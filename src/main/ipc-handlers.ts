@@ -3,6 +3,7 @@ import { basename } from 'node:path'
 import { v4 as uuid } from 'uuid'
 import * as db from './database'
 import * as ai from './ai-service'
+import { validateTaskInput } from './validate'
 
 function csvCell(value: unknown): string {
   const s = String(value ?? '')
@@ -38,8 +39,8 @@ export function setupIpcHandlers(): void {
   // Tasks
   ipcMain.handle('get-tasks', () => db.getTasks())
   ipcMain.handle('get-trash-tasks', () => db.getTrashTasks())
-  ipcMain.handle('create-task', (_, task) => db.createTask(task))
-  ipcMain.handle('update-task', (_, task) => db.updateTask(task))
+  ipcMain.handle('create-task', (_, task) => db.createTask(validateTaskInput(task)))
+  ipcMain.handle('update-task', (_, task) => db.updateTask(validateTaskInput(task)))
   ipcMain.handle('delete-task', (_, id) => db.deleteTask(id))
   ipcMain.handle('restore-task', (_, id) => db.restoreTask(id))
   ipcMain.handle('permanent-delete-task', (_, id) => db.permanentDeleteTask(id))
