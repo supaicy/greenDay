@@ -134,15 +134,19 @@ const TASK_SYSTEM_PROMPT = `You are a task management assistant. Given a natural
 Priority rules: "급하게","긴급","ASAP","중요!","반드시","urgent" → high. "시간 나면","나중에","천천히","여유" → low. Otherwise → none.
 Today is {today}. Return ONLY the JSON, no explanation.`
 
-function buildChatSystemPrompt(taskSummary: string): string {
+export function chatPromptBase(taskSummary: string): string {
   return `You are a productivity assistant for the app "haru". The user can ask about their tasks, schedule, and productivity.
-Answer in the same language the user writes in (Korean or English).
+Answer in the same language the user writes in (Korean or English). When the user writes in Korean, respond ONLY in Korean and never mix languages within a single response.
 Be concise and helpful. Reference specific tasks when relevant.
 
 Current tasks summary:
 ${taskSummary}
 
-Today is {today}.
+Today is ${getToday()}.`
+}
+
+export function buildChatSystemPrompt(taskSummary: string): string {
+  return `${chatPromptBase(taskSummary)}
 Return your response as JSON: {"action":"chat_response","message":"your response here"}`
 }
 
@@ -291,14 +295,7 @@ export async function streamChat(
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
 
   const summary = summarizeTasks(existingTasks)
-  const systemPrompt = `You are a productivity assistant for the app "haru". The user can ask about their tasks, schedule, and productivity.
-Answer in the same language the user writes in (Korean or English).
-Be concise and helpful. Reference specific tasks when relevant.
-
-Current tasks summary:
-${summary}
-
-Today is ${getToday()}.`
+  const systemPrompt = chatPromptBase(summary)
 
   const body = {
     model: config.model,

@@ -239,4 +239,20 @@ describe('ai-service', () => {
       await expect(ai.chat('test', [])).rejects.toThrow('Empty response')
     })
   })
+
+  describe('chat 시스템 프롬프트', () => {
+    it('chatPromptBase는 한국어 전용 응답 규칙을 포함한다', async () => {
+      const ai = await loadAiService()
+      const p = ai.chatPromptBase('No tasks.')
+      expect(p).toContain('respond ONLY in Korean')
+      expect(p).toContain('No tasks.')
+    })
+
+    it('buildChatSystemPrompt는 base를 포함하고 JSON 지시를 덧붙인다', async () => {
+      const ai = await loadAiService()
+      const p = ai.buildChatSystemPrompt('No tasks.')
+      expect(p).toContain('respond ONLY in Korean')
+      expect(p).toContain('"action":"chat_response"')
+    })
+  })
 })
