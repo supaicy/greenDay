@@ -86,3 +86,33 @@ export function nextRecurringDate(pattern: string, fromISODate: string): string 
 
   return null
 }
+
+/**
+ * ISO 날짜시간 문자열을 wholeDays일만큼 이동한 새 ISO 문자열 반환.
+ * 시간대 드리프트 방지: 날짜 부분은 로컬 생성, 시간 부분은 원본 그대로.
+ * @param iso  'YYYY-MM-DDTHH:MM:SS.sssZ' 또는 'YYYY-MM-DD' 형식
+ * @param days 이동할 일 수 (음수 허용)
+ */
+export function shiftIsoByDays(iso: string, days: number): string {
+  // 날짜 부분과 시간 부분 분리
+  const tIdx = iso.indexOf('T')
+  const datePart = tIdx >= 0 ? iso.slice(0, tIdx) : iso
+  const timePart = tIdx >= 0 ? iso.slice(tIdx) : ''     // 'T...' or ''
+  const [y, m, d] = parseDate(datePart)
+  const shifted = new Date(y, m, d + days)
+  const yyyy = shifted.getFullYear()
+  const mm = String(shifted.getMonth() + 1).padStart(2, '0')
+  const dd = String(shifted.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}${timePart}`
+}
+
+/**
+ * 두 YYYY-MM-DD 날짜 사이의 정수 일 차이를 반환 (to - from).
+ */
+export function daysBetween(fromISODate: string, toISODate: string): number {
+  const [fy, fm, fd] = parseDate(fromISODate)
+  const [ty, tm, td] = parseDate(toISODate)
+  const fromMs = new Date(fy, fm, fd).getTime()
+  const toMs = new Date(ty, tm, td).getTime()
+  return Math.round((toMs - fromMs) / 86400000)
+}

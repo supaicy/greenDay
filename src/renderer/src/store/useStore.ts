@@ -17,7 +17,7 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
-import { nextRecurringDate } from '../utils/recurrence'
+import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurrence'
 import { trimHistory } from './trim'
 
 export type Theme = 'dark' | 'light'
@@ -83,6 +83,7 @@ interface Store {
       reminderAt?: string | null
       isRecurring?: boolean
       recurringPattern?: string | null
+      tags?: string[]
     }
   ) => Promise<void>
   updateTask: (task: Partial<Task> & { id: string }) => Promise<void>
@@ -398,7 +399,7 @@ export const useStore = create<Store>((set, get) => ({
       reminderAt: opts.reminderAt || null,
       listId: targetList,
       parentId: opts.parentId || null,
-      tags: [],
+      tags: opts.tags ?? [],
       attachments: [],
       createdAt: now,
       completedAt: null,
@@ -421,7 +422,7 @@ export const useStore = create<Store>((set, get) => ({
       reminderAt: opts.reminderAt || null,
       listId: targetList,
       parentId: opts.parentId || null,
-      tags: [],
+      tags: opts.tags ?? [],
       attachments: [],
       isRecurring: opts.isRecurring || false,
       recurringPattern: opts.recurringPattern || null
@@ -464,14 +465,33 @@ export const useStore = create<Store>((set, get) => ({
         const base = task.dueDate ?? new Date().toISOString().split('T')[0]
         const next = nextRecurringDate(task.recurringPattern, base)
         if (next) {
-          get().addTask(task.title, {
-            listId: task.listId,
-            dueDate: next,
-            dueTime: task.dueTime ?? undefined,
-            priority: task.priority,
-            isRecurring: true,
-            recurringPattern: task.recurringPattern
-          })
+          // 중복 인스턴스 방지: 같은 패턴·제목·기한의 미완료 task가 이미 있으면 생성 건너뜀
+          const exists = get().tasks.some(
+            (t) =>
+              !t.completed &&
+              t.isRecurring &&
+              t.recurringPattern === task.recurringPattern &&
+              t.title === task.title &&
+              t.dueDate === next
+          )
+          if (!exists) {
+            // 알림 오프셋 계산
+            let nextReminderAt: string | null = null
+            if (task.reminderAt && task.dueDate && next) {
+              const delta = daysBetween(task.dueDate, next)
+              nextReminderAt = shiftIsoByDays(task.reminderAt, delta)
+            }
+            get().addTask(task.title, {
+              listId: task.listId,
+              dueDate: next,
+              dueTime: task.dueTime ?? undefined,
+              priority: task.priority,
+              isRecurring: true,
+              recurringPattern: task.recurringPattern,
+              tags: task.tags,
+              reminderAt: nextReminderAt,
+            })
+          }
         }
       }
     }

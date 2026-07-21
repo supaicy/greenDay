@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextRecurringDate } from './recurrence'
+import { nextRecurringDate, shiftIsoByDays, daysBetween } from './recurrence'
 
 describe('nextRecurringDate', () => {
   // ── daily ──────────────────────────────────────────────
@@ -46,6 +46,10 @@ describe('nextRecurringDate', () => {
     expect(nextRecurringDate('monthly:15', '2026-07-21')).toBe('2026-08-15')
   })
 
+  it('monthly: 패딩 없는 숫자 — monthly:5', () => {
+    expect(nextRecurringDate('monthly:5', '2026-07-21')).toBe('2026-08-05')
+  })
+
   it('monthly: 12월이면 다음 해 1월', () => {
     expect(nextRecurringDate('monthly:10', '2026-12-05')).toBe('2027-01-10')
   })
@@ -59,6 +63,10 @@ describe('nextRecurringDate', () => {
     expect(nextRecurringDate('yearly:01-01', '2026-07-21')).toBe('2027-01-01')
   })
 
+  it('yearly: 패딩 없는 월일 — yearly:7-21', () => {
+    expect(nextRecurringDate('yearly:7-21', '2026-07-21')).toBe('2027-07-21')
+  })
+
   // ── 인식 불가 패턴 ──────────────────────────────────────
   it('unknown pattern: null 반환', () => {
     expect(nextRecurringDate('biweekly', '2026-07-21')).toBeNull()
@@ -66,5 +74,49 @@ describe('nextRecurringDate', () => {
 
   it('빈 문자열: null 반환', () => {
     expect(nextRecurringDate('', '2026-07-21')).toBeNull()
+  })
+})
+
+describe('shiftIsoByDays', () => {
+  it('날짜만 있을 때 N일 이동', () => {
+    expect(shiftIsoByDays('2026-07-21', 3)).toBe('2026-07-24')
+  })
+
+  it('시간 부분 보존', () => {
+    expect(shiftIsoByDays('2026-07-21T09:00:00.000Z', 3)).toBe('2026-07-24T09:00:00.000Z')
+  })
+
+  it('월 경계 넘김', () => {
+    expect(shiftIsoByDays('2026-07-30', 5)).toBe('2026-08-04')
+  })
+
+  it('연 경계 넘김', () => {
+    expect(shiftIsoByDays('2026-12-30', 5)).toBe('2027-01-04')
+  })
+
+  it('음수 이동', () => {
+    expect(shiftIsoByDays('2026-07-21', -10)).toBe('2026-07-11')
+  })
+})
+
+describe('daysBetween', () => {
+  it('같은 날 → 0', () => {
+    expect(daysBetween('2026-07-21', '2026-07-21')).toBe(0)
+  })
+
+  it('순방향 7일 차이', () => {
+    expect(daysBetween('2026-07-21', '2026-07-28')).toBe(7)
+  })
+
+  it('역방향 → 음수', () => {
+    expect(daysBetween('2026-07-28', '2026-07-21')).toBe(-7)
+  })
+
+  it('월 경계 넘김', () => {
+    expect(daysBetween('2026-07-28', '2026-08-04')).toBe(7)
+  })
+
+  it('연 경계 넘김', () => {
+    expect(daysBetween('2026-12-31', '2027-01-01')).toBe(1)
   })
 })
