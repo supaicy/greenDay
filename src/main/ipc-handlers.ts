@@ -155,6 +155,8 @@ export function setupIpcHandlers(): void {
 
   // Quick add (global shortcut)
   ipcMain.handle('register-global-shortcut', () => {
+    // MAS 샌드박스에서는 시스템 전역 단축키를 등록할 수 없어 조용히 실패 → no-op
+    if (process.mas) return false
     try {
       globalShortcut.register('CommandOrControl+Shift+A', () => {
         const wins = BrowserWindow.getAllWindows()

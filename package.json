@@ -9,6 +9,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder --mac --config",
+    "package:mas": "electron-vite build && electron-builder --mac mas --config",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome lint src electron.vite.config.ts",
