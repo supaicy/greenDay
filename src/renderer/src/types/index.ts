@@ -105,10 +105,5 @@ export interface AiMessage {
   timestamp: string
 }
 
-export interface AiConfig {
-  provider: 'ollama' | 'openai' | 'custom'
-  baseUrl: string
-  model: string
-  apiKey: string | null
-  maxHistoryMessages: number
-}
+// AiConfig — shared 모듈에서 재내보내기 (단일 정의 유지)
+export type { AiConfig } from '../../../shared/ai-config'

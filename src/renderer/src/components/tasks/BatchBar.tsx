@@ -1,14 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle2, Trash2, ArrowRight, Flag, XCircle, CheckSquare } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import type { Priority } from '../../types'
-
-const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
-  { value: 'none', label: '없음', color: 'text-gray-500' },
-  { value: 'low', label: '낮음', color: 'text-blue-400' },
-  { value: 'medium', label: '중간', color: 'text-yellow-400' },
-  { value: 'high', label: '높음', color: 'text-red-400' }
-]
+import { PRIORITY_OPTIONS } from '../../utils/priority'
 
 export function BatchBar() {
   const {

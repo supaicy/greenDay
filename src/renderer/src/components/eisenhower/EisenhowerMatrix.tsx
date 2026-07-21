@@ -2,16 +2,9 @@ import type React from 'react'
 import { useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
-import type { Task, Priority } from '../../types'
+import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Zap, Target, Clock, Coffee } from 'lucide-react'
-
-// 우선순위 색상
-const priorityColor: Record<Priority, string> = {
-  high: 'text-red-500',
-  medium: 'text-amber-500',
-  low: 'text-blue-500',
-  none: 'text-gray-400'
-}
+import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
 
 interface Quadrant {
   id: 'do' | 'schedule' | 'delegate' | 'eliminate'
@@ -60,8 +53,7 @@ export function EisenhowerMatrix(): React.ReactElement {
 
     // 우선순위 + 마감일 순 정렬
     const sortFn = (a: Task, b: Task) => {
-      const pOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 }
-      const pDiff = pOrder[a.priority] - pOrder[b.priority]
+      const pDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
       if (pDiff !== 0) return pDiff
       if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate)
       if (a.dueDate) return -1
@@ -157,7 +149,7 @@ export function EisenhowerMatrix(): React.ReactElement {
 
       <span className={`flex-1 text-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{task.title}</span>
 
-      {task.priority !== 'none' && <Flag size={10} className={`flex-shrink-0 ${priorityColor[task.priority]}`} />}
+      {task.priority !== 'none' && <Flag size={10} className={`flex-shrink-0 ${PRIORITY_COLOR[task.priority]}`} />}
 
       {task.dueDate && (
         <span

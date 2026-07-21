@@ -1,5 +1,6 @@
 // AI Service Layer — Ollama / OpenAI 호환 API 클라이언트
 import * as db from './database'
+import type { AiConfig } from '../shared/ai-config'
 
 const ALLOWED_ACTIONS = ['create_task', 'chat_response'] as const
 const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const
@@ -7,14 +8,6 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 const DEFAULT_TIMEOUT = 30_000
 const MAX_RETRIES = 2
-
-interface AiConfig {
-  provider: 'ollama' | 'openai' | 'custom'
-  baseUrl: string
-  model: string
-  apiKey: string | null
-  maxHistoryMessages: number
-}
 
 const DEFAULT_CONFIG: AiConfig = {
   provider: 'ollama',

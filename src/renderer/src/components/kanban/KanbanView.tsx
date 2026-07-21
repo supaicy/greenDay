@@ -2,16 +2,9 @@ import type React from 'react'
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
-import type { Task, Priority } from '../../types'
+import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, GripVertical, Calendar } from 'lucide-react'
-
-// 우선순위 색상
-const priorityColor: Record<Priority, string> = {
-  high: 'text-red-500',
-  medium: 'text-amber-500',
-  low: 'text-blue-500',
-  none: 'text-gray-400'
-}
+import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
 
 interface ColumnDef {
   id: 'todo' | 'inProgress' | 'done'
@@ -54,8 +47,7 @@ export function KanbanView(): React.ReactElement {
     }
 
     // 우선순위 순 정렬
-    const priorityOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 }
-    const sortByPriority = (a: Task, b: Task) => priorityOrder[a.priority] - priorityOrder[b.priority]
+    const sortByPriority = (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
 
     todo.sort(sortByPriority)
     inProgress.sort(sortByPriority)
@@ -273,7 +265,7 @@ export function KanbanView(): React.ReactElement {
                           </p>
                           <div className="flex items-center gap-2 mt-1.5">
                             {/* 우선순위 */}
-                            {task.priority !== 'none' && <Flag size={12} className={priorityColor[task.priority]} />}
+                            {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
                             {/* 마감일 */}
                             {task.dueDate && (
                               <span

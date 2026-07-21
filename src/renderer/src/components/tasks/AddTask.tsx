@@ -4,13 +4,7 @@ import { useStore } from '../../store/useStore'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
 import { formatDueDate } from '../../utils/date'
 import type { Priority } from '../../types'
-
-const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
-  { value: 'none', label: '없음', color: 'text-gray-500' },
-  { value: 'low', label: '낮음', color: 'text-blue-400' },
-  { value: 'medium', label: '중간', color: 'text-yellow-400' },
-  { value: 'high', label: '높음', color: 'text-red-400' }
-]
+import { PRIORITY_OPTIONS } from '../../utils/priority'
 
 export function AddTask({ onClose }: { onClose: () => void }) {
   const { addTask, selectedListId, theme, aiCreateTaskFromNL, aiConnected } = useStore()

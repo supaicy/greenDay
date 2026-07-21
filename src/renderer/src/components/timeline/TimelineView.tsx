@@ -2,19 +2,9 @@ import type React from 'react'
 import { useMemo } from 'react'
 import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
-import type { Task, Priority } from '../../types'
+import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Clock, AlertTriangle } from 'lucide-react'
-
-// 우선순위 정렬 순서
-const priorityOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 }
-
-// 우선순위 색상
-const priorityColor: Record<Priority, string> = {
-  high: 'text-red-500',
-  medium: 'text-amber-500',
-  low: 'text-blue-500',
-  none: 'text-gray-400'
-}
+import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
 
 interface TimelineGroup {
   id: string
@@ -68,7 +58,7 @@ export function TimelineView(): React.ReactElement {
     }
 
     // 각 그룹 우선순위 순 정렬
-    const sortFn = (a: Task, b: Task) => priorityOrder[a.priority] - priorityOrder[b.priority]
+    const sortFn = (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
     overdue.sort(sortFn)
     today.sort(sortFn)
     tomorrowTasks.sort(sortFn)
@@ -230,7 +220,7 @@ export function TimelineView(): React.ReactElement {
                       </span>
 
                       {/* 우선순위 */}
-                      {task.priority !== 'none' && <Flag size={12} className={priorityColor[task.priority]} />}
+                      {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
 
                       {/* 시간 */}
                       {task.dueTime && (
