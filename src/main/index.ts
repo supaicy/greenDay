@@ -56,8 +56,8 @@ app.whenReady().then(() => {
   setupIpcHandlers()
   createWindow()
 
-  // 자동 업데이트 설정
-  if (!is.dev) {
+  // 자동 업데이트 설정 (MAS 빌드에서는 App Store가 업데이트를 담당하므로 비활성)
+  if (!is.dev && !process.mas) {
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = true
 
@@ -97,9 +97,13 @@ app.whenReady().then(() => {
     app.on('will-quit', () => clearInterval(updateInterval))
   }
 
-  // 업데이트 다운로드 / 설치 IPC
-  ipcMain.handle('download-update', () => autoUpdater.downloadUpdate())
+  // 업데이트 다운로드 / 설치 IPC (MAS에서는 no-op — App Store가 업데이트 담당)
+  ipcMain.handle('download-update', () => {
+    if (process.mas) return
+    return autoUpdater.downloadUpdate()
+  })
   ipcMain.handle('install-update', () => {
+    if (process.mas) return
     autoUpdater.quitAndInstall(false, true)
   })
 

@@ -14,9 +14,17 @@ mac:
     - dmg
     - zip
   artifactName: ${productName}-${version}-${arch}.${ext}
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
   category: public.app-category.productivity
   darkModeSupport: true
+mas:
+  entitlements: resources/entitlements.mas.plist
+  entitlementsInherit: resources/entitlements.mas.inherit.plist
+  hardenedRuntime: false
+  category: public.app-category.productivity
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 npmRebuild: true
