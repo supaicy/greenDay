@@ -47,7 +47,7 @@ export function getAiConfigInternal(): AiConfig {
   return { ...config }
 }
 
-function isAllowedUrl(url: string): boolean {
+export function isAllowedUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
     if (!['http:', 'https:'].includes(parsed.protocol)) return false
@@ -58,7 +58,8 @@ function isAllowedUrl(url: string): boolean {
     if (host.startsWith('10.')) return false
     if (host.startsWith('172.') && /^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false
     if (host.startsWith('192.168.')) return false
-    // localhost는 Ollama용으로 허용
+    // 의도적 허용: localhost/127.0.0.1은 로컬 Ollama 서버용. 그 외 사설/메타데이터
+    // 대역은 위에서 차단됨. 사용자가 직접 설정하는 신뢰 엔드포인트만 통과.
     return true
   } catch {
     return false

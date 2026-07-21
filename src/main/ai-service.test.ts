@@ -255,4 +255,22 @@ describe('ai-service', () => {
       expect(p).toContain('"action":"chat_response"')
     })
   })
+
+  describe('isAllowedUrl (SSRF 방어)', () => {
+    const cases: [string, boolean][] = [
+      ['http://localhost:11434', true],
+      ['http://127.0.0.1:11434', true],
+      ['https://api.openai.com', true],
+      ['http://169.254.169.254/latest/meta-data', false],
+      ['http://10.0.0.5', false],
+      ['http://192.168.1.10', false],
+      ['http://172.16.0.1', false],
+      ['file:///etc/passwd', false],
+      ['not-a-url', false]
+    ]
+    it.each(cases)('%s → %s', async (url, expected) => {
+      const ai = await loadAiService()
+      expect(ai.isAllowedUrl(url)).toBe(expected)
+    })
+  })
 })
