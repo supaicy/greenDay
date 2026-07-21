@@ -86,6 +86,8 @@ export function setupIpcHandlers(): void {
     return attachments
   })
   ipcMain.handle('get-attachments-dir', () => db.getAttachmentsDir())
+  // 첨부파일 열기: 시스템 기본 앱으로 파일 경로를 엶
+  ipcMain.handle('open-attachment', (_, filePath: string) => shell.openPath(String(filePath)))
 
   // Export
   ipcMain.handle('export-data', async () => {

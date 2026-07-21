@@ -49,6 +49,7 @@ const api = {
   // Attachments
   pickAttachment: () => ipcRenderer.invoke('pick-attachment'),
   getAttachmentsDir: () => ipcRenderer.invoke('get-attachments-dir'),
+  openAttachment: (path: string) => ipcRenderer.invoke('open-attachment', path),
 
   // Export
   exportData: () => ipcRenderer.invoke('export-data'),

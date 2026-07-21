@@ -49,7 +49,7 @@ export function AttachmentList({
       {attachments.length > 0 && (
         <div className="space-y-1 mb-2">
           {attachments.map((entry, index) => {
-            const { name } = parseAttachment(entry)
+            const att = parseAttachment(entry)
             return (
               <div
                 key={`${taskId}-${entry}`}
@@ -61,9 +61,15 @@ export function AttachmentList({
                   size={14}
                   className={isDark ? 'text-gray-500 flex-shrink-0' : 'text-gray-400 flex-shrink-0'}
                 />
-                <span className={`flex-1 text-sm truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={name}>
-                  {name}
-                </span>
+                {/* 파일명 클릭 시 시스템 기본 앱으로 첨부파일 열기 */}
+                <button
+                  type="button"
+                  title={att.name}
+                  onClick={() => window.api.openAttachment(att.path)}
+                  className={`flex-1 text-sm text-left truncate ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  {att.name}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleRemove(index)}
