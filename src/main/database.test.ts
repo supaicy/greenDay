@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey } from './database'
+import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey, capEvents } from './database'
 
 let tmp: string
 
@@ -47,6 +47,37 @@ describe('chat history file I/O', () => {
     const raw = JSON.parse(readFileSync(p, 'utf-8'))
     expect(raw.version).toBe(1)
     expect(raw.messages).toEqual([])
+  })
+})
+
+// === capEvents: score.events 상한 ===
+describe('capEvents', () => {
+  it('상한 미만 → 원본 배열 반환', () => {
+    const arr = [1, 2, 3]
+    expect(capEvents(arr, 5)).toEqual([1, 2, 3])
+  })
+
+  it('상한과 동일 → 원본 배열 반환', () => {
+    const arr = Array.from({ length: 200 }, (_, i) => i)
+    const result = capEvents(arr)
+    expect(result).toHaveLength(200)
+    expect(result[0]).toBe(0)
+    expect(result[199]).toBe(199)
+  })
+
+  it('상한 초과 → 최근 N개(꼬리)만 보존', () => {
+    // 201개 이벤트에서 최근 200개(인덱스 1~200)만 남아야 함
+    const arr = Array.from({ length: 201 }, (_, i) => i)
+    const result = capEvents(arr)
+    expect(result).toHaveLength(200)
+    expect(result[0]).toBe(1)   // 가장 오래된 이벤트 제거
+    expect(result[199]).toBe(200) // 최신 이벤트 보존
+  })
+
+  it('max 파라미터 커스터마이즈', () => {
+    const arr = [10, 20, 30, 40, 50]
+    const result = capEvents(arr, 3)
+    expect(result).toEqual([30, 40, 50])
   })
 })
 

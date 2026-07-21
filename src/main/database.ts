@@ -125,6 +125,20 @@ export function initDatabase(): void {
     if (l.folder_id === undefined) l.folder_id = null
   })
 
+  // 기존 camelCase PomodoroSession 레코드를 snake_case로 일회 마이그레이션 (멱등)
+  data.pomodoroSessions = data.pomodoroSessions.map((s) => {
+    // task_id가 이미 있으면 이미 마이그레이션된 레코드
+    if (s.task_id !== undefined) return s
+    return {
+      id: s.id,
+      task_id: s.taskId ?? null,
+      duration: s.duration,
+      type: s.type,
+      started_at: s.startedAt ?? null,
+      completed_at: s.completedAt ?? null
+    }
+  })
+
   if (!data.lists.find((l) => l.id === 'inbox')) {
     data.lists.push({
       id: 'inbox',
@@ -356,17 +370,33 @@ export function getPomodoroSessions(): unknown[] {
   return data.pomodoroSessions
 }
 export function savePomodoroSession(session: Record<string, unknown>): void {
-  data.pomodoroSessions.push(session)
+  // 다른 엔티티와 동일하게 snake_case로 저장
+  data.pomodoroSessions.push({
+    id: session.id,
+    task_id: session.taskId ?? null,
+    duration: session.duration,
+    type: session.type,
+    started_at: session.startedAt ?? null,
+    completed_at: session.completedAt ?? null
+  })
   save()
 }
 
 // === Score ===
+
+// 순수 헬퍼: events 배열을 최근 max개로 제한 (오래된 항목 제거, total은 별도 누적)
+export function capEvents<T>(events: T[], max = 200): T[] {
+  return events.length > max ? events.slice(events.length - max) : events
+}
+
 export function getScore(): unknown {
   return data.score
 }
 export function addScoreEvent(event: Record<string, unknown>): void {
   data.score.events.push(event)
   data.score.total += (event.points as number) || 0
+  // 상한 초과 시 가장 오래된 이벤트 제거 (write amplification 방지)
+  data.score.events = capEvents(data.score.events)
   save()
 }
 
