@@ -4,5 +4,6 @@ dist
 .DS_Store
 *.log
 docs/superpowers/
+.superpowers/
 .gstack/
 homebrew-haru/
