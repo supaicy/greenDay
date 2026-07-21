@@ -412,22 +412,31 @@ const realCrypto: KeyCrypto = {
 export function encodeApiKey(config: Record<string, unknown>, crypto: KeyCrypto): Record<string, unknown> {
   const out = { ...config }
   if (typeof out.apiKey === 'string' && out.apiKey && crypto.available()) {
-    out.apiKey_enc = crypto.encrypt(out.apiKey)
-    out.apiKey = null
+    try {
+      out.apiKey_enc = crypto.encrypt(out.apiKey)
+      out.apiKey = null
+    } catch {
+      // 암호화 실패: 평문 키를 절대 저장하지 않는다. 기존 apiKey_enc가 있으면 그대로 보존됨.
+      out.apiKey = null
+    }
   }
   return out
 }
 
 export function decodeApiKey(raw: Record<string, unknown>, crypto: KeyCrypto): Record<string, unknown> {
   const out = { ...raw }
-  if (typeof out.apiKey_enc === 'string' && out.apiKey_enc && crypto.available()) {
-    try {
-      out.apiKey = crypto.decrypt(out.apiKey_enc)
-    } catch {
-      out.apiKey = null
+  if (typeof out.apiKey_enc === 'string' && out.apiKey_enc) {
+    if (crypto.available()) {
+      try {
+        out.apiKey = crypto.decrypt(out.apiKey_enc)
+      } catch {
+        out.apiKey = null
+      }
+      // 복호화(또는 손상 확인)를 마친 경우에만 암호문 제거
+      delete out.apiKey_enc
     }
+    // crypto 불가 시: apiKey_enc 보존 → 이후 정상 세션에서 키 복구 가능
   }
-  delete out.apiKey_enc
   return out
 }
 
@@ -443,7 +452,11 @@ export function getAiConfig(): Record<string, unknown> | null {
 
 export function saveAiConfig(config: Record<string, unknown>): void {
   if (!aiConfigPath) return
-  writeFileSync(aiConfigPath, JSON.stringify(encodeApiKey(config, realCrypto), null, 2), 'utf-8')
+  try {
+    writeFileSync(aiConfigPath, JSON.stringify(encodeApiKey(config, realCrypto), null, 2), 'utf-8')
+  } catch (err) {
+    console.error('AI config 저장 실패:', err)
+  }
 }
 
 // === Export ===

@@ -82,4 +82,11 @@ describe('API 키 암호화', () => {
     expect(out.apiKey).toBe('sk-1')
     expect(out.apiKey_enc).toBeUndefined()
   })
+
+  it('decodeApiKey: crypto 불가 시 apiKey_enc를 보존한다 (키 소실 방지)', () => {
+    const noCrypto = { available: () => false, encrypt: () => '', decrypt: () => '' }
+    const out = decodeApiKey({ provider: 'openai', apiKey: null, apiKey_enc: 'enc(sk-1)' }, noCrypto)
+    expect(out.apiKey_enc).toBe('enc(sk-1)')
+    expect(out.apiKey).toBeNull()
+  })
 })
