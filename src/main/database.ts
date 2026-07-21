@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, safeStorage } from 'electron'
 import { readFileSync, writeFileSync, writeFile, existsSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
@@ -390,18 +390,60 @@ export function listAttachmentFiles(): string[] {
 // === AI Config ===
 let aiConfigPath: string
 let chatHistoryPath: string
+
+export interface KeyCrypto {
+  available(): boolean
+  encrypt(s: string): string
+  decrypt(b64: string): string
+}
+
+const realCrypto: KeyCrypto = {
+  available: () => {
+    try {
+      return safeStorage.isEncryptionAvailable()
+    } catch {
+      return false
+    }
+  },
+  encrypt: (s) => safeStorage.encryptString(s).toString('base64'),
+  decrypt: (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64'))
+}
+
+export function encodeApiKey(config: Record<string, unknown>, crypto: KeyCrypto): Record<string, unknown> {
+  const out = { ...config }
+  if (typeof out.apiKey === 'string' && out.apiKey && crypto.available()) {
+    out.apiKey_enc = crypto.encrypt(out.apiKey)
+    out.apiKey = null
+  }
+  return out
+}
+
+export function decodeApiKey(raw: Record<string, unknown>, crypto: KeyCrypto): Record<string, unknown> {
+  const out = { ...raw }
+  if (typeof out.apiKey_enc === 'string' && out.apiKey_enc && crypto.available()) {
+    try {
+      out.apiKey = crypto.decrypt(out.apiKey_enc)
+    } catch {
+      out.apiKey = null
+    }
+  }
+  delete out.apiKey_enc
+  return out
+}
+
 export function getAiConfig(): Record<string, unknown> | null {
   if (!aiConfigPath) return null
   if (!existsSync(aiConfigPath)) return null
   try {
-    return JSON.parse(readFileSync(aiConfigPath, 'utf-8'))
+    return decodeApiKey(JSON.parse(readFileSync(aiConfigPath, 'utf-8')), realCrypto)
   } catch {
     return null
   }
 }
+
 export function saveAiConfig(config: Record<string, unknown>): void {
   if (!aiConfigPath) return
-  writeFileSync(aiConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+  writeFileSync(aiConfigPath, JSON.stringify(encodeApiKey(config, realCrypto), null, 2), 'utf-8')
 }
 
 // === Export ===

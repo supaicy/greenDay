@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readHistoryFile, writeHistoryFile } from './database'
+import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey } from './database'
 
 let tmp: string
 
@@ -47,5 +47,39 @@ describe('chat history file I/O', () => {
     const raw = JSON.parse(readFileSync(p, 'utf-8'))
     expect(raw.version).toBe(1)
     expect(raw.messages).toEqual([])
+  })
+})
+
+// === API 키 암호화 ===
+const fakeCrypto = {
+  available: () => true,
+  encrypt: (s: string) => `enc(${s})`,
+  decrypt: (b64: string) => b64.replace(/^enc\(/, '').replace(/\)$/, '')
+}
+
+describe('API 키 암호화', () => {
+  it('encodeApiKey: 평문 키를 암호화하고 apiKey를 null로 만든다', () => {
+    const out = encodeApiKey({ provider: 'openai', apiKey: 'sk-123' }, fakeCrypto)
+    expect(out.apiKey).toBeNull()
+    expect(out.apiKey_enc).toBe('enc(sk-123)')
+  })
+
+  it('decodeApiKey: 암호문을 평문 키로 복원한다', () => {
+    const out = decodeApiKey({ provider: 'openai', apiKey: null, apiKey_enc: 'enc(sk-123)' }, fakeCrypto)
+    expect(out.apiKey).toBe('sk-123')
+    expect(out.apiKey_enc).toBeUndefined()
+  })
+
+  it('encode→decode 라운드트립', () => {
+    const enc = encodeApiKey({ provider: 'openai', apiKey: 'sk-xyz' }, fakeCrypto)
+    const dec = decodeApiKey(enc, fakeCrypto)
+    expect(dec.apiKey).toBe('sk-xyz')
+  })
+
+  it('암호화 불가 시 평문 그대로 통과', () => {
+    const noCrypto = { available: () => false, encrypt: () => '', decrypt: () => '' }
+    const out = encodeApiKey({ apiKey: 'sk-1' }, noCrypto)
+    expect(out.apiKey).toBe('sk-1')
+    expect(out.apiKey_enc).toBeUndefined()
   })
 })
