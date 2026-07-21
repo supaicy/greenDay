@@ -1,9 +1,13 @@
-import { app, shell, BrowserWindow, globalShortcut, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, globalShortcut, ipcMain, Notification } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
-import { initDatabase, closeDatabase } from './database'
+import { initDatabase, closeDatabase, getTasks } from './database'
+import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
+
+// 리마인더 폴러 인터벌 핸들 (모듈 스코프에서 선언해 will-quit 핸들러에서 접근 가능)
+let reminderInterval: ReturnType<typeof setInterval> | null = null
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -55,6 +59,17 @@ app.whenReady().then(() => {
   initDatabase()
   setupIpcHandlers()
   createWindow()
+
+  // 리마인더 폴러: 60초마다 도래한 리마인더를 확인하고 시스템 알림 발화
+  let lastReminderCheck = new Date().toISOString() // 앱 시작 시점 기록 (과거 리마인더 무시)
+  reminderInterval = setInterval(() => {
+    const now = new Date().toISOString()
+    const due = dueReminders(getTasks() as Record<string, unknown>[], lastReminderCheck, now)
+    for (const t of due) {
+      new Notification({ title: '리마인더', body: String(t.title ?? '') }).show()
+    }
+    lastReminderCheck = now
+  }, 60 * 1000)
 
   // 자동 업데이트 설정 (MAS 빌드에서는 App Store가 업데이트를 담당하므로 비활성)
   if (!is.dev && !process.mas) {
@@ -120,5 +135,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
+  // 리마인더 폴러 정리
+  if (reminderInterval) clearInterval(reminderInterval)
   globalShortcut.unregisterAll()
 })
