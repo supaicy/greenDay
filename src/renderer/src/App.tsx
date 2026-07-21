@@ -1,9 +1,8 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useStore } from './store/useStore'
 import { Sidebar } from './components/sidebar/Sidebar'
 import { Settings } from './components/sidebar/Settings'
 import { TaskListView } from './components/tasks/TaskList'
-import { TaskDetail } from './components/tasks/TaskDetail'
 import { CalendarView } from './components/calendar/CalendarView'
 import { WeeklyCalendar } from './components/calendar/WeeklyCalendar'
 import { DailyCalendar } from './components/calendar/DailyCalendar'
@@ -17,6 +16,11 @@ import { QuickAdd } from './components/common/QuickAdd'
 import { UndoToast } from './components/common/UndoToast'
 import { AiChatPanel } from './components/ai/AiChatPanel'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+
+// react-markdown + highlight.js 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
+const TaskDetail = lazy(() =>
+  import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail }))
+)
 
 function MainContent() {
   const viewType = useStore((s) => s.viewType)
@@ -99,7 +103,11 @@ export default function App() {
       <Sidebar />
       <div className="flex flex-1 min-w-0">
         <MainContent />
-        {viewType === 'tasks' && selectedTaskId && <TaskDetail />}
+        {viewType === 'tasks' && selectedTaskId && (
+          <Suspense fallback={null}>
+            <TaskDetail />
+          </Suspense>
+        )}
       </div>
       <AiChatPanel />
       <Settings />
