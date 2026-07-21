@@ -17,6 +17,7 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
+import { nextRecurringDate } from '../utils/recurrence'
 import { trimHistory } from './trim'
 
 export type Theme = 'dark' | 'light'
@@ -227,11 +228,12 @@ function mapHabitLog(row: Record<string, unknown>): HabitLog {
 function mapPomodoroSession(row: Record<string, unknown>): PomodoroSession {
   return {
     id: row.id as string,
-    taskId: (row.taskId as string) || null,
+    // snake_case 우선, 구 camelCase 폴백 (마이그레이션 과도기 대응)
+    taskId: ((row.task_id ?? row.taskId) as string) || null,
     duration: row.duration as number,
     type: row.type as 'work' | 'break',
-    startedAt: row.startedAt as string,
-    completedAt: (row.completedAt as string) || null
+    startedAt: (row.started_at ?? row.startedAt) as string,
+    completedAt: ((row.completed_at ?? row.completedAt) as string) || null
   }
 }
 function safeParseArray<T = unknown>(s: string | undefined | null): T[] {
@@ -456,6 +458,22 @@ export const useStore = create<Store>((set, get) => ({
     if (newCompleted) {
       const points = task.priority === 'high' ? 3 : task.priority === 'medium' ? 2 : 1
       get().addScore('taskComplete', points)
+
+      // 반복 task: 완료 시 다음 인스턴스 생성
+      if (task.isRecurring && task.recurringPattern) {
+        const base = task.dueDate ?? new Date().toISOString().split('T')[0]
+        const next = nextRecurringDate(task.recurringPattern, base)
+        if (next) {
+          get().addTask(task.title, {
+            listId: task.listId,
+            dueDate: next,
+            dueTime: task.dueTime ?? undefined,
+            priority: task.priority,
+            isRecurring: true,
+            recurringPattern: task.recurringPattern
+          })
+        }
+      }
     }
   },
   removeTask: async (id) => {
@@ -544,6 +562,13 @@ export const useStore = create<Store>((set, get) => ({
     const subtaskIds = allTasks.filter((t) => t.parentId && ids.includes(t.parentId)).map((t) => t.id)
     const allDeletedIds = [...new Set([...ids, ...subtaskIds])]
     const deletedTasks = allTasks.filter((t) => allDeletedIds.includes(t.id))
+    // 삭제 전 undo 스택에 ID 목록 저장 (popUndo deleteTasks 핸들러가 trashTasks에서 ID로 복원)
+    get().pushUndo({
+      type: 'deleteTasks',
+      description: `${allDeletedIds.length}개 삭제됨`,
+      data: allDeletedIds,
+      timestamp: Date.now()
+    })
     set((s) => ({
       tasks: s.tasks.filter((t) => !allDeletedIds.includes(t.id)),
       trashTasks: [...s.trashTasks, ...deletedTasks.map((t) => ({ ...t, deletedAt: now }))],
@@ -659,7 +684,8 @@ export const useStore = create<Store>((set, get) => ({
     set((s) => ({
       score: {
         total: s.score.total + points,
-        events: [...s.score.events, { type, points, date }]
+        // 인메모리 이벤트 배열 최대 200개로 제한 (total은 계속 누적)
+        events: [...s.score.events, { type, points, date }].slice(-200)
       }
     }))
     window.api.addScoreEvent({ type, points, date })

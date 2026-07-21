@@ -84,7 +84,8 @@ export type SortBy = 'default' | 'dueDate' | 'priority' | 'title' | 'createdAt'
 export type SortDir = 'asc' | 'desc'
 
 export interface UndoAction {
-  type: 'deleteTask' | 'completeTasks' | 'moveTasks' | 'deleteTasks'
+  // 실제 push/handle 되는 타입만 유지 ('completeTasks'/'moveTasks' 팬텀 타입 제거)
+  type: 'deleteTask' | 'deleteTasks'
   description: string
   data: unknown
   timestamp: number

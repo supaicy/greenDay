@@ -1,0 +1,88 @@
+/**
+ * 반복 task 다음 발생일 계산 유틸
+ *
+ * 패턴 형식 (RecurringPicker.tsx 기준):
+ *   daily            → fromISODate + 1일
+ *   weekly:1,3,5     → from 이후 가장 가까운 해당 요일 (0=일 ~ 6=토)
+ *   monthly:15       → 다음 달 15일
+ *   yearly:MM-DD     → 내년 해당 월일
+ *
+ * TZ 드리프트 방지를 위해 Date(y, m, d) 로컬 생성, Date.now()/new Date() 비인수 호출 금지.
+ */
+
+/** 'YYYY-MM-DD' → [year, month(0-based), day] */
+function parseDate(iso: string): [number, number, number] {
+  const parts = iso.split('-')
+  return [Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])]
+}
+
+/** [year, month(0-based), day] → 'YYYY-MM-DD' */
+function formatDate(y: number, m: number, d: number): string {
+  const date = new Date(y, m, d) // 로컬 날짜로 정규화
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+/**
+ * 반복 패턴과 기준일로부터 다음 발생일(YYYY-MM-DD)을 반환한다.
+ * 인식 불가 패턴은 null.
+ */
+export function nextRecurringDate(pattern: string, fromISODate: string): string | null {
+  if (!pattern) return null
+
+  const [y, m, d] = parseDate(fromISODate)
+
+  // ── daily ──────────────────────────────────────────────
+  if (pattern === 'daily') {
+    return formatDate(y, m, d + 1)
+  }
+
+  // ── weekly:d[,d,...] ───────────────────────────────────
+  if (pattern.startsWith('weekly:')) {
+    const dayParts = pattern.slice('weekly:'.length).split(',')
+    const targetDays = dayParts.map(Number).filter((n) => !Number.isNaN(n))
+    if (targetDays.length === 0) return null
+
+    // from 날짜의 요일 (0=일)
+    const fromDate = new Date(y, m, d)
+    const fromDow = fromDate.getDay()
+
+    // from 이후(strictly after) 가장 가까운 요일 탐색 (최대 7일)
+    for (let offset = 1; offset <= 7; offset++) {
+      const candidate = new Date(y, m, d + offset)
+      const dow = candidate.getDay()
+      if (targetDays.includes(dow)) {
+        return formatDate(candidate.getFullYear(), candidate.getMonth(), candidate.getDate())
+      }
+    }
+    // 이론상 도달 불가 (7일 내에 반드시 매칭)
+    void fromDow
+    return null
+  }
+
+  // ── monthly:N ─────────────────────────────────────────
+  if (pattern.startsWith('monthly:')) {
+    const day = Number(pattern.slice('monthly:'.length))
+    if (Number.isNaN(day)) return null
+    // 다음 달 (12월 → 1월 / 연도 +1)
+    const nextMonth = m + 1
+    const nextYear = nextMonth > 11 ? y + 1 : y
+    const normalizedMonth = nextMonth > 11 ? 0 : nextMonth
+    return formatDate(nextYear, normalizedMonth, day)
+  }
+
+  // ── yearly:MM-DD ──────────────────────────────────────
+  if (pattern.startsWith('yearly:')) {
+    const mmdd = pattern.slice('yearly:'.length) // 예: '07-21'
+    const parts = mmdd.split('-')
+    if (parts.length !== 2) return null
+    const targetMonth = Number(parts[0]) - 1 // 0-based
+    const targetDay = Number(parts[1])
+    if (Number.isNaN(targetMonth) || Number.isNaN(targetDay)) return null
+    return formatDate(y + 1, targetMonth, targetDay)
+  }
+
+  return null
+}
