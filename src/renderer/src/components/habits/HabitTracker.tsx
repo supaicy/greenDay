@@ -175,8 +175,11 @@ export function HabitTracker() {
           <div
             className={`mt-4 flex items-center gap-3 p-3 border rounded-lg ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-300 bg-gray-50'}`}
           >
-            <div
-              className="w-6 h-6 rounded-full cursor-pointer flex-shrink-0"
+            {/* 색상 변경 버튼 (Pattern A: 순수 클릭 요소 → button) */}
+            <button
+              type="button"
+              aria-label="색상 변경"
+              className="w-6 h-6 rounded-full cursor-pointer flex-shrink-0 appearance-none border-0 p-0"
               style={{ backgroundColor: color }}
               onClick={() => {
                 const idx = COLORS.indexOf(color)

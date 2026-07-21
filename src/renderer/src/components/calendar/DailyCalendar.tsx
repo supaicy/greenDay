@@ -202,14 +202,25 @@ export function DailyCalendar(): React.ReactElement {
           <div className={`px-6 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
             <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>종일</div>
             <div className="space-y-1.5">
-              {allDayTasks.map((task) => (
-                <div
-                  key={task.id}
-                  onClick={() => selectTask(task.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 ${
-                    isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
-                  } ${selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''}`}
-                >
+              {allDayTasks.map((task) => {
+                // 종일 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
+                return (
+                  // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                  <div
+                    key={task.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => selectTask(task.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        selectTask(task.id)
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 ${
+                      isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
+                    } ${selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''}`}
+                  >
                   <button
                     type="button"
                     onClick={(e) => {
@@ -243,14 +254,16 @@ export function DailyCalendar(): React.ReactElement {
                       }
                     />
                   )}
-                </div>
-              ))}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* 시간 슬롯 */}
-        <div
+        {/* 시간 슬롯 (드래그 드롭 대상: <section>으로 의미론적 표현) */}
+        <section
+          aria-label="시간 슬롯"
           className="px-2 relative"
           style={{
             minHeight: `${(DAY_END_HOUR_EXCLUSIVE - DAY_START_HOUR) * 60 * PX_PER_MIN}px`
@@ -329,16 +342,27 @@ export function DailyCalendar(): React.ReactElement {
 
                 {/* 태스크 영역 */}
                 <div className="flex-1 py-0.5 pr-4 space-y-1">
-                  {slotTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => selectTask(task.id)}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 transition-colors ${
-                        isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
-                      } ${
-                        selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''
-                      }`}
-                    >
+                  {slotTasks.map((task) => {
+                    // 시간 슬롯 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
+                    return (
+                      // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                      <div
+                        key={task.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => selectTask(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            selectTask(task.id)
+                          }
+                        }}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 transition-colors ${
+                          isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
+                        } ${
+                          selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''
+                        }`}
+                      >
                       <button
                         type="button"
                         onClick={(e) => {
@@ -379,8 +403,9 @@ export function DailyCalendar(): React.ReactElement {
                           }`}
                         />
                       )}
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -418,7 +443,7 @@ export function DailyCalendar(): React.ReactElement {
               })}
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )

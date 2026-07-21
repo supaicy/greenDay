@@ -56,15 +56,27 @@ export function QuickAdd() {
   if (!showQuickAdd) return null
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 모달 배경 — 클릭/키보드 모두 지원
     <div
       className="fixed inset-0 z-[100] flex items-start justify-center pt-[20vh] bg-black/60 backdrop-blur-sm"
       onClick={() => setShowQuickAdd(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setShowQuickAdd(false)
+        }
+      }}
     >
+      {/* 모달 콘텐츠: 클릭/키보드 전파 차단 (role=dialog) */}
       <div
         className={`w-[540px] rounded-2xl shadow-2xl overflow-hidden transition-all animate-in fade-in slide-in-from-top-4 duration-200 ${
           isDark ? 'bg-[#2C2C2E] border border-gray-700' : 'bg-white border border-gray-200'
         }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="빠른 할 일 추가"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         {/* 입력 영역 */}
         <div className="p-5">

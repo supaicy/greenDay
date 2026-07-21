@@ -72,8 +72,17 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
 
   return (
     <>
+      {/* biome-ignore lint/a11y/useSemanticElements: 드래그/컨텍스트메뉴/중첩 button 포함으로 <button> 전환 불가 */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => (batchMode ? toggleBatchSelect(task.id) : selectTask(task.id))}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            batchMode ? toggleBatchSelect(task.id) : selectTask(task.id)
+          }
+        }}
         onContextMenu={handleContextMenu}
         draggable={!batchMode}
         onDragStart={(e) => {
@@ -182,6 +191,8 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
 
       {/* 우클릭 컨텍스트 메뉴 */}
       {contextMenu && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: 컨텍스트 메뉴 컨테이너 — 중첩 button이 키보드 접근성 제공
+        // biome-ignore lint/a11y/useKeyWithClickEvents: 컨텍스트 메뉴 컨테이너 — 중첩 button이 키보드 접근성 제공
         <div
           ref={menuRef}
           className={`fixed z-[100] rounded-lg shadow-2xl py-1 min-w-[180px] border ${isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'}`}

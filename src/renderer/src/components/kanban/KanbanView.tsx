@@ -178,9 +178,11 @@ export function KanbanView(): React.ReactElement {
       <div className="flex-1 flex gap-4 p-4 overflow-x-auto">
         {columns.map((col) => {
           const colTasks = getTasksForColumn(col.id)
+          // 칸반 칼럼: 드래그 드롭 대상 (<section>으로 의미론적 표현)
           return (
-            <div
+            <section
               key={col.id}
+              aria-label={col.title}
               className={`flex-1 min-w-[280px] flex flex-col rounded-xl border-t-2 ${getHeaderColor(col.id)} ${getColumnBg(col.id)} transition-colors`}
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={handleDragLeave}
@@ -205,13 +207,24 @@ export function KanbanView(): React.ReactElement {
                     {col.emptyText}
                   </div>
                 ) : (
-                  colTasks.map((task) => (
-                    <div
-                      key={task.id}
+                  colTasks.map((task) => {
+                    // 태스크 카드: 드래그 + 클릭 + 중첩 button(체크박스) → Pattern B
+                    return (
+                      // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                      <div
+                        key={task.id}
+                        role="button"
+                        tabIndex={0}
                       draggable
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={handleDragEnd}
                       onClick={() => selectTask(task.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          selectTask(task.id)
+                        }
+                      }}
                       className={`group rounded-lg p-3 cursor-pointer border transition-all ${
                         draggingTaskId === task.id ? 'opacity-40' : 'opacity-100'
                       } ${
@@ -287,11 +300,12 @@ export function KanbanView(): React.ReactElement {
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                      </div>
+                    )
+                  })
                 )}
               </div>
-            </div>
+            </section>
           )
         })}
       </div>

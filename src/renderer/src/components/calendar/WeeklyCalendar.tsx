@@ -285,9 +285,15 @@ export function WeeklyCalendar(): React.ReactElement {
                     }`}
                   >
                     {allDayTasks.map((task) => (
-                      <div key={task.id} onClick={() => selectTask(task.id)} className={taskCardClass(task)}>
+                      // 종일 태스크: 단순 클릭 → Pattern A (button)
+                      <button
+                        key={task.id}
+                        type="button"
+                        onClick={() => selectTask(task.id)}
+                        className={`${taskCardClass(task)} w-full text-left`}
+                      >
                         {task.title}
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )
@@ -325,9 +331,11 @@ export function WeeklyCalendar(): React.ReactElement {
               const dayBlocks = perDay.find((p) => p.dayStr === dayStr)
               const items = dayBlocks?.items ?? []
               const layout = dayBlocks?.layout ?? []
+              // 주간 칼럼: 드래그 드롭 대상 (<section>으로 의미론적 표현)
               return (
-                <div
+                <section
                   key={`daycol-${dayStr}`}
+                  aria-label={dayStr}
                   className={`relative flex-1 border-l ${
                     isToday
                       ? isDark
@@ -400,7 +408,13 @@ export function WeeklyCalendar(): React.ReactElement {
                         style={{ height: '48px' }}
                       >
                         {cellTasks.map((task) => (
-                          <div key={task.id} onClick={() => selectTask(task.id)} className={taskCardClass(task)}>
+                          // 시간 셀 태스크: 단순 클릭 → Pattern A (button)
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => selectTask(task.id)}
+                            className={`${taskCardClass(task)} w-full text-left`}
+                          >
                             <div className="flex items-center gap-1">
                               {task.priority !== 'none' && <Flag size={8} className="flex-shrink-0" />}
                               <span className="truncate">{task.title}</span>
@@ -410,7 +424,7 @@ export function WeeklyCalendar(): React.ReactElement {
                                 {task.dueTime}
                               </div>
                             )}
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )
@@ -448,7 +462,7 @@ export function WeeklyCalendar(): React.ReactElement {
                       })}
                     </div>
                   </div>
-                </div>
+                </section>
               )
             })}
           </div>

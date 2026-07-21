@@ -157,8 +157,11 @@ export function Sidebar() {
     <div key={list.id} className="relative group">
       {editingListId === list.id ? (
         <div className="flex items-center gap-2 px-3 py-1">
-          <div
-            className="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer"
+          {/* 색상 변경 버튼 (Pattern A: 순수 클릭 요소 → button) */}
+          <button
+            type="button"
+            aria-label="색상 변경"
+            className="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer appearance-none border-0 p-0"
             style={{ backgroundColor: editColor }}
             onClick={() => {
               const idx = COLORS.indexOf(editColor)
@@ -180,15 +183,24 @@ export function Sidebar() {
           </button>
         </div>
       ) : (
-        <button
-          type="button"
+        /* biome-ignore lint/a11y/useSemanticElements: 중첩 button(컨텍스트 메뉴 트리거) 포함으로 <button> 전환 불가 */
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setSelectedList(list.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setSelectedList(list.id)
+            }
+          }}
           className={btnClass(selectedListId === list.id && viewType === 'tasks')}
         >
           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: list.color }} />
           <span className="flex-1 text-left truncate">{list.name}</span>
           <span className={`text-xs ${mutedClass}`}>{taskCounts[list.id] || ''}</span>
-          <span
+          <button
+            type="button"
             className="opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation()
@@ -196,8 +208,8 @@ export function Sidebar() {
             }}
           >
             <MoreHorizontal size={14} className={`${mutedClass} hover:text-white`} />
-          </span>
-        </button>
+          </button>
+        </div>
       )}
       {contextMenu === list.id && (
         <div
@@ -357,8 +369,11 @@ export function Sidebar() {
           {/* 리스트 추가 */}
           {showNewList && (
             <div className="flex items-center gap-2 px-3 py-1 mt-1">
-              <div
-                className="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer"
+              {/* 색상 변경 버튼 (Pattern A: 순수 클릭 요소 → button) */}
+              <button
+                type="button"
+                aria-label="색상 변경"
+                className="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer appearance-none border-0 p-0"
                 style={{ backgroundColor: newListColor }}
                 onClick={() => {
                   const idx = COLORS.indexOf(newListColor)

@@ -183,20 +183,31 @@ export function TimelineView(): React.ReactElement {
 
                 {/* 태스크 목록 */}
                 <div className="space-y-1.5">
-                  {group.tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => selectTask(task.id)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedTaskId === task.id
-                          ? isDark
-                            ? 'bg-blue-900/30 border border-blue-500/50'
-                            : 'bg-blue-50 border border-blue-300'
-                          : isDark
-                            ? 'hover:bg-gray-800 border border-transparent'
-                            : 'hover:bg-gray-100 border border-transparent'
-                      }`}
-                    >
+                  {group.tasks.map((task) => {
+                    // 태스크 항목: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
+                    return (
+                      // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                      <div
+                        key={task.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => selectTask(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            selectTask(task.id)
+                          }
+                        }}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                          selectedTaskId === task.id
+                            ? isDark
+                              ? 'bg-blue-900/30 border border-blue-500/50'
+                              : 'bg-blue-50 border border-blue-300'
+                            : isDark
+                              ? 'hover:bg-gray-800 border border-transparent'
+                              : 'hover:bg-gray-100 border border-transparent'
+                        }`}
+                      >
                       {/* 체크박스 */}
                       <button
                         type="button"
@@ -237,7 +248,7 @@ export function TimelineView(): React.ReactElement {
                         </span>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             ))}

@@ -34,12 +34,27 @@ export function ExportDialog() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={handleClose}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: 모달 배경 — 클릭/키보드 모두 지원
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={handleClose}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          handleClose()
+        }
+      }}
+    >
+      {/* 모달 콘텐츠: 클릭 전파 차단 */}
       <div
         className={`w-[400px] rounded-xl shadow-2xl overflow-hidden ${
           isDark ? 'bg-[#2C2C2E] text-gray-100' : 'bg-white text-gray-800'
         }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="데이터 내보내기"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
         <div

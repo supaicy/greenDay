@@ -64,8 +64,13 @@ export function SortMenu({ onClose }: SortMenuProps = {}) {
       {/* 드롭다운 */}
       {open && (
         <>
-          {/* 배경 클릭으로 닫기 */}
-          <div className="fixed inset-0 z-40" onClick={close} />
+          {/* 배경 클릭으로 닫기 (Pattern A: 순수 클릭 → button) */}
+          <button
+            type="button"
+            aria-label="닫기"
+            className="fixed inset-0 z-40"
+            onClick={close}
+          />
 
           <div
             className={`absolute right-0 top-full mt-1 z-50 rounded-lg shadow-2xl border py-1 min-w-[160px] ${

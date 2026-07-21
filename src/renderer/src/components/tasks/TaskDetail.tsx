@@ -385,11 +385,17 @@ export function TaskDetail() {
               </button>
             </div>
             {mdPreview ? (
+              // biome-ignore lint/a11y/noStaticElementInteractions: 마크다운 프리뷰 — 렌더링된 콘텐츠 포함으로 button 전환 불가; onKeyDown으로 편집 모드 전환 지원
               <div
                 className={`prose prose-sm max-w-none flex-1 min-h-[200px] rounded-lg px-3 py-2.5 border cursor-text overflow-y-auto ${isDark ? 'prose-invert bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}
                 onClick={(e) => {
                   const target = e.target as HTMLElement
                   if (target.tagName !== 'INPUT' && target.tagName !== 'A') {
+                    setMdPreview(false)
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
                     setMdPreview(false)
                   }
                 }}

@@ -107,6 +107,7 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   const completedStripe = task.completed ? 'bg-stripes opacity-60' : ''
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 드래그 블록 — drag/contextMenu 인터랙션, button 전환 불가
     <div
       ref={elRef}
       draggable
@@ -129,13 +130,16 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
         {String(end.getMinutes()).padStart(2, '0')}
       </div>
       {/* Resize handle (bottom 6px) */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 크기 조정 핸들, 마우스 드래그 전용 */}
       <div
         onMouseDown={onResizeStart}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '6px', cursor: 'ns-resize' }}
       />
       {menuOpen && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: 컨텍스트 메뉴 컨테이너 — 중첩 button이 키보드 접근성 제공
         <div
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
           className={`absolute right-1 top-1 rounded shadow-md z-10 ${
             isDark ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'
           }`}

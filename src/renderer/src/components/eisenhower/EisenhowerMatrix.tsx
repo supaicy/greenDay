@@ -116,10 +116,20 @@ export function EisenhowerMatrix(): React.ReactElement {
     return result
   }, [tasks, isDark])
 
+  // 태스크 항목: 중첩된 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
   const renderTaskItem = (task: Task) => (
+    // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
     <div
       key={task.id}
+      role="button"
+      tabIndex={0}
       onClick={() => selectTask(task.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          selectTask(task.id)
+        }
+      }}
       className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${
         selectedTaskId === task.id
           ? isDark

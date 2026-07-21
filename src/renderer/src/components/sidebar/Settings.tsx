@@ -67,10 +67,25 @@ export function Settings() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={toggleSettings}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: 모달 배경 — 클릭/키보드 모두 지원
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={toggleSettings}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          toggleSettings()
+        }
+      }}
+    >
+      {/* 모달 콘텐츠: 클릭/키보드 전파 차단 (role=dialog) */}
       <div
         className={`w-[480px] max-h-[80vh] overflow-y-auto rounded-xl shadow-2xl ${theme === 'dark' ? 'bg-[#2C2C2E] text-gray-100' : 'bg-white text-gray-800'}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="설정"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         <div
           className={`flex items-center justify-between px-5 py-4 border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}
