@@ -128,7 +128,7 @@ export function TaskListView() {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: 태스크 목록 컨테이너 — 드래그 드롭 수신 영역
     <div
-      className={`flex-1 flex flex-col h-full ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}
+      className={`flex-1 flex flex-col min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('application/haru-task-block')) {
           e.preventDefault()

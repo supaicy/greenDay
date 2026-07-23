@@ -33,7 +33,7 @@ export function CalendarView() {
   const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
   return (
-    <div className={`flex-1 flex flex-col h-full ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
+    <div className={`flex-1 flex flex-col min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
       <div
         className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}
       >

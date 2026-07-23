@@ -95,7 +95,7 @@ export function PomodoroTimer() {
   const strokeDashoffset = circumference * (1 - progress)
 
   return (
-    <div className={`flex-1 flex flex-col items-center justify-center h-full ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
+    <div className={`flex-1 flex flex-col items-center justify-center min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
       {/* 모드 선택 */}
       <div className="flex gap-2 mb-12">
         {MODES.map((m) => (

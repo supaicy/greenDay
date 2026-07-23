@@ -57,7 +57,7 @@ export function HabitTracker() {
   const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
 
   return (
-    <div className={`flex-1 flex flex-col h-full ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
+    <div className={`flex-1 flex flex-col min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
       {/* 헤더 */}
       <div
         className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}

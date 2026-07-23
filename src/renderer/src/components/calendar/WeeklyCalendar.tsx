@@ -180,7 +180,7 @@ export function WeeklyCalendar(): React.ReactElement {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div
         className={`px-6 py-3 border-b flex items-center justify-between ${
