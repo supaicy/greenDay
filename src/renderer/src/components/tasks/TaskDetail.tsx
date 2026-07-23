@@ -34,6 +34,7 @@ import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { AttachmentList } from './AttachmentList'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
+import { clampDetailHeight } from '../../store/detailHeight'
 import type { Priority } from '../../types'
 
 // react-markdown 설정은 렌더마다 새 참조가 되지 않도록 모듈 스코프에 고정
@@ -143,8 +144,10 @@ export function TaskDetail() {
   const inputCls = isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-300'
   const labelCls = isDark ? 'text-gray-500' : 'text-gray-400'
 
-  // 하단 패널 높이: 저장값(px) 없으면 콘텐츠 높이의 72% (Stage 3에서 드래그로 조절)
-  const height = detailHeight ?? Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.72)
+  // 하단 패널 높이: 저장값(px) 없으면 콘텐츠 높이의 72%. read 시점에도 clamp해서
+  // (큰 창에서 저장한 큰 값이) 작은 창에서 위 뷰를 0으로 짓누르지 않게 한다.
+  // (정밀한 콘텐츠 높이 측정 + 창 리사이즈 재-clamp는 Stage 3)
+  const height = clampDetailHeight(detailHeight ?? Math.round(window.innerHeight * 0.72), window.innerHeight)
   const priorityColor = PRIORITY_OPTIONS.find((p) => p.value === task.priority)?.color || 'text-gray-400'
 
   return (

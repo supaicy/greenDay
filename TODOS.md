@@ -51,6 +51,18 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 
 ## UI/UX
 
+### [P3] 하단 상세 패널 — 코드 품질 후속 (/simplify 2026-07-24 발견, 보류)
+- **TaskDetail 구독 최적화**: `const {…} = useStore()` 무선택자 구독이라 아무 store 쓰기에도 리렌더. `useShallow` 선택자로 전환(액션은 안정 참조라 분리). 리렌더 급감. (기존 패턴, 리팩터가 toggleTask 추가하며 유지)
+- **마크다운 재파싱**: preview에서 매 렌더 `<Markdown>` 재파싱 — `components` 객체를 `useMemo([toggleCheckbox])`로 고정(input 렌더러 타입 마찰 주의). REMARK_PLUGINS는 이미 호이스트됨.
+- **PickerRow 추출**: 알림/반복 토글 블록 ~26줄 near-identical → 로컬 `PickerRow` 컴포넌트로 dedup.
+- **DetailHeader 추출**: TaskDetail 470줄 — 헤더(~95줄) 서브컴포넌트 추출로 가독성.
+- **기본 높이 이동**: `window.innerHeight*0.72` 인라인 기본값을 `store/detailHeight.ts`의 `defaultDetailHeight(contentHeight)`로 이동, store에서 null→기본 해소. Stage 3(드래그+contentHeight)에서 함께 처리 예정.
+
+### [P2] 하단 상세 패널 — 알림/반복 피커 드롭다운 클리핑
+- **What:** ReminderPicker/RecurringPicker가 `absolute top-full` 드롭다운인데, 하단 패널의 짧은 좌측 컬럼(`overflow-y-auto`)에서 아래로 열리면 잘림. z-50로도 overflow 조상은 못 벗어남.
+- **Fix 후보:** 포털 렌더 또는 `position: fixed`, 혹은 트리거가 컬럼 하단이면 위로(bottom-full) 열기. **라이브 QA로 검증 필요** (2026-07-24 code-review 발견, Mac 잠금으로 즉시 검증 불가).
+- **Added:** 2026-07-24 bottom-detail /review
+
 ### [P2] 하단 상세 패널 — 좁은 폭 반응형 스택
 - **What:** 하단 상세 패널의 2열 본문(하위작업+메타 | 메모)이 콘텐츠 폭이 좁을 때 답답함. 브레이크포인트를 두어 특정 폭 미만에서 세로 스택으로 전환.
 - **Why:** 우선 2열로 출시하기로 결정(2026-07-24). 좁은 창/사이드패널 동시 오픈 시 가독성 개선을 위한 후속.
