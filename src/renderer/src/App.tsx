@@ -100,10 +100,8 @@ export default function App() {
       className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#1C1C1E] text-gray-100' : 'bg-white text-gray-800'}`}
     >
       <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0">
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <MainContent />
-        </div>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        <MainContent />
         {selectedTaskId && (
           <Suspense fallback={null}>
             <TaskDetail />
