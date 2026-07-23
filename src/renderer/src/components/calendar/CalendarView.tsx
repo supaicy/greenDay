@@ -5,7 +5,7 @@ import { getCalendarDays, formatDate, toDateString } from '../../utils/date'
 import { isToday, isSameMonth } from 'date-fns'
 
 export function CalendarView() {
-  const { tasks, selectTask, setViewType, setSelectedList, theme } = useStore()
+  const { tasks, selectTask, theme } = useStore()
   const isDark = theme === 'dark'
   const [currentDate, setCurrentDate] = useState(new Date())
   const year = currentDate.getFullYear()
@@ -107,11 +107,7 @@ export function CalendarView() {
                     <button
                       type="button"
                       key={task.id}
-                      onClick={() => {
-                        setViewType('tasks')
-                        setSelectedList(task.listId)
-                        selectTask(task.id)
-                      }}
+                      onClick={() => selectTask(task.id)}
                       className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate transition-colors ${
                         isDark
                           ? 'bg-primary-900/40 text-primary-300 hover:bg-primary-900/60'
