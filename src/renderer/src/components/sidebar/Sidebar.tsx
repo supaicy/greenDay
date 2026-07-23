@@ -28,7 +28,7 @@ import {
   Bot
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import { toDateString } from '../../utils/date'
+import { isDueToday, isOverdue, isDueInNext7Days } from '../../utils/date'
 import type { SmartList, ViewType } from '../../types'
 
 const SMART_LISTS: { id: SmartList; label: string; icon: React.ReactNode }[] = [
@@ -89,12 +89,12 @@ export function Sidebar() {
   const isDark = theme === 'dark'
 
   const taskCounts = useMemo(() => {
-    const todayStr = toDateString(new Date())
-    const next7 = toDateString(new Date(Date.now() + 7 * 86400000))
     const incomplete = tasks.filter((t) => !t.completed)
     const counts: Record<string, number> = {
-      today: incomplete.filter((t) => t.dueDate && t.dueDate <= todayStr).length,
-      next7days: incomplete.filter((t) => t.dueDate && t.dueDate <= next7).length,
+      // Badge counts must use the SAME predicates as the list-view filters
+      // (TaskList.tsx) so the sidebar number always matches what the list shows.
+      today: incomplete.filter((t) => isDueToday(t.dueDate) || isOverdue(t.dueDate)).length,
+      next7days: incomplete.filter((t) => isDueInNext7Days(t.dueDate)).length,
       inbox: incomplete.filter((t) => t.listId === 'inbox').length,
       all: incomplete.length,
       completed: tasks.filter((t) => t.completed).length,
