@@ -91,8 +91,12 @@ export function setupIpcHandlers(): void {
 
   // Export
   ipcMain.handle('export-data', async () => {
+    // Local date (not toISOString/UTC) so the filename matches the user's day —
+    // toISOString lags a day for positive-UTC users in early-morning hours.
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const result = await dialog.showSaveDialog({
-      defaultPath: `ticktick-backup-${new Date().toISOString().split('T')[0]}.json`,
+      defaultPath: `ticktick-backup-${today}.json`,
       filters: [
         { name: 'JSON', extensions: ['json'] },
         { name: 'CSV', extensions: ['csv'] }
