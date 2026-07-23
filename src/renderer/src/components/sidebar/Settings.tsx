@@ -53,6 +53,21 @@ export function Settings() {
     }
   }, [aiConfig])
 
+  // Close on Escape. Uses a capture-phase document listener because the modal
+  // content stops keydown propagation, so the backdrop's onKeyDown never fires
+  // when focus is inside the modal (which is almost always).
+  useEffect(() => {
+    if (!showSettings) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        toggleSettings()
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [showSettings, toggleSettings])
+
   if (!showSettings) return null
 
   const handleAiSave = () => {
