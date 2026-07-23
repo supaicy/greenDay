@@ -20,7 +20,7 @@ Move the task detail from the current right-side vertical panel to a **bottom pa
 1. **Placement**: bottom panel, slides up from the bottom of the content area (right of the sidebar). Does not extend under the sidebar.
 2. **Behavior**: **Push** — the view content (list/calendar/kanban/…) shrinks vertically to sit above the panel; both are visible at once. Not an overlay.
 3. **Scope**: **all views**. Clicking a task/event in any view (list, calendar month/week/day, kanban, timeline, eisenhower) opens the same bottom detail. Remove the `viewType === 'tasks'` gate; gate on `selectedTaskId` alone.
-4. **Height**: user-adjustable by **dragging a grip** at the top edge of the panel. The chosen height **persists** across sessions. Default on first use ≈ 78vh ("XL"). Clamp to a sensible range (min ~22vh, max ~88vh).
+4. **Height**: user-adjustable by **dragging a grip** at the top edge of the panel. The chosen height **persists** across sessions. Stored as **absolute px** (see Store) so the panel keeps the exact size the user set even after the window is resized — vh was considered but rejected because it rescales the panel when the window changes. Default on first use ≈ 72% of the content-area height. Clamped so it never overflows: `[240px, contentHeight − 160px]` (always keep ≥160px of the view visible above); re-clamp on window resize.
 5. **Content layout** (reference-informed — TickTick / Todoist / Things), notes on the **right**:
    - **Header** (full width): complete circle `○` (priority-colored) + editable **title** + inline chips `📅 date/time` and `⚑ priority` + close `✕`.
    - **Body, two columns**:
@@ -50,8 +50,8 @@ Move the task detail from the current right-side vertical panel to a **bottom pa
 - Keep dark-mode styling (existing `isDark` branches).
 
 ### Store (`useStore.ts`)
-- Add persisted UI state `detailPanelHeightVh: number` — panel height as a **vh percentage** (scales with window size), default `78`. Persist alongside other UI prefs (same mechanism as `theme`).
-- Action `setDetailPanelHeightVh(vh)` clamps to `[22, 88]` and persists. During drag, convert the pointer position to vh: `(1 - clientY / window.innerHeight) * 100`, clamped.
+- Add persisted UI state `detailPanelHeightPx: number | null` — panel height in **absolute px** (null = "use default 72% of content height on first open"). Persist alongside other UI prefs (same mechanism as `theme`).
+- Action `setDetailPanelHeightPx(px)` clamps to `[240, contentHeight − 160]` and persists. During drag, derive px from the pointer: `contentBottom − clientY`, clamped. On window resize, re-clamp the stored value against the new available height.
 
 ### Resize interaction
 - Grip `mousedown` → track drag → live-update `--detail-height` (or inline height) → on `mouseup`, commit to `setDetailPanelHeight` (persist). Clamp during drag.
@@ -67,12 +67,16 @@ Move the task detail from the current right-side vertical panel to a **bottom pa
 
 ## Testing
 
-- Unit: `setDetailPanelHeight` clamps and persists; height survives reload.
+- Unit: `setDetailPanelHeightPx` clamps and persists; height survives reload.
 - Behavior (manual / live): detail opens from list, calendar, kanban; drag resizes and persists; Esc/✕ close; title/notes/priority/subtask edits still work; dark mode looks right.
 - Regression: existing TaskDetail field tests (if any) still pass; no console errors on open/close across views.
+
+## Deferred follow-ups (recorded, not in this change)
+
+- **Narrow-width responsive stacking** — when the content column is narrow, the two-column body (subtasks/meta | notes) gets cramped. Deferred by decision (2026-07-24): ship the two-column layout now; add a breakpoint that stacks the columns vertically below some width as a follow-up. Tracked in `TODOS.md`.
 
 ## Out of scope
 
 - Redesigning the fields themselves (pickers, markdown editor) — only their arrangement changes.
-- Mobile/responsive redesign beyond the narrow-width stack note.
+- Full mobile/responsive redesign (beyond the deferred narrow-width stack above).
 - Changing the AI panel or settings modal.
