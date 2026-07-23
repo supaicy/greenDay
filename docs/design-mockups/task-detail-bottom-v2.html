@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru — 하단 상세 패널 v2 (레퍼런스 기반)</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-100:#dbeafe; --primary-700:#2563eb;
+    --g100:#f3f4f6; --g200:#e5e7eb; --g300:#d1d5db; --g400:#9ca3af;
+    --g500:#6b7280; --g600:#4b5563; --g700:#374151; --g800:#1f2937;
+    --red:#ef4444; --amber:#f59e0b; --blue:#3b82f6; --green:#22c55e;
+    --panel-h: 78vh;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+    color:var(--g800);background:#fff;-webkit-font-smoothing:antialiased;font-size:14px;overflow:hidden}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* sidebar */
+  .sidebar{width:220px;flex-shrink:0;background:var(--g100);display:flex;flex-direction:column;padding:8px;user-select:none}
+  .sb-spacer{height:24px}
+  .sb-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--g600);font-size:13px;cursor:pointer}
+  .sb-item:hover{background:var(--g200)}
+  .sb-item.active{background:var(--primary-100);color:var(--primary-700);font-weight:500}
+  .sb-item .ic{width:16px;text-align:center;opacity:.75}
+  .sb-item .count{margin-left:auto;font-size:11px;color:var(--g400)}
+  .sb-sec{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--g400);padding:12px 10px 4px;text-transform:uppercase}
+  .sb-divider{height:1px;background:var(--g300);margin:8px 4px}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;overflow:hidden}
+  .topbar{height:56px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 24px}
+  .topbar h1{font-size:20px;font-weight:700}
+  .search{margin-left:auto;width:200px;height:32px;background:var(--g100);border-radius:8px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--g400);font-size:12px}
+
+  /* content area (list / calendar / kanban) shrinks in PUSH mode */
+  .content{flex:1;min-height:0;overflow:auto;transition:flex-basis .28s cubic-bezier(.32,.72,0,1)}
+  .view{display:none;height:100%}
+  .view.on{display:block}
+  /* list */
+  .add-row{display:flex;align-items:center;gap:10px;color:var(--primary);font-weight:500;padding:10px 24px}
+  .task{display:flex;gap:12px;align-items:flex-start;padding:12px 24px;cursor:pointer;border-bottom:1px solid #f4f4f5}
+  .task:hover{background:#fafafa}
+  .task.sel{background:var(--primary-100)}
+  .circle{width:18px;height:18px;border:2px solid var(--g300);border-radius:50%;flex-shrink:0;margin-top:1px}
+  .task.p-high .circle{border-color:var(--red)}.task.p-low .circle{border-color:var(--blue)}
+  .t-title{font-size:14px}
+  .t-meta{display:flex;gap:10px;margin-top:4px;font-size:12px;color:var(--g400)}
+  .flag-high{color:var(--red)}.flag-low{color:var(--blue)}
+  /* calendar */
+  .cal{padding:12px 24px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--g200);border:1px solid var(--g200);border-radius:8px;overflow:hidden}
+  .cal-grid .dh{background:#fff;text-align:center;font-size:11px;color:var(--g400);padding:6px}
+  .cal-cell{background:#fff;min-height:70px;padding:6px;font-size:12px;color:var(--g600)}
+  .cal-cell.today .num{background:var(--primary);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-grid;place-items:center}
+  .cal-ev{margin-top:4px;background:var(--primary-100);color:var(--primary-700);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* kanban */
+  .kb{display:flex;gap:12px;padding:12px 24px;height:100%}
+  .kb-col{flex:1;background:var(--g100);border-radius:10px;padding:10px}
+  .kb-col h3{font-size:12px;color:var(--g500);margin-bottom:8px;display:flex;justify-content:space-between}
+  .kb-card{background:#fff;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+
+  /* ===== bottom detail panel (reference-informed) ===== */
+  .panel{position:absolute;left:0;right:0;bottom:0;height:var(--panel-h);background:#fff;border-top:1px solid var(--g200);
+    box-shadow:0 -8px 30px rgba(0,0,0,.09);display:flex;flex-direction:column;
+    transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);z-index:5}
+  .panel.open{transform:translateY(0)}
+  .grip{height:14px;display:grid;place-items:center;cursor:ns-resize;flex-shrink:0}
+  .grip::before{content:"";width:38px;height:4px;border-radius:3px;background:var(--g300)}
+
+  /* header: title + inline date/priority chips (TickTick-style) */
+  .p-head{display:flex;align-items:center;gap:14px;padding:2px 24px 14px;border-bottom:1px solid var(--g100)}
+  .p-check{width:24px;height:24px;border:2px solid var(--red);border-radius:50%;flex-shrink:0;cursor:pointer;position:relative}
+  .p-check:hover::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:var(--red);font-size:13px}
+  .p-title{flex:1;font-size:20px;font-weight:600;border:none;outline:none;background:transparent;min-width:0}
+  .hchip{display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;border:1px solid var(--g200);color:var(--g600)}
+  .hchip.date{background:#eff6ff;border-color:#dbeafe;color:var(--primary-700)}
+  .hchip.pri{color:var(--red);border-color:#fecaca;background:#fef2f2}
+  .p-x{color:var(--g400);cursor:pointer;font-size:19px;padding:4px;margin-left:2px}
+  .p-x:hover{color:var(--g700)}
+
+  /* body: NOTES hero (left) + structure/meta sidebar (right) */
+  .p-body{flex:1;min-height:0;display:grid;grid-template-columns:1.35fr 1fr;overflow:hidden}
+  .p-body.flip{grid-template-columns:1fr 1.35fr}
+  .p-body.flip .col-notes{order:2;border-left:1px solid var(--g100);border-right:none}
+  .p-body.flip .col-side{order:1}
+  .col{overflow:auto;padding:18px 24px}
+  .col-notes{border-right:1px solid var(--g100)}
+  .col h4{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--g400);text-transform:uppercase;margin-bottom:10px;display:flex;gap:8px;align-items:center}
+  .tabs{display:flex;gap:4px;margin-bottom:10px}
+  .tabs button{border:none;background:var(--g100);color:var(--g500);font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer}
+  .tabs button.on{background:var(--primary-100);color:var(--primary-700);font-weight:500}
+  .note{width:100%;min-height:calc(100% - 40px);border:none;outline:none;resize:none;font-size:14px;color:var(--g700);line-height:1.7;background:transparent}
+  .sub{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px;color:var(--g700)}
+  .sub .sc{width:16px;height:16px;border:1.5px solid var(--g300);border-radius:4px;flex-shrink:0}
+  .sub.done .sc{background:var(--primary);border-color:var(--primary)}
+  .sub.done span{text-decoration:line-through;color:var(--g400)}
+  .prog{font-size:11px;color:var(--g400);font-weight:400}
+  .addline{color:var(--g400);font-size:13px;padding:7px 0;cursor:pointer}
+  .meta-list{margin-top:6px}
+  .meta-row2{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:13px;border-top:1px solid var(--g100)}
+  .meta-row2 .mk{color:var(--g400);width:74px;display:flex;align-items:center;gap:7px}
+  .meta-row2 .mv{color:var(--g700);cursor:pointer}
+  .meta-row2 .mv.muted{color:var(--g400)}
+  .seg{display:inline-flex;background:var(--g100);border-radius:8px;padding:2px}
+  .seg button{border:none;background:transparent;font-size:12px;padding:4px 9px;border-radius:6px;color:var(--g500);cursor:pointer}
+  .seg button.on{background:#fff;color:var(--g800);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .seg button.high.on{color:var(--red)}
+
+  /* mockup controls */
+  .ctrls{position:fixed;top:12px;right:16px;z-index:50;display:flex;gap:8px;align-items:center;background:rgba(28,28,30,.93);color:#fff;padding:8px 12px;border-radius:12px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+  .ctrls b{font-weight:600;margin-right:2px;color:#c7c7cc}
+  .ctrls button{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:7px;padding:5px 9px;cursor:pointer;font-size:12px}
+  .ctrls button.on{background:#fff;color:#1c1c1e;border-color:#fff}
+  .ctrls .sep{width:1px;height:20px;background:rgba(255,255,255,.2)}
+  .hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;font-size:12px;color:var(--g500);background:#fff;padding:6px 14px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+</style>
+</head>
+<body>
+<div class="ctrls">
+  <b>뷰</b>
+  <button class="on" id="vList" onclick="setView('list')">리스트</button>
+  <button id="vCal" onclick="setView('cal')">캘린더</button>
+  <button id="vKb" onclick="setView('kb')">칸반</button>
+  <span class="sep"></span>
+  <b>높이</b>
+  <button onclick="setH(34,'S')">S</button>
+  <button onclick="setH(50,'M')">M</button>
+  <button onclick="setH(64,'L')">L</button>
+  <button class="on" id="hXL" onclick="setH(78,'XL')">XL</button>
+  <span class="sep"></span>
+  <b>본문</b>
+  <button id="lA" onclick="setLayout('a')">메모-왼쪽</button>
+  <button class="on" id="lB" onclick="setLayout('b')">메모-오른쪽</button>
+</div>
+
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="sb-spacer"></div>
+    <div class="sb-item"><span class="ic">📅</span>오늘<span class="count">2</span></div>
+    <div class="sb-item"><span class="ic">🗓</span>다음 7일<span class="count">2</span></div>
+    <div class="sb-item active" id="sbInbox"><span class="ic">📥</span>수신함<span class="count">8</span></div>
+    <div class="sb-item"><span class="ic">☰</span>전체<span class="count">10</span></div>
+    <div class="sb-item"><span class="ic">✓</span>완료됨<span class="count">14</span></div>
+    <div class="sb-divider"></div>
+    <div class="sb-sec">뷰</div>
+    <div class="sb-item" id="sbCal"><span class="ic">📆</span>캘린더 (월)</div>
+    <div class="sb-item" id="sbKb"><span class="ic">▦</span>칸반 보드</div>
+    <div class="sb-item"><span class="ic">◷</span>포모도로</div>
+    <div class="sb-sec">리스트</div>
+    <div class="sb-item"><span class="ic" style="color:#4A90D9">●</span>HomestayKorea</div>
+    <div class="sb-item"><span class="ic" style="color:#2ECC71">●</span>web<span class="count">1</span></div>
+  </aside>
+
+  <section class="main">
+    <div class="topbar"><h1 id="viewTitle">수신함</h1><div class="search">🔍 검색... (Cmd+F)</div></div>
+
+    <div class="content" id="content">
+      <!-- LIST -->
+      <div class="view on" id="view-list">
+        <div class="add-row">＋ 할 일 추가 (Cmd+N)</div>
+        <div class="task p-low" onclick="openTask(this,'Chatwoot')"><div class="circle"></div><div><div class="t-title">Chatwoot</div><div class="t-meta"><span class="flag-low">⚑ 낮음</span></div></div></div>
+        <div class="task p-high" onclick="openTask(this,'대전 결혼 장려금')"><div class="circle"></div><div><div class="t-title">대전 결혼 장려금</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div></div>
+        <div class="task p-high sel" onclick="openTask(this,'Android 키스토어 생성 + 보안 백업')"><div class="circle"></div><div><div class="t-title">Android 키스토어 생성 + 보안 백업</div><div class="t-meta"><span>📅 오늘 14:00</span><span class="flag-high">⚑ 높음</span></div></div></div>
+        <div class="task p-high" onclick="openTask(this,'Firebase 콘솔 앱 등록')"><div class="circle"></div><div><div class="t-title">Firebase 콘솔 앱 등록 → GoogleService-Info.plist 배치</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div></div>
+        <div class="task p-high" onclick="openTask(this,'Bundle ID / 브랜드명 최종 확정')"><div class="circle"></div><div><div class="t-title">Bundle ID / 브랜드명 최종 확정</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div></div>
+      </div>
+      <!-- CALENDAR -->
+      <div class="view" id="view-cal">
+        <div class="cal">
+          <div class="cal-grid">
+            <div class="dh">일</div><div class="dh">월</div><div class="dh">화</div><div class="dh">수</div><div class="dh">목</div><div class="dh">금</div><div class="dh">토</div>
+            <div class="cal-cell"><span class="num">20</span></div>
+            <div class="cal-cell"><span class="num">21</span></div>
+            <div class="cal-cell"><span class="num">22</span></div>
+            <div class="cal-cell"><span class="num">23</span></div>
+            <div class="cal-cell today"><span class="num">24</span><div class="cal-ev" onclick="openTask(null,'Android 키스토어 생성 + 보안 백업')">키스토어 생성</div></div>
+            <div class="cal-cell"><span class="num">25</span></div>
+            <div class="cal-cell"><span class="num">26</span></div>
+            <div class="cal-cell"><span class="num">27</span></div>
+            <div class="cal-cell"><span class="num">28</span><div class="cal-ev" onclick="openTask(null,'스토어 메타데이터 작성')">스토어 메타</div></div>
+            <div class="cal-cell"><span class="num">29</span></div>
+            <div class="cal-cell"><span class="num">30</span></div>
+            <div class="cal-cell"><span class="num">31</span></div>
+            <div class="cal-cell"><span class="num">1</span></div>
+            <div class="cal-cell"><span class="num">2</span></div>
+          </div>
+          <p style="margin-top:10px;font-size:12px;color:var(--g400)">캘린더에서 일정을 클릭해도 같은 하단 상세가 올라옵니다 (전 뷰 공통).</p>
+        </div>
+      </div>
+      <!-- KANBAN -->
+      <div class="view" id="view-kb">
+        <div class="kb">
+          <div class="kb-col"><h3>할 일 <span>3</span></h3>
+            <div class="kb-card" onclick="openTask(null,'대전 결혼 장려금')">대전 결혼 장려금</div>
+            <div class="kb-card" onclick="openTask(null,'Firebase 콘솔 앱 등록')">Firebase 콘솔 앱 등록</div>
+          </div>
+          <div class="kb-col"><h3>진행 중 <span>1</span></h3>
+            <div class="kb-card" onclick="openTask(null,'Android 키스토어 생성 + 보안 백업')">Android 키스토어 생성 + 보안 백업</div>
+          </div>
+          <div class="kb-col"><h3>완료 <span>2</span></h3>
+            <div class="kb-card" style="opacity:.6">사진 고르기</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== bottom detail ===== -->
+    <div class="panel open" id="panel">
+      <div class="grip" id="grip" title="드래그해서 높이 조절"></div>
+      <div class="p-head">
+        <div class="p-check" title="완료 표시"></div>
+        <input class="p-title" id="pTitle" value="Android 키스토어 생성 + 보안 백업" />
+        <div class="hchip date">📅 오늘 14:00</div>
+        <div class="hchip pri">⚑ 높음</div>
+        <div class="p-x" onclick="closePanel()" title="닫기 (Esc)">✕</div>
+      </div>
+      <div class="p-body flip" id="pBody">
+        <!-- LEFT: notes hero -->
+        <div class="col col-notes">
+          <div class="tabs"><button class="on">편집</button><button>미리보기</button></div>
+          <textarea class="note" placeholder="클릭하여 메모 작성...">키스토어는 앱 서명의 핵심. 유출 시 앱 업데이트가 불가하므로 오프라인 백업 필수.
+
+1. keytool -genkey -v -keystore haru.jks -alias haru -keyalg RSA -keysize 2048
+2. Play Console → 앱 서명 → 업로드 키 등록
+3. SHA-1 / SHA-256 지문을 Firebase 콘솔에 등록
+4. 비밀번호 + .jks 파일을 1Password & 외장 SSD 2곳에 백업</textarea>
+        </div>
+        <!-- RIGHT: structure + meta sidebar -->
+        <div class="col col-side">
+          <h4>하위 작업 <span class="prog">1/3</span></h4>
+          <div class="sub done"><span class="sc"></span><span>키스토어(.jks) 생성</span></div>
+          <div class="sub"><span class="sc"></span><span>SHA-1 / SHA-256 지문 등록</span></div>
+          <div class="sub"><span class="sc"></span><span>비밀번호 1Password 백업</span></div>
+          <div class="addline">＋ 하위 작업 추가</div>
+
+          <h4 style="margin-top:16px">첨부</h4>
+          <div class="addline">＋ 파일 추가</div>
+
+          <div class="meta-list" style="margin-top:14px">
+            <div class="meta-row2"><span class="mk">📋 리스트</span><span class="mv">수신함 ▾</span></div>
+            <div class="meta-row2"><span class="mk">⚑ 우선순위</span>
+              <span class="seg"><button>없음</button><button>낮음</button><button>중간</button><button class="high on">높음</button></span>
+            </div>
+            <div class="meta-row2"><span class="mk">🔔 알림</span><span class="mv muted">없음 · 추가</span></div>
+            <div class="meta-row2"><span class="mk">🔁 반복</span><span class="mv muted">안 함 · 설정</span></div>
+            <div class="meta-row2"><span class="mk"># 태그</span><span class="mv muted">태그 추가</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="hint">👆 리스트·캘린더·칸반 어디서 클릭해도 같은 하단 상세 · 상단 컨트롤로 뷰/높이/본문배치 비교 · 핸들 드래그로 리사이즈</div>
+
+<script>
+  const app=document.getElementById('app'),panel=document.getElementById('panel'),content=document.getElementById('content');
+  function setView(v){
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));
+    document.getElementById('view-'+v).classList.add('on');
+    document.getElementById('viewTitle').textContent = v==='list'?'수신함':v==='cal'?'2026년 7월':'칸반 보드';
+    ['vList','vCal','vKb'].forEach(id=>document.getElementById(id).classList.remove('on'));
+    ({list:'vList',cal:'vCal',kb:'vKb'});
+    document.getElementById(v==='list'?'vList':v==='cal'?'vCal':'vKb').classList.add('on');
+    syncPush();
+  }
+  function openTask(el,title){
+    if(el){document.querySelectorAll('.task').forEach(t=>t.classList.remove('sel'));el.classList.add('sel');}
+    document.getElementById('pTitle').value=title;
+    panel.classList.add('open');syncPush();
+  }
+  function closePanel(){panel.classList.remove('open');syncPush();}
+  function setH(vh,label){
+    document.documentElement.style.setProperty('--panel-h',vh+'vh');
+    ['S','M','L','XL'].forEach(l=>{[...document.querySelectorAll('.ctrls button')].find(b=>b.textContent===l)?.classList.remove('on');});
+    [...document.querySelectorAll('.ctrls button')].find(b=>b.textContent===label)?.classList.add('on');
+    syncPush();
+  }
+  function setLayout(x){
+    document.getElementById('pBody').classList.toggle('flip',x==='b');
+    document.getElementById('lA').classList.toggle('on',x==='a');
+    document.getElementById('lB').classList.toggle('on',x==='b');
+  }
+  function syncPush(){
+    const open=panel.classList.contains('open');
+    content.style.flexBasis = open ? 'calc(100% - '+getComputedStyle(document.documentElement).getPropertyValue('--panel-h')+')' : 'auto';
+  }
+  const grip=document.getElementById('grip');let drag=false;
+  grip.addEventListener('mousedown',e=>{drag=true;e.preventDefault();});
+  window.addEventListener('mouseup',()=>drag=false);
+  window.addEventListener('mousemove',e=>{if(!drag)return;const vh=Math.min(88,Math.max(22,(1-e.clientY/window.innerHeight)*100));document.documentElement.style.setProperty('--panel-h',vh+'vh');syncPush();});
+  window.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
+  syncPush();
+</script>
+</body>
+</html>
