@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
+import { clampDetailHeight } from './detailHeight'
 import type {
   Task,
   TaskList,
@@ -41,6 +42,7 @@ interface Store {
   showAddTask: boolean
   editingListId: string | null
   theme: Theme
+  detailPanelHeightPx: number | null
   showSettings: boolean
   sortBy: SortBy
   sortDir: SortDir
@@ -115,6 +117,7 @@ interface Store {
   setViewType: (type: ViewType) => void
   setSearchQuery: (query: string) => void
   setTheme: (theme: Theme) => void
+  setDetailPanelHeightPx: (px: number, contentHeight: number) => void
   toggleSettings: () => void
   setShowQuickAdd: (show: boolean) => void
   setShowExport: (show: boolean) => void
@@ -261,6 +264,10 @@ export const useStore = create<Store>((set, get) => ({
   showAddTask: false,
   editingListId: null,
   theme: (localStorage.getItem('ticktick-theme') as Theme) || 'dark',
+  detailPanelHeightPx: ((): number | null => {
+    const n = Number(localStorage.getItem('ticktick-detail-height'))
+    return Number.isFinite(n) && n > 0 ? n : null
+  })(),
   showSettings: false,
   sortBy: 'default',
   sortDir: 'asc',
@@ -625,6 +632,11 @@ export const useStore = create<Store>((set, get) => ({
   setTheme: (theme) => {
     localStorage.setItem('ticktick-theme', theme)
     set({ theme })
+  },
+  setDetailPanelHeightPx: (px, contentHeight) => {
+    const clamped = clampDetailHeight(px, contentHeight)
+    localStorage.setItem('ticktick-detail-height', String(clamped))
+    set({ detailPanelHeightPx: clamped })
   },
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   setShowQuickAdd: (show) => set({ showQuickAdd: show }),
