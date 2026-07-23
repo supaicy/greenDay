@@ -33,7 +33,11 @@ import { SubtaskList } from './SubtaskList'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { AttachmentList } from './AttachmentList'
+import { PRIORITY_OPTIONS } from '../../utils/priority'
 import type { Priority } from '../../types'
+
+// react-markdown 설정은 렌더마다 새 참조가 되지 않도록 모듈 스코프에 고정
+const REMARK_PLUGINS = [remarkGfm]
 
 // 코드 블록 syntax highlighting (모듈 스코프 컴포넌트)
 const CodeBlock = memo(function CodeBlock({
@@ -76,13 +80,6 @@ function formatScheduledRange(startIso: string, endIso: string): string {
   const e = `${pad(end.getHours())}:${pad(end.getMinutes())}`
   return `${date} ${s}–${e}`
 }
-
-const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
-  { value: 'none', label: '없음', color: 'text-gray-400' },
-  { value: 'low', label: '낮음', color: 'text-blue-400' },
-  { value: 'medium', label: '중간', color: 'text-yellow-400' },
-  { value: 'high', label: '높음', color: 'text-red-400' }
-]
 
 export function TaskDetail() {
   const { tasks, lists, selectedTaskId, selectTask, updateTask, removeTask, toggleTask, theme } = useStore()
@@ -428,7 +425,7 @@ export function TaskDetail() {
                   checkboxIndex.current = 0
                   return (
                     <Markdown
-                      remarkPlugins={[remarkGfm]}
+                      remarkPlugins={REMARK_PLUGINS}
                       components={{
                         code: CodeBlock,
                         input: (props) => {
