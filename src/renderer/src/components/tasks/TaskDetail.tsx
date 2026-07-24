@@ -101,6 +101,8 @@ export function TaskDetail() {
   const [showReminder, setShowReminder] = useState(false)
   // 드래그 중 라이브 높이(px). null이면 저장값 사용. mouseup에서만 persist.
   const [dragHeight, setDragHeight] = useState<number | null>(null)
+  // 열릴 때 아래에서 슬라이드업
+  const [shown, setShown] = useState(false)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form state resets only when a different task is selected; watching other fields would overwrite in-progress edits
   useEffect(() => {
@@ -146,6 +148,12 @@ export function TaskDetail() {
     return () => window.removeEventListener('resize', onResize)
   }, [detailHeight, setDetailPanelHeightPx])
 
+  // 마운트 직후 translateY(100%)→0 슬라이드업
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   if (!task) return null
 
   const save = (updates: Record<string, unknown>) => updateTask({ id: task.id, ...updates })
@@ -184,8 +192,8 @@ export function TaskDetail() {
   return (
     <div
       ref={panelRef}
-      className={`w-full flex-shrink-0 border-t flex flex-col ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
-      style={{ height }}
+      className={`w-full flex-shrink-0 border-t flex flex-col transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
+      style={{ height, transform: shown ? 'translateY(0)' : 'translateY(100%)' }}
     >
       {/* 드래그 핸들: 높이 조절 */}
       <button
