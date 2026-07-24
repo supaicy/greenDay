@@ -63,6 +63,11 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **Impact:** React18에서 언마운트 후 setState는 무해(no-op)하고 다음 mouseup에서 정리되지만, 견고성을 위해 useEffect cleanup으로 unmount 시 리스너 해제 권장.
 - **Added:** 2026-07-24 Stage 3 /review
 
+### [P3] 노트 에디터 — 번들 감량 (코드 언어 축소)
+- **What:** Atomic 라이브프리뷰 도입으로 lazy TaskDetail 청크가 563kB→~1,135kB. `@codemirror/lang-*` 13종이 상당 부분. `codeLanguages` prop으로 흔한 언어(js/ts/py/json/bash/css/html)만 로드하면 감량 가능.
+- **Impact:** 온디맨드 lazy 청크라 메인 초기로드엔 영향 없음. 저위험 최적화.
+- **Added:** 2026-07-24 노트 라이브프리뷰
+
 ### [P2] 하단 상세 패널 — 알림/반복 피커 드롭다운 클리핑
 - **What:** ReminderPicker/RecurringPicker가 `absolute top-full` 드롭다운인데, 하단 패널의 짧은 좌측 컬럼(`overflow-y-auto`)에서 아래로 열리면 잘림. z-50로도 overflow 조상은 못 벗어남.
 - **Fix 후보:** 포털 렌더 또는 `position: fixed`, 혹은 트리거가 컬럼 하단이면 위로(bottom-full) 열기. **라이브 QA로 검증 필요** (2026-07-24 code-review 발견, Mac 잠금으로 즉시 검증 불가).
