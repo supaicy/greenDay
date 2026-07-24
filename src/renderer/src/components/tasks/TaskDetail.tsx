@@ -89,6 +89,11 @@ export function TaskDetail() {
   )
   // 태스크 전환(flushNotes 재생성) / 언마운트 시 대기 중인 메모를 이전 태스크에 저장
   useEffect(() => flushNotes, [flushNotes])
+  // 창 닫힘/종료 시 디바운스 대기 중인 메모 유실 방지
+  useEffect(() => {
+    window.addEventListener('beforeunload', flushNotes)
+    return () => window.removeEventListener('beforeunload', flushNotes)
+  }, [flushNotes])
 
   const editorExtensions = useMemo(() => (isDark ? [DARK_EDITOR_THEME] : []), [isDark])
 
