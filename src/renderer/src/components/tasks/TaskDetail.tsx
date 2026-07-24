@@ -22,15 +22,25 @@ function formatScheduledRange(startIso: string, endIso: string): string {
   return `${date} ${s}–${e}`
 }
 
-// 다크 모드용 CM6 테마 (Atomic엔 theme prop이 없어 extensions로 전달). 배경은
-// 투명 — 부모 컬럼의 배경을 그대로 쓴다.
+// CM6 테마 (Atomic엔 theme prop이 없어 extensions로 전달). 배경은 투명 —
+// 부모 컬럼 배경을 그대로 쓰고, 본문 색만 앱 테마에 맞춰 대비를 확보한다.
+// Atomic 기본 테마는 다크 지향(본문색 변수 --atomic-editor-fg: #dcddde)이라
+// 라이트 배경에서 흐리다. 테마별로 이 변수를 덮어 대비를 맞춘다.
 const DARK_EDITOR_THEME = EditorView.theme(
   {
-    '&': { color: '#e5e5ea', backgroundColor: 'transparent' },
+    '&': { '--atomic-editor-fg': '#e5e5ea', backgroundColor: 'transparent' },
     '.cm-content': { caretColor: '#e5e5ea' },
     '.cm-gutters': { backgroundColor: 'transparent', color: '#8e8e93', border: 'none' }
   },
   { dark: true }
+)
+const LIGHT_EDITOR_THEME = EditorView.theme(
+  {
+    '&': { '--atomic-editor-fg': '#1f2937', backgroundColor: 'transparent' },
+    '.cm-content': { caretColor: '#1f2937' },
+    '.cm-gutters': { backgroundColor: 'transparent', color: '#9ca3af', border: 'none' }
+  },
+  { dark: false }
 )
 
 export function TaskDetail() {
@@ -95,7 +105,7 @@ export function TaskDetail() {
     return () => window.removeEventListener('beforeunload', flushNotes)
   }, [flushNotes])
 
-  const editorExtensions = useMemo(() => (isDark ? [DARK_EDITOR_THEME] : []), [isDark])
+  const editorExtensions = useMemo(() => (isDark ? [DARK_EDITOR_THEME] : [LIGHT_EDITOR_THEME]), [isDark])
 
   // 창 리사이즈 시 저장된 높이를 새 콘텐츠 높이 기준으로 다시 clamp
   useEffect(() => {
