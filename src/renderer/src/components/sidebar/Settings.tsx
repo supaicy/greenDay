@@ -61,6 +61,9 @@ export function Settings() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
+        // 상세 패널이 함께 열려 있을 때 window 단축키(useKeyboardShortcuts)까지
+        // 전파돼 태스크 선택이 같이 해제되는 이중발화를 막는다.
+        e.stopPropagation()
         toggleSettings()
       }
     }
