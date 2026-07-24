@@ -272,38 +272,25 @@ export function TaskDetail() {
         </div>
       </div>
 
-      {/* 본문: 왼쪽 하위작업+첨부+메타 / 오른쪽 메모 */}
-      <div className="flex-1 min-h-0 grid grid-cols-[280px_1fr]">
-        {/* 왼쪽: 하위작업 · 첨부 · 리스트/알림/반복/태그 */}
-        <div className={`min-h-0 overflow-y-auto p-4 space-y-4 border-r ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-          {/* 예정된 블록 (읽기 전용) */}
+      {/* 본문: 상단 메타 띠 + 아래 하위작업/첨부 + 메모 */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {/* 메타 띠: 리스트 · 알림 · 반복 · 태그 (가로 컴팩트) */}
+        <div className={`flex flex-wrap items-center gap-2 px-4 py-2 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
           {task.scheduledStart && task.scheduledEnd && (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Clock size={14} />
-              <span>예정: {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}</span>
-            </div>
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <Clock size={13} /> 예정 {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}
+            </span>
           )}
-
-          {/* 하위 작업 */}
-          <SubtaskList taskId={task.id} />
-
-          {/* 첨부파일 */}
-          <AttachmentList
-            taskId={task.id}
-            attachments={task.attachments}
-            onUpdate={(attachments) => save({ attachments })}
-          />
-
           {/* 리스트 */}
-          <div className="flex items-center gap-3">
-            <List size={16} className={labelCls} />
+          <div className="flex items-center gap-1">
+            <List size={14} className={labelCls} />
             <select
               value={listId}
               onChange={(e) => {
                 setListId(e.target.value)
                 save({ listId: e.target.value })
               }}
-              className={`flex-1 text-sm rounded px-2 py-1.5 outline-none border ${inputCls}`}
+              className={`text-xs rounded px-2 py-1 outline-none border ${inputCls}`}
             >
               {lists.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -312,103 +299,100 @@ export function TaskDetail() {
               ))}
             </select>
           </div>
-
           {/* 알림 */}
-          <div className="flex items-center gap-3">
-            <Bell size={16} className={labelCls} />
-            <div className="relative flex-1">
-              <button
-                type="button"
-                onClick={() => setShowReminder(!showReminder)}
-                className={`text-sm px-2 py-1 rounded border w-full text-left ${
-                  task.reminderAt
-                    ? 'text-primary-400 border-primary-500/30'
-                    : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
-                }`}
-              >
-                {task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림 설정'}
-              </button>
-              {showReminder && (
-                <ReminderPicker
-                  dueDate={task.dueDate}
-                  value={task.reminderAt}
-                  onChange={(v) => {
-                    save({ reminderAt: v })
-                    setShowReminder(false)
-                  }}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* 반복 */}
-          <div className="flex items-center gap-3">
-            <Repeat size={16} className={labelCls} />
-            <div className="relative flex-1">
-              <button
-                type="button"
-                onClick={() => setShowRecurring(!showRecurring)}
-                className={`text-sm px-2 py-1 rounded border w-full text-left ${
-                  task.isRecurring
-                    ? 'text-purple-400 border-purple-500/30'
-                    : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
-                }`}
-              >
-                {task.isRecurring ? task.recurringPattern || '반복' : '반복 설정'}
-              </button>
-              {showRecurring && (
-                <RecurringPicker
-                  value={task.recurringPattern}
-                  onChange={(v) => {
-                    save({ isRecurring: !!v, recurringPattern: v })
-                    setShowRecurring(false)
-                  }}
-                />
-              )}
-            </div>
-          </div>
-
-          {/* 태그 */}
-          <div className="flex items-start gap-3">
-            <Tag size={16} className={`${labelCls} mt-1`} />
-            <div className="flex-1">
-              <div className="flex flex-wrap gap-1 mb-2">
-                {task.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}
-                  >
-                    {tag}
-                    <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-400">
-                      <X size={10} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <input
-                type="text"
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.nativeEvent.isComposing) return
-                  if (e.key === 'Enter') addTag()
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowReminder(!showReminder)}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+                task.reminderAt
+                  ? 'text-primary-400 border-primary-500/30'
+                  : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
+              }`}
+            >
+              <Bell size={13} /> {task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
+            </button>
+            {showReminder && (
+              <ReminderPicker
+                dueDate={task.dueDate}
+                value={task.reminderAt}
+                onChange={(v) => {
+                  save({ reminderAt: v })
+                  setShowReminder(false)
                 }}
-                placeholder="태그 추가..."
-                className={`w-full text-xs rounded px-2 py-1.5 outline-none border ${inputCls} ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
               />
-            </div>
+            )}
+          </div>
+          {/* 반복 */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowRecurring(!showRecurring)}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+                task.isRecurring
+                  ? 'text-purple-400 border-purple-500/30'
+                  : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
+              }`}
+            >
+              <Repeat size={13} /> {task.isRecurring ? task.recurringPattern || '반복' : '반복'}
+            </button>
+            {showRecurring && (
+              <RecurringPicker
+                value={task.recurringPattern}
+                onChange={(v) => {
+                  save({ isRecurring: !!v, recurringPattern: v })
+                  setShowRecurring(false)
+                }}
+              />
+            )}
+          </div>
+          {/* 태그 */}
+          <div className="flex items-center gap-1 flex-1 min-w-[160px]">
+            <Tag size={14} className={labelCls} />
+            {task.tags.map((tag) => (
+              <span
+                key={tag}
+                className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}
+              >
+                {tag}
+                <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-400">
+                  <X size={10} />
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing) return
+                if (e.key === 'Enter') addTag()
+              }}
+              placeholder="태그..."
+              className={`flex-1 min-w-[60px] text-xs bg-transparent outline-none ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
+            />
           </div>
         </div>
 
-        {/* 오른쪽: 메모 (라이브프리뷰 마크다운) */}
-        <div className="min-h-0 overflow-hidden flex flex-col">
-          <AtomicCodeMirrorEditor
-            documentId={task.id}
-            markdownSource={task.description}
-            onMarkdownChange={onNotesChange}
-            onLinkClick={(url) => window.api.openExternal(url)}
-            extensions={editorExtensions}
-          />
+        {/* 하위작업 + 첨부 (컴팩트) + 메모 (히어로) */}
+        <div className="flex-1 min-h-0 flex flex-col px-4 pt-3">
+          <div className="flex-shrink-0 space-y-3 max-h-[45%] overflow-y-auto">
+            <SubtaskList taskId={task.id} />
+            <AttachmentList
+              taskId={task.id}
+              attachments={task.attachments}
+              onUpdate={(attachments) => save({ attachments })}
+            />
+          </div>
+          <div className="flex-1 min-h-0 pt-2 pb-4 flex flex-col">
+            <AtomicCodeMirrorEditor
+              documentId={task.id}
+              markdownSource={task.description}
+              onMarkdownChange={onNotesChange}
+              onLinkClick={(url) => window.api.openExternal(url)}
+              extensions={editorExtensions}
+            />
+          </div>
         </div>
       </div>
     </div>
