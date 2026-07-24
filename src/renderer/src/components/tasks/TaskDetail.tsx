@@ -30,6 +30,8 @@ const DARK_EDITOR_THEME = EditorView.theme(
   {
     '&': { '--atomic-editor-fg': '#e5e5ea', backgroundColor: 'transparent' },
     '.cm-content': { caretColor: '#e5e5ea' },
+    // 빈 줄에도 커서가 보이도록 최소 높이 확보
+    '.cm-line': { minHeight: '1.4em' },
     '.cm-gutters': { backgroundColor: 'transparent', color: '#8e8e93', border: 'none' }
   },
   { dark: true }
@@ -38,6 +40,7 @@ const LIGHT_EDITOR_THEME = EditorView.theme(
   {
     '&': { '--atomic-editor-fg': '#1f2937', backgroundColor: 'transparent' },
     '.cm-content': { caretColor: '#1f2937' },
+    '.cm-line': { minHeight: '1.4em' },
     '.cm-gutters': { backgroundColor: 'transparent', color: '#9ca3af', border: 'none' }
   },
   { dark: false }
@@ -374,23 +377,25 @@ export function TaskDetail() {
           </div>
         </div>
 
-        {/* 하위작업 + 첨부 (컴팩트) + 메모 (히어로) */}
-        <div className="flex-1 min-h-0 flex flex-col px-4 pt-3">
-          <div className="flex-shrink-0 space-y-3 max-h-[45%] overflow-y-auto">
-            <SubtaskList taskId={task.id} />
-            <AttachmentList
-              taskId={task.id}
-              attachments={task.attachments}
-              onUpdate={(attachments) => save({ attachments })}
-            />
-          </div>
-          <div className="flex-1 min-h-0 pt-2 pb-4 flex flex-col">
+        {/* 본문: 메모(좌, 히어로) + 하위작업·첨부(우, 사이드 레일) */}
+        <div className="flex-1 min-h-0 flex px-4 py-3 gap-4">
+          {/* 메모 (라이브프리뷰) */}
+          <div className="flex-1 min-w-0 flex flex-col">
             <AtomicCodeMirrorEditor
               documentId={task.id}
               markdownSource={task.description}
               onMarkdownChange={onNotesChange}
               onLinkClick={(url) => window.api.openExternal(url)}
               extensions={editorExtensions}
+            />
+          </div>
+          {/* 하위작업 · 첨부 (사이드 레일) */}
+          <div className={`w-[280px] flex-shrink-0 overflow-y-auto border-l pl-4 space-y-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+            <SubtaskList taskId={task.id} />
+            <AttachmentList
+              taskId={task.id}
+              attachments={task.attachments}
+              onUpdate={(attachments) => save({ attachments })}
             />
           </div>
         </div>
