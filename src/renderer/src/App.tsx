@@ -17,7 +17,7 @@ import { UndoToast } from './components/common/UndoToast'
 import { AiChatPanel } from './components/ai/AiChatPanel'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
-// react-markdown + highlight.js 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
+// CodeMirror 6 라이브프리뷰 에디터(@atomic-editor/editor) 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
 const TaskDetail = lazy(() =>
   import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail }))
 )
