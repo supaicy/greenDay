@@ -58,6 +58,11 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **DetailHeader 추출**: TaskDetail 470줄 — 헤더(~95줄) 서브컴포넌트 추출로 가독성.
 - **기본 높이 이동**: `window.innerHeight*0.72` 인라인 기본값을 `store/detailHeight.ts`의 `defaultDetailHeight(contentHeight)`로 이동, store에서 null→기본 해소. Stage 3(드래그+contentHeight)에서 함께 처리 예정.
 
+### [P3] 하단 상세 패널 — 드래그 리스너 언마운트 정리
+- **What:** TaskDetail의 그립 드래그가 mousedown에서 window mousemove/mouseup를 붙이고 mouseup에서 떼는데, 드래그 도중 패널이 언마운트(selectTask(null) 등)되면 리스너가 남음.
+- **Impact:** React18에서 언마운트 후 setState는 무해(no-op)하고 다음 mouseup에서 정리되지만, 견고성을 위해 useEffect cleanup으로 unmount 시 리스너 해제 권장.
+- **Added:** 2026-07-24 Stage 3 /review
+
 ### [P2] 하단 상세 패널 — 알림/반복 피커 드롭다운 클리핑
 - **What:** ReminderPicker/RecurringPicker가 `absolute top-full` 드롭다운인데, 하단 패널의 짧은 좌측 컬럼(`overflow-y-auto`)에서 아래로 열리면 잘림. z-50로도 overflow 조상은 못 벗어남.
 - **Fix 후보:** 포털 렌더 또는 `position: fixed`, 혹은 트리거가 컬럼 하단이면 위로(bottom-full) 열기. **라이브 QA로 검증 필요** (2026-07-24 code-review 발견, Mac 잠금으로 즉시 검증 불가).
