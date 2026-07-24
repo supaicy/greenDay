@@ -137,15 +137,18 @@ Inside the component (near the other hooks, before the `if (!task) return null` 
 ```tsx
         <div className="min-h-0 overflow-hidden flex flex-col">
           <AtomicCodeMirrorEditor
+            documentId={task.id}
             markdownSource={description}
             onMarkdownChange={onNotesChange}
             onLinkClick={(url) => window.api.openExternal(url)}
-            /* dark theme applied via the mechanism recorded in Task 0 */
+            extensions={editorExtensions}
           />
         </div>
 ```
 
-Apply the dark/light theme exactly as recorded in Task 0 (prop or CM6 theme extension). If `window.api.openExternal` isn't typed, it already exists (`preload/index.ts:61`); use it.
+**CRITICAL (from spike):** pass a stable `documentId={task.id}`. Atomic treats `markdownSource` as mount-only and, WITHOUT a `documentId`, uses `markdownSource` itself as the document identity — so any change to it (e.g. re-feeding edited text) **remounts the editor on every keystroke** and typing dies after one char. With `documentId={task.id}` the editor only remounts when the task changes; `markdownSource` is the initial value and the editor owns the doc after mount (do NOT feed `onMarkdownChange` output back into `markdownSource`).
+
+Theme (from Task 0): there is no `theme` prop — pass a CM6 theme via `extensions`. Build `editorExtensions` = a dark `EditorView.theme({...}, {dark:true})` when `isDark`, else `[]` (the built-in `atomicEditorTheme` is applied by default). To re-theme on a live dark-mode toggle, include theme in the remount key too, e.g. `documentId={`${task.id}-${theme}`}`. `window.api.openExternal` already exists (`preload/index.ts:61`).
 
 - [ ] **Step 3: Delete the now-dead code.** Remove: `mdPreview` state, `toggleCheckbox` useCallback, `checkboxIndex` ref, the `CodeBlock` memo component, and all `highlight.js` + `react-markdown` + `remark-gfm` imports and the `hljs.registerLanguage(...)` block.
 
