@@ -1,34 +1,9 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { X, Trash2, Tag, List, Eye, Edit3, Clock, Bell, Repeat, Calendar, Circle, CheckCircle2 } from 'lucide-react'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import hljs from 'highlight.js/lib/core'
-import javascript from 'highlight.js/lib/languages/javascript'
-import typescript from 'highlight.js/lib/languages/typescript'
-import python from 'highlight.js/lib/languages/python'
-import json from 'highlight.js/lib/languages/json'
-import bash from 'highlight.js/lib/languages/bash'
-import css from 'highlight.js/lib/languages/css'
-import xml from 'highlight.js/lib/languages/xml'
-import markdown from 'highlight.js/lib/languages/markdown'
-import sql from 'highlight.js/lib/languages/sql'
-import java from 'highlight.js/lib/languages/java'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { X, Trash2, Tag, List, Clock, Bell, Repeat, Calendar, Circle, CheckCircle2 } from 'lucide-react'
+import { EditorView } from '@codemirror/view'
+import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
+import '@atomic-editor/editor/styles.css'
 import { useStore } from '../../store/useStore'
-
-hljs.registerLanguage('javascript', javascript)
-hljs.registerLanguage('js', javascript)
-hljs.registerLanguage('typescript', typescript)
-hljs.registerLanguage('ts', typescript)
-hljs.registerLanguage('python', python)
-hljs.registerLanguage('json', json)
-hljs.registerLanguage('bash', bash)
-hljs.registerLanguage('sh', bash)
-hljs.registerLanguage('css', css)
-hljs.registerLanguage('html', xml)
-hljs.registerLanguage('xml', xml)
-hljs.registerLanguage('markdown', markdown)
-hljs.registerLanguage('sql', sql)
-hljs.registerLanguage('java', java)
 import { SubtaskList } from './SubtaskList'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
@@ -36,41 +11,6 @@ import { AttachmentList } from './AttachmentList'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
 import { clampDetailHeight } from '../../store/detailHeight'
 import type { Priority } from '../../types'
-
-// react-markdown 설정은 렌더마다 새 참조가 되지 않도록 모듈 스코프에 고정
-const REMARK_PLUGINS = [remarkGfm]
-
-// 코드 블록 syntax highlighting (모듈 스코프 컴포넌트)
-const CodeBlock = memo(function CodeBlock({
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) {
-  const codeRef = useRef<HTMLElement>(null)
-  const match = /language-(\w+)/.exec(className || '')
-  const lang = match ? match[1] : null
-  const isInline = !lang && !String(children).includes('\n')
-
-  useEffect(() => {
-    if (codeRef.current && lang) {
-      codeRef.current.removeAttribute('data-highlighted')
-      hljs.highlightElement(codeRef.current)
-    }
-  }, [lang])
-
-  if (isInline) {
-    return (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    )
-  }
-  return (
-    <code ref={codeRef} className={className} {...props}>
-      {children}
-    </code>
-  )
-})
 
 function formatScheduledRange(startIso: string, endIso: string): string {
   const start = new Date(startIso)
@@ -82,6 +22,17 @@ function formatScheduledRange(startIso: string, endIso: string): string {
   return `${date} ${s}–${e}`
 }
 
+// 다크 모드용 CM6 테마 (Atomic엔 theme prop이 없어 extensions로 전달). 배경은
+// 투명 — 부모 컬럼의 배경을 그대로 쓴다.
+const DARK_EDITOR_THEME = EditorView.theme(
+  {
+    '&': { color: '#e5e5ea', backgroundColor: 'transparent' },
+    '.cm-content': { caretColor: '#e5e5ea' },
+    '.cm-gutters': { backgroundColor: 'transparent', color: '#8e8e93', border: 'none' }
+  },
+  { dark: true }
+)
+
 export function TaskDetail() {
   const { tasks, lists, selectedTaskId, selectTask, updateTask, removeTask, toggleTask, theme } = useStore()
   const detailHeight = useStore((s) => s.detailPanelHeightPx)
@@ -90,13 +41,11 @@ export function TaskDetail() {
   const isDark = theme === 'dark'
 
   const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [dueTime, setDueTime] = useState('')
   const [priority, setPriority] = useState<Priority>('none')
   const [listId, setListId] = useState('inbox')
   const [tagInput, setTagInput] = useState('')
-  const [mdPreview, setMdPreview] = useState(true)
   const [showRecurring, setShowRecurring] = useState(false)
   const [showReminder, setShowReminder] = useState(false)
   // 드래그 중 라이브 높이(px). null이면 저장값 사용. mouseup에서만 persist.
@@ -108,7 +57,6 @@ export function TaskDetail() {
   useEffect(() => {
     if (task) {
       setTitle(task.title)
-      setDescription(task.description)
       setDueDate(task.dueDate || '')
       setDueTime(task.dueTime || '')
       setPriority(task.priority)
@@ -116,26 +64,33 @@ export function TaskDetail() {
     }
   }, [task?.id])
 
-  // 체크박스 토글: description 내 n번째 체크박스의 상태를 변경
-  const toggleCheckbox = useCallback(
-    (index: number) => {
-      if (!task) return
-      let count = 0
-      const newDesc = description.replace(/^(\s*[-*]\s*)\[([ xX])\]/gm, (match, prefix, check) => {
-        if (count++ === index) {
-          const newCheck = check === ' ' ? 'x' : ' '
-          return `${prefix}[${newCheck}]`
-        }
-        return match
-      })
-      setDescription(newDesc)
-      updateTask({ id: task.id, description: newDesc })
-    },
-    [description, task, updateTask]
-  )
-
-  const checkboxIndex = useRef(0)
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // 메모 저장: 편집 중엔 ref에 모으고 400ms 디바운스로 저장. 태스크 전환/언마운트 시 flush.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingNotes = useRef<string | null>(null)
+  const flushNotes = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    if (pendingNotes.current != null && selectedTaskId) {
+      updateTask({ id: selectedTaskId, description: pendingNotes.current })
+      pendingNotes.current = null
+    }
+  }, [selectedTaskId, updateTask])
+  const onNotesChange = useCallback(
+    (md: string) => {
+      pendingNotes.current = md
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(flushNotes, 400)
+    },
+    [flushNotes]
+  )
+  // 태스크 전환(flushNotes 재생성) / 언마운트 시 대기 중인 메모를 이전 태스크에 저장
+  useEffect(() => flushNotes, [flushNotes])
+
+  const editorExtensions = useMemo(() => (isDark ? [DARK_EDITOR_THEME] : []), [isDark])
 
   // 창 리사이즈 시 저장된 높이를 새 콘텐츠 높이 기준으로 다시 clamp
   useEffect(() => {
@@ -430,79 +385,15 @@ export function TaskDetail() {
           </div>
         </div>
 
-        {/* 오른쪽: 메모 (히어로) */}
-        <div className="min-h-0 overflow-y-auto p-4 flex flex-col">
-          <div className="flex items-center gap-1 mb-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setMdPreview(false)}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${!mdPreview ? 'text-primary-400 bg-primary-900/30' : isDark ? 'text-gray-500 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100'}`}
-            >
-              <Edit3 size={12} /> 편집
-            </button>
-            <button
-              type="button"
-              onClick={() => setMdPreview(true)}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${mdPreview ? 'text-primary-400 bg-primary-900/30' : isDark ? 'text-gray-500 hover:bg-gray-800' : 'text-gray-400 hover:bg-gray-100'}`}
-            >
-              <Eye size={12} /> 미리보기
-            </button>
-          </div>
-          {mdPreview ? (
-            // biome-ignore lint/a11y/noStaticElementInteractions: 마크다운 프리뷰 — 렌더링된 콘텐츠 포함으로 button 전환 불가; onKeyDown으로 편집 모드 전환 지원
-            <div
-              className={`prose prose-sm max-w-none flex-1 min-h-[200px] rounded-lg px-3 py-2.5 border cursor-text overflow-y-auto ${isDark ? 'prose-invert bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'}`}
-              onClick={(e) => {
-                const target = e.target as HTMLElement
-                if (target.tagName !== 'INPUT' && target.tagName !== 'A') {
-                  setMdPreview(false)
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  setMdPreview(false)
-                }
-              }}
-            >
-              {description ? (
-                (() => {
-                  checkboxIndex.current = 0
-                  return (
-                    <Markdown
-                      remarkPlugins={REMARK_PLUGINS}
-                      components={{
-                        code: CodeBlock,
-                        input: (props) => {
-                          if (props.type === 'checkbox') {
-                            const idx = checkboxIndex.current++
-                            return (
-                              <input type="checkbox" checked={props.checked} onChange={() => toggleCheckbox(idx)} />
-                            )
-                          }
-                          return <input {...props} />
-                        }
-                      }}
-                    >
-                      {description}
-                    </Markdown>
-                  )
-                })()
-              ) : (
-                <p className={`text-sm ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>클릭하여 메모 작성...</p>
-              )}
-            </div>
-          ) : (
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onBlur={() => {
-                save({ description })
-                if (description.trim()) setMdPreview(true)
-              }}
-              placeholder="마크다운으로 메모를 작성하세요..."
-              className={`w-full flex-1 min-h-[200px] text-sm rounded-lg px-3 py-2.5 outline-none border resize-none font-mono leading-relaxed ${inputCls} ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
-            />
-          )}
+        {/* 오른쪽: 메모 (라이브프리뷰 마크다운) */}
+        <div className="min-h-0 overflow-hidden flex flex-col">
+          <AtomicCodeMirrorEditor
+            documentId={task.id}
+            markdownSource={task.description}
+            onMarkdownChange={onNotesChange}
+            onLinkClick={(url) => window.api.openExternal(url)}
+            extensions={editorExtensions}
+          />
         </div>
       </div>
     </div>
