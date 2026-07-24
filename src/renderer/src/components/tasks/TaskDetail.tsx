@@ -85,6 +85,7 @@ function formatScheduledRange(startIso: string, endIso: string): string {
 export function TaskDetail() {
   const { tasks, lists, selectedTaskId, selectTask, updateTask, removeTask, toggleTask, theme } = useStore()
   const detailHeight = useStore((s) => s.detailPanelHeightPx)
+  const setDetailPanelHeightPx = useStore((s) => s.setDetailPanelHeightPx)
   const task = tasks.find((t) => t.id === selectedTaskId)
   const isDark = theme === 'dark'
 
@@ -98,6 +99,8 @@ export function TaskDetail() {
   const [mdPreview, setMdPreview] = useState(true)
   const [showRecurring, setShowRecurring] = useState(false)
   const [showReminder, setShowReminder] = useState(false)
+  // 드래그 중 라이브 높이(px). null이면 저장값 사용. mouseup에서만 persist.
+  const [dragHeight, setDragHeight] = useState<number | null>(null)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form state resets only when a different task is selected; watching other fields would overwrite in-progress edits
   useEffect(() => {
@@ -130,6 +133,18 @@ export function TaskDetail() {
   )
 
   const checkboxIndex = useRef(0)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // 창 리사이즈 시 저장된 높이를 새 콘텐츠 높이 기준으로 다시 clamp
+  useEffect(() => {
+    if (detailHeight == null) return
+    const onResize = () => {
+      const parent = panelRef.current?.parentElement
+      if (parent) setDetailPanelHeightPx(detailHeight, parent.getBoundingClientRect().height)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [detailHeight, setDetailPanelHeightPx])
 
   if (!task) return null
 
@@ -144,21 +159,39 @@ export function TaskDetail() {
   const inputCls = isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-300'
   const labelCls = isDark ? 'text-gray-500' : 'text-gray-400'
 
-  // 하단 패널 높이: 저장값(px) 없으면 콘텐츠 높이의 72%. read 시점에도 clamp해서
-  // (큰 창에서 저장한 큰 값이) 작은 창에서 위 뷰를 0으로 짓누르지 않게 한다.
-  // (정밀한 콘텐츠 높이 측정 + 창 리사이즈 재-clamp는 Stage 3)
-  const height = clampDetailHeight(detailHeight ?? Math.round(window.innerHeight * 0.72), window.innerHeight)
+  // 하단 패널 높이: 드래그 중이면 라이브값, 아니면 저장값(없으면 창의 72%).
+  // read 시점에도 clamp해서 큰 저장값이 작은 창에서 위 뷰를 0으로 짓누르지 않게 한다.
+  const height = dragHeight ?? clampDetailHeight(detailHeight ?? Math.round(window.innerHeight * 0.72), window.innerHeight)
   const priorityColor = PRIORITY_OPTIONS.find((p) => p.value === task.priority)?.color || 'text-gray-400'
+
+  // 그립 드래그로 높이 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault()
+    const parent = panelRef.current?.parentElement
+    if (!parent) return
+    const rect = parent.getBoundingClientRect()
+    const onMove = (ev: MouseEvent) => setDragHeight(clampDetailHeight(rect.bottom - ev.clientY, rect.height))
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      setDetailPanelHeightPx(rect.bottom - ev.clientY, rect.height)
+      setDragHeight(null)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   return (
     <div
+      ref={panelRef}
       className={`w-full flex-shrink-0 border-t flex flex-col ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
       style={{ height }}
     >
-      {/* 드래그 핸들 (높이 조절 배선은 Stage 3) */}
+      {/* 드래그 핸들: 높이 조절 */}
       <button
         type="button"
         aria-label="상세 패널 높이 조절"
+        onMouseDown={startResize}
         className="w-full h-3 flex items-center justify-center cursor-ns-resize flex-shrink-0"
       >
         <div className={`w-9 h-1 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
