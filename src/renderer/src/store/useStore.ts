@@ -545,7 +545,8 @@ export const useStore = create<Store>((set, get) => ({
     set({ trashTasks: [] })
     window.api.emptyTrash()
   },
-  selectTask: (id) => set({ selectedTaskId: id }),
+  // 같은 태스크를 다시 클릭하면 상세를 닫는다(토글). 다른 id면 전환, null이면 닫기.
+  selectTask: (id) => set((s) => ({ selectedTaskId: s.selectedTaskId === id ? null : id })),
   setShowAddTask: (show) => set({ showAddTask: show }),
   reorderTasks: async (ids) => {
     set((s) => ({

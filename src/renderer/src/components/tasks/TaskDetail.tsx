@@ -303,7 +303,7 @@ export function TaskDetail() {
       </div>
 
       {/* 본문: 왼쪽 하위작업+첨부+메타 / 오른쪽 메모 */}
-      <div className="flex-1 min-h-0 grid grid-cols-[1fr_1.35fr]">
+      <div className="flex-1 min-h-0 grid grid-cols-[280px_1fr]">
         {/* 왼쪽: 하위작업 · 첨부 · 리스트/알림/반복/태그 */}
         <div className={`min-h-0 overflow-y-auto p-4 space-y-4 border-r ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
           {/* 예정된 블록 (읽기 전용) */}
