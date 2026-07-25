@@ -60,6 +60,15 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **PickerRow 추출**: 알림/반복 토글 블록 ~26줄 near-identical → 로컬 `PickerRow` 컴포넌트로 dedup. (미해소)
 - **DetailHeader 추출**: TaskDetail — 헤더/메타 서브컴포넌트 추출로 가독성. (미해소)
 
+### [P3] 드래그 MIME 상수 일원화
+- **What:** `application/haru-task-block`(TaskList/주·일 캘린더), `application/haru-cal-date`(월 캘린더) 등 DnD MIME 문자열이 파일별 인라인. 공용 상수 모듈로 모으면 계약이 명확해지고 오타 위험 감소.
+- **Impact:** 저위험 정리. 여러 파일(TaskList, TimeBlock, Weekly/DailyCalendar, CalendarView) 동시 수정 필요라 후속으로 분리.
+- **Added:** 2026-07-25 월 캘린더 드래그 /review
+
+### [P3] 배치 선택 vs 뷰 — 하위작업 제외 일원화
+- **What:** `getFilteredTaskIds`(전체 선택)는 스마트/태그 리스트에서 뷰와 달리 `!parentId`를 일괄 적용하지 않음(태그 케이스만 맞춤). 뷰는 항상 최상위만 표시하므로 select-all도 항상 하위작업 제외하도록 통일하면 좋음(기존 리스트 동작 변경이라 별도 처리).
+- **Added:** 2026-07-25 태그 뷰 /review
+
 ### [P3] 우측 상세 패널 — AiChat 동시 오픈 시 폭 경합
 - **What:** `clampDetailWidth`는 사이드바(256)+목록최소(320)만 예약하고 AiChatPanel(w-80=320)은 고려 안 함. 상세 패널을 최대로 늘린 상태에서 AI 챗까지 열면 가운데 목록이 `min-w-0`로 0까지 눌릴 수 있음.
 - **Impact:** 크래시/데이터 손실 없음(우아한 축소). 사용자가 둘 중 하나 닫으면 복구. 필요 시 clamp에 `showAiChat` 여부를 반영해 AiChat 폭까지 예약.
