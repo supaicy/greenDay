@@ -66,7 +66,15 @@ export interface PomodoroSession {
   completedAt: string | null
 }
 
-export type SmartList = 'inbox' | 'today' | 'next7days' | 'all' | 'completed' | 'trash'
+export type SmartList =
+  | 'inbox'
+  | 'today'
+  | 'tomorrow'
+  | 'next7days'
+  | 'all'
+  | 'summary'
+  | 'completed'
+  | 'trash'
 
 export type ViewType =
   | 'tasks'

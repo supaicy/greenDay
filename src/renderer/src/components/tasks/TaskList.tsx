@@ -6,17 +6,28 @@ import { AddTask } from './AddTask'
 import { TrashView } from './TrashView'
 import { SortMenu } from './SortMenu'
 import { BatchBar } from './BatchBar'
-import { isDueToday, isDueInNext7Days, isOverdue } from '../../utils/date'
+import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue } from '../../utils/date'
+import { SMART_LIST_PREDICATES } from '../../utils/smartLists'
 import type { Task, SortBy, SortDir } from '../../types'
 
 const SMART_LABELS: Record<string, string> = {
-  today: '오늘',
-  next7days: '다음 7일',
-  inbox: '수신함',
   all: '전체',
+  today: '오늘',
+  tomorrow: '내일',
+  next7days: '다음 7일',
+  inbox: '기본함',
+  summary: '요약',
   completed: '완료됨',
   trash: '휴지통'
 }
+
+// '요약' 뷰의 시간대 그룹 정의 (위→아래 표시 순서). 각 태스크는 첫 매칭 그룹에 들어간다.
+const SUMMARY_GROUPS: { key: string; label: string; match: (dueDate: string | null) => boolean }[] = [
+  { key: 'overdue', label: '지남', match: isOverdue },
+  { key: 'today', label: '오늘', match: isDueToday },
+  { key: 'tomorrow', label: '내일', match: isDueTomorrow },
+  { key: 'upcoming', label: '향후 7일', match: isDueInNext7Days }
+]
 
 function sortTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
   if (sortBy === 'default') return tasks
@@ -72,10 +83,16 @@ export function TaskListView() {
     let result: Task[]
     switch (selectedListId) {
       case 'today':
-        result = tasks.filter((t) => !t.completed && (isDueToday(t.dueDate) || isOverdue(t.dueDate)))
+        result = tasks.filter(SMART_LIST_PREDICATES.today)
+        break
+      case 'tomorrow':
+        result = tasks.filter(SMART_LIST_PREDICATES.tomorrow)
         break
       case 'next7days':
-        result = tasks.filter((t) => !t.completed && isDueInNext7Days(t.dueDate))
+        result = tasks.filter(SMART_LIST_PREDICATES.next7days)
+        break
+      case 'summary':
+        result = tasks.filter(SMART_LIST_PREDICATES.summary)
         break
       case 'inbox':
         result = tasks.filter((t) => t.listId === 'inbox')
@@ -105,6 +122,23 @@ export function TaskListView() {
 
   const incompleteTasks = filteredTasks.filter((t) => !t.completed)
   const completedTasks = filteredTasks.filter((t) => t.completed)
+
+  // '요약' 뷰: 마감일 기준 시간대 그룹으로 분할 (빈 그룹은 숨김). 각 태스크는 첫 매칭 그룹에만.
+  // 태스크당 한 번만 그룹을 찾아(single pass) 버킷에 담는다.
+  const summaryGroups = useMemo(() => {
+    if (selectedListId !== 'summary') return []
+    const buckets = new Map<string, Task[]>()
+    for (const t of filteredTasks) {
+      const g = SUMMARY_GROUPS.find((x) => x.match(t.dueDate))
+      if (!g) continue
+      const arr = buckets.get(g.key)
+      if (arr) arr.push(t)
+      else buckets.set(g.key, [t])
+    }
+    return SUMMARY_GROUPS.map((g) => ({ ...g, tasks: buckets.get(g.key) ?? [] })).filter(
+      (g) => g.tasks.length > 0
+    )
+  }, [selectedListId, filteredTasks])
 
   const handleDrop = useCallback(
     (targetId: string) => {
@@ -197,7 +231,20 @@ export function TaskListView() {
           </button>
         )}
 
-        {selectedListId === 'completed' ? (
+        {selectedListId === 'summary' ? (
+          summaryGroups.map((g) => (
+            <div key={g.key} className="mt-1">
+              <div
+                className={`px-6 py-2 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
+              >
+                {g.label} ({g.tasks.length})
+              </div>
+              {g.tasks.map((task) => (
+                <TaskItem key={task.id} task={task} onDrop={handleDrop} />
+              ))}
+            </div>
+          ))
+        ) : selectedListId === 'completed' ? (
           filteredTasks.map((task) => <TaskItem key={task.id} task={task} onDrop={handleDrop} />)
         ) : (
           <>

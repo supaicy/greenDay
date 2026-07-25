@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
 import { clampDetailWidth } from './detailWidth'
+import { isVirtualSmartList, smartListPredicate } from '../utils/smartLists'
+import { todayString, tomorrowString } from '../utils/date'
 import type {
   Task,
   TaskList,
@@ -383,11 +385,13 @@ export const useStore = create<Store>((set, get) => ({
   // === 태스크 ===
   addTask: async (title, opts = {}) => {
     const currentList = get().selectedListId
-    const smartLists = ['today', 'next7days', 'all', 'completed', 'inbox', 'trash']
     const targetList =
-      opts.listId || (typeof currentList === 'string' && !smartLists.includes(currentList) ? currentList : 'inbox')
+      opts.listId ||
+      (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
+    // 오늘/내일 뷰에서 날짜 없이 추가하면, 방금 추가한 그 리스트에 보이도록 마감일을 채운다.
     let finalDueDate = opts.dueDate || null
-    if (!finalDueDate && currentList === 'today') finalDueDate = new Date().toISOString().split('T')[0]
+    if (!finalDueDate && currentList === 'today') finalDueDate = todayString()
+    else if (!finalDueDate && currentList === 'tomorrow') finalDueDate = tomorrowString()
 
     const id = uuid()
     const now = new Date().toISOString()
@@ -885,14 +889,12 @@ export const useStore = create<Store>((set, get) => ({
 }))
 
 function getFilteredTaskIds(tasks: Task[], listId: string | SmartList): string[] {
-  const now = new Date()
-  const todayStr = now.toISOString().split('T')[0]
-  const next7 = new Date(now.getTime() + 7 * 86400000).toISOString().split('T')[0]
+  // 마감일 기반 스마트 리스트는 뷰(TaskList)와 동일한 판별식을 재사용해
+  // '전체 선택'이 화면에 보이는 목록과 항상 일치하게 한다 (UTC 문자열 비교로 인한
+  // 시간대/포맷 불일치 제거).
+  const pred = smartListPredicate(listId as string)
+  if (pred) return tasks.filter(pred).map((t) => t.id)
   switch (listId) {
-    case 'today':
-      return tasks.filter((t) => !t.completed && t.dueDate && t.dueDate <= todayStr).map((t) => t.id)
-    case 'next7days':
-      return tasks.filter((t) => !t.completed && t.dueDate && t.dueDate <= next7).map((t) => t.id)
     case 'all':
       return tasks.filter((t) => !t.completed).map((t) => t.id)
     case 'completed':

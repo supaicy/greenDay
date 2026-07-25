@@ -24,18 +24,21 @@ import {
   Clock,
   Grid2X2,
   CalendarClock,
+  LayoutList,
   Trophy,
   Bot
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import { isDueToday, isOverdue, isDueInNext7Days } from '../../utils/date'
+import { SMART_LIST_PREDICATES } from '../../utils/smartLists'
 import type { SmartList, ViewType } from '../../types'
 
 const SMART_LISTS: { id: SmartList; label: string; icon: React.ReactNode }[] = [
-  { id: 'today', label: '오늘', icon: <CalendarDays size={18} /> },
-  { id: 'next7days', label: '다음 7일', icon: <CalendarRange size={18} /> },
-  { id: 'inbox', label: '수신함', icon: <Inbox size={18} /> },
   { id: 'all', label: '전체', icon: <ListTodo size={18} /> },
+  { id: 'today', label: '오늘', icon: <CalendarDays size={18} /> },
+  { id: 'tomorrow', label: '내일', icon: <CalendarClock size={18} /> },
+  { id: 'next7days', label: '다음 7일', icon: <CalendarRange size={18} /> },
+  { id: 'inbox', label: '기본함', icon: <Inbox size={18} /> },
+  { id: 'summary', label: '요약', icon: <LayoutList size={18} /> },
   { id: 'completed', label: '완료됨', icon: <CheckCircle2 size={18} /> },
   { id: 'trash', label: '휴지통', icon: <Trash2 size={18} /> }
 ]
@@ -91,12 +94,14 @@ export function Sidebar() {
   const taskCounts = useMemo(() => {
     const incomplete = tasks.filter((t) => !t.completed)
     const counts: Record<string, number> = {
-      // Badge counts must use the SAME predicates as the list-view filters
-      // (TaskList.tsx) so the sidebar number always matches what the list shows.
-      today: incomplete.filter((t) => isDueToday(t.dueDate) || isOverdue(t.dueDate)).length,
-      next7days: incomplete.filter((t) => isDueInNext7Days(t.dueDate)).length,
+      // Badge counts share the SAME predicates as the list-view filters
+      // (SMART_LIST_PREDICATES) so the sidebar number always matches the list.
+      today: tasks.filter(SMART_LIST_PREDICATES.today).length,
+      tomorrow: tasks.filter(SMART_LIST_PREDICATES.tomorrow).length,
+      next7days: tasks.filter(SMART_LIST_PREDICATES.next7days).length,
       inbox: incomplete.filter((t) => t.listId === 'inbox').length,
       all: incomplete.length,
+      summary: tasks.filter(SMART_LIST_PREDICATES.summary).length,
       completed: tasks.filter((t) => t.completed).length,
       trash: trashTasks.length
     }

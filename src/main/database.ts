@@ -139,16 +139,21 @@ export function initDatabase(): void {
     }
   })
 
-  if (!data.lists.find((l) => l.id === 'inbox')) {
+  const inbox = data.lists.find((l) => l.id === 'inbox')
+  if (!inbox) {
     data.lists.push({
       id: 'inbox',
-      name: '수신함',
+      name: '기본함',
       color: '#4A90D9',
       icon: 'inbox',
       folder_id: null,
       sort_order: 0,
       created_at: new Date().toISOString()
     })
+  } else if (inbox.name === '수신함') {
+    // 시스템 리스트('inbox')는 UI에서 이름 편집이 불가하므로, 이전 기본 이름을
+    // 새 이름으로 정규화한다 (사이드바 '기본함' 표기와 리스트 선택 드롭다운 일치).
+    inbox.name = '기본함'
   }
   save()
 }

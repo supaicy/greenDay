@@ -5,6 +5,7 @@ import { parseNaturalDateTime } from '../../utils/naturalDate'
 import { formatDueDate } from '../../utils/date'
 import type { Priority } from '../../types'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
+import { isVirtualSmartList } from '../../utils/smartLists'
 
 export function AddTask({ onClose }: { onClose: () => void }) {
   const { addTask, selectedListId, theme, aiCreateTaskFromNL, aiConnected } = useStore()
@@ -52,9 +53,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
     try {
       const result = await aiCreateTaskFromNL(title.trim())
       if (result) {
-        const listId = ['today', 'next7days', 'all', 'completed', 'trash'].includes(selectedListId as string)
-          ? undefined
-          : (selectedListId as string)
+        const listId = isVirtualSmartList(selectedListId as string) ? undefined : (selectedListId as string)
         // 메인 태스크 생성
         await addTask(result.title, {
           listId,
@@ -105,9 +104,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
 
     if (!finalTitle) return
 
-    const listId = ['today', 'next7days', 'all', 'completed', 'trash'].includes(selectedListId as string)
-      ? undefined
-      : (selectedListId as string)
+    const listId = isVirtualSmartList(selectedListId as string) ? undefined : (selectedListId as string)
     await addTask(finalTitle, { listId, dueDate: finalDueDate, dueTime: finalDueTime, priority })
     setTitle('')
     setDueDate('')

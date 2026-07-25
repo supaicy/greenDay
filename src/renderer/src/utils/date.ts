@@ -36,6 +36,21 @@ export function isDueToday(dateStr: string | null): boolean {
   return isToday(new Date(dateStr))
 }
 
+export function isDueTomorrow(dateStr: string | null): boolean {
+  if (!dateStr) return false
+  return isTomorrow(new Date(dateStr))
+}
+
+// 로컬 시간 기준 오늘/내일 날짜 문자열(yyyy-MM-dd). UTC 기반 toISOString 과 달리
+// 자정 근처 시간대에서도 뷰의 isDueToday/isDueTomorrow(로컬)와 어긋나지 않는다.
+export function todayString(): string {
+  return toDateString(new Date())
+}
+
+export function tomorrowString(): string {
+  return toDateString(addDays(new Date(), 1))
+}
+
 export function isDueInNext7Days(dateStr: string | null): boolean {
   if (!dateStr) return false
   const date = new Date(dateStr)
