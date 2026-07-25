@@ -7,6 +7,9 @@ const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 const DEFAULT_TIMEOUT = 30_000
+// 스트리밍은 전체 시간이 아니라 '토큰 간 유휴' 기준으로 끊는다. 긴 응답도 토큰이
+// 계속 오면 유지되고, 모델이 중간에 멈추면 이 시간 뒤 중단된다.
+const STREAM_IDLE_TIMEOUT = 30_000
 const MAX_RETRIES = 2
 
 const DEFAULT_CONFIG: AiConfig = {
@@ -130,7 +133,8 @@ Today is {today}. Return ONLY the JSON, no explanation.`
 
 export function chatPromptBase(taskSummary: string): string {
   return `You are a productivity assistant for the app "haru". The user can ask about their tasks, schedule, and productivity.
-Answer in the same language the user writes in (Korean or English). When the user writes in Korean, respond ONLY in Korean and never mix languages within a single response.
+Answer in the same language the user writes in (Korean or English).
+When the user writes in Korean, respond ONLY in Korean: use Hangul and standard punctuation, and never mix in English words, Chinese, Japanese, Thai, or any other script within a word or sentence. If you are unsure of a Korean term, paraphrase it in Korean instead of switching languages.
 Be concise and helpful. Reference specific tasks when relevant.
 
 Current tasks summary:
@@ -301,59 +305,88 @@ export async function streamChat(
     stream: true
   }
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
+  // 이미 토큰을 하나라도 흘려보냈으면 재시도하지 않는다 (중복 출력 방지).
+  // 연결/헤더 단계 실패만 재시도한다.
+  let emittedAny = false
+  let lastError = 'Stream failed'
 
-  try {
-    const res = await fetch(getChatUrl(), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal
-    })
-    clearTimeout(timeout)
-
-    if (!res.ok) {
-      onError(`API error: ${res.status}`)
-      return
-    }
-
-    const reader = res.body?.getReader()
-    if (!reader) {
-      onError('No response body')
-      return
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed === 'data: [DONE]') continue
-        if (!trimmed.startsWith('data: ')) continue
-
-        try {
-          const json = JSON.parse(trimmed.slice(6))
-          const token = json.choices?.[0]?.delta?.content || ''
-          if (token) onToken(token)
-        } catch {
-          // skip malformed SSE lines
-        }
+  // SSE 한 줄에서 델타 토큰을 추출해 emit. 성공 시 true.
+  const emitLine = (line: string): void => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed === 'data: [DONE]' || !trimmed.startsWith('data: ')) return
+    try {
+      const token = JSON.parse(trimmed.slice(6)).choices?.[0]?.delta?.content || ''
+      if (token) {
+        emittedAny = true
+        onToken(token)
       }
+    } catch {
+      // skip malformed SSE lines
+    }
+  }
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    // 처음엔 연결(첫 바이트) 타임아웃, 데이터가 오기 시작하면 유휴 타임아웃으로 리셋.
+    let idleTimer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
+    const resetIdle = (): void => {
+      clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => controller.abort(), STREAM_IDLE_TIMEOUT)
     }
 
-    onDone()
-  } catch (err) {
-    clearTimeout(timeout)
-    const message = err instanceof Error ? err.message : 'Stream failed'
-    onError(message.includes('abort') ? '응답 시간이 초과되었습니다' : message)
+    try {
+      const res = await fetch(getChatUrl(), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal
+      })
+
+      if (!res.ok) {
+        lastError = `API error: ${res.status}`
+        if (attempt < MAX_RETRIES && !emittedAny) continue
+        onError(lastError)
+        return
+      }
+
+      const reader = res.body?.getReader()
+      if (!reader) {
+        lastError = 'No response body'
+        if (attempt < MAX_RETRIES && !emittedAny) continue
+        onError(lastError)
+        return
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        resetIdle()
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) emitLine(line)
+      }
+      // 남은 멀티바이트/마지막 줄 flush
+      buffer += decoder.decode()
+      if (buffer) emitLine(buffer)
+
+      onDone()
+      return
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Stream failed'
+      lastError = message.includes('abort') ? '응답 시간이 초과되었습니다' : message
+      if (attempt < MAX_RETRIES && !emittedAny) continue
+      onError(lastError)
+      return
+    } finally {
+      // continue/return/throw 어느 경로든 이번 시도의 타이머를 정리
+      clearTimeout(idleTimer)
+    }
   }
+
+  // 루프는 정상적으로 항상 return 하지만, 안전망으로 종단 콜백을 보장한다.
+  onError(lastError)
 }

@@ -240,6 +240,85 @@ describe('ai-service', () => {
     })
   })
 
+  describe('streamChat', () => {
+    // 청크 배열을 순서대로 내보내는 가짜 스트리밍 응답
+    function sse(chunks: Uint8Array[]): unknown {
+      let i = 0
+      return {
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: async () =>
+              i < chunks.length ? { done: false, value: chunks[i++] } : { done: true, value: undefined }
+          })
+        }
+      }
+    }
+    const enc = (s: string): Uint8Array => new TextEncoder().encode(s)
+
+    it('델타 토큰을 순서대로 emit하고 onDone을 호출', async () => {
+      const ai = await loadAiService()
+      mockFetch.mockResolvedValueOnce(
+        sse([
+          enc('data: {"choices":[{"delta":{"content":"안녕"}}]}\n'),
+          enc('data: {"choices":[{"delta":{"content":"하세요"}}]}\n'),
+          enc('data: [DONE]\n')
+        ])
+      )
+      const tokens: string[] = []
+      let done = false
+      await ai.streamChat(
+        '안녕',
+        [],
+        (t) => tokens.push(t),
+        () => {
+          done = true
+        },
+        () => {}
+      )
+      expect(tokens.join('')).toBe('안녕하세요')
+      expect(done).toBe(true)
+    })
+
+    it('UTF-8 멀티바이트가 바이트 단위로 쪼개져 와도 깨지지 않고 복원', async () => {
+      const ai = await loadAiService()
+      const bytes = enc('data: {"choices":[{"delta":{"content":"한글 テスト"}}]}\n')
+      const perByte = Array.from(bytes, (b) => new Uint8Array([b]))
+      mockFetch.mockResolvedValueOnce(sse([...perByte, enc('data: [DONE]\n')]))
+      const tokens: string[] = []
+      await ai.streamChat(
+        'x',
+        [],
+        (t) => tokens.push(t),
+        () => {},
+        () => {}
+      )
+      expect(tokens.join('')).toBe('한글 テスト')
+    })
+
+    it('초기 연결 실패는 재시도 후 성공 (토큰 중복 없음)', async () => {
+      const ai = await loadAiService()
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 })
+      mockFetch.mockResolvedValueOnce(
+        sse([enc('data: {"choices":[{"delta":{"content":"ok"}}]}\n'), enc('data: [DONE]\n')])
+      )
+      const tokens: string[] = []
+      let errored = false
+      await ai.streamChat(
+        'x',
+        [],
+        (t) => tokens.push(t),
+        () => {},
+        () => {
+          errored = true
+        }
+      )
+      expect(tokens.join('')).toBe('ok')
+      expect(errored).toBe(false)
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+  })
+
   describe('chat 시스템 프롬프트', () => {
     it('chatPromptBase는 한국어 전용 응답 규칙을 포함한다', async () => {
       const ai = await loadAiService()
