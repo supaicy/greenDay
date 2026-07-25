@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>haru — TickTick식 오른쪽 상세 패널 목업</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-100:#dbeafe; --primary-700:#2563eb;
+    --g100:#f3f4f6; --g200:#e5e7eb; --g300:#d1d5db; --g400:#9ca3af;
+    --g500:#6b7280; --g600:#4b5563; --g700:#374151; --g800:#1f2937;
+    --red:#ef4444; --blue:#3b82f6;
+    --detail-w: 400px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Arial,sans-serif;color:var(--g800);background:#fff;-webkit-font-smoothing:antialiased;font-size:14px;overflow:hidden}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* 사이드바 */
+  .sidebar{width:200px;flex-shrink:0;background:var(--g100);display:flex;flex-direction:column;padding:8px;user-select:none}
+  .sb-sp{height:24px}
+  .sb-item{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;color:var(--g600);font-size:13px;cursor:pointer}
+  .sb-item:hover{background:var(--g200)}
+  .sb-item.active{background:var(--primary-100);color:var(--primary-700);font-weight:500}
+  .sb-item .ic{width:16px;text-align:center;opacity:.75}
+  .sb-item .count{margin-left:auto;font-size:11px;color:var(--g400)}
+  .sb-sec{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--g400);padding:12px 10px 4px;text-transform:uppercase}
+
+  /* 가운데 할일 목록 */
+  .list{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+  .list .top{height:56px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:0 24px}
+  .list .top h1{font-size:20px;font-weight:700}
+  .list .body{flex:1;min-height:0;overflow:auto;padding:0 12px 12px}
+  .task{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:10px;cursor:pointer;border-bottom:1px solid #f4f4f5}
+  .task:hover{background:#fafafa}
+  .task.sel{background:var(--primary-100)}
+  .circle{width:18px;height:18px;border:2px solid var(--g300);border-radius:50%;flex-shrink:0;margin-top:1px}
+  .task.p-high .circle{border-color:var(--red)}.task.p-low .circle{border-color:var(--blue)}
+  .t-meta{display:flex;gap:10px;margin-top:4px;font-size:12px;color:var(--g400)}
+  .flag-high{color:var(--red)}.flag-low{color:var(--blue)}
+
+  /* 리사이즈 핸들 (세로 구분선) */
+  .divider{width:5px;flex-shrink:0;cursor:col-resize;background:var(--g200);position:relative}
+  .divider:hover, .divider.drag{background:var(--primary)}
+
+  /* 오른쪽 상세 패널 */
+  .detail{width:var(--detail-w);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+  .d-head{display:flex;align-items:center;gap:10px;padding:14px 16px 12px;border-bottom:1px solid var(--g200)}
+  .d-check{width:22px;height:22px;border:2px solid var(--red);border-radius:50%;flex-shrink:0}
+  .d-title{flex:1;font-size:17px;font-weight:600}
+  .d-x{color:var(--g400);cursor:pointer}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;padding:12px 16px;border-bottom:1px solid var(--g100)}
+  .mchip{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;font-size:12px;border:1px solid var(--g200);color:var(--g600);cursor:pointer;white-space:nowrap}
+  .mchip.date{background:#eff6ff;border-color:#dbeafe;color:var(--primary-700)}
+  .mchip.pri{background:#fef2f2;border-color:#fecaca;color:var(--red)}
+  .d-body{flex:1;min-height:0;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+  .notes{flex:1;min-height:180px;line-height:1.7;color:var(--g700)}
+  .notes h1{font-size:19px;margin:2px 0 8px}
+  .notes code{background:var(--g100);border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:.9em}
+  .notes .cur{background:#eef4ff;margin:0 -6px;padding:0 6px;border-radius:3px}
+  .h4{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--g400);text-transform:uppercase;margin-bottom:6px}
+  .sub{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--g700)}
+  .sub .sc{width:15px;height:15px;border:1.5px solid var(--g300);border-radius:4px;flex-shrink:0}
+  .sub.done .sc{background:var(--primary);border-color:var(--primary)}
+  .sub.done span{text-decoration:line-through;color:var(--g400)}
+  .add{color:var(--g400);font-size:13px;padding:5px 0;cursor:pointer}
+
+  .hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;font-size:12px;color:var(--g600);background:#fff;padding:6px 14px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="sb-sp"></div>
+    <div class="sb-item"><span class="ic">📅</span>오늘<span class="count">2</span></div>
+    <div class="sb-item"><span class="ic">🗓</span>다음 7일<span class="count">2</span></div>
+    <div class="sb-item active"><span class="ic">📥</span>수신함<span class="count">8</span></div>
+    <div class="sb-item"><span class="ic">☰</span>전체<span class="count">10</span></div>
+    <div class="sb-item"><span class="ic">✓</span>완료됨<span class="count">14</span></div>
+    <div class="sb-sec">뷰</div>
+    <div class="sb-item"><span class="ic">📆</span>캘린더</div>
+    <div class="sb-item"><span class="ic">▦</span>칸반</div>
+    <div class="sb-sec">리스트</div>
+    <div class="sb-item"><span class="ic" style="color:#4A90D9">●</span>HomestayKorea</div>
+    <div class="sb-item"><span class="ic" style="color:#2ECC71">●</span>web</div>
+  </aside>
+
+  <section class="list">
+    <div class="top"><h1>수신함</h1></div>
+    <div class="body">
+      <div class="task p-low"><div class="circle"></div><div><div>Chatwoot</div><div class="t-meta"><span class="flag-low">⚑ 낮음</span></div></div></div>
+      <div class="task p-high sel"><div class="circle"></div><div><div>Android 키스토어 생성 + 보안 백업</div><div class="t-meta"><span>📅 오늘</span><span class="flag-high">⚑ 높음</span></div></div></div>
+      <div class="task p-high"><div class="circle"></div><div><div>Firebase 콘솔 앱 등록</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div></div>
+      <div class="task p-high"><div class="circle"></div><div><div>Bundle ID / 브랜드명 최종 확정</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div></div>
+      <div class="task p-high"><div class="circle"></div><div><div>스토어 메타데이터 작성</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div></div>
+    </div>
+  </section>
+
+  <div class="divider" id="divider" title="드래그해서 상세 폭 조절"></div>
+
+  <aside class="detail" id="detail">
+    <div class="d-head">
+      <div class="d-check"></div>
+      <div class="d-title">Android 키스토어 생성 + 보안 백업</div>
+      <div class="d-x">✕</div>
+    </div>
+    <div class="meta">
+      <div class="mchip date">📅 오늘 14:00</div>
+      <div class="mchip pri">⚑ 높음</div>
+      <div class="mchip">☰ 수신함 ▾</div>
+      <div class="mchip">🔔 알림</div>
+      <div class="mchip">🔁 반복</div>
+      <div class="mchip">🏷 태그</div>
+    </div>
+    <div class="d-body">
+      <div class="notes">
+        <h1>키스토어 백업 절차</h1>
+        <p>키스토어는 앱 서명의 핵심. 유출 시 앱 업데이트 불가하므로 오프라인 백업 필수.</p>
+        <p class="cur">1. <code>keytool -genkey -v -keystore haru.jks</code></p>
+        <p>2. Play Console → 앱 서명 키 등록</p>
+        <p>3. SHA-1 / SHA-256 지문을 Firebase 콘솔에 등록</p>
+        <p>4. .jks + 비밀번호를 1Password & 외장 SSD 2곳에 백업</p>
+      </div>
+      <div>
+        <div class="h4">하위 작업 1/3</div>
+        <div class="sub done"><span class="sc"></span><span>키스토어(.jks) 생성</span></div>
+        <div class="sub"><span class="sc"></span><span>SHA-1 / SHA-256 지문 등록</span></div>
+        <div class="sub"><span class="sc"></span><span>비밀번호 1Password 백업</span></div>
+        <div class="add">＋ 하위 작업 추가</div>
+      </div>
+      <div>
+        <div class="h4">첨부</div>
+        <div class="add">＋ 파일 추가</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<div class="hint">👆 목록과 상세 사이 세로선(파랑)을 좌우로 드래그해 상세 폭을 조절 — TickTick식</div>
+
+<script>
+  const divider=document.getElementById('divider'), app=document.getElementById('app')
+  let drag=false
+  divider.addEventListener('mousedown',e=>{drag=true;divider.classList.add('drag');e.preventDefault()})
+  window.addEventListener('mouseup',()=>{drag=false;divider.classList.remove('drag')})
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return
+    const w=Math.min(680,Math.max(300, window.innerWidth - e.clientX))
+    document.documentElement.style.setProperty('--detail-w', w+'px')
+  })
+</script>
+</body>
+</html>

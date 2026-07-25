@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
-import { clampDetailHeight } from './detailHeight'
+import { clampDetailWidth } from './detailWidth'
 import type {
   Task,
   TaskList,
@@ -42,7 +42,7 @@ interface Store {
   showAddTask: boolean
   editingListId: string | null
   theme: Theme
-  detailPanelHeightPx: number | null
+  detailPanelWidthPx: number | null
   showSettings: boolean
   sortBy: SortBy
   sortDir: SortDir
@@ -117,7 +117,7 @@ interface Store {
   setViewType: (type: ViewType) => void
   setSearchQuery: (query: string) => void
   setTheme: (theme: Theme) => void
-  setDetailPanelHeightPx: (px: number, contentHeight: number) => void
+  setDetailPanelWidthPx: (px: number, windowWidth: number) => void
   toggleSettings: () => void
   setShowQuickAdd: (show: boolean) => void
   setShowExport: (show: boolean) => void
@@ -264,8 +264,8 @@ export const useStore = create<Store>((set, get) => ({
   showAddTask: false,
   editingListId: null,
   theme: (localStorage.getItem('ticktick-theme') as Theme) || 'dark',
-  detailPanelHeightPx: ((): number | null => {
-    const n = Number(localStorage.getItem('ticktick-detail-height'))
+  detailPanelWidthPx: ((): number | null => {
+    const n = Number(localStorage.getItem('ticktick-detail-width'))
     return Number.isFinite(n) && n > 0 ? n : null
   })(),
   showSettings: false,
@@ -634,10 +634,10 @@ export const useStore = create<Store>((set, get) => ({
     localStorage.setItem('ticktick-theme', theme)
     set({ theme })
   },
-  setDetailPanelHeightPx: (px, contentHeight) => {
-    const clamped = clampDetailHeight(px, contentHeight)
-    localStorage.setItem('ticktick-detail-height', String(clamped))
-    set({ detailPanelHeightPx: clamped })
+  setDetailPanelWidthPx: (px, windowWidth) => {
+    const clamped = clampDetailWidth(px, windowWidth)
+    localStorage.setItem('ticktick-detail-width', String(clamped))
+    set({ detailPanelWidthPx: clamped })
   },
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   setShowQuickAdd: (show) => set({ showQuickAdd: show }),

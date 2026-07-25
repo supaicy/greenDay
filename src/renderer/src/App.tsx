@@ -102,12 +102,12 @@ export default function App() {
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <MainContent />
-        {selectedTaskId && (
-          <Suspense fallback={null}>
-            <TaskDetail />
-          </Suspense>
-        )}
       </div>
+      {selectedTaskId && (
+        <Suspense fallback={null}>
+          <TaskDetail />
+        </Suspense>
+      )}
       <AiChatPanel />
       <Settings />
       {showQuickAdd && <QuickAdd />}

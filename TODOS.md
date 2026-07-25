@@ -51,17 +51,19 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 
 ## UI/UX
 
-### [P3] 하단 상세 패널 — 코드 품질 후속 (/simplify 2026-07-24 발견, 보류)
-- **TaskDetail 구독 최적화**: `const {…} = useStore()` 무선택자 구독이라 아무 store 쓰기에도 리렌더. `useShallow` 선택자로 전환(액션은 안정 참조라 분리). 리렌더 급감. (기존 패턴, 리팩터가 toggleTask 추가하며 유지)
-- **마크다운 재파싱**: preview에서 매 렌더 `<Markdown>` 재파싱 — `components` 객체를 `useMemo([toggleCheckbox])`로 고정(input 렌더러 타입 마찰 주의). REMARK_PLUGINS는 이미 호이스트됨.
-- **PickerRow 추출**: 알림/반복 토글 블록 ~26줄 near-identical → 로컬 `PickerRow` 컴포넌트로 dedup.
-- **DetailHeader 추출**: TaskDetail 470줄 — 헤더(~95줄) 서브컴포넌트 추출로 가독성.
-- **기본 높이 이동**: `window.innerHeight*0.72` 인라인 기본값을 `store/detailHeight.ts`의 `defaultDetailHeight(contentHeight)`로 이동, store에서 null→기본 해소. Stage 3(드래그+contentHeight)에서 함께 처리 예정.
+> **참고 (2026-07-25):** 하단(bottom) 상세 패널 → **오른쪽(right) 폭 리사이즈 패널**(TickTick식)로 전환됨. 아래 "하단 상세 패널" 항목 중 폭/세로스택 관련은 재해석 필요.
 
-### [P3] 하단 상세 패널 — 드래그 리스너 언마운트 정리
-- **What:** TaskDetail의 그립 드래그가 mousedown에서 window mousemove/mouseup를 붙이고 mouseup에서 떼는데, 드래그 도중 패널이 언마운트(selectTask(null) 등)되면 리스너가 남음.
-- **Impact:** React18에서 언마운트 후 setState는 무해(no-op)하고 다음 mouseup에서 정리되지만, 견고성을 위해 useEffect cleanup으로 unmount 시 리스너 해제 권장.
-- **Added:** 2026-07-24 Stage 3 /review
+### [P3] 우측 상세 패널 — 코드 품질 후속 (/simplify 발견, 일부 해소)
+- ~~**TaskDetail 구독 최적화**~~ ✅ 2026-07-25: 무선택자 `useStore()` → 개별 셀렉터로 전환(액션은 안정 참조).
+- ~~**마크다운 재파싱**~~ 무효: react-markdown 제거(Atomic 에디터 전환)로 소멸.
+- ~~**기본 높이 이동**~~ 무효: 높이 state 제거(우측 패널은 폭 기반), `DEFAULT_DETAIL_WIDTH` 상수로 처리.
+- **PickerRow 추출**: 알림/반복 토글 블록 ~26줄 near-identical → 로컬 `PickerRow` 컴포넌트로 dedup. (미해소)
+- **DetailHeader 추출**: TaskDetail — 헤더/메타 서브컴포넌트 추출로 가독성. (미해소)
+
+### [P3] 우측 상세 패널 — AiChat 동시 오픈 시 폭 경합
+- **What:** `clampDetailWidth`는 사이드바(256)+목록최소(320)만 예약하고 AiChatPanel(w-80=320)은 고려 안 함. 상세 패널을 최대로 늘린 상태에서 AI 챗까지 열면 가운데 목록이 `min-w-0`로 0까지 눌릴 수 있음.
+- **Impact:** 크래시/데이터 손실 없음(우아한 축소). 사용자가 둘 중 하나 닫으면 복구. 필요 시 clamp에 `showAiChat` 여부를 반영해 AiChat 폭까지 예약.
+- **Added:** 2026-07-25 우측 패널 /review
 
 ### [P3] 노트 에디터 — 번들 감량 (코드 언어 축소)
 - **What:** Atomic 라이브프리뷰 도입으로 lazy TaskDetail 청크가 563kB→~1,135kB. `@codemirror/lang-*` 13종이 상당 부분. `codeLanguages` prop으로 흔한 언어(js/ts/py/json/bash/css/html)만 로드하면 감량 가능.

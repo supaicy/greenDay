@@ -9,7 +9,7 @@ import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { AttachmentList } from './AttachmentList'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
-import { clampDetailHeight } from '../../store/detailHeight'
+import { clampDetailWidth } from '../../store/detailWidth'
 import type { Priority } from '../../types'
 
 function formatScheduledRange(startIso: string, endIso: string): string {
@@ -46,10 +46,21 @@ const LIGHT_EDITOR_THEME = EditorView.theme(
   { dark: false }
 )
 
+const DEFAULT_DETAIL_WIDTH = 400
+
 export function TaskDetail() {
-  const { tasks, lists, selectedTaskId, selectTask, updateTask, removeTask, toggleTask, theme } = useStore()
-  const detailHeight = useStore((s) => s.detailPanelHeightPx)
-  const setDetailPanelHeightPx = useStore((s) => s.setDetailPanelHeightPx)
+  // 개별 셀렉터로 구독 — 무선택자 useStore()는 아무 store 쓰기에도 리렌더된다.
+  // (액션은 안정 참조라 리렌더를 유발하지 않음)
+  const tasks = useStore((s) => s.tasks)
+  const lists = useStore((s) => s.lists)
+  const selectedTaskId = useStore((s) => s.selectedTaskId)
+  const selectTask = useStore((s) => s.selectTask)
+  const updateTask = useStore((s) => s.updateTask)
+  const removeTask = useStore((s) => s.removeTask)
+  const toggleTask = useStore((s) => s.toggleTask)
+  const theme = useStore((s) => s.theme)
+  const detailWidth = useStore((s) => s.detailPanelWidthPx)
+  const setDetailPanelWidthPx = useStore((s) => s.setDetailPanelWidthPx)
   const task = tasks.find((t) => t.id === selectedTaskId)
   const isDark = theme === 'dark'
 
@@ -61,9 +72,11 @@ export function TaskDetail() {
   const [tagInput, setTagInput] = useState('')
   const [showRecurring, setShowRecurring] = useState(false)
   const [showReminder, setShowReminder] = useState(false)
-  // 드래그 중 라이브 높이(px). null이면 저장값 사용. mouseup에서만 persist.
-  const [dragHeight, setDragHeight] = useState<number | null>(null)
-  // 열릴 때 아래에서 슬라이드업
+  // 드래그 중 라이브 폭(px). null이면 저장값 사용. mouseup에서만 persist.
+  const [dragWidth, setDragWidth] = useState<number | null>(null)
+  // 창 너비 추적 — 변할 때 clamp가 재계산되도록. persist는 하지 않는다.
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
+  // 열릴 때 오른쪽에서 슬라이드인
   const [shown, setShown] = useState(false)
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: form state resets only when a different task is selected; watching other fields would overwrite in-progress edits
@@ -78,6 +91,9 @@ export function TaskDetail() {
   }, [task?.id])
 
   const panelRef = useRef<HTMLDivElement>(null)
+  // 진행 중인 폭 드래그의 리스너 정리 함수. 드래그 도중 언마운트되면 누수 방지용.
+  const dragCleanup = useRef<(() => void) | null>(null)
+  useEffect(() => () => dragCleanup.current?.(), [])
 
   // 메모 저장: 편집 중엔 ref에 모으고 400ms 디바운스로 저장. 태스크 전환/언마운트 시 flush.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -110,18 +126,16 @@ export function TaskDetail() {
 
   const editorExtensions = useMemo(() => (isDark ? [DARK_EDITOR_THEME] : [LIGHT_EDITOR_THEME]), [isDark])
 
-  // 창 리사이즈 시 저장된 높이를 새 콘텐츠 높이 기준으로 다시 clamp
+  // 창 너비 변화를 추적 → 렌더 시 clamp가 새 너비 기준으로 다시 계산된다.
+  // 저장값을 덮어쓰지 않으므로(persist 안 함), 창을 좁혔다 다시 넓히면
+  // 사용자가 지정한 폭이 그대로 복원된다. 저장값이 없어도(기본 400) 동작한다.
   useEffect(() => {
-    if (detailHeight == null) return
-    const onResize = () => {
-      const parent = panelRef.current?.parentElement
-      if (parent) setDetailPanelHeightPx(detailHeight, parent.getBoundingClientRect().height)
-    }
+    const onResize = () => setWindowWidth(window.innerWidth)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
-  }, [detailHeight, setDetailPanelHeightPx])
+  }, [])
 
-  // 마운트 직후 translateY(100%)→0 슬라이드업
+  // 마운트 직후 translateX(100%)→0 슬라이드인
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true))
     return () => cancelAnimationFrame(id)
@@ -140,46 +154,48 @@ export function TaskDetail() {
   const inputCls = isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-300'
   const labelCls = isDark ? 'text-gray-500' : 'text-gray-400'
 
-  // 하단 패널 높이: 드래그 중이면 라이브값, 아니면 저장값(없으면 창의 72%).
-  // read 시점에도 clamp해서 큰 저장값이 작은 창에서 위 뷰를 0으로 짓누르지 않게 한다.
-  const height = dragHeight ?? clampDetailHeight(detailHeight ?? Math.round(window.innerHeight * 0.72), window.innerHeight)
+  // 우측 패널 폭: 드래그 중이면 라이브값, 아니면 저장값(없으면 기본 400).
+  // read 시점에도 clamp해서 큰 저장값이 좁은 창에서 목록을 0으로 짓누르지 않게 한다.
+  const width = dragWidth ?? clampDetailWidth(detailWidth ?? DEFAULT_DETAIL_WIDTH, windowWidth)
   const priorityColor = PRIORITY_OPTIONS.find((p) => p.value === task.priority)?.color || 'text-gray-400'
 
-  // 그립 드래그로 높이 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist
+  // 좌측 경계선 드래그로 폭 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist.
+  // 패널 우측 경계는 고정(창 우측에 핀)이므로 mousedown 시점 값을 그대로 사용.
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault()
-    const parent = panelRef.current?.parentElement
-    if (!parent) return
-    const rect = parent.getBoundingClientRect()
-    const onMove = (ev: MouseEvent) => setDragHeight(clampDetailHeight(rect.bottom - ev.clientY, rect.height))
+    const panel = panelRef.current
+    if (!panel) return
+    const right = panel.getBoundingClientRect().right
+    const controller = new AbortController()
+    const { signal } = controller
+    const onMove = (ev: MouseEvent) => setDragWidth(clampDetailWidth(right - ev.clientX, window.innerWidth))
     const onUp = (ev: MouseEvent) => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      setDetailPanelHeightPx(rect.bottom - ev.clientY, rect.height)
-      setDragHeight(null)
+      controller.abort()
+      dragCleanup.current = null
+      setDetailPanelWidthPx(right - ev.clientX, window.innerWidth)
+      setDragWidth(null)
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('mousemove', onMove, { signal })
+    window.addEventListener('mouseup', onUp, { signal })
+    dragCleanup.current = () => controller.abort()
   }
 
   return (
     <div
       ref={panelRef}
-      className={`w-full flex-shrink-0 border-t flex flex-col transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
-      style={{ height, transform: shown ? 'translateY(0)' : 'translateY(100%)' }}
+      className={`relative flex-shrink-0 border-l flex flex-col transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
+      style={{ width, transform: shown ? 'translateX(0)' : 'translateX(100%)' }}
     >
-      {/* 드래그 핸들: 높이 조절 */}
+      {/* 좌측 경계 드래그 핸들: 폭 조절 */}
       <button
         type="button"
-        aria-label="상세 패널 높이 조절"
+        aria-label="상세 패널 폭 조절"
         onMouseDown={startResize}
-        className="w-full h-3 flex items-center justify-center cursor-ns-resize flex-shrink-0"
-      >
-        <div className={`w-9 h-1 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`} />
-      </button>
+        className="absolute left-0 top-0 h-full w-2 -ml-1 cursor-col-resize z-10 hover:bg-primary-500/40 transition-colors"
+      />
 
-      {/* 헤더: 완료 + 제목 + 마감일/시간 + 우선순위 + 삭제/닫기 */}
-      <div className={`flex items-center gap-3 px-4 pb-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+      {/* 헤더: 완료 + 제목 + 삭제/닫기 */}
+      <div className={`flex items-center gap-2 px-4 pt-4 pb-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
         <button
           type="button"
           onClick={() => toggleTask(task.id)}
@@ -196,8 +212,33 @@ export function TaskDetail() {
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           className={`flex-1 min-w-0 bg-transparent text-lg font-semibold outline-none ${isDark ? 'text-gray-100' : 'text-gray-800'}`}
         />
+        <button
+          type="button"
+          onClick={() => removeTask(task.id)}
+          className="shrink-0 text-gray-500 hover:text-red-400 transition-colors"
+          aria-label="삭제"
+        >
+          <Trash2 size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={() => selectTask(null)}
+          className={`shrink-0 transition-colors ${labelCls} hover:text-gray-300`}
+          aria-label="닫기"
+        >
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* 메타: 마감일/시간 · 우선순위 · 리스트 · 알림 · 반복 · 태그 (좁은 폭에서 줄바꿈) */}
+      <div className={`flex flex-wrap items-center gap-2 px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+        {task.scheduledStart && task.scheduledEnd && (
+          <span className="flex items-center gap-1 text-xs text-gray-500 w-full">
+            <Clock size={13} /> 예정 {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}
+          </span>
+        )}
         {/* 마감일 + 시간 */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5">
           <Calendar size={15} className={labelCls} />
           <input
             type="date"
@@ -215,7 +256,7 @@ export function TaskDetail() {
               setDueTime(e.target.value)
               save({ dueTime: e.target.value || null })
             }}
-            className={`w-20 text-sm rounded px-2 py-1 outline-none border ${inputCls}`}
+            className={`w-[74px] text-sm rounded px-2 py-1 outline-none border ${inputCls}`}
           />
           {(dueDate || dueTime) && (
             <button
@@ -233,7 +274,7 @@ export function TaskDetail() {
           )}
         </div>
         {/* 우선순위 */}
-        <div className="flex gap-1 shrink-0">
+        <div className="flex gap-1">
           {PRIORITY_OPTIONS.map((opt) => (
             <button
               type="button"
@@ -254,150 +295,119 @@ export function TaskDetail() {
             </button>
           ))}
         </div>
-        {/* 삭제 / 닫기 */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* 리스트 */}
+        <div className="flex items-center gap-1">
+          <List size={14} className={labelCls} />
+          <select
+            value={listId}
+            onChange={(e) => {
+              setListId(e.target.value)
+              save({ listId: e.target.value })
+            }}
+            className={`text-xs rounded px-2 py-1 outline-none border ${inputCls}`}
+          >
+            {lists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* 알림 */}
+        <div className="relative">
           <button
             type="button"
-            onClick={() => removeTask(task.id)}
-            className="text-gray-500 hover:text-red-400 transition-colors"
-            aria-label="삭제"
+            onClick={() => setShowReminder(!showReminder)}
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+              task.reminderAt
+                ? 'text-primary-400 border-primary-500/30'
+                : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
+            }`}
           >
-            <Trash2 size={16} />
+            <Bell size={13} /> {task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
           </button>
+          {showReminder && (
+            <ReminderPicker
+              dueDate={task.dueDate}
+              value={task.reminderAt}
+              onChange={(v) => {
+                save({ reminderAt: v })
+                setShowReminder(false)
+              }}
+            />
+          )}
+        </div>
+        {/* 반복 */}
+        <div className="relative">
           <button
             type="button"
-            onClick={() => selectTask(null)}
-            className={`transition-colors ${labelCls}`}
-            aria-label="닫기"
+            onClick={() => setShowRecurring(!showRecurring)}
+            className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+              task.isRecurring
+                ? 'text-purple-400 border-purple-500/30'
+                : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
+            }`}
           >
-            <X size={16} />
+            <Repeat size={13} /> {task.isRecurring ? task.recurringPattern || '반복' : '반복'}
           </button>
+          {showRecurring && (
+            <RecurringPicker
+              value={task.recurringPattern}
+              onChange={(v) => {
+                save({ isRecurring: !!v, recurringPattern: v })
+                setShowRecurring(false)
+              }}
+            />
+          )}
+        </div>
+        {/* 태그 */}
+        <div className="flex items-center gap-1 flex-1 min-w-[160px]">
+          <Tag size={14} className={labelCls} />
+          {task.tags.map((tag) => (
+            <span
+              key={tag}
+              className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}
+            >
+              {tag}
+              <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-400">
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return
+              if (e.key === 'Enter') addTag()
+            }}
+            placeholder="태그..."
+            className={`flex-1 min-w-[60px] text-xs bg-transparent outline-none ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
+          />
         </div>
       </div>
 
-      {/* 본문: 상단 메타 띠 + 아래 하위작업/첨부 + 메모 */}
+      {/* 본문: 메모(히어로, 세로로 채움) + 하위작업·첨부(아래 바운드 스크롤 영역) */}
       <div className="flex-1 min-h-0 flex flex-col">
-        {/* 메타 띠: 리스트 · 알림 · 반복 · 태그 (가로 컴팩트) */}
-        <div className={`flex flex-wrap items-center gap-2 px-4 py-2 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-          {task.scheduledStart && task.scheduledEnd && (
-            <span className="flex items-center gap-1 text-xs text-gray-500">
-              <Clock size={13} /> 예정 {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}
-            </span>
-          )}
-          {/* 리스트 */}
-          <div className="flex items-center gap-1">
-            <List size={14} className={labelCls} />
-            <select
-              value={listId}
-              onChange={(e) => {
-                setListId(e.target.value)
-                save({ listId: e.target.value })
-              }}
-              className={`text-xs rounded px-2 py-1 outline-none border ${inputCls}`}
-            >
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          {/* 알림 */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowReminder(!showReminder)}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
-                task.reminderAt
-                  ? 'text-primary-400 border-primary-500/30'
-                  : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
-              }`}
-            >
-              <Bell size={13} /> {task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
-            </button>
-            {showReminder && (
-              <ReminderPicker
-                dueDate={task.dueDate}
-                value={task.reminderAt}
-                onChange={(v) => {
-                  save({ reminderAt: v })
-                  setShowReminder(false)
-                }}
-              />
-            )}
-          </div>
-          {/* 반복 */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowRecurring(!showRecurring)}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
-                task.isRecurring
-                  ? 'text-purple-400 border-purple-500/30'
-                  : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
-              }`}
-            >
-              <Repeat size={13} /> {task.isRecurring ? task.recurringPattern || '반복' : '반복'}
-            </button>
-            {showRecurring && (
-              <RecurringPicker
-                value={task.recurringPattern}
-                onChange={(v) => {
-                  save({ isRecurring: !!v, recurringPattern: v })
-                  setShowRecurring(false)
-                }}
-              />
-            )}
-          </div>
-          {/* 태그 */}
-          <div className="flex items-center gap-1 flex-1 min-w-[160px]">
-            <Tag size={14} className={labelCls} />
-            {task.tags.map((tag) => (
-              <span
-                key={tag}
-                className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}
-              >
-                {tag}
-                <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-400">
-                  <X size={10} />
-                </button>
-              </span>
-            ))}
-            <input
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return
-                if (e.key === 'Enter') addTag()
-              }}
-              placeholder="태그..."
-              className={`flex-1 min-w-[60px] text-xs bg-transparent outline-none ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
-            />
-          </div>
+        {/* 메모 (라이브프리뷰) */}
+        <div className="flex-1 min-h-0 flex flex-col px-4 py-3">
+          <AtomicCodeMirrorEditor
+            documentId={task.id}
+            markdownSource={task.description}
+            onMarkdownChange={onNotesChange}
+            onLinkClick={(url) => window.api.openExternal(url)}
+            extensions={editorExtensions}
+          />
         </div>
-
-        {/* 본문: 메모(좌, 히어로) + 하위작업·첨부(우, 사이드 레일) */}
-        <div className="flex-1 min-h-0 flex px-4 py-3 gap-4">
-          {/* 메모 (라이브프리뷰) */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            <AtomicCodeMirrorEditor
-              documentId={task.id}
-              markdownSource={task.description}
-              onMarkdownChange={onNotesChange}
-              onLinkClick={(url) => window.api.openExternal(url)}
-              extensions={editorExtensions}
-            />
-          </div>
-          {/* 하위작업 · 첨부 (사이드 레일) */}
-          <div className={`w-[280px] flex-shrink-0 overflow-y-auto border-l pl-4 space-y-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
-            <SubtaskList taskId={task.id} />
-            <AttachmentList
-              taskId={task.id}
-              attachments={task.attachments}
-              onUpdate={(attachments) => save({ attachments })}
-            />
-          </div>
+        {/* 하위작업 · 첨부 */}
+        <div className={`flex-shrink-0 max-h-[38%] overflow-y-auto border-t px-4 py-3 space-y-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+          <SubtaskList taskId={task.id} />
+          <AttachmentList
+            taskId={task.id}
+            attachments={task.attachments}
+            onUpdate={(attachments) => save({ attachments })}
+          />
         </div>
       </div>
     </div>
