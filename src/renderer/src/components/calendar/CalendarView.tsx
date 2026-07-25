@@ -4,10 +4,15 @@ import { useStore } from '../../store/useStore'
 import { getCalendarDays, formatDate, toDateString } from '../../utils/date'
 import { isToday, isSameMonth } from 'date-fns'
 
+// 월간 캘린더에서 태스크를 다른 날로 드래그해 마감일 변경 시 쓰는 커스텀 MIME.
+// 주/일 뷰의 시간블록 드래그('application/haru-task-block')와 겹치지 않게 분리한다.
+const CAL_DATE_MIME = 'application/haru-cal-date'
+
 export function CalendarView() {
-  const { tasks, selectTask, theme } = useStore()
+  const { tasks, selectTask, updateTask, theme } = useStore()
   const isDark = theme === 'dark'
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null)
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
@@ -90,10 +95,31 @@ export function CalendarView() {
             const today = isToday(day)
             const sameMonth = isSameMonth(day, currentDate)
 
+            // 드롭 대상 강조. onDragLeave 는 자식(날짜숫자/태스크 버튼) 진입 시에도 발생해
+            // 깜빡이므로 쓰지 않는다 — 다른 셀의 onDragOver 가 덮어쓰고, 드래그 종료 시
+            // 소스 버튼의 onDragEnd 가 정리한다.
+            const dropRing = dragOverDate !== dateStr
+              ? ''
+              : isDark
+                ? 'ring-2 ring-inset ring-primary-500 bg-primary-900/20'
+                : 'ring-2 ring-inset ring-primary-500 bg-primary-50'
+
             return (
+              // biome-ignore lint/a11y/noStaticElementInteractions: 날짜 셀은 태스크 드래그의 드롭 영역
               <div
                 key={dateStr}
-                className={`min-h-[100px] p-1.5 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'} ${!sameMonth ? 'opacity-30' : ''}`}
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes(CAL_DATE_MIME)) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragOverDate !== dateStr) setDragOverDate(dateStr)
+                }}
+                onDrop={(e) => {
+                  const id = e.dataTransfer.getData(CAL_DATE_MIME)
+                  setDragOverDate(null)
+                  if (id) updateTask({ id, dueDate: dateStr })
+                }}
+                className={`min-h-[100px] p-1.5 transition-colors ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'} ${!sameMonth ? 'opacity-30' : ''} ${dropRing}`}
               >
                 <div
                   className={`text-xs mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
@@ -107,8 +133,15 @@ export function CalendarView() {
                     <button
                       type="button"
                       key={task.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(CAL_DATE_MIME, task.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                      }}
+                      onDragEnd={() => setDragOverDate(null)}
                       onClick={() => selectTask(task.id)}
-                      className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate transition-colors ${
+                      title="드래그해서 다른 날로 이동"
+                      className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate transition-colors cursor-grab active:cursor-grabbing ${
                         isDark
                           ? 'bg-primary-900/40 text-primary-300 hover:bg-primary-900/60'
                           : 'bg-primary-100 text-primary-700 hover:bg-primary-200'
