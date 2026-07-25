@@ -167,8 +167,11 @@ interface Store {
     dueDate: string | null
     dueTime: string | null
     priority: Priority
+    tags: string[]
     subtasks: { title: string; dueDate: string | null }[]
   } | null>
+  // 채팅 메시지를 할일로 변환해 생성. 생성된 제목 반환(실패 시 null).
+  aiAddTaskFromText: (text: string) => Promise<string | null>
 }
 
 function mapTask(row: Record<string, unknown>): Task {
@@ -881,6 +884,27 @@ export const useStore = create<Store>((set, get) => ({
     } catch {
       return null
     }
+  },
+  aiAddTaskFromText: async (text) => {
+    const parsed = await get().aiCreateTaskFromNL(text)
+    if (!parsed) return null
+    await get().addTask(parsed.title, {
+      dueDate: parsed.dueDate,
+      dueTime: parsed.dueTime,
+      priority: parsed.priority,
+      tags: parsed.tags
+    })
+    // 하위작업 생성. addTask는 배열 끝에 추가하므로, 같은 제목이 이미 있어도
+    // 방금 만든(가장 최근) 최상위 태스크에 붙도록 뒤에서부터 찾는다.
+    if (parsed.subtasks.length > 0) {
+      const parent = [...get().tasks].reverse().find((t) => t.title === parsed.title && !t.parentId)
+      if (parent) {
+        for (const sub of parsed.subtasks) {
+          await get().addTask(sub.title, { parentId: parent.id, dueDate: sub.dueDate })
+        }
+      }
+    }
+    return parsed.title
   }
 }))
 

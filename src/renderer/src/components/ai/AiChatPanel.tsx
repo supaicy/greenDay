@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
-import { Bot, Send, X, Trash2, Loader2, WifiOff } from 'lucide-react'
+import { Bot, Send, X, Trash2, Loader2, WifiOff, ListPlus, Check } from 'lucide-react'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
+  // 채팅 메시지 → 할일 추가 상태 (메시지 id별)
+  const [taskAdds, setTaskAdds] = useState<Record<string, 'adding' | 'added' | 'error'>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -17,8 +19,15 @@ export function AiChatPanel() {
   const aiSendMessage = useStore((s) => s.aiSendMessage)
   const aiClearMessages = useStore((s) => s.aiClearMessages)
   const aiCheckConnection = useStore((s) => s.aiCheckConnection)
+  const aiAddTaskFromText = useStore((s) => s.aiAddTaskFromText)
 
   const isDark = theme === 'dark'
+
+  const handleAddTask = async (id: string, content: string) => {
+    setTaskAdds((s) => ({ ...s, [id]: 'adding' }))
+    const title = await aiAddTaskFromText(content)
+    setTaskAdds((s) => ({ ...s, [id]: title ? 'added' : 'error' }))
+  }
 
   useEffect(() => {
     if (showAiChat && aiConnected === null) {
@@ -135,7 +144,10 @@ export function AiChatPanel() {
         )}
 
         {aiMessages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div
+            key={msg.id}
+            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+          >
             <div
               className={`max-w-[85%] px-3 py-2 rounded-lg text-sm whitespace-pre-wrap ${
                 msg.role === 'user'
@@ -148,6 +160,38 @@ export function AiChatPanel() {
               {msg.content ||
                 (aiLoading && msg.role === 'assistant' ? <Loader2 size={14} className="animate-spin" /> : null)}
             </div>
+            {/* 사용자 메시지를 할일로 추가 (안전한 추가 액션) */}
+            {msg.role === 'user' && msg.content && aiConnected !== false && (
+              <div className="mt-1">
+                {taskAdds[msg.id] === 'added' ? (
+                  <span className="flex items-center gap-1 text-[11px] text-green-500">
+                    <Check size={11} /> 할일 추가됨
+                  </span>
+                ) : taskAdds[msg.id] === 'error' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleAddTask(msg.id, msg.content)}
+                    className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300"
+                  >
+                    <ListPlus size={11} /> 추가 실패 · 다시 시도
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleAddTask(msg.id, msg.content)}
+                    disabled={taskAdds[msg.id] === 'adding'}
+                    className={`flex items-center gap-1 text-[11px] transition-colors ${isDark ? 'text-gray-500 hover:text-blue-400' : 'text-gray-400 hover:text-blue-500'}`}
+                  >
+                    {taskAdds[msg.id] === 'adding' ? (
+                      <Loader2 size={11} className="animate-spin" />
+                    ) : (
+                      <ListPlus size={11} />
+                    )}
+                    할일로 추가
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ))}
         <div ref={messagesEndRef} />
