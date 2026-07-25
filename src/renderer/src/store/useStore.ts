@@ -23,6 +23,7 @@ import { isValidSchedulePair } from '../utils/scheduledTime'
 import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurrence'
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
+import { buildAiTaskContext } from '../utils/aiContext'
 
 export type Theme = 'dark' | 'light'
 
@@ -810,14 +811,7 @@ export const useStore = create<Store>((set, get) => ({
       aiLoading: true
     }))
 
-    const tasks = get()
-      .tasks.slice(0, 50)
-      .map((t) => ({
-        title: t.title,
-        dueDate: t.dueDate,
-        priority: t.priority,
-        completed: t.completed
-      }))
+    const tasks = buildAiTaskContext(get().tasks)
 
     // 리스너를 스트림 호출 전에 등록 (레이스 컨디션 방지)
     const cleanup = () => {
@@ -870,14 +864,7 @@ export const useStore = create<Store>((set, get) => ({
     void window.api.aiSaveHistory([])
   },
   aiCreateTaskFromNL: async (input) => {
-    const tasks = get()
-      .tasks.slice(0, 50)
-      .map((t) => ({
-        title: t.title,
-        dueDate: t.dueDate,
-        priority: t.priority,
-        completed: t.completed
-      }))
+    const tasks = buildAiTaskContext(get().tasks)
     try {
       const result = (await window.api.aiCreateTask(input, tasks)) as {
         action: string

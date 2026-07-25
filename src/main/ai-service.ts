@@ -217,8 +217,10 @@ async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: b
 export interface TaskContext {
   title: string
   dueDate: string | null
+  dueTime?: string | null
   priority: string
   completed: boolean
+  tags?: string[]
 }
 
 function summarizeTasks(tasks: TaskContext[]): string {
@@ -226,9 +228,10 @@ function summarizeTasks(tasks: TaskContext[]): string {
   return tasks
     .map((t) => {
       const status = t.completed ? '[done]' : '[todo]'
-      const due = t.dueDate ? ` (due: ${t.dueDate})` : ''
+      const due = t.dueDate ? ` (due: ${t.dueDate}${t.dueTime ? ` ${t.dueTime}` : ''})` : ''
       const pri = t.priority !== 'none' ? ` [${t.priority}]` : ''
-      return `${status} ${t.title}${due}${pri}`
+      const tags = t.tags && t.tags.length > 0 ? ` ${t.tags.map((tag) => `#${tag}`).join(' ')}` : ''
+      return `${status} ${t.title}${due}${pri}${tags}`
     })
     .join('\n')
 }
