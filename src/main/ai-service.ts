@@ -1,6 +1,7 @@
 // AI Service Layer — Ollama / OpenAI 호환 API 클라이언트
 import * as db from './database'
 import type { AiConfig } from '../shared/ai-config'
+import { type ChatHistoryMessage, normalizeChatHistory } from '../shared/ai-history'
 
 const ALLOWED_ACTIONS = ['create_task', 'chat_response'] as const
 const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const
@@ -285,6 +286,7 @@ export async function chat(userMessage: string, existingTasks: TaskContext[]): P
 export async function streamChat(
   userMessage: string,
   existingTasks: TaskContext[],
+  history: ChatHistoryMessage[],
   onToken: (token: string) => void,
   onDone: () => void,
   onError: (error: string) => void
@@ -295,10 +297,14 @@ export async function streamChat(
   const summary = summarizeTasks(existingTasks)
   const systemPrompt = chatPromptBase(summary)
 
+  // 직전 대화를 컨텍스트로 포함 (멀티턴). 방어적으로 재검증 + 최근 N개로 제한.
+  const priorTurns = normalizeChatHistory(history)
+
   const body = {
     model: config.model,
     messages: [
       { role: 'system', content: systemPrompt },
+      ...priorTurns,
       { role: 'user', content: userMessage }
     ],
     temperature: 0.3,

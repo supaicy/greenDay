@@ -89,7 +89,8 @@ const api = {
   aiSetConfig: (updates: Record<string, unknown>) => ipcRenderer.invoke('ai:set-config', updates),
   aiCreateTask: (input: string, tasks: unknown[]) => ipcRenderer.invoke('ai:create-task', input, tasks),
   aiChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:chat', message, tasks),
-  aiStreamChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:stream-chat', message, tasks),
+  aiStreamChat: (message: string, tasks: unknown[], history: unknown[]) =>
+    ipcRenderer.invoke('ai:stream-chat', message, tasks, history),
   aiGetHistory: () => ipcRenderer.invoke('ai:get-history'),
   aiSaveHistory: (messages: unknown[]) => ipcRenderer.invoke('ai:save-history', messages),
   onAiStreamToken: (callback: (token: string) => void) => {

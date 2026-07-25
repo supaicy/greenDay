@@ -270,6 +270,7 @@ describe('ai-service', () => {
       await ai.streamChat(
         '안녕',
         [],
+        [],
         (t) => tokens.push(t),
         () => {
           done = true
@@ -289,6 +290,7 @@ describe('ai-service', () => {
       await ai.streamChat(
         'x',
         [],
+        [],
         (t) => tokens.push(t),
         () => {},
         () => {}
@@ -307,6 +309,7 @@ describe('ai-service', () => {
       await ai.streamChat(
         'x',
         [],
+        [],
         (t) => tokens.push(t),
         () => {},
         () => {
@@ -316,6 +319,55 @@ describe('ai-service', () => {
       expect(tokens.join('')).toBe('ok')
       expect(errored).toBe(false)
       expect(mockFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('직전 대화를 system과 현재 user 사이에 순서대로 넣고, 최근 10개로 제한', async () => {
+      const ai = await loadAiService()
+      mockFetch.mockResolvedValueOnce(sse([enc('data: [DONE]\n')]))
+      // 12개 히스토리 → 최근 10개만 포함되어야 함
+      const history = Array.from({ length: 12 }, (_, i) => ({
+        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: `h${i}`
+      }))
+      await ai.streamChat(
+        '지금질문',
+        [],
+        history,
+        () => {},
+        () => {},
+        () => {}
+      )
+      const sent = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body)
+      const msgs = sent.messages as { role: string; content: string }[]
+      expect(msgs[0].role).toBe('system')
+      expect(msgs[msgs.length - 1]).toEqual({ role: 'user', content: '지금질문' })
+      // system + 10 history + current user = 12
+      expect(msgs.length).toBe(12)
+      expect(msgs[1].content).toBe('h2') // h0,h1 잘리고 h2부터
+      expect(msgs[10].content).toBe('h11')
+    })
+
+    it('빈/잘못된 role의 히스토리는 제외', async () => {
+      const ai = await loadAiService()
+      mockFetch.mockResolvedValueOnce(sse([enc('data: [DONE]\n')]))
+      const history = [
+        { role: 'user' as const, content: '유효' },
+        { role: 'user' as const, content: '   ' }, // 공백 → 제외
+        { role: 'system' as unknown as 'user', content: '시스템사칭' } // 잘못된 role → 제외
+      ]
+      await ai.streamChat(
+        'q',
+        [],
+        history,
+        () => {},
+        () => {},
+        () => {}
+      )
+      const sent = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body)
+      const msgs = sent.messages as { role: string; content: string }[]
+      // system + '유효' + current user = 3
+      expect(msgs.length).toBe(3)
+      expect(msgs[1]).toEqual({ role: 'user', content: '유효' })
     })
   })
 

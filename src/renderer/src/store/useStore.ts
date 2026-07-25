@@ -22,6 +22,7 @@ import type {
 import { isValidSchedulePair } from '../utils/scheduledTime'
 import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurrence'
 import { trimHistory } from './trim'
+import { normalizeChatHistory } from '../../../shared/ai-history'
 
 export type Theme = 'dark' | 'light'
 
@@ -789,6 +790,9 @@ export const useStore = create<Store>((set, get) => ({
     const prevCleanup = get()._aiStreamCleanup
     if (prevCleanup) prevCleanup()
 
+    // 현재 메시지 추가 전의 대화를 컨텍스트로 캡처 (멀티턴). 최근 N개만.
+    const history = normalizeChatHistory(get().aiMessages)
+
     const userMsg: AiMessage = {
       id: uuid(),
       role: 'user',
@@ -850,7 +854,7 @@ export const useStore = create<Store>((set, get) => ({
     set({ _aiStreamCleanup: cleanup })
 
     try {
-      await window.api.aiStreamChat(message, tasks)
+      await window.api.aiStreamChat(message, tasks, history)
     } catch {
       set((s) => ({
         aiLoading: false,
