@@ -7,7 +7,7 @@ import { TrashView } from './TrashView'
 import { SortMenu } from './SortMenu'
 import { BatchBar } from './BatchBar'
 import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue } from '../../utils/date'
-import { SMART_LIST_PREDICATES } from '../../utils/smartLists'
+import { SMART_LIST_PREDICATES, tagFromListId } from '../../utils/smartLists'
 import type { Task, SortBy, SortDir } from '../../types'
 
 const SMART_LABELS: Record<string, string> = {
@@ -28,6 +28,15 @@ const SUMMARY_GROUPS: { key: string; label: string; match: (dueDate: string | nu
   { key: 'tomorrow', label: '내일', match: isDueTomorrow },
   { key: 'upcoming', label: '향후 7일', match: isDueInNext7Days }
 ]
+
+function matchesSearch(t: Task, query: string): boolean {
+  const q = query.toLowerCase()
+  return (
+    t.title.toLowerCase().includes(q) ||
+    t.description.toLowerCase().includes(q) ||
+    t.tags.some((tag) => tag.toLowerCase().includes(q))
+  )
+}
 
 function sortTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
   if (sortBy === 'default') return tasks
@@ -75,48 +84,47 @@ export function TaskListView() {
   const isDark = theme === 'dark'
 
   const listName = useMemo(() => {
+    const tag = tagFromListId(selectedListId as string)
+    if (tag) return `#${tag}`
     if (selectedListId in SMART_LABELS) return SMART_LABELS[selectedListId]
     return lists.find((l) => l.id === selectedListId)?.name || ''
   }, [selectedListId, lists])
 
   const filteredTasks = useMemo(() => {
+    const tag = tagFromListId(selectedListId as string)
     let result: Task[]
-    switch (selectedListId) {
-      case 'today':
-        result = tasks.filter(SMART_LIST_PREDICATES.today)
-        break
-      case 'tomorrow':
-        result = tasks.filter(SMART_LIST_PREDICATES.tomorrow)
-        break
-      case 'next7days':
-        result = tasks.filter(SMART_LIST_PREDICATES.next7days)
-        break
-      case 'summary':
-        result = tasks.filter(SMART_LIST_PREDICATES.summary)
-        break
-      case 'inbox':
-        result = tasks.filter((t) => t.listId === 'inbox')
-        break
-      case 'all':
-        result = tasks.filter((t) => !t.completed)
-        break
-      case 'completed':
-        result = tasks.filter((t) => t.completed)
-        break
-      default:
-        result = tasks.filter((t) => t.listId === selectedListId)
-        break
+    if (tag) {
+      result = tasks.filter((t) => !t.completed && t.tags.includes(tag))
+    } else {
+      switch (selectedListId) {
+        case 'today':
+          result = tasks.filter(SMART_LIST_PREDICATES.today)
+          break
+        case 'tomorrow':
+          result = tasks.filter(SMART_LIST_PREDICATES.tomorrow)
+          break
+        case 'next7days':
+          result = tasks.filter(SMART_LIST_PREDICATES.next7days)
+          break
+        case 'summary':
+          result = tasks.filter(SMART_LIST_PREDICATES.summary)
+          break
+        case 'inbox':
+          result = tasks.filter((t) => t.listId === 'inbox')
+          break
+        case 'all':
+          result = tasks.filter((t) => !t.completed)
+          break
+        case 'completed':
+          result = tasks.filter((t) => t.completed)
+          break
+        default:
+          result = tasks.filter((t) => t.listId === selectedListId)
+          break
+      }
     }
     result = result.filter((t) => !t.parentId)
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      result = result.filter(
-        (t) =>
-          t.title.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q) ||
-          t.tags.some((tag) => tag.toLowerCase().includes(q))
-      )
-    }
+    if (searchQuery) result = result.filter((t) => matchesSearch(t, searchQuery))
     return sortTasks(result, sortBy, sortDir)
   }, [tasks, selectedListId, searchQuery, sortBy, sortDir])
 

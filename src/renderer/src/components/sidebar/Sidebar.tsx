@@ -25,11 +25,12 @@ import {
   Grid2X2,
   CalendarClock,
   LayoutList,
+  Hash,
   Trophy,
   Bot
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import { SMART_LIST_PREDICATES } from '../../utils/smartLists'
+import { SMART_LIST_PREDICATES, tagListId } from '../../utils/smartLists'
 import type { SmartList, ViewType } from '../../types'
 
 const SMART_LISTS: { id: SmartList; label: string; icon: React.ReactNode }[] = [
@@ -110,6 +111,17 @@ export function Sidebar() {
     }
     return counts
   }, [tasks, trashTasks, lists])
+
+  // 미완료 최상위 태스크에 쓰인 태그와 개수 (가나다순). 태그별 보기 섹션에 표시.
+  // 하위작업(parentId)은 뷰에 top-level로 안 보이므로 개수에서도 제외 → 뱃지=목록 일치.
+  const tagList = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const t of tasks) {
+      if (t.completed || t.parentId) continue
+      for (const tag of t.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ko'))
+  }, [tasks])
 
   const handleAddList = async () => {
     if (!newListName.trim()) return
@@ -281,6 +293,27 @@ export function Sidebar() {
             </button>
           ))}
         </div>
+
+        {/* 태그 */}
+        {tagList.length > 0 && (
+          <div className={`mb-3 border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
+            <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>태그</div>
+            {tagList.map(([tag, count]) => (
+              <button
+                type="button"
+                key={tag}
+                onClick={() => setSelectedList(tagListId(tag))}
+                className={btnClass(selectedListId === tagListId(tag) && viewType === 'tasks')}
+              >
+                <span className={mutedClass}>
+                  <Hash size={18} />
+                </span>
+                <span className="flex-1 text-left truncate">{tag}</span>
+                <span className={`text-xs ${mutedClass}`}>{count}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 리스트 + 폴더 */}
         <div className={`border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>

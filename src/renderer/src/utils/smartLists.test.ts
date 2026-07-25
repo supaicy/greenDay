@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { isVirtualSmartList, smartListPredicate, SMART_LIST_PREDICATES } from './smartLists'
+import {
+  isVirtualSmartList,
+  smartListPredicate,
+  SMART_LIST_PREDICATES,
+  tagListId,
+  tagFromListId
+} from './smartLists'
 import { todayString, tomorrowString } from './date'
 import type { Task } from '../types'
 
@@ -14,6 +20,24 @@ describe('isVirtualSmartList', () => {
     for (const id of ['today', 'tomorrow', 'next7days', 'all', 'summary', 'completed', 'trash']) {
       expect(isVirtualSmartList(id)).toBe(true)
     }
+  })
+  it('treats tag views as virtual (a task never has a tag id as its listId)', () => {
+    expect(isVirtualSmartList(tagListId('work'))).toBe(true)
+  })
+})
+
+describe('tag list ids', () => {
+  it('round-trips a tag through the list id', () => {
+    expect(tagListId('work')).toBe('tag:work')
+    expect(tagFromListId(tagListId('work'))).toBe('work')
+  })
+  it('returns null for non-tag ids', () => {
+    expect(tagFromListId('today')).toBeNull()
+    expect(tagFromListId('inbox')).toBeNull()
+    expect(tagFromListId('some-user-list')).toBeNull()
+  })
+  it('preserves colons inside a tag name', () => {
+    expect(tagFromListId(tagListId('a:b'))).toBe('a:b')
   })
 })
 

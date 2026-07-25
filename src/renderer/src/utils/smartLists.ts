@@ -14,8 +14,21 @@ export const VIRTUAL_SMART_LISTS: SmartList[] = [
   'trash'
 ]
 
+// 태그별 보기: selectedListId 를 'tag:<태그명>' 형태로 인코딩해 기존 리스트
+// 선택 배관(setSelectedList/필터)을 그대로 재사용한다.
+export const TAG_PREFIX = 'tag:'
+
+export function tagListId(tag: string): string {
+  return `${TAG_PREFIX}${tag}`
+}
+
+export function tagFromListId(id: string): string | null {
+  return id.startsWith(TAG_PREFIX) ? id.slice(TAG_PREFIX.length) : null
+}
+
 export function isVirtualSmartList(id: string): boolean {
-  return (VIRTUAL_SMART_LISTS as string[]).includes(id)
+  // 태그 뷰도 실제 컨테이너가 아니다 → 새 태스크는 리스트를 상속하지 않는다.
+  return id.startsWith(TAG_PREFIX) || (VIRTUAL_SMART_LISTS as string[]).includes(id)
 }
 
 // 마감일 기반 스마트 리스트의 '미완료 태스크' 판별식 단일 출처.
