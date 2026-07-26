@@ -13,6 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 
 const SHORTCUTS = [
   { keys: 'Cmd+N', desc: '할 일 추가' },
@@ -317,7 +318,7 @@ export function Settings() {
                       )}
                       {aiModels.map((m) => (
                         <option key={m} value={m}>
-                          {m}
+                          {isKoreanRecommendedModel(m) ? `${m} · 한국어 추천` : m}
                         </option>
                       ))}
                     </select>
@@ -343,6 +344,13 @@ export function Settings() {
                 {aiProvider === 'ollama' && (
                   <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                     한국어 답변 품질은 8B 이상 모델을 권장합니다.
+                    {!hasKoreanRecommendedModel(aiModels) && (
+                      <>
+                        {' '}
+                        한국어 특화 모델(EXAONE, EEVE)이 더 정확합니다 —{' '}
+                        <code className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}>ollama pull exaone3.5</code>
+                      </>
+                    )}
                   </p>
                 )}
               </div>
