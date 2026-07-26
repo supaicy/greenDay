@@ -1,5 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Moon, Sun, X, Keyboard, ArrowUpCircle, CheckCircle2, Bot, Wifi, WifiOff, Download } from 'lucide-react'
+import {
+  Moon,
+  Sun,
+  X,
+  Keyboard,
+  ArrowUpCircle,
+  CheckCircle2,
+  Bot,
+  Wifi,
+  WifiOff,
+  Download,
+  RefreshCw
+} from 'lucide-react'
 import { useStore } from '../../store/useStore'
 
 const SHORTCUTS = [
@@ -25,6 +37,7 @@ export function Settings() {
     updateChecked,
     aiConfig,
     aiConnected,
+    aiModels,
     aiLoadConfig,
     aiCheckConnection,
     aiSaveConfig
@@ -37,11 +50,13 @@ export function Settings() {
   const [aiMaxHistory, setAiMaxHistory] = useState(200)
 
   useEffect(() => {
-    if (showSettings && !aiConfig) {
-      aiLoadConfig()
-      aiCheckConnection()
-    }
-  }, [showSettings, aiConfig, aiLoadConfig, aiCheckConnection])
+    if (showSettings && !aiConfig) aiLoadConfig()
+  }, [showSettings, aiConfig, aiLoadConfig])
+
+  // 설정을 열 때마다 연결 상태 + 모델 목록을 새로고침 (드롭다운 최신화)
+  useEffect(() => {
+    if (showSettings) aiCheckConnection()
+  }, [showSettings, aiCheckConnection])
 
   useEffect(() => {
     if (aiConfig) {
@@ -244,13 +259,48 @@ export function Settings() {
                 <label htmlFor="ai-model" className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
                   모델
                 </label>
-                <input
-                  id="ai-model"
-                  type="text"
-                  value={aiModel}
-                  onChange={(e) => setAiModel(e.target.value)}
-                  className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${theme === 'dark' ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
-                />
+                {aiProvider === 'ollama' && aiModels.length > 0 ? (
+                  // Ollama: 설치된 모델을 드롭다운으로. 저장값이 목록에 없으면 맨 위에 표시.
+                  <div className="flex gap-2 mt-1">
+                    <select
+                      id="ai-model"
+                      value={aiModel}
+                      onChange={(e) => setAiModel(e.target.value)}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm ${theme === 'dark' ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
+                    >
+                      {aiModel && !aiModels.includes(aiModel) && (
+                        <option value={aiModel}>{aiModel} (미설치)</option>
+                      )}
+                      {aiModels.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={aiCheckConnection}
+                      title="모델 목록 새로고침"
+                      className={`px-2.5 rounded-lg ${theme === 'dark' ? 'bg-gray-700 text-gray-400 hover:text-gray-200' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                    >
+                      <RefreshCw size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  // 비-Ollama이거나 아직 모델 목록을 못 불러왔으면 자유 입력 폴백.
+                  <input
+                    id="ai-model"
+                    type="text"
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${theme === 'dark' ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
+                  />
+                )}
+                {aiProvider === 'ollama' && (
+                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    한국어 답변 품질은 8B 이상 모델을 권장합니다.
+                  </p>
+                )}
               </div>
               {aiProvider !== 'ollama' && (
                 <div>

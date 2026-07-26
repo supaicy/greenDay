@@ -152,6 +152,7 @@ interface Store {
   aiMessages: AiMessage[]
   aiLoading: boolean
   aiConnected: boolean | null
+  aiModels: string[]
   aiConfig: AiConfig | null
   showAiChat: boolean
   _aiStreamCleanup: (() => void) | null
@@ -752,6 +753,7 @@ export const useStore = create<Store>((set, get) => ({
   aiMessages: [],
   aiLoading: false,
   aiConnected: null,
+  aiModels: [],
   aiConfig: null,
   showAiChat: false,
   _aiStreamCleanup: null as (() => void) | null,
@@ -766,10 +768,10 @@ export const useStore = create<Store>((set, get) => ({
   },
   aiCheckConnection: async () => {
     try {
-      const result = (await window.api.aiCheckConnection()) as { connected: boolean }
-      set({ aiConnected: result.connected })
+      const result = (await window.api.aiCheckConnection()) as { connected: boolean; models?: string[] }
+      set({ aiConnected: result.connected, aiModels: result.models ?? [] })
     } catch {
-      set({ aiConnected: false })
+      set({ aiConnected: false, aiModels: [] })
     }
   },
   aiLoadConfig: async () => {
