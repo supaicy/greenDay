@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { Bot, Send, X, Trash2, Loader2, WifiOff, ListPlus, Check, ShieldCheck, Cloud } from 'lucide-react'
 import { shouldSendOnEnter, isNearBottom } from '../../utils/chatInput'
-import { isLocalAiConfig } from '../../../../shared/ai-config'
+import { aiDestination } from '../../../../shared/ai-config'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
@@ -106,21 +106,25 @@ export function AiChatPanel() {
           {aiConnected === true && <span className="w-2 h-2 rounded-full bg-green-500" title="연결됨" />}
           {aiConnected === false && <span className="w-2 h-2 rounded-full bg-red-500" title="연결 안 됨" />}
           {aiConfig &&
-            (isLocalAiConfig(aiConfig) ? (
-              <span
-                title="데이터가 기기를 벗어나지 않습니다"
-                className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/15 text-green-600"
-              >
-                <ShieldCheck size={11} /> 온디바이스
-              </span>
-            ) : (
-              <span
-                title="대화·할일 내용이 외부 서버로 전송됩니다"
-                className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600"
-              >
-                <Cloud size={11} /> 외부 전송
-              </span>
-            ))}
+            (() => {
+              // 이그레스 가시성: 배지에 실제 호출 목적지(host)를 함께 노출한다.
+              const { host, isLocal } = aiDestination(aiConfig)
+              return isLocal ? (
+                <span
+                  title={`데이터가 기기를 벗어나지 않습니다 (→ ${host})`}
+                  className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/15 text-green-600"
+                >
+                  <ShieldCheck size={11} /> 온디바이스
+                </span>
+              ) : (
+                <span
+                  title={`대화·할일 내용이 외부 서버로 전송됩니다 (→ ${host})`}
+                  className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600"
+                >
+                  <Cloud size={11} /> 외부 · {host}
+                </span>
+              )
+            })()}
         </div>
         <div className="flex items-center gap-1">
           {aiMessages.length > 0 && (
