@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { v4 as uuid } from 'uuid'
 import { clampDetailWidth } from './detailWidth'
-import { isVirtualSmartList, smartListPredicate, tagFromListId } from '../utils/smartLists'
+import { isVirtualSmartList, tagFromListId } from '../utils/smartLists'
+import { getFilteredTaskIds } from '../utils/filteredTaskIds'
 import { todayString, tomorrowString } from '../utils/date'
 import type {
   Task,
@@ -922,22 +923,3 @@ export const useStore = create<Store>((set, get) => ({
     return parsed.title
   }
 }))
-
-function getFilteredTaskIds(tasks: Task[], listId: string | SmartList): string[] {
-  // 태그 뷰: 해당 태그를 가진 미완료 최상위 태스크 (뷰와 동일하게 하위작업 제외).
-  const tag = tagFromListId(listId as string)
-  if (tag) return tasks.filter((t) => !t.completed && !t.parentId && t.tags.includes(tag)).map((t) => t.id)
-  // 마감일 기반 스마트 리스트는 뷰(TaskList)와 동일한 판별식을 재사용해
-  // '전체 선택'이 화면에 보이는 목록과 항상 일치하게 한다 (UTC 문자열 비교로 인한
-  // 시간대/포맷 불일치 제거).
-  const pred = smartListPredicate(listId as string)
-  if (pred) return tasks.filter(pred).map((t) => t.id)
-  switch (listId) {
-    case 'all':
-      return tasks.filter((t) => !t.completed).map((t) => t.id)
-    case 'completed':
-      return tasks.filter((t) => t.completed).map((t) => t.id)
-    default:
-      return tasks.filter((t) => t.listId === listId && !t.completed).map((t) => t.id)
-  }
-}

@@ -102,8 +102,8 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **Result:** `src/renderer/src/utils/dnd.ts`에 `DND_MIME`(TASK_ID/TASK_BLOCK/CAL_DATE) 상수+타입 신설. 인라인 문자열 6개 파일(TaskItem, TaskList, TimeBlock, Daily/WeeklyCalendar, CalendarView) 전부 상수 참조로 치환. CalendarView의 로컬 `CAL_DATE_MIME` 별칭도 제거해 직접 참조로 통일. typecheck/lint/173 tests green.
 - **Added:** 2026-07-25 월 캘린더 드래그 /review
 
-### [P3] 배치 선택 vs 뷰 — 하위작업 제외 일원화
-- **What:** `getFilteredTaskIds`(전체 선택)는 스마트/태그 리스트에서 뷰와 달리 `!parentId`를 일괄 적용하지 않음(태그 케이스만 맞춤). 뷰는 항상 최상위만 표시하므로 select-all도 항상 하위작업 제외하도록 통일하면 좋음(기존 리스트 동작 변경이라 별도 처리).
+### ~~[P3] 배치 선택 vs 뷰 — 하위작업 제외 일원화~~ ✅ DONE (2026-07-27)
+- **Result:** `getFilteredTaskIds`를 `useStore.ts`에서 순수 유틸 `utils/filteredTaskIds.ts`로 추출하고, 모든 브랜치(all/completed/실제 리스트/스마트/태그)에 `!parentId` 최상위 프리필터를 일원 적용. 이제 '전체 선택'이 뷰(TaskList: 항상 `!parentId`)와 정확히 일치. 신규 테스트 4건 포함 189 tests green. (동작 변경: 실제 리스트/스마트/all/completed에서 하위작업이 더 이상 select-all에 포함되지 않음 — 의도된 통일.)
 - **Added:** 2026-07-25 태그 뷰 /review
 
 ### ~~[P3] 우측 상세 패널 — AiChat 동시 오픈 시 폭 경합~~ ✅ DONE (2026-07-27)
