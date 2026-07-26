@@ -111,9 +111,11 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **Result:** `clampDetailWidth(px, windowWidth, aiChatOpen?)`에 3번째 인자 추가 — 챗 열림 시 `AI_CHAT_WIDTH(320)`을 상한에서 추가 예약. TaskDetail(읽기/드래그)과 store `setDetailPanelWidthPx`(persist)가 모두 `showAiChat`을 전달. 챗을 열면 상세 패널이 자동 축소돼 가운데 목록이 0으로 눌리지 않음. 인자 생략 시 기존 동작 유지(기본 false). 신규 테스트 2건 포함 175 tests green.
 - **Added:** 2026-07-25 우측 패널 /review
 
-### [P3] 노트 에디터 — 번들 감량 (코드 언어 축소)
-- **What:** Atomic 라이브프리뷰 도입으로 lazy TaskDetail 청크가 563kB→~1,135kB. `@codemirror/lang-*` 13종이 상당 부분. `codeLanguages` prop으로 흔한 언어(js/ts/py/json/bash/css/html)만 로드하면 감량 가능.
-- **Impact:** 온디맨드 lazy 청크라 메인 초기로드엔 영향 없음. 저위험 최적화.
+### ~~[P3] 노트 에디터 — 번들 감량 (코드 언어 축소)~~ ❌ 무효 (2026-07-27, 측정 결과 전제 오류)
+- **측정:** `npm run build` 후 TaskDetail lazy 청크(1,135kB)를 grep한 결과 `@codemirror/lang-*` 중 **`lang-markdown`만** 포함(에디터 필수 문법). 나머지 13종은 청크에 없음.
+- **원인:** `AtomicCodeMirrorEditor`의 `codeLanguages`는 기본값 `[]`이고, 우리 코드는 이 prop이나 `ATOMIC_CODE_LANGUAGES`를 넘기지 않아 13종이 트리셰이크로 이미 빠져 있음. 코드 펜스는 plain monospace로 렌더.
+- **결론:** 감량할 lang 번들이 애초에 없음 → `codeLanguages` 축소는 no-op. 오히려 큐레이션 리스트를 넘기면 문법이 lazy로 **추가**됨. 1,135kB의 본체는 CodeMirror 코어 + Atomic 에디터로, 이미 lazy 청크라 초기 로드 무영향.
+- **후속(선택):** 펜스 하이라이트가 필요하면 흔한 언어만 담은 `codeLanguages`를 **추가**하는 기능(감량 아님) — 별도 판단.
 - **Added:** 2026-07-24 노트 라이브프리뷰
 
 ### [P2] 하단 상세 패널 — 알림/반복 피커 드롭다운 클리핑
