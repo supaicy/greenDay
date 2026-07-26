@@ -25,6 +25,7 @@ export function AiChatPanel() {
   const aiSendMessage = useStore((s) => s.aiSendMessage)
   const aiClearMessages = useStore((s) => s.aiClearMessages)
   const aiCheckConnection = useStore((s) => s.aiCheckConnection)
+  const aiLoadConfig = useStore((s) => s.aiLoadConfig)
   const aiWarmup = useStore((s) => s.aiWarmup)
   const aiAddTaskFromText = useStore((s) => s.aiAddTaskFromText)
 
@@ -41,6 +42,11 @@ export function AiChatPanel() {
       aiCheckConnection()
     }
   }, [showAiChat, aiConnected, aiCheckConnection])
+
+  // 온디바이스 배지 판정에 aiConfig(provider/baseUrl)가 필요하므로 패널 열 때 로드
+  useEffect(() => {
+    if (showAiChat && !aiConfig) aiLoadConfig()
+  }, [showAiChat, aiConfig, aiLoadConfig])
 
   // 패널을 열면 로컬 모델을 미리 로드(warmup)해 첫 메시지의 콜드 지연을 없앤다.
   useEffect(() => {
