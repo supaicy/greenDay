@@ -158,6 +158,7 @@ interface Store {
   _aiStreamCleanup: (() => void) | null
   setShowAiChat: (show: boolean) => void
   aiCheckConnection: () => Promise<void>
+  aiWarmup: () => Promise<void>
   aiLoadConfig: () => Promise<void>
   aiLoadHistory: () => Promise<void>
   aiSaveConfig: (updates: Partial<AiConfig>) => Promise<void>
@@ -772,6 +773,14 @@ export const useStore = create<Store>((set, get) => ({
       set({ aiConnected: result.connected, aiModels: result.models ?? [] })
     } catch {
       set({ aiConnected: false, aiModels: [] })
+    }
+  },
+  aiWarmup: async () => {
+    // 로컬 모델을 미리 로드해 첫 응답의 콜드 지연 제거 (Ollama가 아니면 main에서 no-op)
+    try {
+      await window.api.aiWarmup?.()
+    } catch {
+      /* 웜업 실패는 무시 */
     }
   },
   aiLoadConfig: async () => {

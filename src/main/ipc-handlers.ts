@@ -135,6 +135,7 @@ export function setupIpcHandlers(): void {
 
   // AI
   ipcMain.handle('ai:check-connection', () => ai.checkConnection())
+  ipcMain.handle('ai:warmup', () => ai.warmupModel())
   ipcMain.handle('ai:get-config', () => ai.getAiConfig())
   ipcMain.handle('ai:set-config', (_, updates) => ai.setAiConfig(updates))
   ipcMain.handle('ai:create-task', (_, input, tasks) => ai.createTaskFromNL(input, tasks))

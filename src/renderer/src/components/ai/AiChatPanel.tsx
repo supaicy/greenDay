@@ -24,6 +24,7 @@ export function AiChatPanel() {
   const aiSendMessage = useStore((s) => s.aiSendMessage)
   const aiClearMessages = useStore((s) => s.aiClearMessages)
   const aiCheckConnection = useStore((s) => s.aiCheckConnection)
+  const aiWarmup = useStore((s) => s.aiWarmup)
   const aiAddTaskFromText = useStore((s) => s.aiAddTaskFromText)
 
   const isDark = theme === 'dark'
@@ -39,6 +40,11 @@ export function AiChatPanel() {
       aiCheckConnection()
     }
   }, [showAiChat, aiConnected, aiCheckConnection])
+
+  // 패널을 열면 로컬 모델을 미리 로드(warmup)해 첫 메시지의 콜드 지연을 없앤다.
+  useEffect(() => {
+    if (showAiChat) aiWarmup()
+  }, [showAiChat, aiWarmup])
 
   // 새 메시지가 추가되거나 스트리밍 토큰이 들어올 때(aiMessages 변경)마다,
   // 바닥을 따라가는 중이면 맨 아래로 스크롤한다. 스트리밍은 초당 여러 토큰이라

@@ -12,6 +12,9 @@ const DEFAULT_TIMEOUT = 30_000
 // 계속 오면 유지되고, 모델이 중간에 멈추면 이 시간 뒤 중단된다.
 const STREAM_IDLE_TIMEOUT = 30_000
 const MAX_RETRIES = 2
+// 응답 최대 토큰 (폭주 방지 안전장치 — 일반 답변엔 넉넉). OpenAI 호환 필드라
+// Ollama/OpenAI/커스텀 모두 동작.
+const MAX_RESPONSE_TOKENS = 2048
 
 const DEFAULT_CONFIG: AiConfig = {
   provider: 'ollama',
@@ -98,6 +101,24 @@ export async function checkConnection(): Promise<{ connected: boolean; models?: 
   }
 }
 
+// 모델을 미리 메모리에 올려두고 keep_alive를 늘려, 유휴 후 첫 응답의 콜드 로드
+// 지연을 없앤다. Ollama 로컬에서만 의미 있음(OpenAI/커스텀은 서버가 상주 관리).
+// keep_alive는 /v1 채팅 엔드포인트가 무시하므로 네이티브 /api/generate 로 설정한다.
+export async function warmupModel(): Promise<void> {
+  const cfg = getAiConfigInternal()
+  if (cfg.provider !== 'ollama') return
+  try {
+    await fetch(`${cfg.baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: cfg.model, prompt: '', keep_alive: '30m' }),
+      signal: AbortSignal.timeout(DEFAULT_TIMEOUT)
+    })
+  } catch {
+    // 웜업 실패는 무시 — 실제 요청 때 어차피 로드된다.
+  }
+}
+
 interface TaskResult {
   action: 'create_task'
   task: {
@@ -164,6 +185,7 @@ async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: b
       { role: 'user', content: userMessage }
     ],
     temperature: 0.3,
+    max_tokens: MAX_RESPONSE_TOKENS,
     stream: false
   }
 
@@ -311,6 +333,7 @@ export async function streamChat(
       { role: 'user', content: userMessage }
     ],
     temperature: 0.3,
+    max_tokens: MAX_RESPONSE_TOKENS,
     stream: true
   }
 

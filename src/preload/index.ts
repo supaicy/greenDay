@@ -87,6 +87,7 @@ const api = {
   aiCheckConnection: () => ipcRenderer.invoke('ai:check-connection'),
   aiGetConfig: () => ipcRenderer.invoke('ai:get-config'),
   aiSetConfig: (updates: Record<string, unknown>) => ipcRenderer.invoke('ai:set-config', updates),
+  aiWarmup: () => ipcRenderer.invoke('ai:warmup'),
   aiCreateTask: (input: string, tasks: unknown[]) => ipcRenderer.invoke('ai:create-task', input, tasks),
   aiChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:chat', message, tasks),
   aiStreamChat: (message: string, tasks: unknown[], history: unknown[]) =>

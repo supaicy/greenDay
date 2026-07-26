@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru · 로컬 AI 프라이버시 전략 제안</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-700:#2563eb; --primary-50:#eff6ff;
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626;
+    --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto;padding:40px 24px 80px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px}
+  .kicker{color:var(--primary-700);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:28px;margin:6px 0 8px;line-height:1.25}
+  .sub{color:var(--muted);font-size:15px}
+  h2{font-size:20px;margin:38px 0 12px;padding-top:8px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--primary);color:#fff;font-size:14px;font-weight:700;flex:none}
+  h3{font-size:15px;margin:0 0 6px}
+  p{margin:8px 0}
+  .lead{font-size:16px;background:var(--primary-50);border:1px solid #dbeafe;border-radius:12px;padding:16px 18px;color:#1e3a8a}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card .tag{font-size:11px;font-weight:700;letter-spacing:.03em;padding:2px 8px;border-radius:999px;display:inline-block;margin-bottom:8px}
+  .t-now{background:#dcfce7;color:#166534}
+  .t-mid{background:#fef9c3;color:#854d0e}
+  .t-far{background:#e0e7ff;color:#3730a3}
+  .card p{font-size:14px;color:#374151;margin:6px 0 0}
+  .card .why{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:#f1f5f9;color:#475569;margin:2px 4px 2px 0}
+  .pill.ok{background:#dcfce7;color:#166534}
+  ul.checks{list-style:none;padding:0;margin:10px 0}
+  ul.checks li{position:relative;padding:4px 0 4px 26px;font-size:14px}
+  ul.checks li::before{content:"✓";position:absolute;left:0;top:4px;color:var(--green);font-weight:800}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;color:#334155;font-weight:700;font-size:12px;letter-spacing:.03em}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f1f5f9;border-radius:5px;padding:1px 6px;color:#0f172a}
+  .rec{background:#0f172a;color:#e2e8f0;border-radius:14px;padding:22px 24px;margin-top:36px}
+  .rec h2{color:#fff;margin-top:0}
+  .rec h2 .n{background:#334155}
+  .rec .step{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #1e293b}
+  .rec .step:last-child{border-bottom:0}
+  .rec .step b{color:#7dd3fc}
+  .rec .num{flex:none;width:22px;height:22px;border-radius:6px;background:#1d4ed8;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;margin-top:2px}
+  .foot{margin-top:34px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+  .badgebar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .status{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .s-have{background:#dcfce7;color:#166534}
+  .s-gap{background:#fee2e2;color:#991b1b}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="kicker">haru · 제품 전략 제안</div>
+    <h1>개인정보를 지키는 로컬 AI 전략</h1>
+    <div class="sub">외부 클라우드 AI에 대한 프라이버시 반감을 강점으로 바꾸기 · 2026-07-27</div>
+  </header>
+
+  <p class="lead">
+    <b>핵심:</b> haru는 이미 <b>로컬 AI(Ollama)를 기본값</b>으로 씁니다. 즉, 특별한 설정 없이도 대화·할일 데이터가
+    사용자 기기를 벗어나지 않습니다. 문제는 이 강점이 <b>사용자에게 보이지 않는다</b>는 점, 그리고 외부 제공자로
+    바꿀 때 <b>데이터가 나간다는 사실이 충분히 고지되지 않는다</b>는 점입니다. 아래 제안은 "로컬 우선"을
+    <b>신뢰 신호이자 App Store 차별점</b>으로 끌어올리는 방법입니다.
+  </p>
+
+  <h2><span class="n">1</span>지금 갖춘 것 (출발점)</h2>
+  <div class="badgebar">
+    <span class="status s-have">✓ Ollama 로컬이 기본 제공자</span>
+    <span class="status s-have">✓ 외부(OpenAI/커스텀)는 선택</span>
+    <span class="status s-have">✓ SSRF 가드 · localhost만 허용</span>
+    <span class="status s-have">✓ API 키 마스킹</span>
+    <span class="status s-have">✓ 설치 모델 드롭다운 + 8B+ 권장 안내</span>
+    <span class="status s-gap">✗ 프라이버시 상태가 UI에 안 보임</span>
+    <span class="status s-gap">✗ 외부 전환 시 데이터 전송 경고 없음</span>
+  </div>
+  <p style="font-size:14px;color:#374151;margin-top:12px">
+    기술적 토대는 이미 프라이버시 친화적입니다. 남은 건 <b>이 사실을 사용자가 믿을 수 있게 드러내고</b>,
+    <b>실수로도 데이터가 새지 않도록 잠그고</b>, <b>로컬 설치 마찰을 줄이는 것</b>입니다.
+  </p>
+
+  <h2><span class="n">2</span>제안 — 즉시 (로우행잉)</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="tag t-now">즉시 · 소</span>
+      <h3>🔒 "온디바이스" 배지</h3>
+      <p>Ollama 사용 중일 때 AI 패널·설정에 <b>"로컬 처리 · 데이터가 기기를 벗어나지 않음"</b> 배지를 상시 표시.</p>
+      <p class="why">이미 로컬인데 안 보임 → 가장 값싼 신뢰 획득. 연결 상태 점(●) 옆에 붙이면 끝.</p>
+    </div>
+    <div class="card">
+      <span class="tag t-now">즉시 · 소</span>
+      <h3>⚠️ 외부 전환 경고</h3>
+      <p>제공자를 OpenAI/커스텀으로 바꿀 때 <b>"대화·할일 내용이 &lt;업체&gt; 서버로 전송됩니다"</b>를 명확히 고지하고 동의 받기.</p>
+      <p class="why">몰라서 새는 걸 막는 최소 장치. 설정의 provider 변경 지점에 확인 모달 한 개.</p>
+    </div>
+    <div class="card">
+      <span class="tag t-now">즉시 · 중</span>
+      <h3>🔐 로컬 전용 잠금 (프라이버시 모드)</h3>
+      <p>설정에 토글 하나: 켜면 <b>외부 제공자 자체를 비활성화</b>. 실수로도, 나중에도 데이터가 나갈 수 없음.</p>
+      <p class="why">프라이버시 민감/기업 사용자에게 "확실한 보장". provider 드롭다운을 Ollama로 고정.</p>
+    </div>
+    <div class="card">
+      <span class="tag t-now">즉시 · 중</span>
+      <h3>👁 전송 데이터 미리보기</h3>
+      <p>모델에 실제로 보내는 컨텍스트(할일 요약)를 <b>펼쳐 볼 수 있게</b> 노출. "무엇이 나가는지" 투명화.</p>
+      <p class="why">이미 <span class="code">buildAiTaskContext</span>로 만든 요약이라 그대로 보여주기만 하면 됨.</p>
+    </div>
+  </div>
+
+  <h2><span class="n">3</span>제안 — 중기 (온보딩·가시성)</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="tag t-mid">중기 · 중</span>
+      <h3>⚡ 원클릭 로컬 온보딩</h3>
+      <p>Ollama 미설치를 감지 → 설치 안내/딥링크, 그리고 <b>추천 모델 자동 <span class="code">pull</span></b>(한국어용 8B급).</p>
+      <p class="why">로컬 AI 최대 마찰 = 설치. 이걸 줄이면 로컬을 기본으로 쓰는 사용자가 급증. (연결 실패 화면에서 바로 유도)</p>
+    </div>
+    <div class="card">
+      <span class="tag t-mid">중기 · 소</span>
+      <h3>📡 네트워크 인디케이터</h3>
+      <p>AI 호출이 <b>어디로 나가는지</b> 표시. localhost면 "로컬", 외부면 도메인 노출. 이그레스 가시성.</p>
+      <p class="why">"진짜 로컬인지" 눈으로 확인. 로컬일 땐 외부 트래픽 0임을 증명.</p>
+    </div>
+    <div class="card">
+      <span class="tag t-mid">중기 · 소</span>
+      <h3>✈️ 오프라인 우선 강조</h3>
+      <p>로컬 모델은 <b>네트워크 없이도</b> 동작(이미 그럼). "비행기 모드에서도 AI가 됩니다"를 명시적 가치로.</p>
+      <p class="why">클라우드 to-do 앱과의 즉각적 대비. 마케팅 포인트.</p>
+    </div>
+    <div class="card">
+      <span class="tag t-mid">중기 · 중</span>
+      <h3>🇰🇷 한국어 로컬 모델 큐레이션</h3>
+      <p>설치 모델 드롭다운에 <b>한국어 품질 추천 배지</b>. EXAONE/EEVE 등 한국어 특화 모델 원클릭 설치.</p>
+      <p class="why">"로컬은 한국어가 약하다"는 반론을 정면 해소. (드롭다운·8B+ 힌트는 이미 구현됨)</p>
+    </div>
+  </div>
+
+  <h2><span class="n">4</span>제안 — 장기 (강한 해자)</h2>
+  <div class="grid">
+    <div class="card">
+      <span class="tag t-far">장기 · 대</span>
+      <h3>📦 내장 런타임 (Ollama 의존 제거)</h3>
+      <p><span class="code">node-llama-cpp</span> 등으로 <b>앱 안에서 모델을 직접 구동</b>. 별도 설치 0, 완전 자족.</p>
+      <p class="why">최고의 프라이버시·최저 마찰("설치할 게 없음"). 대신 번들 크기↑·엔지니어링 부담↑. 소형 모델 번들 + 대형은 옵션.</p>
+    </div>
+    <div class="card">
+      <span class="tag t-far">장기 · 중</span>
+      <h3>🔎 로컬 RAG / 임베딩</h3>
+      <p>Ollama 임베딩으로 <b>관련 할일만 검색</b>해 컨텍스트 구성. 전량 전송 대신 필요한 것만, 전부 로컬.</p>
+      <p class="why">할일이 많아도 정확·저비용. 프롬프트 컨텍스트 품질↑ (현재는 상위 ~48개를 통째로 전달).</p>
+    </div>
+  </div>
+
+  <h2><span class="n">5</span>트레이드오프 &amp; 완화</h2>
+  <table>
+    <thead><tr><th style="width:26%">우려</th><th style="width:37%">실제</th><th>완화책</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>한국어 품질</b></td>
+        <td>3B(llama3.2)는 한국어에 다른 언어를 섞음(실측 확인). 8B+/특화 모델은 깨끗.</td>
+        <td>8B+ 권장 안내(구현됨) · 한국어 특화 모델 큐레이션 · 프롬프트 강화(구현됨)</td>
+      </tr>
+      <tr>
+        <td><b>속도</b></td>
+        <td>큰 로컬 모델은 클라우드보다 느릴 수 있음(기기 성능 의존).</td>
+        <td>기기별 모델 크기 안내 · 스트리밍으로 체감 개선(구현됨) · 소형↔대형 선택권</td>
+      </tr>
+      <tr>
+        <td><b>설치 마찰</b></td>
+        <td>Ollama 설치 + 모델 pull이 진입장벽.</td>
+        <td>원클릭 온보딩(중기) · 장기적으로 내장 런타임으로 마찰 0</td>
+      </tr>
+      <tr>
+        <td><b>RAM/디스크</b></td>
+        <td>8B≈5GB, 20B≈13GB. 저사양 기기 부담.</td>
+        <td>드롭다운에 크기/권장 사양 표기 · 기본은 경량, 대형은 옵트인</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="rec">
+    <h2><span class="n">✓</span>권장 로드맵</h2>
+    <div class="step"><span class="num">1</span><div><b>이번 릴리스:</b> 온디바이스 배지 + 외부 전환 경고 + 로컬 전용 잠금. <span style="color:#94a3b8">(작음, 큰 신뢰 효과 — App Store 심사 전에 넣기 좋음)</span></div></div>
+    <div class="step"><span class="num">2</span><div><b>다음:</b> 원클릭 로컬 온보딩 + 전송 데이터 미리보기 + 네트워크 인디케이터. <span style="color:#94a3b8">(로컬 채택률·투명성)</span></div></div>
+    <div class="step"><span class="num">3</span><div><b>이후:</b> 한국어 모델 큐레이션 → 로컬 RAG → (여력 되면) 내장 런타임. <span style="color:#94a3b8">(해자)</span></div></div>
+  </div>
+
+  <h2><span class="n">6</span>포지셔닝 한 줄</h2>
+  <ul class="checks">
+    <li><b>"당신의 할일은 당신의 기기에만."</b> — 온디바이스 AI를 1급 기능으로.</li>
+    <li>클라우드 to-do 앱들이 못 하는 <b>오프라인·무유출</b>을 정면에 세우기.</li>
+    <li>외부 모델은 <b>끄고 싶으면 확실히 꺼지는</b> 선택지로 남겨 신뢰 확보.</li>
+  </ul>
+
+  <div class="foot">
+    이 문서는 현재 haru 코드베이스(Ollama 기본 제공자, provider 시스템, SSRF 가드, 설치 모델 드롭다운, buildAiTaskContext 컨텍스트)를
+    근거로 작성됨. "구현됨" 표기는 이미 반영된 항목. · haru 로컬 AI 프라이버시 전략 제안
+  </div>
+
+</div>
+</body>
+</html>

@@ -347,6 +347,22 @@ describe('ai-service', () => {
       expect(msgs[10].content).toBe('h11')
     })
 
+    it('요청 바디에 max_tokens 상한을 포함한다', async () => {
+      const ai = await loadAiService()
+      mockFetch.mockResolvedValueOnce(sse([enc('data: [DONE]\n')]))
+      await ai.streamChat(
+        'q',
+        [],
+        [],
+        () => {},
+        () => {},
+        () => {}
+      )
+      const sent = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body)
+      expect(typeof sent.max_tokens).toBe('number')
+      expect(sent.max_tokens).toBeGreaterThan(0)
+    })
+
     it('빈/잘못된 role의 히스토리는 제외', async () => {
       const ai = await loadAiService()
       mockFetch.mockResolvedValueOnce(sse([enc('data: [DONE]\n')]))
