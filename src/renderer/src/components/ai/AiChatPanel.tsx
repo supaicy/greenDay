@@ -1,13 +1,30 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useStore } from '../../store/useStore'
-import { Bot, Send, X, Trash2, Loader2, WifiOff, ListPlus, Check, ShieldCheck, Cloud } from 'lucide-react'
+import {
+  Bot,
+  Send,
+  X,
+  Trash2,
+  Loader2,
+  WifiOff,
+  ListPlus,
+  Check,
+  ShieldCheck,
+  Cloud,
+  Database,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react'
 import { shouldSendOnEnter, isNearBottom } from '../../utils/chatInput'
 import { aiDestination } from '../../../../shared/ai-config'
+import { buildAiTaskContext } from '../../utils/aiContext'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
   // 채팅 메시지 → 할일 추가 상태 (메시지 id별)
   const [taskAdds, setTaskAdds] = useState<Record<string, 'adding' | 'added' | 'error'>>({})
+  // 전송 데이터 미리보기(투명성) 펼침 여부
+  const [showContext, setShowContext] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -28,8 +45,12 @@ export function AiChatPanel() {
   const aiLoadConfig = useStore((s) => s.aiLoadConfig)
   const aiWarmup = useStore((s) => s.aiWarmup)
   const aiAddTaskFromText = useStore((s) => s.aiAddTaskFromText)
+  const tasks = useStore((s) => s.tasks)
 
   const isDark = theme === 'dark'
+  // 모델에 실제로 전송되는 태스크 컨텍스트(스토어 전송 경로와 동일한 buildAiTaskContext).
+  // 사용자가 무엇이 기기를 떠나는지 직접 확인할 수 있게 투명하게 노출한다.
+  const sentContext = useMemo(() => buildAiTaskContext(tasks), [tasks])
 
   const handleAddTask = async (id: string, content: string) => {
     setTaskAdds((s) => ({ ...s, [id]: 'adding' }))
@@ -145,6 +166,42 @@ export function AiChatPanel() {
             <X size={16} />
           </button>
         </div>
+      </div>
+
+      {/* 전송 데이터 미리보기(투명성) — 모델에 나가는 태스크 컨텍스트를 그대로 노출 */}
+      <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <button
+          type="button"
+          onClick={() => setShowContext((v) => !v)}
+          className={`flex items-center gap-1.5 w-full px-4 py-1.5 text-[11px] ${isDark ? 'text-gray-400 hover:bg-gray-700/40' : 'text-gray-500 hover:bg-gray-200/60'}`}
+          title="이 대화에서 모델로 전송되는 할일 데이터"
+        >
+          {showContext ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <Database size={11} />
+          전송 데이터 미리보기 · {sentContext.length}건
+        </button>
+        {showContext && (
+          <div className={`max-h-40 overflow-y-auto px-4 pb-2 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            <p className="mb-1 opacity-70">
+              메시지·대화 기록과 함께 아래 할일 요약이 전송됩니다.
+            </p>
+            {sentContext.length === 0 ? (
+              <p className="opacity-70">전송할 할일이 없습니다.</p>
+            ) : (
+              <ul className="space-y-0.5">
+                {sentContext.map((c, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 읽기 전용 미리보기 목록 — 행별 state가 없고 제목 중복 가능해 index가 안정적
+                  <li key={`${c.title}-${i}`} className="flex items-start gap-1">
+                    <span className={c.completed ? 'line-through opacity-50' : ''}>{c.title || '(제목 없음)'}</span>
+                    {c.dueDate && <span className="opacity-60">· {c.dueDate}</span>}
+                    {c.priority !== 'none' && <span className="opacity-60">· {c.priority}</span>}
+                    {c.tags.length > 0 && <span className="opacity-60">· #{c.tags.join(' #')}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Messages */}
