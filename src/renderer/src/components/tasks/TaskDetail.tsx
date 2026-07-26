@@ -61,6 +61,7 @@ export function TaskDetail() {
   const theme = useStore((s) => s.theme)
   const detailWidth = useStore((s) => s.detailPanelWidthPx)
   const setDetailPanelWidthPx = useStore((s) => s.setDetailPanelWidthPx)
+  const showAiChat = useStore((s) => s.showAiChat)
   const task = tasks.find((t) => t.id === selectedTaskId)
   const isDark = theme === 'dark'
 
@@ -156,7 +157,7 @@ export function TaskDetail() {
 
   // 우측 패널 폭: 드래그 중이면 라이브값, 아니면 저장값(없으면 기본 400).
   // read 시점에도 clamp해서 큰 저장값이 좁은 창에서 목록을 0으로 짓누르지 않게 한다.
-  const width = dragWidth ?? clampDetailWidth(detailWidth ?? DEFAULT_DETAIL_WIDTH, windowWidth)
+  const width = dragWidth ?? clampDetailWidth(detailWidth ?? DEFAULT_DETAIL_WIDTH, windowWidth, showAiChat)
   const priorityColor = PRIORITY_OPTIONS.find((p) => p.value === task.priority)?.color || 'text-gray-400'
 
   // 좌측 경계선 드래그로 폭 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist.
@@ -168,7 +169,7 @@ export function TaskDetail() {
     const right = panel.getBoundingClientRect().right
     const controller = new AbortController()
     const { signal } = controller
-    const onMove = (ev: MouseEvent) => setDragWidth(clampDetailWidth(right - ev.clientX, window.innerWidth))
+    const onMove = (ev: MouseEvent) => setDragWidth(clampDetailWidth(right - ev.clientX, window.innerWidth, showAiChat))
     const onUp = (ev: MouseEvent) => {
       controller.abort()
       dragCleanup.current = null

@@ -16,4 +16,12 @@ describe('clampDetailWidth', () => {
     expect(clampDetailWidth(50, 700)).toBe(320)
     expect(clampDetailWidth(999, 700)).toBe(320)
   })
+  it('reserves the AI chat panel width (320) when it is open', () => {
+    // windowWidth 1400, chat open -> ceil = max(320, 1400 - 896) = 504
+    expect(clampDetailWidth(2000, 1400, true)).toBe(504)
+    expect(clampDetailWidth(400, 1400, true)).toBe(400) // still inside range
+  })
+  it('defaults to no chat reservation when the flag is omitted', () => {
+    expect(clampDetailWidth(2000, 1400)).toBe(clampDetailWidth(2000, 1400, false))
+  })
 })

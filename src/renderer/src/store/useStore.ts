@@ -651,7 +651,7 @@ export const useStore = create<Store>((set, get) => ({
     set({ theme })
   },
   setDetailPanelWidthPx: (px, windowWidth) => {
-    const clamped = clampDetailWidth(px, windowWidth)
+    const clamped = clampDetailWidth(px, windowWidth, get().showAiChat)
     localStorage.setItem('ticktick-detail-width', String(clamped))
     set({ detailPanelWidthPx: clamped })
   },

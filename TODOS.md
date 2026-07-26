@@ -105,9 +105,8 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **What:** `getFilteredTaskIds`(전체 선택)는 스마트/태그 리스트에서 뷰와 달리 `!parentId`를 일괄 적용하지 않음(태그 케이스만 맞춤). 뷰는 항상 최상위만 표시하므로 select-all도 항상 하위작업 제외하도록 통일하면 좋음(기존 리스트 동작 변경이라 별도 처리).
 - **Added:** 2026-07-25 태그 뷰 /review
 
-### [P3] 우측 상세 패널 — AiChat 동시 오픈 시 폭 경합
-- **What:** `clampDetailWidth`는 사이드바(256)+목록최소(320)만 예약하고 AiChatPanel(w-80=320)은 고려 안 함. 상세 패널을 최대로 늘린 상태에서 AI 챗까지 열면 가운데 목록이 `min-w-0`로 0까지 눌릴 수 있음.
-- **Impact:** 크래시/데이터 손실 없음(우아한 축소). 사용자가 둘 중 하나 닫으면 복구. 필요 시 clamp에 `showAiChat` 여부를 반영해 AiChat 폭까지 예약.
+### ~~[P3] 우측 상세 패널 — AiChat 동시 오픈 시 폭 경합~~ ✅ DONE (2026-07-27)
+- **Result:** `clampDetailWidth(px, windowWidth, aiChatOpen?)`에 3번째 인자 추가 — 챗 열림 시 `AI_CHAT_WIDTH(320)`을 상한에서 추가 예약. TaskDetail(읽기/드래그)과 store `setDetailPanelWidthPx`(persist)가 모두 `showAiChat`을 전달. 챗을 열면 상세 패널이 자동 축소돼 가운데 목록이 0으로 눌리지 않음. 인자 생략 시 기존 동작 유지(기본 false). 신규 테스트 2건 포함 175 tests green.
 - **Added:** 2026-07-25 우측 패널 /review
 
 ### [P3] 노트 에디터 — 번들 감량 (코드 언어 축소)
