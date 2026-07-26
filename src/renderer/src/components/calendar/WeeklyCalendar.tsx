@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Flag } from 'lucide-react'
 import { TimeBlock } from './TimeBlock'
 import { layoutOverlappingBlocks } from '../../utils/timeBlockLayout'
 import { getScheduledForOccurrence, snapTo15Min } from '../../utils/scheduledTime'
+import { DND_MIME } from '../../utils/dnd'
 
 // 요일 이름
 const dayLabels = ['일', '월', '화', '수', '목', '금', '토']
@@ -347,8 +348,8 @@ export function WeeklyCalendar(): React.ReactElement {
                   }`}
                   onDragOver={(e) => {
                     if (
-                      e.dataTransfer.types.includes('application/haru-task-id') ||
-                      e.dataTransfer.types.includes('application/haru-task-block')
+                      e.dataTransfer.types.includes(DND_MIME.TASK_ID) ||
+                      e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK)
                     ) {
                       e.preventDefault()
                       e.dataTransfer.dropEffect = 'move'
@@ -372,8 +373,8 @@ export function WeeklyCalendar(): React.ReactElement {
                     }
 
                     const taskId =
-                      e.dataTransfer.getData('application/haru-task-id') ||
-                      e.dataTransfer.getData('application/haru-task-block')
+                      e.dataTransfer.getData(DND_MIME.TASK_ID) ||
+                      e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
                     if (!taskId) return
                     const existing = tasks.find((t) => t.id === taskId)
                     if (!existing) return
@@ -381,7 +382,7 @@ export function WeeklyCalendar(): React.ReactElement {
                     // Move of an existing block: preserve duration
                     let endMs = startMs + 30 * 60000
                     if (
-                      e.dataTransfer.types.includes('application/haru-task-block') &&
+                      e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK) &&
                       existing.scheduledStart &&
                       existing.scheduledEnd
                     ) {

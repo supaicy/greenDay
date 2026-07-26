@@ -8,6 +8,7 @@ import { SortMenu } from './SortMenu'
 import { BatchBar } from './BatchBar'
 import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue } from '../../utils/date'
 import { SMART_LIST_PREDICATES, tagFromListId } from '../../utils/smartLists'
+import { DND_MIME } from '../../utils/dnd'
 import type { Task, SortBy, SortDir } from '../../types'
 
 const SMART_LABELS: Record<string, string> = {
@@ -172,13 +173,13 @@ export function TaskListView() {
     <div
       className={`flex-1 flex flex-col min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes('application/haru-task-block')) {
+        if (e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK)) {
           e.preventDefault()
           e.dataTransfer.dropEffect = 'move'
         }
       }}
       onDrop={(e) => {
-        const id = e.dataTransfer.getData('application/haru-task-block')
+        const id = e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
         if (!id) return
         void useStore.getState().updateTask({ id, scheduledStart: null, scheduledEnd: null })
       }}

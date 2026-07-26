@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from 'react'
 import { Circle, CheckCircle2, Flag, Calendar, Trash2, Copy, ArrowRight, Square, CheckSquare2 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { formatDueDate, isOverdue } from '../../utils/date'
+import { DND_MIME } from '../../utils/dnd'
 import type { Task } from '../../types'
 
 const PRIORITY_COLORS = {
@@ -87,7 +88,7 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
         draggable={!batchMode}
         onDragStart={(e) => {
           setDragTaskId(task.id)
-          e.dataTransfer.setData('application/haru-task-id', task.id)
+          e.dataTransfer.setData(DND_MIME.TASK_ID, task.id)
           e.dataTransfer.effectAllowed = 'copy'
         }}
         onDragOver={(e) => {

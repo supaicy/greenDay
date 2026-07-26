@@ -97,9 +97,8 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **PickerRow 추출**: 알림/반복 토글 블록 ~26줄 near-identical → 로컬 `PickerRow` 컴포넌트로 dedup. (미해소)
 - **DetailHeader 추출**: TaskDetail — 헤더/메타 서브컴포넌트 추출로 가독성. (미해소)
 
-### [P3] 드래그 MIME 상수 일원화
-- **What:** `application/haru-task-block`(TaskList/주·일 캘린더), `application/haru-cal-date`(월 캘린더) 등 DnD MIME 문자열이 파일별 인라인. 공용 상수 모듈로 모으면 계약이 명확해지고 오타 위험 감소.
-- **Impact:** 저위험 정리. 여러 파일(TaskList, TimeBlock, Weekly/DailyCalendar, CalendarView) 동시 수정 필요라 후속으로 분리.
+### ~~[P3] 드래그 MIME 상수 일원화~~ ✅ DONE (2026-07-27)
+- **Result:** `src/renderer/src/utils/dnd.ts`에 `DND_MIME`(TASK_ID/TASK_BLOCK/CAL_DATE) 상수+타입 신설. 인라인 문자열 6개 파일(TaskItem, TaskList, TimeBlock, Daily/WeeklyCalendar, CalendarView) 전부 상수 참조로 치환. CalendarView의 로컬 `CAL_DATE_MIME` 별칭도 제거해 직접 참조로 통일. typecheck/lint/173 tests green.
 - **Added:** 2026-07-25 월 캘린더 드래그 /review
 
 ### [P3] 배치 선택 vs 뷰 — 하위작업 제외 일원화

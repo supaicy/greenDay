@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Task } from '../../types'
 import { useStore } from '../../store/useStore'
 import { snapTo15Min } from '../../utils/scheduledTime'
+import { DND_MIME } from '../../utils/dnd'
 
 interface Props {
   task: Task
@@ -46,7 +47,7 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   }
 
   const onDragStart = (e: React.DragEvent): void => {
-    e.dataTransfer.setData('application/haru-task-block', task.id)
+    e.dataTransfer.setData(DND_MIME.TASK_BLOCK, task.id)
     e.dataTransfer.effectAllowed = 'move'
   }
 

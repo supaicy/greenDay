@@ -2,11 +2,11 @@ import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { getCalendarDays, formatDate, toDateString } from '../../utils/date'
+import { DND_MIME } from '../../utils/dnd'
 import { isToday, isSameMonth } from 'date-fns'
 
-// 월간 캘린더에서 태스크를 다른 날로 드래그해 마감일 변경 시 쓰는 커스텀 MIME.
-// 주/일 뷰의 시간블록 드래그('application/haru-task-block')와 겹치지 않게 분리한다.
-const CAL_DATE_MIME = 'application/haru-cal-date'
+// 월간 캘린더의 날짜 간 이동은 DND_MIME.CAL_DATE 사용 — 주/일 뷰의 시간블록
+// 드래그(DND_MIME.TASK_BLOCK)와 MIME을 분리해 서로 오탐되지 않게 한다.
 
 export function CalendarView() {
   const { tasks, selectTask, updateTask, theme } = useStore()
@@ -109,13 +109,13 @@ export function CalendarView() {
               <div
                 key={dateStr}
                 onDragOver={(e) => {
-                  if (!e.dataTransfer.types.includes(CAL_DATE_MIME)) return
+                  if (!e.dataTransfer.types.includes(DND_MIME.CAL_DATE)) return
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'move'
                   if (dragOverDate !== dateStr) setDragOverDate(dateStr)
                 }}
                 onDrop={(e) => {
-                  const id = e.dataTransfer.getData(CAL_DATE_MIME)
+                  const id = e.dataTransfer.getData(DND_MIME.CAL_DATE)
                   setDragOverDate(null)
                   if (id) updateTask({ id, dueDate: dateStr })
                 }}
@@ -135,7 +135,7 @@ export function CalendarView() {
                       key={task.id}
                       draggable
                       onDragStart={(e) => {
-                        e.dataTransfer.setData(CAL_DATE_MIME, task.id)
+                        e.dataTransfer.setData(DND_MIME.CAL_DATE, task.id)
                         e.dataTransfer.effectAllowed = 'move'
                       }}
                       onDragEnd={() => setDragOverDate(null)}
