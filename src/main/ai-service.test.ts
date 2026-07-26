@@ -441,4 +441,69 @@ describe('ai-service', () => {
       expect(ai.isAllowedUrl(url)).toBe(expected)
     })
   })
+
+  describe('taskTagVocabulary', () => {
+    it('중복 없이 태그 어휘를 모은다', async () => {
+      const ai = await loadAiService()
+      const tasks = [
+        { title: 'a', dueDate: null, priority: 'none', completed: false, tags: ['work', 'urgent'] },
+        { title: 'b', dueDate: null, priority: 'none', completed: true, tags: ['work', 'home'] }
+      ]
+      expect(ai.taskTagVocabulary(tasks)).toEqual(['work', 'urgent', 'home'])
+    })
+
+    it('max 개수를 초과하지 않는다', async () => {
+      const ai = await loadAiService()
+      const tasks = Array.from({ length: 50 }, (_, i) => ({
+        title: `t${i}`,
+        dueDate: null,
+        priority: 'none',
+        completed: false,
+        tags: [`tag${i}`]
+      }))
+      expect(ai.taskTagVocabulary(tasks, 5)).toHaveLength(5)
+    })
+
+    it('태그 없으면 빈 배열', async () => {
+      const ai = await loadAiService()
+      expect(ai.taskTagVocabulary([])).toEqual([])
+    })
+  })
+
+  describe('buildTaskSystemPrompt', () => {
+    it('기존 태그가 있으면 재사용 힌트를 넣는다', async () => {
+      const ai = await loadAiService()
+      const prompt = ai.buildTaskSystemPrompt(['work', 'home'])
+      expect(prompt).toContain('#work #home')
+      expect(prompt).toContain('reusing one of')
+      expect(prompt).not.toContain('{tagHint}')
+    })
+
+    it('태그가 없으면 힌트 없이 플레이스홀더만 제거', async () => {
+      const ai = await loadAiService()
+      const prompt = ai.buildTaskSystemPrompt([])
+      expect(prompt).not.toContain('{tagHint}')
+      expect(prompt).not.toContain('existing tags')
+    })
+  })
+
+  describe('createTaskFromNL — 기존 태그 힌트', () => {
+    it('전달된 태스크의 태그가 요청 프롬프트에 포함된다', async () => {
+      const ai = await loadAiService()
+      const taskJson = {
+        action: 'create_task',
+        task: { title: '보고서', dueDate: null, dueTime: null, priority: 'none', tags: [], subtasks: [] }
+      }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(taskJson) } }] })
+      })
+      await ai.createTaskFromNL('보고서 쓰기', [
+        { title: '기존', dueDate: null, priority: 'none', completed: false, tags: ['프로젝트'] }
+      ])
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body)
+      const systemMsg = body.messages.find((m: { role: string }) => m.role === 'system')
+      expect(systemMsg.content).toContain('#프로젝트')
+    })
+  })
 })

@@ -82,8 +82,9 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **배경:** llama3.2(3B)는 한국어에 영어/CJK/타이 혼입(실측). gpt-oss:20b는 깨끗.
 - **Added:** 2026-07-26 AI 개선
 
-### [P4] createTaskFromNL의 existingTasks 미사용
-- **What:** `ai.createTaskFromNL(input, _existingTasks)`는 컨텍스트를 무시. 중복 감지/태그 제안 등에 활용 여지. (현재 store는 buildAiTaskContext 결과를 넘기지만 서비스가 버림 → payload만 소모.)
+### ~~[P4] createTaskFromNL의 existingTasks 미사용~~ ✅ DONE (2026-07-27)
+- **Result:** `existingTasks`에서 `taskTagVocabulary`(중복 없는 태그 어휘, 최대 30)를 뽑아 `buildTaskSystemPrompt`가 태스크 생성 프롬프트에 "기존 태그 재사용" 힌트로 주입. 모델이 새 태그를 남발하지 않고 사용자 태그 어휘를 재사용하도록 유도. 출력 스키마/검증(sanitizeTaskResult)은 불변이라 저위험. 신규 테스트 7건(헬퍼 + fetch 바디에 태그 힌트 포함 확인) 포함 185 tests green.
+- **남은 여지:** 중복 감지(동일 제목 경고)는 확인 UX가 필요해 별도 — [P2 기존 할일 액션]과 함께 다룰 사안.
 - **Added:** 2026-07-26 AI 개선
 
 ## UI/UX

@@ -158,7 +158,30 @@ const TASK_SYSTEM_PROMPT = `You are a task management assistant. Given a natural
   }
 }
 Priority rules: "급하게","긴급","ASAP","중요!","반드시","urgent" → high. "시간 나면","나중에","천천히","여유" → low. Otherwise → none.
-Today is {today}. Return ONLY the JSON, no explanation.`
+{tagHint}Today is {today}. Return ONLY the JSON, no explanation.`
+
+// 기존 태스크에서 중복 없는 태그 어휘를 최대 max개 뽑는다. 태스크 생성 시 모델이
+// 새 태그를 만들기보다 사용자의 기존 태그를 재사용하도록 프롬프트에 힌트로 넣는다.
+export function taskTagVocabulary(tasks: TaskContext[], max = 30): string[] {
+  const seen = new Set<string>()
+  for (const t of tasks) {
+    for (const tag of t.tags ?? []) {
+      if (tag) seen.add(tag)
+      if (seen.size >= max) return [...seen]
+    }
+  }
+  return [...seen]
+}
+
+export function buildTaskSystemPrompt(existingTags: string[]): string {
+  const tagHint =
+    existingTags.length > 0
+      ? `When a tag fits, prefer reusing one of the user's existing tags instead of inventing a new one: ${existingTags
+          .map((t) => `#${t}`)
+          .join(' ')}.\n`
+      : ''
+  return TASK_SYSTEM_PROMPT.replace('{tagHint}', tagHint)
+}
 
 export function chatPromptBase(taskSummary: string): string {
   return `You are a productivity assistant for the app "haru". The user can ask about their tasks, schedule, and productivity.
@@ -301,8 +324,8 @@ function sanitizeTaskResult(raw: AiResult): TaskResult {
   }
 }
 
-export async function createTaskFromNL(input: string, _existingTasks: TaskContext[]): Promise<TaskResult> {
-  const prompt = TASK_SYSTEM_PROMPT
+export async function createTaskFromNL(input: string, existingTasks: TaskContext[]): Promise<TaskResult> {
+  const prompt = buildTaskSystemPrompt(taskTagVocabulary(existingTasks))
   const result = await callLlm(prompt, input, true)
   return sanitizeTaskResult(result)
 }
