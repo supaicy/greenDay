@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { Bot, Send, X, Trash2, Loader2, WifiOff, ListPlus, Check } from 'lucide-react'
+import { shouldSendOnEnter } from '../../utils/chatInput'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
@@ -53,7 +54,9 @@ export function AiChatPanel() {
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // IME 조합 중(한글 마지막 글자 조합)에는 전송하지 않는다. 조합 중 전송하면
+    // 입력창을 비운 뒤 확정된 글자가 다시 들어가 "마지막 글자가 남는" 현상이 생김.
+    if (shouldSendOnEnter(e)) {
       e.preventDefault()
       handleSend()
     }
