@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import { useStore } from '../../store/useStore'
 import { Bot, Send, X, Trash2, Loader2, WifiOff, ListPlus, Check } from 'lucide-react'
-import { shouldSendOnEnter } from '../../utils/chatInput'
+import { shouldSendOnEnter, isNearBottom } from '../../utils/chatInput'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
   // 채팅 메시지 → 할일 추가 상태 (메시지 id별)
   const [taskAdds, setTaskAdds] = useState<Record<string, 'adding' | 'added' | 'error'>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  // 바닥 근처면 새 메시지/토큰마다 자동으로 따라 내려간다. 사용자가 위로
+  // 스크롤해 읽는 중이면 false가 되어 자동 스크롤을 멈춘다.
+  const stickToBottomRef = useRef(true)
 
   const theme = useStore((s) => s.theme)
   const showAiChat = useStore((s) => s.showAiChat)
@@ -36,9 +40,21 @@ export function AiChatPanel() {
     }
   }, [showAiChat, aiConnected, aiCheckConnection])
 
+  // 새 메시지가 추가되거나 스트리밍 토큰이 들어올 때(aiMessages 변경)마다,
+  // 바닥을 따라가는 중이면 맨 아래로 스크롤한다. 스트리밍은 초당 여러 토큰이라
+  // 'smooth'는 애니메이션이 겹치며 onScroll을 중간 위치로 발생시켜 추적이 풀린다.
+  // 'auto'(즉시)로 바닥에 딱 붙여, 실제 사용자 스크롤에만 추적이 해제되게 한다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: aiMessages 변경(토큰 포함) 시마다 재실행이 목적
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+    if (stickToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    }
+  }, [aiMessages])
+
+  const handleScroll = () => {
+    const el = messagesContainerRef.current
+    if (el) stickToBottomRef.current = isNearBottom(el.scrollHeight, el.scrollTop, el.clientHeight)
+  }
 
   useEffect(() => {
     if (showAiChat) inputRef.current?.focus()
@@ -50,6 +66,7 @@ export function AiChatPanel() {
     const trimmed = input.trim()
     if (!trimmed || aiLoading) return
     setInput('')
+    stickToBottomRef.current = true // 전송하면 다시 바닥을 따라간다
     aiSendMessage(trimmed)
   }
 
@@ -98,7 +115,7 @@ export function AiChatPanel() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+      <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         {aiConnected === false && (
           <div
             className={`flex flex-col items-center gap-2 py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}

@@ -13,3 +13,15 @@ export interface EnterKeyEvent {
 export function shouldSendOnEnter(e: EnterKeyEvent): boolean {
   return e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing
 }
+
+// 스크롤 위치가 바닥 근처인지 판단 (채팅 자동 따라내리기 유지 여부).
+// threshold px 이내면 true → 새 메시지/토큰이 오면 계속 바닥을 따라간다.
+// 사용자가 위로 스크롤해 읽는 중이면 false가 되어 자동 스크롤이 멈춘다.
+export function isNearBottom(
+  scrollHeight: number,
+  scrollTop: number,
+  clientHeight: number,
+  threshold = 40
+): boolean {
+  return scrollHeight - scrollTop - clientHeight <= threshold
+}

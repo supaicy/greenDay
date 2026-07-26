@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldSendOnEnter, type EnterKeyEvent } from './chatInput'
+import { shouldSendOnEnter, isNearBottom, type EnterKeyEvent } from './chatInput'
 
 const ev = (o: Partial<EnterKeyEvent> & { isComposing?: boolean } = {}): EnterKeyEvent => ({
   key: o.key ?? 'Enter',
@@ -23,5 +23,24 @@ describe('shouldSendOnEnter', () => {
 
   it('Enter가 아닌 키는 전송하지 않는다', () => {
     expect(shouldSendOnEnter(ev({ key: 'a' }))).toBe(false)
+  })
+})
+
+describe('isNearBottom', () => {
+  it('맨 아래면 true (자동 따라내리기 유지)', () => {
+    // scrollHeight 1000, clientHeight 300 → 최대 scrollTop 700
+    expect(isNearBottom(1000, 700, 300)).toBe(true)
+  })
+
+  it('threshold 이내면 true', () => {
+    expect(isNearBottom(1000, 670, 300)).toBe(true) // 30px 위 (<=40)
+  })
+
+  it('위로 많이 스크롤했으면 false (자동 스크롤 멈춤)', () => {
+    expect(isNearBottom(1000, 200, 300)).toBe(false) // 500px 위
+  })
+
+  it('threshold를 넘기면 false', () => {
+    expect(isNearBottom(1000, 650, 300, 40)).toBe(false) // 50px 위 (>40)
   })
 })
