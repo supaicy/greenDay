@@ -1,6 +1,6 @@
 // AI Service Layer — Ollama / OpenAI 호환 API 클라이언트
 import * as db from './database'
-import type { AiConfig } from '../shared/ai-config'
+import { type AiConfig, isLocalAiConfig } from '../shared/ai-config'
 import { type ChatHistoryMessage, normalizeChatHistory } from '../shared/ai-history'
 
 const ALLOWED_ACTIONS = ['create_task', 'chat_response'] as const
@@ -21,7 +21,8 @@ const DEFAULT_CONFIG: AiConfig = {
   baseUrl: 'http://localhost:11434',
   model: 'llama3.2:latest',
   apiKey: null,
-  maxHistoryMessages: 200
+  maxHistoryMessages: 200,
+  localOnly: false
 }
 
 let config: AiConfig = { ...DEFAULT_CONFIG }
@@ -78,7 +79,13 @@ export function setAiConfig(updates: Partial<AiConfig>): void {
   if (updates.apiKey?.startsWith('••••••')) {
     delete updates.apiKey
   }
-  config = { ...config, ...updates }
+  const next = { ...config, ...updates }
+  // 로컬 전용(프라이버시) 모드 강제: 잠금이 켜져 있으면 외부(비-로컬) 제공자로
+  // 저장할 수 없다. 렌더러가 우회하더라도 여기서 막아 데이터 유출을 방지한다.
+  if (next.localOnly && !isLocalAiConfig(next)) {
+    throw new Error('로컬 전용 모드에서는 외부 AI 제공자를 사용할 수 없습니다')
+  }
+  config = next
   db.saveAiConfig({ ...config } as unknown as Record<string, unknown>)
 }
 
@@ -175,6 +182,10 @@ function getToday(): string {
 }
 
 async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: boolean): Promise<AiResult> {
+  // 런타임 방어: 잠금이 켜졌는데 비-로컬 구성이면(예: 손으로 수정된 config) 외부 호출 차단
+  if (config.localOnly && !isLocalAiConfig(config)) {
+    throw new Error('로컬 전용 모드: 외부 제공자 호출이 차단되었습니다')
+  }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
 
@@ -316,6 +327,11 @@ export async function streamChat(
   onDone: () => void,
   onError: (error: string) => void
 ): Promise<void> {
+  // 런타임 방어: 잠금이 켜졌는데 비-로컬 구성이면 외부 호출 차단
+  if (config.localOnly && !isLocalAiConfig(config)) {
+    onError('로컬 전용 모드: 외부 제공자 호출이 차단되었습니다')
+    return
+  }
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
 

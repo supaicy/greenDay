@@ -796,7 +796,11 @@ export const useStore = create<Store>((set, get) => ({
     set({ aiMessages: messages })
   },
   aiSaveConfig: async (updates) => {
-    await window.api.aiSetConfig(updates)
+    try {
+      await window.api.aiSetConfig(updates)
+    } catch {
+      // main이 거부하면(예: 로컬 전용 잠금 위반) 저장 안 됨 → 실제 저장 상태로 폼 복원
+    }
     const config = (await window.api.aiGetConfig()) as AiConfig
     set({ aiConfig: config })
   },

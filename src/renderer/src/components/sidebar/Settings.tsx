@@ -48,6 +48,7 @@ export function Settings() {
   const [aiApiKey, setAiApiKey] = useState('')
   const [aiProvider, setAiProvider] = useState<'ollama' | 'openai' | 'custom'>('ollama')
   const [aiMaxHistory, setAiMaxHistory] = useState(200)
+  const [aiLocalOnly, setAiLocalOnly] = useState(false)
 
   useEffect(() => {
     if (showSettings && !aiConfig) aiLoadConfig()
@@ -65,6 +66,7 @@ export function Settings() {
       setAiApiKey(aiConfig.apiKey || '')
       setAiProvider(aiConfig.provider)
       setAiMaxHistory(aiConfig.maxHistoryMessages ?? 200)
+      setAiLocalOnly(aiConfig.localOnly ?? false)
     }
   }, [aiConfig])
 
@@ -94,9 +96,22 @@ export function Settings() {
       baseUrl: aiBaseUrl,
       model: aiModel,
       apiKey: aiApiKey || null,
-      maxHistoryMessages: aiMaxHistory
+      maxHistoryMessages: aiMaxHistory,
+      localOnly: aiLocalOnly
     })
     aiCheckConnection()
+  }
+
+  // 로컬 전용 잠금을 켜면 외부 제공자를 쓸 수 없으므로, 외부였다면 Ollama 로컬로 되돌린다.
+  const toggleLocalOnly = () => {
+    const next = !aiLocalOnly
+    setAiLocalOnly(next)
+    if (next && aiProvider !== 'ollama') {
+      setAiProvider('ollama')
+      setAiBaseUrl('http://localhost:11434')
+      setAiModel('llama3.2:latest')
+      setAiApiKey('')
+    }
   }
 
   return (
@@ -224,6 +239,7 @@ export function Settings() {
                   value={aiProvider}
                   onChange={(e) => {
                     const v = e.target.value as 'ollama' | 'openai' | 'custom'
+                    if (aiLocalOnly && v !== 'ollama') return // 로컬 전용 잠금 시 외부 선택 차단
                     setAiProvider(v)
                     if (v === 'ollama') {
                       setAiBaseUrl('http://localhost:11434')
@@ -236,10 +252,38 @@ export function Settings() {
                   className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${theme === 'dark' ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}
                 >
                   <option value="ollama">Ollama (로컬)</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="custom">커스텀 API</option>
+                  <option value="openai" disabled={aiLocalOnly}>
+                    OpenAI{aiLocalOnly ? ' (로컬 전용 잠금됨)' : ''}
+                  </option>
+                  <option value="custom" disabled={aiLocalOnly}>
+                    커스텀 API{aiLocalOnly ? ' (로컬 전용 잠금됨)' : ''}
+                  </option>
                 </select>
               </div>
+
+              {/* 외부 전송 경고 */}
+              {aiProvider !== 'ollama' && (
+                <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs bg-amber-500/10 text-amber-700 border border-amber-500/30">
+                  <span>⚠️</span>
+                  <span>
+                    이 제공자를 사용하면 <b>대화·할일 내용이 외부 서버로 전송</b>됩니다. 프라이버시가 중요하면
+                    Ollama(로컬)를 사용하세요.
+                  </span>
+                </div>
+              )}
+
+              {/* 로컬 전용 잠금 (프라이버시 모드) */}
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={aiLocalOnly} onChange={toggleLocalOnly} className="mt-0.5" />
+                <span>
+                  <span className={`text-sm ${theme === 'dark' ? 'text-gray-200' : 'text-gray-700'}`}>
+                    🔒 로컬 전용 (외부 AI 차단)
+                  </span>
+                  <span className={`block text-xs mt-0.5 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    켜면 외부 제공자를 선택할 수 없어, 데이터가 절대 기기를 벗어나지 않습니다.
+                  </span>
+                </span>
+              </label>
               <div>
                 <label
                   htmlFor="ai-base-url"

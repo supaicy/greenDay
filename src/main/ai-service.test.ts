@@ -74,6 +74,27 @@ describe('ai-service', () => {
     })
   })
 
+  describe('로컬 전용 잠금 (localOnly)', () => {
+    it('잠금이 켜지면 외부 제공자로 저장할 수 없다 (throw)', async () => {
+      const ai = await loadAiService()
+      // 먼저 로컬에서 잠금 켜기 (허용)
+      ai.setAiConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
+      // 외부로 전환 시도 → 거부
+      expect(() => ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com' })).toThrow(
+        '로컬 전용'
+      )
+    })
+
+    it('잠금이 꺼져 있으면 외부 제공자 저장 허용', async () => {
+      const ai = await loadAiService()
+      ai.setAiConfig({ provider: 'ollama', localOnly: false })
+      expect(() =>
+        ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com', apiKey: 'sk-x' })
+      ).not.toThrow()
+      expect(ai.getAiConfig().provider).toBe('openai')
+    })
+  })
+
   describe('createTaskFromNL', () => {
     it('정상 응답 시 태스크 JSON 반환', async () => {
       const ai = await loadAiService()
