@@ -25,7 +25,7 @@ import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurre
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
-import { type ActionOp, looksLikeTaskAction, resolveActionTarget } from '../utils/aiActions'
+import { type ActionOp, type TaskActionInterpretation, looksLikeTaskAction, resolveActionTarget } from '../utils/aiActions'
 import { isCapableModel } from '../utils/aiModels'
 
 export type Theme = 'dark' | 'light'
@@ -953,11 +953,7 @@ export const useStore = create<Store>((set, get) => ({
     set((s) => ({ aiMessages: [...s.aiMessages, userMsg], aiLoading: true, aiPendingAction: null }))
     try {
       const tasks = buildAiTaskContext(get().tasks)
-      const res = (await window.api.aiInterpretAction(message, tasks)) as {
-        op: ActionOp
-        taskTitle: string
-        dueDate: string | null
-      }
+      const res = (await window.api.aiInterpretAction(message, tasks)) as TaskActionInterpretation
       if (res.op === 'none') {
         set({ aiLoading: false })
         pushAssistant('무엇을 하려는지 정확히 파악하지 못했어요. 어떤 할일을 어떻게 할지 다시 말씀해 주세요.')
@@ -989,20 +985,34 @@ export const useStore = create<Store>((set, get) => ({
     const pending = get().aiPendingAction
     if (!pending) return
     set({ aiPendingAction: null })
+    const pushAssistant = (content: string): void =>
+      set((s) => ({
+        aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content, timestamp: new Date().toISOString() }]
+      }))
+    // TOCTOU 방지: 확인 카드가 떠 있는 동안 사용자가 손으로 그 태스크를 완료/삭제/변경했을
+    // 수 있다. 실행 직전 현재 상태를 다시 확인해, 없거나 이미 처리된 경우 blind 실행 대신
+    // 정직하게 알린다(예전 코드는 toggleTask가 이미 완료된 태스크를 도로 미완료로 되돌렸음).
+    const task = get().tasks.find((t) => t.id === pending.taskId && !t.deletedAt)
+    if (!task) {
+      pushAssistant(`"${pending.taskTitle}"을(를) 찾을 수 없어요 (이미 삭제되었을 수 있어요).`)
+      return
+    }
     let done = ''
     if (pending.op === 'complete') {
-      await get().toggleTask(pending.taskId)
+      if (task.completed) {
+        pushAssistant(`"${pending.taskTitle}"은(는) 이미 완료되어 있어요.`)
+        return
+      }
+      await get().toggleTask(pending.taskId) // 미완료 확인 후이므로 완료로 전환됨
       done = `"${pending.taskTitle}"을(를) 완료 처리했어요.`
     } else if (pending.op === 'delete') {
       await get().removeTask(pending.taskId)
-      done = `"${pending.taskTitle}"을(를) 삭제했어요(휴지통에서 되돌릴 수 있어요).`
+      done = `"${pending.taskTitle}"을(를) 삭제했어요 (휴지통에서 되돌릴 수 있어요).`
     } else if (pending.op === 'reschedule') {
       await get().updateTask({ id: pending.taskId, dueDate: pending.dueDate })
       done = `"${pending.taskTitle}"의 마감일을 ${pending.dueDate}(으)로 변경했어요.`
     }
-    set((s) => ({
-      aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content: done, timestamp: new Date().toISOString() }]
-    }))
+    pushAssistant(done)
   },
   aiCancelAction: () => {
     if (!get().aiPendingAction) return

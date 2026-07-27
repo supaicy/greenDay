@@ -28,6 +28,9 @@ const SHORTCUTS = [
   { keys: 'Esc', desc: '선택 해제 / 닫기' }
 ]
 
+// 진행률 불확정(manifest/verify 등 percent=null) 단계에서 보여줄 바 폭(%).
+const INDETERMINATE_BAR_PCT = 8
+
 // Ollama 모델 안내 + 한국어 추천 모델 원클릭 설치. 설치 상태(진행/연결됨/미연결/완료)를
 // 중첩 삼항 대신 상호배타 가드 블록으로 나눠 스캔하기 쉽게 한다.
 function OllamaModelHint({
@@ -63,7 +66,7 @@ function OllamaModelHint({
           <div className={`h-1.5 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
             <div
               className="h-1.5 rounded-full bg-primary-500 transition-all"
-              style={{ width: `${aiPull.percent ?? 8}%` }}
+              style={{ width: `${aiPull.percent ?? INDETERMINATE_BAR_PCT}%` }}
             />
           </div>
         </div>

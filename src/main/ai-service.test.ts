@@ -478,6 +478,14 @@ describe('ai-service', () => {
       const ai = await loadAiService()
       expect(ai.parsePullProgress('{"status":"x","completed":300,"total":200}')?.percent).toBe(100)
     })
+    it('total=0이면 나눗셈 없이 percent=null (0 나눗셈 방어)', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('{"status":"x","completed":0,"total":0}')?.percent).toBeNull()
+    })
+    it('다운로드 시작(completed=0, total>0)은 percent=0', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('{"status":"downloading","completed":0,"total":200}')?.percent).toBe(0)
+    })
   })
 
   // 한 번에 전체 NDJSON을 흘려보내는 스트리밍 응답 body 목
@@ -572,6 +580,19 @@ describe('ai-service', () => {
       })
       const res = await ai.interpretTaskAction('x 미뤄', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
       expect(res.dueDate).toBeNull()
+    })
+
+    it('오늘 날짜 reschedule은 유지 (>= today 경계)', async () => {
+      const ai = await loadAiService()
+      // 런타임 today를 써서 실행 날짜와 무관하게 경계를 검증
+      const today = new Date().toISOString().split('T')[0]
+      const json = { action: 'task_action', op: 'reschedule', taskTitle: 'x', dueDate: today }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
+      })
+      const res = await ai.interpretTaskAction('x 오늘로', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
+      expect(res.dueDate).toBe(today)
     })
 
     it('알 수 없는 op은 none, complete는 dueDate를 null로', async () => {

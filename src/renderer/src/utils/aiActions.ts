@@ -2,6 +2,14 @@ import type { Task } from '../types'
 
 export type ActionOp = 'complete' | 'reschedule' | 'delete' | 'none'
 
+// main interpretTaskAction(ActionResult)의 렌더러 측 형상 — IPC 응답 캐스트와
+// 대기 액션이 같은 계약을 공유하도록 한곳에 둔다.
+export interface TaskActionInterpretation {
+  op: ActionOp
+  taskTitle: string
+  dueDate: string | null
+}
+
 // 사용자 메시지가 '기존 할일 조작' 의도로 보이는가? — LLM 호출 전 가벼운 게이트.
 // 매칭될 때만 액션 해석(비스트리밍 LLM 1콜)으로 라우팅해, 일반 질문의 지연을 늘리지 않는다.
 // 명령형 표현 위주로 둔다 — 바로 '완료'는 "오늘 완료한 거 알려줘" 같은 질문에서

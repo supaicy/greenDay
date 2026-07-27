@@ -38,4 +38,11 @@ describe('isCapableModel', () => {
     expect(isCapableModel('gpt-4o')).toBe(true)
     expect(isCapableModel('some-custom-model')).toBe(true)
   })
+  it('크기 태그 뒤 접미사가 붙어도 파싱(:\\d+b\\b 경계)', () => {
+    expect(isCapableModel('exaone3.5:7.8b-instruct')).toBe(true)
+    expect(isCapableModel('qwen2.5:0.5b-chat')).toBe(false)
+  })
+  it('mini/tiny/small은 큰 크기 태그보다 우선해 부적합', () => {
+    expect(isCapableModel('foo-mini:70b')).toBe(false)
+  })
 })

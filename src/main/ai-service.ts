@@ -256,7 +256,8 @@ interface ChatResult {
 // 기존 할일에 대한 파괴적 액션(완료/리스케줄/삭제). 실행 전 렌더러에서 확인 카드 필수.
 export interface ActionResult {
   action: 'task_action'
-  op: 'complete' | 'reschedule' | 'delete' | 'none'
+  // op 집합의 단일 출처는 ACTION_OPS — 타입을 배열에서 파생해 드리프트를 막는다.
+  op: (typeof ACTION_OPS)[number]
   // 대상 태스크의 (모델이 고른) 제목. 렌더러가 실제 태스크 id로 해석한다.
   taskTitle: string
   // reschedule일 때 새 마감일(YYYY-MM-DD), 그 외 null.
@@ -280,9 +281,12 @@ const TASK_SYSTEM_PROMPT = `You are a task management assistant. Given a natural
 Priority rules: "급하게","긴급","ASAP","중요!","반드시","urgent" → high. "시간 나면","나중에","천천히","여유" → low. Otherwise → none.
 {tagHint}Today is {today}. Return ONLY the JSON, no explanation.`
 
+// 프롬프트에 넣을 기존 태그 어휘의 최대 개수 — 너무 길면 프롬프트가 비대해진다.
+const MAX_TAG_VOCAB = 30
+
 // 기존 태스크에서 중복 없는 태그 어휘를 최대 max개 뽑는다. 태스크 생성 시 모델이
 // 새 태그를 만들기보다 사용자의 기존 태그를 재사용하도록 프롬프트에 힌트로 넣는다.
-export function taskTagVocabulary(tasks: TaskContext[], max = 30): string[] {
+export function taskTagVocabulary(tasks: TaskContext[], max = MAX_TAG_VOCAB): string[] {
   const seen = new Set<string>()
   for (const t of tasks) {
     for (const tag of t.tags ?? []) {
@@ -458,7 +462,7 @@ export function buildActionSystemPrompt(tasks: TaskContext[]): string {
     .map((t) => `- ${t.title}${t.dueDate ? ` (due: ${t.dueDate})` : ''}`)
     .join('\n')
   return `You manage the user's EXISTING task list. The user wants to act on ONE existing task.
-Return ONLY JSON: {"action":"task_action","op":"complete|reschedule|delete|none","taskTitle":"<exact title from the list, or empty>","dueDate":"YYYY-MM-DD or null"}
+Return ONLY JSON: {"action":"task_action","op":"${ACTION_OPS.join('|')}","taskTitle":"<exact title from the list, or empty>","dueDate":"YYYY-MM-DD or null"}
 Rules:
 - op: complete = mark done (완료/끝냈어/했어), reschedule = change the due date (미뤄/내일로/모레/다음주), delete = remove it (삭제/지워/없애).
 - taskTitle: copy the EXACT title of the single best-matching task from the list below. If nothing matches, use op="none" and taskTitle="".
