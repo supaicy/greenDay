@@ -25,7 +25,8 @@ import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurre
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
-import { type ActionOp, resolveActionTarget } from '../utils/aiActions'
+import { type ActionOp, looksLikeTaskAction, resolveActionTarget } from '../utils/aiActions'
+import { isCapableModel } from '../utils/aiModels'
 
 export type Theme = 'dark' | 'light'
 
@@ -165,6 +166,8 @@ interface Store {
   setShowAiChat: (show: boolean) => void
   aiCheckConnection: () => Promise<void>
   aiPullModel: (model: string) => void
+  // 채팅 전송 진입점 — 신뢰 가능한 모델 + 액션 의도면 액션 해석으로, 아니면 일반 채팅으로 라우팅.
+  aiSubmit: (message: string) => void
   aiRequestTaskAction: (message: string) => Promise<void>
   aiConfirmAction: () => Promise<void>
   aiCancelAction: () => void
@@ -927,6 +930,16 @@ export const useStore = create<Store>((set, get) => ({
   aiClearMessages: () => {
     set({ aiMessages: [], aiPendingAction: null })
     void window.api.aiSaveHistory([])
+  },
+  aiSubmit: (message) => {
+    // 신뢰 가능한 모델 + 액션 의도(명령형 휴리스틱)면 '기존 할일' 액션 해석으로 라우팅(확인 카드).
+    // 그 외에는 일반 채팅 스트리밍. (소형 모델은 오탐이 잦아 자동 감지에서 제외)
+    const cfg = get().aiConfig
+    if (cfg && isCapableModel(cfg.model) && looksLikeTaskAction(message)) {
+      void get().aiRequestTaskAction(message)
+    } else {
+      void get().aiSendMessage(message)
+    }
   },
   aiRequestTaskAction: async (message) => {
     const pushAssistant = (content: string): void =>

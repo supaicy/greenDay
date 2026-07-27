@@ -18,8 +18,7 @@ import {
 import { shouldSendOnEnter, isNearBottom } from '../../utils/chatInput'
 import { aiDestination } from '../../../../shared/ai-config'
 import { buildAiTaskContext } from '../../utils/aiContext'
-import { isCapableModel } from '../../utils/aiModels'
-import { looksLikeTaskAction, actionOpLabel } from '../../utils/aiActions'
+import { actionOpLabel } from '../../utils/aiActions'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
@@ -41,7 +40,7 @@ export function AiChatPanel() {
   const aiLoading = useStore((s) => s.aiLoading)
   const aiConnected = useStore((s) => s.aiConnected)
   const aiConfig = useStore((s) => s.aiConfig)
-  const aiSendMessage = useStore((s) => s.aiSendMessage)
+  const aiSubmit = useStore((s) => s.aiSubmit)
   const aiClearMessages = useStore((s) => s.aiClearMessages)
   const aiCheckConnection = useStore((s) => s.aiCheckConnection)
   const aiLoadConfig = useStore((s) => s.aiLoadConfig)
@@ -49,14 +48,16 @@ export function AiChatPanel() {
   const aiAddTaskFromText = useStore((s) => s.aiAddTaskFromText)
   const tasks = useStore((s) => s.tasks)
   const aiPendingAction = useStore((s) => s.aiPendingAction)
-  const aiRequestTaskAction = useStore((s) => s.aiRequestTaskAction)
   const aiConfirmAction = useStore((s) => s.aiConfirmAction)
   const aiCancelAction = useStore((s) => s.aiCancelAction)
 
   const isDark = theme === 'dark'
   // 모델에 실제로 전송되는 태스크 컨텍스트(스토어 전송 경로와 동일한 buildAiTaskContext).
   // 사용자가 무엇이 기기를 떠나는지 직접 확인할 수 있게 투명하게 노출한다.
-  const sentContext = useMemo(() => buildAiTaskContext(tasks), [tasks])
+  // 패널이 닫혀 있으면(항상 마운트됨) 계산하지 않아 태스크 변경마다의 낭비를 막는다.
+  const sentContext = useMemo(() => (showAiChat ? buildAiTaskContext(tasks) : []), [showAiChat, tasks])
+  // 이그레스 가시성: 배지에 표시할 호출 목적지(host/로컬 여부).
+  const dest = aiConfig ? aiDestination(aiConfig) : null
 
   const handleAddTask = async (id: string, content: string) => {
     setTaskAdds((s) => ({ ...s, [id]: 'adding' }))
@@ -107,13 +108,8 @@ export function AiChatPanel() {
     if (!trimmed || aiLoading) return
     setInput('')
     stickToBottomRef.current = true // 전송하면 다시 바닥을 따라간다
-    // 신뢰 가능한 모델 + 액션 의도로 보이면 '기존 할일' 액션 해석으로 라우팅(확인 카드).
-    // 그 외에는 일반 채팅 스트리밍. (소형 모델은 오탐이 잦아 자동 감지에서 제외)
-    if (aiConfig && isCapableModel(aiConfig.model) && looksLikeTaskAction(trimmed)) {
-      aiRequestTaskAction(trimmed)
-    } else {
-      aiSendMessage(trimmed)
-    }
+    // 액션 라우팅(액션 해석 vs 일반 채팅)은 store의 aiSubmit이 판단한다.
+    aiSubmit(trimmed)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -138,26 +134,21 @@ export function AiChatPanel() {
           <span className="font-medium text-sm">AI 어시스턴트</span>
           {aiConnected === true && <span className="w-2 h-2 rounded-full bg-green-500" title="연결됨" />}
           {aiConnected === false && <span className="w-2 h-2 rounded-full bg-red-500" title="연결 안 됨" />}
-          {aiConfig &&
-            (() => {
-              // 이그레스 가시성: 배지에 실제 호출 목적지(host)를 함께 노출한다.
-              const { host, isLocal } = aiDestination(aiConfig)
-              return isLocal ? (
-                <span
-                  title={`데이터가 기기를 벗어나지 않습니다 (→ ${host})`}
-                  className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/15 text-green-600"
-                >
-                  <ShieldCheck size={11} /> 온디바이스
-                </span>
-              ) : (
-                <span
-                  title={`대화·할일 내용이 외부 서버로 전송됩니다 (→ ${host})`}
-                  className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600"
-                >
-                  <Cloud size={11} /> 외부 · {host}
-                </span>
-              )
-            })()}
+          {dest && (
+            <span
+              title={
+                dest.isLocal
+                  ? `데이터가 기기를 벗어나지 않습니다 (→ ${dest.host})`
+                  : `대화·할일 내용이 외부 서버로 전송됩니다 (→ ${dest.host})`
+              }
+              className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                dest.isLocal ? 'bg-green-500/15 text-green-600' : 'bg-amber-500/15 text-amber-600'
+              }`}
+            >
+              {dest.isLocal ? <ShieldCheck size={11} /> : <Cloud size={11} />}{' '}
+              {dest.isLocal ? '온디바이스' : `외부 · ${dest.host}`}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {aiMessages.length > 0 && (

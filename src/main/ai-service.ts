@@ -472,7 +472,8 @@ function sanitizeActionResult(raw: AiResult): ActionResult {
   if (raw.action !== 'task_action') {
     throw new Error('Unexpected action from task-action interpret')
   }
-  const r = raw as ActionResult
+  // 위 가드로 raw는 ActionResult로 좁혀진다(캐스트 불필요).
+  const r = raw
   const op = ACTION_OPS.includes(r.op as (typeof ACTION_OPS)[number]) ? r.op : 'none'
   return {
     action: 'task_action',
