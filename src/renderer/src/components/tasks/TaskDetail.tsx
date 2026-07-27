@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import { X, Trash2, Tag, List, Clock, Bell, Repeat, Calendar, Circle, CheckCircle2 } from 'lucide-react'
 import { EditorView } from '@codemirror/view'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
@@ -47,6 +47,41 @@ const LIGHT_EDITOR_THEME = EditorView.theme(
 )
 
 const DEFAULT_DETAIL_WIDTH = 400
+
+// 메타 스트립의 알림/반복 토글은 트리거 버튼 + 조건부 드롭다운 구조가 동일하다.
+// 트리거/래퍼를 PickerRow로 dedup하고, 실제 피커는 children으로 받는다.
+function PickerRow({
+  open,
+  onToggle,
+  active,
+  activeCls,
+  inactiveCls,
+  icon,
+  label,
+  children
+}: {
+  open: boolean
+  onToggle: () => void
+  active: boolean
+  activeCls: string
+  inactiveCls: string
+  icon: ReactNode
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${active ? activeCls : inactiveCls}`}
+      >
+        {icon} {label}
+      </button>
+      {open && children}
+    </div>
+  )
+}
 
 export function TaskDetail() {
   // 개별 셀렉터로 구독 — 무선택자 useStore()는 아무 store 쓰기에도 리렌더된다.
@@ -315,52 +350,42 @@ export function TaskDetail() {
           </select>
         </div>
         {/* 알림 */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowReminder(!showReminder)}
-            className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
-              task.reminderAt
-                ? 'text-primary-400 border-primary-500/30'
-                : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
-            }`}
-          >
-            <Bell size={13} /> {task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
-          </button>
-          {showReminder && (
-            <ReminderPicker
-              dueDate={task.dueDate}
-              value={task.reminderAt}
-              onChange={(v) => {
-                save({ reminderAt: v })
-                setShowReminder(false)
-              }}
-            />
-          )}
-        </div>
+        <PickerRow
+          open={showReminder}
+          onToggle={() => setShowReminder(!showReminder)}
+          active={!!task.reminderAt}
+          activeCls="text-primary-400 border-primary-500/30"
+          inactiveCls={`${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+          icon={<Bell size={13} />}
+          label={task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
+        >
+          <ReminderPicker
+            dueDate={task.dueDate}
+            value={task.reminderAt}
+            onChange={(v) => {
+              save({ reminderAt: v })
+              setShowReminder(false)
+            }}
+          />
+        </PickerRow>
         {/* 반복 */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowRecurring(!showRecurring)}
-            className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${
-              task.isRecurring
-                ? 'text-purple-400 border-purple-500/30'
-                : `${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`
-            }`}
-          >
-            <Repeat size={13} /> {task.isRecurring ? task.recurringPattern || '반복' : '반복'}
-          </button>
-          {showRecurring && (
-            <RecurringPicker
-              value={task.recurringPattern}
-              onChange={(v) => {
-                save({ isRecurring: !!v, recurringPattern: v })
-                setShowRecurring(false)
-              }}
-            />
-          )}
-        </div>
+        <PickerRow
+          open={showRecurring}
+          onToggle={() => setShowRecurring(!showRecurring)}
+          active={task.isRecurring}
+          activeCls="text-purple-400 border-purple-500/30"
+          inactiveCls={`${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+          icon={<Repeat size={13} />}
+          label={task.isRecurring ? task.recurringPattern || '반복' : '반복'}
+        >
+          <RecurringPicker
+            value={task.recurringPattern}
+            onChange={(v) => {
+              save({ isRecurring: !!v, recurringPattern: v })
+              setShowRecurring(false)
+            }}
+          />
+        </PickerRow>
         {/* 태그 */}
         <div className="flex items-center gap-1 flex-1 min-w-[160px]">
           <Tag size={14} className={labelCls} />

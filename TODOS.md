@@ -96,8 +96,8 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - ~~**TaskDetail 구독 최적화**~~ ✅ 2026-07-25: 무선택자 `useStore()` → 개별 셀렉터로 전환(액션은 안정 참조).
 - ~~**마크다운 재파싱**~~ 무효: react-markdown 제거(Atomic 에디터 전환)로 소멸.
 - ~~**기본 높이 이동**~~ 무효: 높이 state 제거(우측 패널은 폭 기반), `DEFAULT_DETAIL_WIDTH` 상수로 처리.
-- **PickerRow 추출**: 알림/반복 토글 블록 ~26줄 near-identical → 로컬 `PickerRow` 컴포넌트로 dedup. (미해소)
-- **DetailHeader 추출**: TaskDetail — 헤더/메타 서브컴포넌트 추출로 가독성. (미해소)
+- ~~**PickerRow 추출**~~ ✅ 2026-07-27: 알림/반복 토글의 트리거+조건부 드롭다운 구조를 로컬 `PickerRow`로 dedup(피커는 children). ~26줄 중복 제거, 동작 불변(typecheck/build/215 tests green).
+- **DetailHeader 추출**: ❌ 보류(의도적) — 헤더 추출은 task/title/setTitle/save/toggle/remove/selectTask/priorityColor 등 8개+ prop 드릴링이 필요해 가독성 이득보다 비용·회귀위험이 큼. PickerRow dedup으로 파일 길이는 이미 개선.
 
 ### ~~[P3] 드래그 MIME 상수 일원화~~ ✅ DONE (2026-07-27)
 - **Result:** `src/renderer/src/utils/dnd.ts`에 `DND_MIME`(TASK_ID/TASK_BLOCK/CAL_DATE) 상수+타입 신설. 인라인 문자열 6개 파일(TaskItem, TaskList, TimeBlock, Daily/WeeklyCalendar, CalendarView) 전부 상수 참조로 치환. CalendarView의 로컬 `CAL_DATE_MIME` 별칭도 제거해 직접 참조로 통일. typecheck/lint/173 tests green.
