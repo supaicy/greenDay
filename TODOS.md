@@ -67,8 +67,8 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - ~~**[중기] 전송 데이터 미리보기**~~ ✅ 2026-07-27 — AI 패널 헤더 아래 접이식 "전송 데이터 미리보기 · N건" 디스클로저 추가. 스토어 전송 경로와 **동일한** `buildAiTaskContext(tasks)`를 useMemo로 계산해 노출(제목/마감/우선순위/태그) → 미리보기가 실제 전송값과 항상 일치. 렌더러 전용, 저위험. (라이브 QA 미검증 — Mac 잠금)
 - ~~**[중기] 네트워크 인디케이터**~~ ✅ 2026-07-27 — `aiDestination(config)` 헬퍼(shared/ai-config.ts, 4 tests) 신설. AI 패널 배지에 실제 호출 목적지(host)를 노출: 외부 전송 시 "외부 · api.openai.com"처럼 host 인라인 표시, 로컬은 "온디바이스" + 툴팁에 "→ localhost". `hostnameOf` 추출로 URL 파싱을 `isLocalAiConfig`와 공유.
 - **[중기] 한국어 모델 큐레이션** (배지 ✅ 2026-07-27 / 원클릭 설치 남음) — `utils/aiModels.ts`(isKoreanRecommendedModel/hasKoreanRecommendedModel, 4 tests) 신설. 설치 모델 드롭다운에서 EXAONE/EEVE 계열에 "· 한국어 추천" 라벨 표시. 추천 모델 미설치 시 모델 안내 문구에 `ollama pull exaone3.5` 안내 추가. **남은 것:** 앱 내 원클릭 pull(메인 프로세스 shell exec + 진행률 UI + QA 필요) → [원클릭 Ollama 온보딩]과 함께.
-- **[장기] 내장 런타임** — `node-llama-cpp` 등으로 Ollama 의존 제거(설치 0). 번들 크기↑.
-- **[장기] 로컬 RAG/임베딩** — Ollama 임베딩으로 관련 할일만 검색해 컨텍스트 구성(전량 전송 대체).
+- **[장기] 내장 런타임** — `node-llama-cpp` 등으로 Ollama 의존 제거(설치 0). 번들 크기↑. → **제안서 작성됨(결정 대기)**: `docs/proposals/2026-07-27-embedded-runtime-and-local-rag.html` (번들 vs 다운로드/기본 모델/MAS 샌드박스/아키텍처/폴백 결정 필요). 무검증 구현 위험이 커 설계 단계로 둠.
+- **[장기] 로컬 RAG/임베딩** — Ollama 임베딩으로 관련 할일만 검색해 컨텍스트 구성(전량 전송 대체). → **제안서 작성됨**: 위 HTML. **추천: v1 키워드 관련도(순수·저위험·즉시 구현 가능)부터 → v2 임베딩**. 승인 시 v1 착수.
 
 ### ~~[P2] 채팅에서 '기존 할일' 액션 (완료/리스케줄/삭제)~~ ✅ DONE (2026-07-27)
 - **Result:** (a) main `interpretTaskAction`/`buildActionSystemPrompt`/`sanitizeActionResult` — 모델이 대상 태스크 제목+연산(complete/reschedule/delete/none)을 구조화 JSON으로 반환(`task_action` 액션 추가). (b) 렌더러 `resolveActionTarget`로 제목→실제 태스크 해석(정확→부분 매칭, 미완료·최상위만). (c) **확인 카드 UX**: 실행 전 반드시 사용자가 [확인]/[취소] — 삭제는 빨강. (d) `isCapableModel` 게이트 + `looksLikeTaskAction` 명령형 휴리스틱으로 소형 모델·일반 질문 오탐 차단. 실행은 기존 store 액션(toggle/update/remove=휴지통, 되돌리기 가능) 재사용. 신규 테스트 13건 포함 215 tests green.
