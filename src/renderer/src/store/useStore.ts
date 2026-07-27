@@ -25,6 +25,7 @@ import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurre
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
+import { type ActionOp, resolveActionTarget } from '../utils/aiActions'
 
 export type Theme = 'dark' | 'light'
 
@@ -158,10 +159,15 @@ interface Store {
   showAiChat: boolean
   // 원클릭 모델 설치(pull) 진행 상태. null이면 진행 중 아님.
   aiPull: { model: string; status: string; percent: number | null; error: string | null; active: boolean } | null
+  // 실행 대기 중인 '기존 할일' 액션. 사용자가 확인 카드에서 승인해야 실행된다.
+  aiPendingAction: { op: ActionOp; taskId: string; taskTitle: string; dueDate: string | null } | null
   _aiStreamCleanup: (() => void) | null
   setShowAiChat: (show: boolean) => void
   aiCheckConnection: () => Promise<void>
   aiPullModel: (model: string) => void
+  aiRequestTaskAction: (message: string) => Promise<void>
+  aiConfirmAction: () => Promise<void>
+  aiCancelAction: () => void
   aiWarmup: () => Promise<void>
   aiLoadConfig: () => Promise<void>
   aiLoadHistory: () => Promise<void>
@@ -762,6 +768,7 @@ export const useStore = create<Store>((set, get) => ({
   aiConfig: null,
   showAiChat: false,
   aiPull: null,
+  aiPendingAction: null,
   _aiStreamCleanup: null as (() => void) | null,
   setShowAiChat: (show) => {
     if (!show) {
@@ -918,8 +925,73 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   aiClearMessages: () => {
-    set({ aiMessages: [] })
+    set({ aiMessages: [], aiPendingAction: null })
     void window.api.aiSaveHistory([])
+  },
+  aiRequestTaskAction: async (message) => {
+    const pushAssistant = (content: string): void =>
+      set((s) => ({
+        aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content, timestamp: new Date().toISOString() }]
+      }))
+    const userMsg: AiMessage = { id: uuid(), role: 'user', content: message, timestamp: new Date().toISOString() }
+    set((s) => ({ aiMessages: [...s.aiMessages, userMsg], aiLoading: true, aiPendingAction: null }))
+    try {
+      const tasks = buildAiTaskContext(get().tasks)
+      const res = (await window.api.aiInterpretAction(message, tasks)) as {
+        op: ActionOp
+        taskTitle: string
+        dueDate: string | null
+      }
+      if (res.op === 'none') {
+        set({ aiLoading: false })
+        pushAssistant('무엇을 하려는지 정확히 파악하지 못했어요. 어떤 할일을 어떻게 할지 다시 말씀해 주세요.')
+        return
+      }
+      if (res.op === 'reschedule' && !res.dueDate) {
+        set({ aiLoading: false })
+        pushAssistant('며칠로 옮길지 구체적으로 알려주세요 (예: "내일로", "25일로").')
+        return
+      }
+      const target = resolveActionTarget(res.taskTitle, get().tasks)
+      if (!target) {
+        set({ aiLoading: false })
+        pushAssistant(`"${res.taskTitle}"에 해당하는 할일을 찾지 못했어요.`)
+        return
+      }
+      set({
+        aiLoading: false,
+        aiPendingAction: { op: res.op, taskId: target.id, taskTitle: target.title, dueDate: res.dueDate }
+      })
+    } catch {
+      set({ aiLoading: false })
+      pushAssistant('AI 서비스에 연결할 수 없습니다.')
+    }
+  },
+  aiConfirmAction: async () => {
+    const pending = get().aiPendingAction
+    if (!pending) return
+    set({ aiPendingAction: null })
+    let done = ''
+    if (pending.op === 'complete') {
+      await get().toggleTask(pending.taskId)
+      done = `"${pending.taskTitle}"을(를) 완료 처리했어요.`
+    } else if (pending.op === 'delete') {
+      await get().removeTask(pending.taskId)
+      done = `"${pending.taskTitle}"을(를) 삭제했어요(휴지통에서 되돌릴 수 있어요).`
+    } else if (pending.op === 'reschedule') {
+      await get().updateTask({ id: pending.taskId, dueDate: pending.dueDate })
+      done = `"${pending.taskTitle}"의 마감일을 ${pending.dueDate}(으)로 변경했어요.`
+    }
+    set((s) => ({
+      aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content: done, timestamp: new Date().toISOString() }]
+    }))
+  },
+  aiCancelAction: () => {
+    if (!get().aiPendingAction) return
+    set((s) => ({
+      aiPendingAction: null,
+      aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content: '취소했어요.', timestamp: new Date().toISOString() }]
+    }))
   },
   aiCreateTaskFromNL: async (input) => {
     const tasks = buildAiTaskContext(get().tasks)

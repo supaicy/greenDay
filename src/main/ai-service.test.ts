@@ -537,6 +537,57 @@ describe('ai-service', () => {
     })
   })
 
+  describe('buildActionSystemPrompt / interpretTaskAction', () => {
+    it('프롬프트에 미완료 태스크 제목만 나열', async () => {
+      const ai = await loadAiService()
+      const prompt = ai.buildActionSystemPrompt([
+        { title: '보고서', dueDate: '2026-07-28', priority: 'none', completed: false },
+        { title: '완료된것', dueDate: null, priority: 'none', completed: true }
+      ])
+      expect(prompt).toContain('보고서')
+      expect(prompt).toContain('due: 2026-07-28')
+      expect(prompt).not.toContain('완료된것')
+    })
+
+    it('reschedule 응답을 정규화(op/taskTitle/dueDate)', async () => {
+      const ai = await loadAiService()
+      const json = { action: 'task_action', op: 'reschedule', taskTitle: '보고서', dueDate: '2026-07-28' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
+      })
+      const res = await ai.interpretTaskAction('보고서 내일로 미뤄', [
+        { title: '보고서', dueDate: null, priority: 'none', completed: false }
+      ])
+      expect(res).toEqual({ action: 'task_action', op: 'reschedule', taskTitle: '보고서', dueDate: '2026-07-28' })
+    })
+
+    it('알 수 없는 op은 none, complete는 dueDate를 null로', async () => {
+      const ai = await loadAiService()
+      const json = { action: 'task_action', op: 'complete', taskTitle: '장보기', dueDate: '2026-07-28' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
+      })
+      const res = await ai.interpretTaskAction('장보기 했어', [
+        { title: '장보기', dueDate: null, priority: 'none', completed: false }
+      ])
+      expect(res.op).toBe('complete')
+      expect(res.dueDate).toBeNull() // complete엔 dueDate 무시
+    })
+
+    it('잘못된 날짜의 reschedule은 dueDate=null', async () => {
+      const ai = await loadAiService()
+      const json = { action: 'task_action', op: 'reschedule', taskTitle: 'x', dueDate: 'tomorrow' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
+      })
+      const res = await ai.interpretTaskAction('x 미뤄', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
+      expect(res.dueDate).toBeNull()
+    })
+  })
+
   describe('taskTagVocabulary', () => {
     it('중복 없이 태그 어휘를 모은다', async () => {
       const ai = await loadAiService()

@@ -89,6 +89,7 @@ const api = {
   aiSetConfig: (updates: Record<string, unknown>) => ipcRenderer.invoke('ai:set-config', updates),
   aiWarmup: () => ipcRenderer.invoke('ai:warmup'),
   aiCreateTask: (input: string, tasks: unknown[]) => ipcRenderer.invoke('ai:create-task', input, tasks),
+  aiInterpretAction: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:interpret-action', message, tasks),
   aiChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:chat', message, tasks),
   aiStreamChat: (message: string, tasks: unknown[], history: unknown[]) =>
     ipcRenderer.invoke('ai:stream-chat', message, tasks, history),

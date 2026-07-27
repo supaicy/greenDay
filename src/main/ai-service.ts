@@ -3,7 +3,8 @@ import * as db from './database'
 import { type AiConfig, isLocalAiConfig } from '../shared/ai-config'
 import { type ChatHistoryMessage, normalizeChatHistory } from '../shared/ai-history'
 
-const ALLOWED_ACTIONS = ['create_task', 'chat_response'] as const
+const ALLOWED_ACTIONS = ['create_task', 'chat_response', 'task_action'] as const
+const ACTION_OPS = ['complete', 'reschedule', 'delete', 'none'] as const
 const VALID_PRIORITIES = ['none', 'low', 'medium', 'high'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -252,7 +253,17 @@ interface ChatResult {
   message: string
 }
 
-type AiResult = TaskResult | ChatResult
+// 기존 할일에 대한 파괴적 액션(완료/리스케줄/삭제). 실행 전 렌더러에서 확인 카드 필수.
+export interface ActionResult {
+  action: 'task_action'
+  op: 'complete' | 'reschedule' | 'delete' | 'none'
+  // 대상 태스크의 (모델이 고른) 제목. 렌더러가 실제 태스크 id로 해석한다.
+  taskTitle: string
+  // reschedule일 때 새 마감일(YYYY-MM-DD), 그 외 null.
+  dueDate: string | null
+}
+
+type AiResult = TaskResult | ChatResult | ActionResult
 
 const TASK_SYSTEM_PROMPT = `You are a task management assistant. Given a natural language input in Korean or English, extract task information and return ONLY valid JSON in this exact format:
 {
@@ -437,6 +448,52 @@ export async function createTaskFromNL(input: string, existingTasks: TaskContext
   const prompt = buildTaskSystemPrompt(taskTagVocabulary(existingTasks))
   const result = await callLlm(prompt, input, true)
   return sanitizeTaskResult(result)
+}
+
+// 기존 할일 액션 해석용 시스템 프롬프트. 미완료 최상위 태스크 목록을 주고,
+// 모델이 대상 태스크의 정확한 제목 + 연산을 고르게 한다.
+export function buildActionSystemPrompt(tasks: TaskContext[]): string {
+  const list = tasks
+    .filter((t) => !t.completed)
+    .map((t) => `- ${t.title}${t.dueDate ? ` (due: ${t.dueDate})` : ''}`)
+    .join('\n')
+  return `You manage the user's EXISTING task list. The user wants to act on ONE existing task.
+Return ONLY JSON: {"action":"task_action","op":"complete|reschedule|delete|none","taskTitle":"<exact title from the list, or empty>","dueDate":"YYYY-MM-DD or null"}
+Rules:
+- op: complete = mark done (완료/끝냈어/했어), reschedule = change the due date (미뤄/내일로/모레/다음주), delete = remove it (삭제/지워/없애).
+- taskTitle: copy the EXACT title of the single best-matching task from the list below. If nothing matches, use op="none" and taskTitle="".
+- dueDate: for reschedule, resolve relative dates (내일/모레/다음 주 등) against Today into YYYY-MM-DD. Otherwise null.
+Tasks:
+${list || '(none)'}
+Today is {today}. Return ONLY the JSON, no explanation.`
+}
+
+function sanitizeActionResult(raw: AiResult): ActionResult {
+  if (raw.action !== 'task_action') {
+    throw new Error('Unexpected action from task-action interpret')
+  }
+  const r = raw as ActionResult
+  const op = ACTION_OPS.includes(r.op as (typeof ACTION_OPS)[number]) ? r.op : 'none'
+  return {
+    action: 'task_action',
+    op,
+    taskTitle: typeof r.taskTitle === 'string' ? r.taskTitle.slice(0, 500) : '',
+    dueDate:
+      op === 'reschedule' &&
+      typeof r.dueDate === 'string' &&
+      DATE_RE.test(r.dueDate) &&
+      !Number.isNaN(Date.parse(r.dueDate))
+        ? r.dueDate
+        : null
+  }
+}
+
+// 사용자 메시지를 기존 할일 액션으로 해석. 확인 카드용 구조화 결과만 반환하며,
+// 실제 변경은 렌더러가 사용자 확인 후 수행한다(파괴적 액션 안전장치).
+export async function interpretTaskAction(message: string, existingTasks: TaskContext[]): Promise<ActionResult> {
+  const prompt = buildActionSystemPrompt(existingTasks)
+  const result = await callLlm(prompt, message, true)
+  return sanitizeActionResult(result)
 }
 
 export async function chat(userMessage: string, existingTasks: TaskContext[]): Promise<string> {

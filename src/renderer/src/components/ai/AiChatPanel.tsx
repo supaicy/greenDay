@@ -18,6 +18,8 @@ import {
 import { shouldSendOnEnter, isNearBottom } from '../../utils/chatInput'
 import { aiDestination } from '../../../../shared/ai-config'
 import { buildAiTaskContext } from '../../utils/aiContext'
+import { isCapableModel } from '../../utils/aiModels'
+import { looksLikeTaskAction, actionOpLabel } from '../../utils/aiActions'
 
 export function AiChatPanel() {
   const [input, setInput] = useState('')
@@ -46,6 +48,10 @@ export function AiChatPanel() {
   const aiWarmup = useStore((s) => s.aiWarmup)
   const aiAddTaskFromText = useStore((s) => s.aiAddTaskFromText)
   const tasks = useStore((s) => s.tasks)
+  const aiPendingAction = useStore((s) => s.aiPendingAction)
+  const aiRequestTaskAction = useStore((s) => s.aiRequestTaskAction)
+  const aiConfirmAction = useStore((s) => s.aiConfirmAction)
+  const aiCancelAction = useStore((s) => s.aiCancelAction)
 
   const isDark = theme === 'dark'
   // 모델에 실제로 전송되는 태스크 컨텍스트(스토어 전송 경로와 동일한 buildAiTaskContext).
@@ -101,7 +107,13 @@ export function AiChatPanel() {
     if (!trimmed || aiLoading) return
     setInput('')
     stickToBottomRef.current = true // 전송하면 다시 바닥을 따라간다
-    aiSendMessage(trimmed)
+    // 신뢰 가능한 모델 + 액션 의도로 보이면 '기존 할일' 액션 해석으로 라우팅(확인 카드).
+    // 그 외에는 일반 채팅 스트리밍. (소형 모델은 오탐이 잦아 자동 감지에서 제외)
+    if (aiConfig && isCapableModel(aiConfig.model) && looksLikeTaskAction(trimmed)) {
+      aiRequestTaskAction(trimmed)
+    } else {
+      aiSendMessage(trimmed)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -306,6 +318,36 @@ export function AiChatPanel() {
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 기존 할일 액션 확인 카드 (파괴적 액션 안전장치) — 확인해야만 실행 */}
+      {aiPendingAction && (
+        <div className={`mx-3 mb-2 rounded-lg border p-3 ${isDark ? 'border-amber-500/30 bg-amber-500/10' : 'border-amber-300 bg-amber-50'}`}>
+          <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+            다음 할일을 <b>{actionOpLabel(aiPendingAction.op, aiPendingAction.dueDate)}</b>할까요?
+          </p>
+          <p className={`text-sm font-medium mt-0.5 truncate ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
+            “{aiPendingAction.taskTitle}”
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={aiConfirmAction}
+              className={`flex items-center gap-1 text-xs px-3 py-1 rounded-md text-white ${
+                aiPendingAction.op === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary-500 hover:bg-primary-600'
+              }`}
+            >
+              <Check size={12} /> 확인
+            </button>
+            <button
+              type="button"
+              onClick={aiCancelAction}
+              className={`text-xs px-3 py-1 rounded-md ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className={`px-3 py-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>

@@ -139,6 +139,7 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('ai:get-config', () => ai.getAiConfig())
   ipcMain.handle('ai:set-config', (_, updates) => ai.setAiConfig(updates))
   ipcMain.handle('ai:create-task', (_, input, tasks) => ai.createTaskFromNL(input, tasks))
+  ipcMain.handle('ai:interpret-action', (_, message, tasks) => ai.interpretTaskAction(message, tasks))
   ipcMain.handle('ai:chat', (_, message, tasks) => ai.chat(message, tasks))
   ipcMain.handle('ai:stream-chat', (event, message, tasks, history) => {
     const sender = event.sender
