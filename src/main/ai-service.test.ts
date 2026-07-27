@@ -442,6 +442,101 @@ describe('ai-service', () => {
     })
   })
 
+  describe('parsePullProgress', () => {
+    it('completed/total로 퍼센트 계산', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('{"status":"downloading","completed":50,"total":200}')).toEqual({
+        status: 'downloading',
+        completed: 50,
+        total: 200,
+        percent: 25
+      })
+    })
+    it('total 없으면 percent=null (불확정 단계)', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('{"status":"pulling manifest"}')).toEqual({
+        status: 'pulling manifest',
+        completed: undefined,
+        total: undefined,
+        percent: null
+      })
+    })
+    it('error 라인은 error 필드로', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('{"error":"model not found"}')).toEqual({
+        status: 'error',
+        percent: null,
+        error: 'model not found'
+      })
+    })
+    it('빈 줄/비JSON은 null', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('   ')).toBeNull()
+      expect(ai.parsePullProgress('not json')).toBeNull()
+    })
+    it('percent는 0–100로 클램프', async () => {
+      const ai = await loadAiService()
+      expect(ai.parsePullProgress('{"status":"x","completed":300,"total":200}')?.percent).toBe(100)
+    })
+  })
+
+  // 한 번에 전체 NDJSON을 흘려보내는 스트리밍 응답 body 목
+  function oneShotBody(text: string) {
+    let sent = false
+    return {
+      getReader() {
+        return {
+          read: async () => {
+            if (sent) return { done: true, value: undefined }
+            sent = true
+            return { done: false, value: new TextEncoder().encode(text) }
+          }
+        }
+      }
+    }
+  }
+
+  describe('pullModel', () => {
+    it('Ollama가 아니면 즉시 에러', async () => {
+      const ai = await loadAiService()
+      ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com', apiKey: 'sk-x' })
+      const onError = vi.fn()
+      await ai.pullModel('exaone3.5', vi.fn(), vi.fn(), onError)
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('Ollama'))
+    })
+
+    it('빈 모델명은 에러', async () => {
+      const ai = await loadAiService()
+      const onError = vi.fn()
+      await ai.pullModel('  ', vi.fn(), vi.fn(), onError)
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('모델 이름'))
+    })
+
+    it('스트리밍 진행 라인을 파싱해 onProgress→onDone 순으로 콜백', async () => {
+      const ai = await loadAiService()
+      const ndjson =
+        '{"status":"pulling manifest"}\n{"status":"downloading","completed":100,"total":100}\n{"status":"success"}\n'
+      mockFetch.mockResolvedValueOnce({ ok: true, body: oneShotBody(ndjson) })
+      const onProgress = vi.fn()
+      const onDone = vi.fn()
+      const onError = vi.fn()
+      await ai.pullModel('exaone3.5', onProgress, onDone, onError)
+      expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ status: 'downloading', percent: 100 }))
+      expect(onDone).toHaveBeenCalledTimes(1)
+      expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('스트림 내 error 라인이면 onError', async () => {
+      const ai = await loadAiService()
+      mockFetch.mockResolvedValueOnce({ ok: true, body: oneShotBody('{"error":"file does not exist"}\n') })
+      const onDone = vi.fn()
+      const onError = vi.fn()
+      await ai.pullModel('nope', vi.fn(), onDone, onError)
+      expect(onError).toHaveBeenCalledWith('file does not exist')
+      expect(onDone).not.toHaveBeenCalled()
+    })
+  })
+
   describe('taskTagVocabulary', () => {
     it('중복 없이 태그 어휘를 모은다', async () => {
       const ai = await loadAiService()

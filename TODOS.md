@@ -63,7 +63,7 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - 프라이버시: 온디바이스 배지·외부 전환 경고·로컬 전용 잠금(main 강제) (`77916e6`,`d93733d`)
 
 ### 🔜 남은 로컬-AI / 프라이버시 로드맵 (제안서 기준)
-- **[중기] 원클릭 Ollama 온보딩** — 미설치 감지 → 설치 안내/딥링크 + 추천 모델 자동 `ollama pull` (한국어 8B급). 연결 실패 화면에서 유도.
+- ~~**[중기] 원클릭 Ollama 온보딩**~~ ✅ 2026-07-27 — 서버가 떠 있으면 HTTP `POST /api/pull`(NDJSON 진행률)로 CLI/PATH 없이 모델 설치. main `pullModel` + `parsePullProgress`(유휴 타임아웃, 9 tests), IPC `ai:pull-model`(+progress/done/error), preload/store 배관, 스토어 `aiPullModel` 액션(진행 상태·완료 시 목록 새로고침+실제 태그로 모델 자동 선택). Settings에 추천 모델 미설치 시 "한국어 모델 설치(exaone3.5)" 버튼 + 진행률 바. 서버 미연결이면 수동 안내 폴백. (라이브 QA 대기)
 - ~~**[중기] 전송 데이터 미리보기**~~ ✅ 2026-07-27 — AI 패널 헤더 아래 접이식 "전송 데이터 미리보기 · N건" 디스클로저 추가. 스토어 전송 경로와 **동일한** `buildAiTaskContext(tasks)`를 useMemo로 계산해 노출(제목/마감/우선순위/태그) → 미리보기가 실제 전송값과 항상 일치. 렌더러 전용, 저위험. (라이브 QA 미검증 — Mac 잠금)
 - ~~**[중기] 네트워크 인디케이터**~~ ✅ 2026-07-27 — `aiDestination(config)` 헬퍼(shared/ai-config.ts, 4 tests) 신설. AI 패널 배지에 실제 호출 목적지(host)를 노출: 외부 전송 시 "외부 · api.openai.com"처럼 host 인라인 표시, 로컬은 "온디바이스" + 툴팁에 "→ localhost". `hostnameOf` 추출로 URL 파싱을 `isLocalAiConfig`와 공유.
 - **[중기] 한국어 모델 큐레이션** (배지 ✅ 2026-07-27 / 원클릭 설치 남음) — `utils/aiModels.ts`(isKoreanRecommendedModel/hasKoreanRecommendedModel, 4 tests) 신설. 설치 모델 드롭다운에서 EXAONE/EEVE 계열에 "· 한국어 추천" 라벨 표시. 추천 모델 미설치 시 모델 안내 문구에 `ollama pull exaone3.5` 안내 추가. **남은 것:** 앱 내 원클릭 pull(메인 프로세스 shell exec + 진행률 UI + QA 필요) → [원클릭 Ollama 온보딩]과 함께.
@@ -79,7 +79,7 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 ### [P3] 한국어 응답 품질 — 모델 큐레이션 (대부분 해소)
 - ~~Settings에 "8B+ 권장" 안내 + 설치 모델 드롭다운~~ ✅ 2026-07-27 (`8dda9b4`).
 - ~~감지 목록에서 한국어 특화 모델 추천 배지 + 추천 pull 안내~~ ✅ 2026-07-27 (utils/aiModels.ts).
-- **남은 것:** 앱 내 원클릭 설치(ollama pull) — 위 로드맵 참조.
+- ~~**앱 내 원클릭 설치(ollama pull)**~~ ✅ 2026-07-27 — Settings "한국어 모델 설치" 버튼 + 진행률(위 원클릭 온보딩 참조).
 - **배경:** llama3.2(3B)는 한국어에 영어/CJK/타이 혼입(실측). gpt-oss:20b는 깨끗.
 - **Added:** 2026-07-26 AI 개선
 

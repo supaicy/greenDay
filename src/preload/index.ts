@@ -94,6 +94,27 @@ const api = {
     ipcRenderer.invoke('ai:stream-chat', message, tasks, history),
   aiGetHistory: () => ipcRenderer.invoke('ai:get-history'),
   aiSaveHistory: (messages: unknown[]) => ipcRenderer.invoke('ai:save-history', messages),
+  aiPullModel: (model: string) => ipcRenderer.invoke('ai:pull-model', model),
+  onAiPullProgress: (
+    callback: (p: { status: string; completed?: number; total?: number; percent: number | null }) => void
+  ) => {
+    const handler = (
+      _: Electron.IpcRendererEvent,
+      p: { status: string; completed?: number; total?: number; percent: number | null }
+    ): void => callback(p)
+    ipcRenderer.on('ai:pull-progress', handler)
+    return () => ipcRenderer.removeListener('ai:pull-progress', handler)
+  },
+  onAiPullDone: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('ai:pull-done', handler)
+    return () => ipcRenderer.removeListener('ai:pull-done', handler)
+  },
+  onAiPullError: (callback: (error: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, error: string): void => callback(error)
+    ipcRenderer.on('ai:pull-error', handler)
+    return () => ipcRenderer.removeListener('ai:pull-error', handler)
+  },
   onAiStreamToken: (callback: (token: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, token: string): void => callback(token)
     ipcRenderer.on('ai:stream-token', handler)

@@ -10,6 +10,7 @@ import {
   Wifi,
   WifiOff,
   Download,
+  Loader2,
   RefreshCw
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
@@ -39,6 +40,8 @@ export function Settings() {
     aiConfig,
     aiConnected,
     aiModels,
+    aiPull,
+    aiPullModel,
     aiLoadConfig,
     aiCheckConnection,
     aiSaveConfig
@@ -342,16 +345,52 @@ export function Settings() {
                   />
                 )}
                 {aiProvider === 'ollama' && (
-                  <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
-                    한국어 답변 품질은 8B 이상 모델을 권장합니다.
-                    {!hasKoreanRecommendedModel(aiModels) && (
-                      <>
-                        {' '}
-                        한국어 특화 모델(EXAONE, EEVE)이 더 정확합니다 —{' '}
-                        <code className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}>ollama pull exaone3.5</code>
-                      </>
+                  <div className={`mt-1 space-y-1.5 text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
+                    <p>한국어 답변 품질은 8B 이상 모델을 권장합니다.</p>
+                    {!hasKoreanRecommendedModel(aiModels) &&
+                      (aiPull?.active ? (
+                        // 설치 진행 중: 상태 + 진행률 바
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <Loader2 size={12} className="animate-spin" />
+                            <span>
+                              설치 중: <b>{aiPull.model}</b> · {aiPull.status}
+                              {aiPull.percent != null ? ` ${aiPull.percent}%` : ''}
+                            </span>
+                          </div>
+                          <div className={`h-1.5 rounded-full ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                            <div
+                              className="h-1.5 rounded-full bg-primary-500 transition-all"
+                              style={{ width: `${aiPull.percent ?? 8}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : aiConnected === true ? (
+                        // 서버 연결됨: 원클릭 설치 버튼 (+ 직전 실패 메시지)
+                        <div className="space-y-1">
+                          <p>한국어 특화 모델(EXAONE)이 더 정확합니다.</p>
+                          <button
+                            type="button"
+                            onClick={() => aiPullModel('exaone3.5')}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-500 text-white hover:bg-primary-600"
+                          >
+                            <Download size={12} /> 한국어 모델 설치 (exaone3.5)
+                          </button>
+                          {aiPull?.error && <p className="text-red-400">설치 실패: {aiPull.error}</p>}
+                        </div>
+                      ) : (
+                        // 서버 미연결: 수동 안내
+                        <p>
+                          한국어 특화 모델(EXAONE, EEVE)이 더 정확합니다. Ollama 실행 후 설치 —{' '}
+                          <code className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}>
+                            ollama pull exaone3.5
+                          </code>
+                        </p>
+                      ))}
+                    {aiPull && !aiPull.active && !aiPull.error && hasKoreanRecommendedModel(aiModels) && (
+                      <p className="text-green-500">✓ {aiPull.model} 설치 완료 — 모델로 선택됨</p>
                     )}
-                  </p>
+                  </div>
                 )}
               </div>
               {aiProvider !== 'ollama' && (

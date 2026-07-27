@@ -156,9 +156,12 @@ interface Store {
   aiModels: string[]
   aiConfig: AiConfig | null
   showAiChat: boolean
+  // 원클릭 모델 설치(pull) 진행 상태. null이면 진행 중 아님.
+  aiPull: { model: string; status: string; percent: number | null; error: string | null; active: boolean } | null
   _aiStreamCleanup: (() => void) | null
   setShowAiChat: (show: boolean) => void
   aiCheckConnection: () => Promise<void>
+  aiPullModel: (model: string) => void
   aiWarmup: () => Promise<void>
   aiLoadConfig: () => Promise<void>
   aiLoadHistory: () => Promise<void>
@@ -758,6 +761,7 @@ export const useStore = create<Store>((set, get) => ({
   aiModels: [],
   aiConfig: null,
   showAiChat: false,
+  aiPull: null,
   _aiStreamCleanup: null as (() => void) | null,
   setShowAiChat: (show) => {
     if (!show) {
@@ -775,6 +779,41 @@ export const useStore = create<Store>((set, get) => ({
     } catch {
       set({ aiConnected: false, aiModels: [] })
     }
+  },
+  aiPullModel: (model) => {
+    // 이미 설치 중이면 중복 실행 방지
+    if (get().aiPull?.active) return
+    set({ aiPull: { model, status: '준비 중…', percent: null, error: null, active: true } })
+
+    // 리스너 정리는 done/error 어느 쪽이든 한 번만. (aiSendMessage와 동일 패턴)
+    const cleanup = (): void => {
+      offProgress?.()
+      offDone?.()
+      offError?.()
+    }
+    const offProgress = window.api.onAiPullProgress?.((p) => {
+      set({
+        aiPull: { model, status: p.status || '내려받는 중…', percent: p.percent, error: null, active: true }
+      })
+    })
+    const offDone = window.api.onAiPullDone?.(() => {
+      set({ aiPull: { model, status: '설치 완료', percent: 100, error: null, active: false } })
+      cleanup()
+      // 새 모델을 목록에 반영하고 방금 설치한 모델을 활성 모델로 지정.
+      // 'exaone3.5'로 pull하면 Ollama는 'exaone3.5:latest'로 저장하므로, 새로고침된
+      // 목록에서 실제 태그를 찾아 저장한다(드롭다운에서 '(미설치)'로 보이지 않게).
+      void get()
+        .aiCheckConnection()
+        .then(() => {
+          const installed = get().aiModels.find((m) => m === model || m.startsWith(`${model}:`)) ?? model
+          return get().aiSaveConfig({ model: installed })
+        })
+    })
+    const offError = window.api.onAiPullError?.((error) => {
+      set({ aiPull: { model, status: '설치 실패', percent: null, error, active: false } })
+      cleanup()
+    })
+    void window.api.aiPullModel?.(model)
   },
   aiWarmup: async () => {
     // 로컬 모델을 미리 로드해 첫 응답의 콜드 지연 제거 (Ollama가 아니면 main에서 no-op)

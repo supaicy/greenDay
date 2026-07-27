@@ -159,6 +159,21 @@ export function setupIpcHandlers(): void {
   })
   ipcMain.handle('ai:get-history', () => db.getChatHistory())
   ipcMain.handle('ai:save-history', (_, messages) => db.saveChatHistory(messages))
+  ipcMain.handle('ai:pull-model', (event, model) => {
+    const sender = event.sender
+    ai.pullModel(
+      String(model ?? ''),
+      (progress) => {
+        if (!sender.isDestroyed()) sender.send('ai:pull-progress', progress)
+      },
+      () => {
+        if (!sender.isDestroyed()) sender.send('ai:pull-done')
+      },
+      (error) => {
+        if (!sender.isDestroyed()) sender.send('ai:pull-error', error)
+      }
+    )
+  })
 
   // Quick add (global shortcut)
   ipcMain.handle('register-global-shortcut', () => {

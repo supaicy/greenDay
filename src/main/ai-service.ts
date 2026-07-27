@@ -126,6 +126,115 @@ export async function warmupModel(): Promise<void> {
   }
 }
 
+// === 모델 설치(원클릭 Ollama 온보딩) ===
+// Ollama 서버가 떠 있으면 CLI/PATH 없이 HTTP /api/pull 로 모델을 내려받는다.
+// 다운로드는 수 분 걸릴 수 있어 '유휴' 타임아웃(진행 라인마다 리셋)으로 관리한다.
+const PULL_IDLE_TIMEOUT = 60_000
+
+export interface PullProgress {
+  status: string
+  completed?: number
+  total?: number
+  // total을 알 때만 0–100, 아니면 null(불확정 단계: manifest/verify 등)
+  percent: number | null
+  error?: string
+}
+
+// /api/pull NDJSON 한 줄을 진행 상태로 파싱. 빈 줄/비JSON은 null.
+export function parsePullProgress(line: string): PullProgress | null {
+  const trimmed = line.trim()
+  if (!trimmed) return null
+  let obj: Record<string, unknown>
+  try {
+    obj = JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+  if (typeof obj.error === 'string') return { status: 'error', percent: null, error: obj.error }
+  const status = typeof obj.status === 'string' ? obj.status : ''
+  const completed = typeof obj.completed === 'number' ? obj.completed : undefined
+  const total = typeof obj.total === 'number' && obj.total > 0 ? obj.total : undefined
+  const percent =
+    completed != null && total != null ? Math.max(0, Math.min(100, Math.round((completed / total) * 100))) : null
+  return { status, completed, total, percent }
+}
+
+export async function pullModel(
+  model: string,
+  onProgress: (p: PullProgress) => void,
+  onDone: () => void,
+  onError: (error: string) => void
+): Promise<void> {
+  const cfg = getAiConfigInternal()
+  if (cfg.provider !== 'ollama') {
+    onError('모델 설치는 Ollama(로컬)에서만 가능합니다')
+    return
+  }
+  if (!isAllowedUrl(cfg.baseUrl)) {
+    onError('허용되지 않은 서버 주소입니다')
+    return
+  }
+  const name = String(model || '').trim()
+  if (!name) {
+    onError('모델 이름이 비어 있습니다')
+    return
+  }
+
+  const controller = new AbortController()
+  let idleTimer = setTimeout(() => controller.abort(), PULL_IDLE_TIMEOUT)
+  const resetIdle = (): void => {
+    clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => controller.abort(), PULL_IDLE_TIMEOUT)
+  }
+  let sawError = ''
+
+  const emitLine = (line: string): void => {
+    const p = parsePullProgress(line)
+    if (!p) return
+    if (p.error) sawError = p.error
+    onProgress(p)
+  }
+
+  try {
+    const res = await fetch(`${cfg.baseUrl}/api/pull`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, stream: true }),
+      signal: controller.signal
+    })
+    if (!res.ok) {
+      onError(`설치 실패: HTTP ${res.status}`)
+      return
+    }
+    const reader = res.body?.getReader()
+    if (!reader) {
+      onError('응답 본문이 없습니다')
+      return
+    }
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      resetIdle()
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) emitLine(line)
+    }
+    buffer += decoder.decode()
+    if (buffer) emitLine(buffer)
+
+    if (sawError) onError(sawError)
+    else onDone()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '설치 실패'
+    onError(message.includes('abort') ? '설치가 시간 초과로 중단되었습니다' : message)
+  } finally {
+    clearTimeout(idleTimer)
+  }
+}
+
 interface TaskResult {
   action: 'create_task'
   task: {
