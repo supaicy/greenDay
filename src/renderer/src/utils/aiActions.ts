@@ -46,12 +46,14 @@ export function resolveActionTarget(taskTitle: string, tasks: Task[]): Task | nu
   const candidates = tasks.filter((t) => !t.completed && !t.parentId && !t.deletedAt)
   const exact = candidates.find((t) => t.title.trim().toLowerCase() === needle)
   if (exact) return exact
-  return (
-    candidates.find((t) => {
-      const title = t.title.trim().toLowerCase()
-      return title.includes(needle) || needle.includes(title)
-    }) ?? null
-  )
+  // 부분 일치 중 가장 '구체적인'(제목이 긴) 후보를 고른다 — "회의 준비"에 대해 짧고
+  // 일반적인 제목("준비")이 needle.includes(title)로 잘못 잡히는 것을 방지.
+  const partials = candidates.filter((t) => {
+    const title = t.title.trim().toLowerCase()
+    return title.includes(needle) || needle.includes(title)
+  })
+  if (partials.length === 0) return null
+  return partials.reduce((best, t) => (t.title.trim().length > best.title.trim().length ? t : best))
 }
 
 // 확인 카드에 쓸 사람이 읽는 동작 설명.

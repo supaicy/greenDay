@@ -549,17 +549,29 @@ describe('ai-service', () => {
       expect(prompt).not.toContain('완료된것')
     })
 
-    it('reschedule 응답을 정규화(op/taskTitle/dueDate)', async () => {
+    it('reschedule 응답을 정규화(op/taskTitle/dueDate) — 미래 날짜 유지', async () => {
       const ai = await loadAiService()
-      const json = { action: 'task_action', op: 'reschedule', taskTitle: '보고서', dueDate: '2026-07-28' }
+      // 실행 날짜와 무관하도록 먼 미래 날짜 사용(과거 날짜 가드에 걸리지 않게)
+      const json = { action: 'task_action', op: 'reschedule', taskTitle: '보고서', dueDate: '2099-12-31' }
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
       })
-      const res = await ai.interpretTaskAction('보고서 내일로 미뤄', [
+      const res = await ai.interpretTaskAction('보고서 미뤄', [
         { title: '보고서', dueDate: null, priority: 'none', completed: false }
       ])
-      expect(res).toEqual({ action: 'task_action', op: 'reschedule', taskTitle: '보고서', dueDate: '2026-07-28' })
+      expect(res).toEqual({ action: 'task_action', op: 'reschedule', taskTitle: '보고서', dueDate: '2099-12-31' })
+    })
+
+    it('과거 날짜 reschedule은 dueDate=null (오늘 이후만 허용)', async () => {
+      const ai = await loadAiService()
+      const json = { action: 'task_action', op: 'reschedule', taskTitle: 'x', dueDate: '2000-01-01' }
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
+      })
+      const res = await ai.interpretTaskAction('x 미뤄', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
+      expect(res.dueDate).toBeNull()
     })
 
     it('알 수 없는 op은 none, complete는 dueDate를 null로', async () => {

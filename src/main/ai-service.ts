@@ -480,10 +480,13 @@ function sanitizeActionResult(raw: AiResult): ActionResult {
     op,
     taskTitle: typeof r.taskTitle === 'string' ? r.taskTitle.slice(0, 500) : '',
     dueDate:
+      // 리스케줄 날짜는 형식/파싱뿐 아니라 '오늘 이후'여야 한다 — 모델이 과거 날짜로
+      // 잘못 해석하면 무효(null)로 떨궈, 렌더러가 구체적 날짜를 다시 묻게 한다.
       op === 'reschedule' &&
       typeof r.dueDate === 'string' &&
       DATE_RE.test(r.dueDate) &&
-      !Number.isNaN(Date.parse(r.dueDate))
+      !Number.isNaN(Date.parse(r.dueDate)) &&
+      r.dueDate >= getToday()
         ? r.dueDate
         : null
   }

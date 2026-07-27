@@ -938,6 +938,9 @@ export const useStore = create<Store>((set, get) => ({
     if (cfg && isCapableModel(cfg.model) && looksLikeTaskAction(message)) {
       void get().aiRequestTaskAction(message)
     } else {
+      // 사용자가 확인 카드를 무시하고 다른 메시지를 보내면, 맥락을 벗어난 파괴적
+      // 액션 카드가 남아 나중에 잘못 확인되지 않게 조용히 닫는다.
+      if (get().aiPendingAction) set({ aiPendingAction: null })
       void get().aiSendMessage(message)
     }
   },
@@ -976,8 +979,10 @@ export const useStore = create<Store>((set, get) => ({
         aiPendingAction: { op: res.op, taskId: target.id, taskTitle: target.title, dueDate: res.dueDate }
       })
     } catch {
+      // 연결 실패뿐 아니라 모델이 예상과 다른 형식을 반환한 경우(sanitize throw)도 여기로
+      // 온다 — 특정해 "연결 불가"라 단정하지 않고 일반 메시지로 안내한다.
       set({ aiLoading: false })
-      pushAssistant('AI 서비스에 연결할 수 없습니다.')
+      pushAssistant('요청을 처리하지 못했어요. 다시 시도해 주세요.')
     }
   },
   aiConfirmAction: async () => {

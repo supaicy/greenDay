@@ -38,6 +38,11 @@ describe('resolveActionTarget', () => {
     expect(resolveActionTarget('하위작업', tasks)).toBeNull()
     expect(resolveActionTarget('  ', tasks)).toBeNull()
   })
+  it('부분 일치가 여럿이면 가장 구체적인(긴) 제목 우선', () => {
+    const t = [task({ id: 'short', title: '준비' }), task({ id: 'long', title: '회의 준비' })]
+    // needle "회의 준비 좀"은 두 태스크 모두 부분 일치 — 짧은 "준비"가 아니라 "회의 준비"를 선택
+    expect(resolveActionTarget('회의 준비 좀', t)?.id).toBe('long')
+  })
 })
 
 describe('actionOpLabel', () => {
