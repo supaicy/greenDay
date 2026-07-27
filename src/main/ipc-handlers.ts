@@ -24,6 +24,9 @@ async function safeOpenExternal(url: string): Promise<void> {
 }
 
 export function setupIpcHandlers(): void {
+  // App meta — 렌더러가 Mac App Store(샌드박스) 빌드 여부를 알아 업데이트 UI 등을 분기.
+  ipcMain.handle('app:is-mas', () => Boolean(process.mas))
+
   // Folders
   ipcMain.handle('get-folders', () => db.getFolders())
   ipcMain.handle('create-folder', (_, id, name) => db.createFolder(id, name))

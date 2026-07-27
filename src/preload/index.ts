@@ -57,6 +57,9 @@ const api = {
   // Notifications
   showNotification: (title: string, body: string) => ipcRenderer.invoke('show-notification', title, body),
 
+  // App meta
+  isMas: () => ipcRenderer.invoke('app:is-mas') as Promise<boolean>,
+
   // 외부 링크 열기
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

@@ -125,6 +125,12 @@ export function Settings() {
   const [aiProvider, setAiProvider] = useState<'ollama' | 'openai' | 'custom'>('ollama')
   const [aiMaxHistory, setAiMaxHistory] = useState(200)
   const [aiLocalOnly, setAiLocalOnly] = useState(false)
+  // Mac App Store(샌드박스) 빌드면 앱 내 업데이트가 아니라 App Store가 업데이트를 담당한다.
+  const [isMas, setIsMas] = useState(false)
+
+  useEffect(() => {
+    window.api.isMas?.().then(setIsMas)
+  }, [])
 
   useEffect(() => {
     if (showSettings && !aiConfig) aiLoadConfig()
@@ -517,23 +523,30 @@ export function Settings() {
                   Electron + React
                 </span>
               </div>
-              {updateChecked && !updateAvailable && (
+              {isMas ? (
+                // App Store 빌드: 앱 내 업데이트 확인/다운로드는 비활성(App Store가 담당)
+                <div className="flex items-center gap-1.5 mt-1">
+                  <CheckCircle2 size={13} className="text-green-500" />
+                  <span className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Mac App Store를 통해 자동으로 업데이트됩니다
+                  </span>
+                </div>
+              ) : updateChecked && !updateAvailable ? (
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className="text-green-500" />
                   <span className={`text-xs ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
                     최신 버전입니다
                   </span>
                 </div>
-              )}
-              {!updateChecked && (
+              ) : !updateChecked ? (
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className={`text-xs ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                     업데이트 확인 중...
                   </span>
                 </div>
-              )}
+              ) : null}
             </div>
-            {updateAvailable && (
+            {!isMas && updateAvailable && (
               <button
                 type="button"
                 onClick={() => window.api.openExternal(updateAvailable.downloadUrl)}
