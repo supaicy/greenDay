@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru · 밤샘 자율 작업 리포트 (2026-07-27)</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-700:#2563eb; --primary-50:#eff6ff;
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 24px 80px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px}
+  .kicker{color:var(--primary-700);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:28px;margin:6px 0 8px;line-height:1.25}
+  .sub{color:var(--muted);font-size:15px}
+  h2{font-size:20px;margin:38px 0 12px;padding-top:8px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--primary);color:#fff;font-size:14px;font-weight:700;flex:none}
+  p{margin:8px 0}
+  .lead{font-size:16px;background:var(--primary-50);border:1px solid #dbeafe;border-radius:12px;padding:16px 18px;color:#1e3a8a}
+  .statline{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .status{font-size:12.5px;font-weight:700;padding:4px 12px;border-radius:999px}
+  .s-ok{background:#dcfce7;color:#166534}
+  .s-info{background:#e0e7ff;color:#3730a3}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;color:#334155;font-weight:700;font-size:12px;letter-spacing:.03em}
+  .sha{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:#f1f5f9;border-radius:5px;padding:1px 6px;color:#0f172a;white-space:nowrap}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f1f5f9;border-radius:5px;padding:1px 6px;color:#0f172a}
+  .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;display:inline-block}
+  .t-ref{background:#e0e7ff;color:#3730a3}
+  .t-fix{background:#dcfce7;color:#166534}
+  .t-feat{background:#dbeafe;color:#1e40af}
+  .t-doc{background:#f1f5f9;color:#475569}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-top:12px}
+  .card h3{font-size:15px;margin:0 0 4px}
+  .card p{font-size:13.5px;color:#374151;margin:4px 0 0}
+  ul.checks{list-style:none;padding:0;margin:10px 0}
+  ul.checks li{position:relative;padding:5px 0 5px 26px;font-size:14px}
+  ul.checks li::before{content:"✓";position:absolute;left:0;top:5px;color:var(--green);font-weight:800}
+  ul.pause{list-style:none;padding:0;margin:10px 0}
+  ul.pause li{position:relative;padding:6px 0 6px 26px;font-size:14px;border-bottom:1px dashed var(--line)}
+  ul.pause li:last-child{border-bottom:0}
+  ul.pause li::before{content:"⏸";position:absolute;left:0;top:6px}
+  ul.pause b{color:#0f172a}
+  .why{color:var(--muted);font-size:13px}
+  .foot{margin-top:40px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="kicker">Night Autonomous Session · Report</div>
+    <h1>밤샘 자율 작업 리포트</h1>
+    <div class="sub">2026-07-27 · branch <span class="sha">supaicy/coordinate</span> · 신규 커밋 9개 (<span class="sha">f6461bf</span> … <span class="sha">6db8a46</span>)</div>
+    <div class="statline">
+      <span class="status s-ok">typecheck ✅</span>
+      <span class="status s-ok">lint ✅ 0 errors</span>
+      <span class="status s-ok">tests ✅ 193 passed (173→193)</span>
+      <span class="status s-ok">working tree clean</span>
+    </div>
+  </header>
+
+  <p class="lead">
+    남은 작업 리스트를 자율적으로 진행했습니다. 각 단계마다 typecheck/lint/test로 검증하고
+    diff를 self-review(simplify 4각도 + code-review 버그체크)한 뒤 커밋했으며, TODOS.md도 실시간 반영했습니다.
+    안전하게 검증 가능한 리팩터·로컬 AI/프라이버시 로드맵에 집중하고, 미검증 위험이 큰 항목은 근거와 함께 보류했습니다.
+  </p>
+
+  <h2><span class="n">✓</span> 완료 (커밋 9개)</h2>
+  <table>
+    <thead><tr><th>커밋</th><th>분류</th><th>내용</th><th>검증</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="sha">f6461bf</span></td><td><span class="tag t-ref">refactor</span></td>
+        <td><b>DnD MIME 상수 일원화</b> — 6개 파일 인라인 <span class="code">'application/haru-*'</span> → <span class="code">utils/dnd.ts</span>의 <span class="code">DND_MIME</span>. CalendarView 로컬 별칭도 제거해 직접 참조로 통일.</td>
+        <td>typecheck·lint·173 tests</td>
+      </tr>
+      <tr>
+        <td><span class="sha">7c945c6</span></td><td><span class="tag t-fix">fix</span></td>
+        <td><b>상세패널 ↔ AiChat 폭 경합</b> — <span class="code">clampDetailWidth(px,w,aiChatOpen?)</span>로 챗 폭(320) 예약. 챗 열면 상세 패널 자동 축소, 가운데 목록이 0으로 안 눌림.</td>
+        <td>+테스트 2 (175)</td>
+      </tr>
+      <tr>
+        <td><span class="sha">1fe7f85</span></td><td><span class="tag t-feat">feat</span></td>
+        <td><b>네트워크 인디케이터(이그레스 가시성)</b> — <span class="code">aiDestination(config)</span>로 실제 호출 목적지 host를 배지에 노출. 외부 전송 시 "외부 · api.openai.com", 로컬은 "온디바이스"+툴팁.</td>
+        <td>+테스트 4 (179)</td>
+      </tr>
+      <tr>
+        <td><span class="sha">96704b3</span></td><td><span class="tag t-feat">feat</span></td>
+        <td><b>전송 데이터 미리보기(투명성)</b> — 모델로 나가는 태스크 컨텍스트를 접이식 디스클로저로 노출. 전송 경로와 <b>동일한</b> <span class="code">buildAiTaskContext</span> 재사용 → 미리보기가 실제 전송값과 항상 일치.</td>
+        <td>typecheck·lint·test</td>
+      </tr>
+      <tr>
+        <td><span class="sha">6f3cc78</span></td><td><span class="tag t-feat">feat</span></td>
+        <td><b>태그 어휘 재사용</b> — <span class="code">createTaskFromNL</span>이 버리던 existingTasks 활용. <span class="code">taskTagVocabulary</span>(중복 제거, 최대 30)를 "기존 태그 재사용" 힌트로 프롬프트 주입. 출력 스키마 불변.</td>
+        <td>+테스트 7 (185)</td>
+      </tr>
+      <tr>
+        <td><span class="sha">213c8d8</span></td><td><span class="tag t-fix">fix</span></td>
+        <td><b>배치 선택 하위작업 제외 일원화</b> — <span class="code">getFilteredTaskIds</span>를 순수 유틸로 추출, 전 브랜치에 <span class="code">!parentId</span> 프리필터. '전체 선택'이 뷰와 정확히 일치.</td>
+        <td>+테스트 4 (189)</td>
+      </tr>
+      <tr>
+        <td><span class="sha">e5e03a3</span></td><td><span class="tag t-feat">feat</span></td>
+        <td><b>한국어 모델 추천 배지</b> — <span class="code">utils/aiModels.ts</span>. 드롭다운의 EXAONE/EEVE 계열에 "· 한국어 추천" 라벨, 미설치 시 <span class="code">ollama pull exaone3.5</span> 힌트.</td>
+        <td>+테스트 4 (193)</td>
+      </tr>
+      <tr>
+        <td><span class="sha">8f30bf4</span></td><td><span class="tag t-doc">docs</span></td>
+        <td><b>노트 번들 감량 TODO 무효화</b> — 빌드 실측 결과 TaskDetail 청크에 lang-* 중 <span class="code">lang-markdown</span>만 존재(나머지 13종 이미 트리셰이크). 전제 오류로 판명.</td>
+        <td>build 측정</td>
+      </tr>
+      <tr>
+        <td><span class="sha">6db8a46</span></td><td><span class="tag t-doc">docs</span></td>
+        <td><b>하단 패널 P2 2건 정리</b> — 우측 패널 전환으로 (1) 피커 클리핑 조건 소멸, (2) 2열→세로 스택 무효. 현재 구조 재검토 근거 기록.</td>
+        <td>코드 재검토</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card">
+    <h3>로드맵 진척 (로컬 AI · 프라이버시)</h3>
+    <p>중기 4개 중 <b>네트워크 인디케이터 · 전송 데이터 미리보기 · 한국어 모델 큐레이션(배지)</b> 완료.
+    남은 중기 항목은 원클릭 Ollama 온보딩(=원클릭 설치)뿐.</p>
+  </div>
+
+  <h2><span class="n">⏸</span> 의도적으로 보류 (근거 포함)</h2>
+  <ul class="pause">
+    <li><b>원클릭 Ollama 온보딩 / 한국어 원클릭 설치</b> — 메인 프로세스 <span class="code">ollama pull</span> child_process + 진행률 스트리밍 필요. <span class="why">미검증 상태로 프로세스 스폰 코드를 밤새 배포하는 건 위험(행업·보안). 추천 pull 명령어는 UI에 노출해 둠. 라이브 QA와 함께 진행 권장.</span></li>
+    <li><b>AI '기존 할일' 액션(완료/리스케줄/삭제)</b> — 툴콜링 + 확인 카드 UX + 큰 모델 필요. <span class="why">실데이터 오조작 위험으로 디자인/QA 선행.</span></li>
+    <li><b>내장 런타임 · 로컬 RAG/임베딩 (장기)</b> — <span class="why">한 세션 범위 초과.</span></li>
+    <li><b>PickerRow / DetailHeader 추출 (P3)</b> — <span class="why">순수 가독성 리팩터인데 복잡 컴포넌트라 QA 없이 회귀 위험 &gt; 가치.</span></li>
+    <li><b>div 접근성 (P2)</b> — <span class="why">과거 <span class="sha">06c9945</span>로 이미 biome green. 린트 압박 없음 + 키보드 QA 필요라 보류.</span></li>
+  </ul>
+
+  <h2><span class="n">!</span> 아침에 눈으로 확인해 주세요</h2>
+  <ul class="checks">
+    <li>UI 기능(네트워크 인디케이터 · 전송 데이터 미리보기 · 한국어 추천 배지)은 <b>Mac 잠금으로 라이브 QA 미수행</b>. 로직은 typecheck/lint/test/build로 검증됨.</li>
+    <li>앱을 열어 AI 패널 배지·미리보기·모델 드롭다운 표시를 확인해 주세요.</li>
+    <li>배치 선택 동작 변경: 실제 리스트/스마트/all/completed에서 하위작업이 더 이상 select-all에 포함되지 않음(의도된 통일).</li>
+  </ul>
+
+  <div class="foot">
+    process note — <span class="code">/simplify</span>+<span class="code">/review</span>는 각 단계 diff에 적용. 기계적·충분히 테스트된 diff는 4에이전트 팬아웃 대신 4각도 consolidated self-review로 처리(리소스 절약, 과정 표기)하고 실제 개선을 반영했습니다. · 상세 잔여 작업은 <span class="code">TODOS.md</span> 참조.
+  </div>
+</div>
+</body>
+</html>
