@@ -308,7 +308,9 @@ export function Settings() {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-5 space-y-6">
+        {/* 섹션 사이 32px + 구분선 아래 16px. 이전에는 24/16이라 위아래 여백 차이가
+            8px뿐이어서 구분선이 어느 섹션에 속하는지 눈에 안 잡혔다. */}
+        <div className="overflow-y-auto p-5 space-y-8">
           {/* 테마 */}
           <div>
             <SectionHeading isDark={isDark} icon={<Palette size={16} />} label="테마" />
