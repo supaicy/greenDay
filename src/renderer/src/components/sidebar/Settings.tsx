@@ -1,24 +1,6 @@
 import { useState, useEffect } from 'react'
-import {
-  Moon,
-  Sun,
-  X,
-  Keyboard,
-  ArrowUpCircle,
-  CheckCircle2,
-  Bot,
-  Wifi,
-  WifiOff,
-  Download,
-  Loader2,
-  RefreshCw,
-  Palette,
-  Database,
-  Info,
-  Lock,
-  AlertTriangle
-} from 'lucide-react'
-import { useStore } from '../../store/useStore'
+import { X, ArrowUpCircle, CheckCircle2, Wifi, WifiOff, Download, Loader2, RefreshCw, Lock, AlertTriangle } from 'lucide-react'
+import { useStore, type Theme } from '../../store/useStore'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 
 // 설명은 실제 동작과 1:1로 맞춘다. Cmd+N/Cmd+Shift+A는 토글이고,
@@ -34,6 +16,11 @@ const SHORTCUTS = [
   { keys: 'Delete', desc: '선택한 할 일 삭제' },
   { keys: '1-4', desc: '선택한 할 일 우선순위 (없음~높음)' },
   { keys: 'Esc', desc: '선택 해제 / 닫기' }
+]
+
+const THEMES: { value: Theme; label: string }[] = [
+  { value: 'dark', label: '다크' },
+  { value: 'light', label: '라이트' }
 ]
 
 // 진행률 불확정(manifest/verify 등 percent=null) 단계에서 보여줄 바 폭(%).
@@ -61,28 +48,30 @@ const FIELD_FOCUS_DARK =
   'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-[#2C2C2E]'
 const FIELD_FOCUS_LIGHT =
   'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-white'
+const PEER_FOCUS_DARK =
+  'peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-[#2C2C2E]'
+const PEER_FOCUS_LIGHT =
+  'peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-white'
 const focusRing = (isDark: boolean) => (isDark ? FOCUS_RING_DARK : FOCUS_RING_LIGHT)
+const peerFocusRing = (isDark: boolean) => (isDark ? PEER_FOCUS_DARK : PEER_FOCUS_LIGHT)
 const fieldSurface = (isDark: boolean) =>
   isDark
     ? `bg-gray-700 text-gray-100 ${FIELD_FOCUS_DARK}`
     : `bg-gray-100 text-gray-800 ${FIELD_FOCUS_LIGHT}`
 
-// 섹션 제목. 다섯 개 섹션 중 AI/단축키만 아이콘이 있고 테마/데이터/버전은 없어서
-// 같은 위계인데 다르게 보였다. 아이콘 + 라벨 한 줄로 통일한다.
+// 섹션 제목. 다섯 개가 아이콘 유무로 제각각이었는데, 장식을 더하는 대신 걷어내는 쪽으로
+// 통일했다. children은 연결 상태처럼 '정보'인 것만 받는다.
 function SectionHeading({
   isDark,
-  icon,
   label,
   children
 }: {
   isDark: boolean
-  icon: React.ReactNode
   label: string
   children?: React.ReactNode
 }) {
   return (
     <h3 className={`flex items-center gap-2 text-sm font-medium mb-3 ${headingText(isDark)}`}>
-      <span className="text-primary-500">{icon}</span>
       {label}
       {children}
     </h3>
@@ -244,18 +233,18 @@ export function Settings() {
     aiCheckConnection()
   }
 
-  // 테마 카드. 선택/비선택 스타일을 한 곳에서 정하고 두 카드가 같은 규칙을 쓰게 한다.
-  const themeCard = (active: boolean) =>
-    `flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${focusRing(isDark)} ${
+  // 세그먼티드 컨트롤의 각 칸. 선택된 칸만 떠 보이게 하고 나머지는 트랙에 잠기게 한다.
+  // 라이트 비선택은 gray-500이면 트랙(gray-100) 위에서 4.39:1로 미달이라 gray-600을 쓴다.
+  const segment = (active: boolean) =>
+    `cursor-pointer select-none px-4 py-1 rounded-md text-sm transition-colors ${peerFocusRing(isDark)} ${
       active
-        ? 'border-primary-500 bg-primary-500/10'
+        ? isDark
+          ? 'bg-gray-600 text-white font-medium'
+          : 'bg-white text-gray-900 font-medium shadow-sm'
         : isDark
-          ? 'border-gray-600 hover:border-gray-500'
-          : 'border-gray-300 hover:border-gray-400'
+          ? 'text-gray-400 hover:text-gray-200'
+          : 'text-gray-600 hover:text-gray-900'
     }`
-  // 선택된 라벨이 라이트 모드에서 primary-500이면 3.01:1로 AA 미달이라 primary-700을 쓴다.
-  const themeCardLabel = (active: boolean) =>
-    `text-xs font-medium ${active ? (isDark ? 'text-primary-300' : 'text-primary-700') : labelText(isDark)}`
 
   // 로컬 전용 잠금을 켜면 외부 제공자를 쓸 수 없으므로, 외부였다면 Ollama 로컬로 되돌린다.
   const toggleLocalOnly = () => {
@@ -313,36 +302,28 @@ export function Settings() {
         <div className="overflow-y-auto p-5 space-y-8">
           {/* 테마 */}
           <div>
-            <SectionHeading isDark={isDark} icon={<Palette size={16} />} label="테마" />
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setTheme('dark')}
-                aria-pressed={isDark}
-                className={themeCard(isDark)}
-              >
-                <div className="w-16 h-10 rounded-lg bg-[#1C1C1E] border border-gray-600 flex items-center justify-center">
-                  <Moon size={16} className="text-gray-400" />
-                </div>
-                <span className={themeCardLabel(isDark)}>다크 모드</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTheme('light')}
-                aria-pressed={!isDark}
-                className={themeCard(!isDark)}
-              >
-                <div className="w-16 h-10 rounded-lg bg-white border border-gray-300 flex items-center justify-center">
-                  <Sun size={16} className="text-yellow-500" />
-                </div>
-                <span className={themeCardLabel(!isDark)}>라이트 모드</span>
-              </button>
-            </div>
+            <SectionHeading isDark={isDark} label="테마" />
+            <fieldset className={`inline-flex rounded-lg p-0.5 ${isDark ? 'bg-black/20' : 'bg-gray-100'}`}>
+              <legend className="sr-only">테마</legend>
+              {THEMES.map(({ value, label }) => (
+                <label key={value} className={segment(theme === value)}>
+                  <input
+                    type="radio"
+                    name="theme"
+                    value={value}
+                    checked={theme === value}
+                    onChange={() => setTheme(value)}
+                    className="sr-only peer"
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
           </div>
 
           {/* 데이터 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} icon={<Database size={16} />} label="데이터" />
+            <SectionHeading isDark={isDark} label="데이터" />
             <button
               type="button"
               onClick={() => {
@@ -365,7 +346,7 @@ export function Settings() {
 
           {/* AI 설정 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} icon={<Bot size={16} />} label="AI 어시스턴트">
+            <SectionHeading isDark={isDark} label="AI 어시스턴트">
               {aiConnected === true && <Wifi size={14} className={successText(isDark)} />}
               {aiConnected === false && <WifiOff size={14} className={errorText(isDark)} />}
             </SectionHeading>
@@ -430,11 +411,13 @@ export function Settings() {
                   className={`mt-0.5 accent-primary-600 ${focusRing(isDark)}`}
                 />
                 <span>
+                  {/* 라벨의 '(외부 AI 차단)'과 설명이 같은 말을 두 번 하고 있었다. 라벨은 짧게,
+                      설명이 한 번만 말하게 한다. */}
                   <span className={`flex items-center gap-1.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                    <Lock size={13} /> 로컬 전용 (외부 AI 차단)
+                    <Lock size={13} /> 로컬 전용
                   </span>
                   <span className={`block text-xs mt-0.5 ${hintText(isDark)}`}>
-                    켜면 외부 제공자를 선택할 수 없어, 데이터가 절대 기기를 벗어나지 않습니다.
+                    외부 AI 제공자를 차단해 데이터가 기기를 벗어나지 않습니다.
                   </span>
                 </span>
               </label>
@@ -560,7 +543,7 @@ export function Settings() {
 
           {/* 키보드 단축키 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} icon={<Keyboard size={16} />} label="키보드 단축키" />
+            <SectionHeading isDark={isDark} label="키보드 단축키" />
             <div className="space-y-1.5">
               {SHORTCUTS.map((s) => (
                 <div key={s.keys} className="flex items-center justify-between">
@@ -579,7 +562,7 @@ export function Settings() {
 
           {/* 버전 및 업데이트 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} icon={<Info size={16} />} label="버전 정보" />
+            <SectionHeading isDark={isDark} label="버전 정보" />
             <div className={`rounded-lg px-4 py-3 mb-3 ${isDark ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
               <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                 haru v{__APP_VERSION__}
