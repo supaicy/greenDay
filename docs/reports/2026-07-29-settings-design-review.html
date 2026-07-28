@@ -107,6 +107,7 @@
   <p class="lede">
     실행 중인 haru v2.0.0의 설정 모달을 라이브 캡처하고, 렌더링된 색상의 대비를 실측해
     25건을 확인했습니다. 이 중 20건은 수정해 커밋했고, 제품 판단이 필요한 5건은 제안으로 남겼습니다.
+    이후 피드백을 받아 <a href="#round2">테마 선택 UI를 다시 설계</a>했습니다.
   </p>
 </header>
 
@@ -142,20 +143,26 @@
 <div class="shots">
   <figure>
     <img src="assets/2026-07-29-settings/before-dark.png" alt="수정 전 설정 모달, 다크 모드" />
-    <figcaption><strong>Before</strong> — 섹션 제목에 아이콘이 있는 것과 없는 것이 섞임, 힌트 텍스트 2.88:1, 🔒 이모지, 헤더가 본문과 함께 스크롤.</figcaption>
+    <figcaption><strong>Before</strong> — 힌트 텍스트 2.88:1, 🔒 이모지, 헤더가 본문과 함께 스크롤, 테마 선택에 96px.</figcaption>
   </figure>
   <figure>
-    <img src="assets/2026-07-29-settings/after-dark.png" alt="수정 후 설정 모달, 다크 모드" />
-    <figcaption><strong>After</strong> — 섹션 제목 통일(Palette·Database·Bot), 힌트 5.49:1, Lock 아이콘, 헤더 고정.</figcaption>
+    <img src="assets/2026-07-29-settings/after-dark.png" alt="1차 수정 후 설정 모달, 다크 모드" />
+    <figcaption><strong>After (1차)</strong> — 힌트 5.49:1, Lock 아이콘, 헤더 고정. 여기 보이는 섹션 제목 아이콘과 테마 카드는 <a href="#round2">2차에서 다시 걷어냈습니다</a>.</figcaption>
   </figure>
   <figure>
     <img src="assets/2026-07-29-settings/after-focus-ring.png" alt="AI 제공자 셀렉트에 파란 포커스 링이 표시된 상태" />
     <figcaption><strong>포커스 링</strong> — AI 제공자 셀렉트에 링이 표시됨. 수정 전에는 어떤 컨트롤에도 포커스 표시가 없었다.</figcaption>
   </figure>
   <figure>
-    <img src="assets/2026-07-29-settings/after-light.png" alt="수정 후 설정 모달, 라이트 모드" />
-    <figcaption><strong>라이트 모드</strong> — 힌트 2.54:1 → 4.83:1. 선택된 테마 카드 라벨 3.01:1 → 4.66:1.</figcaption>
+    <img src="assets/2026-07-29-settings/after-light.png" alt="1차 수정 후 설정 모달, 라이트 모드" />
+    <figcaption><strong>라이트 모드 (1차)</strong> — 힌트 2.54:1 → 4.83:1.</figcaption>
   </figure>
+</div>
+
+<div class="note">
+  위 “After (1차)” 두 장은 <strong>테마 UI를 다시 설계하기 전</strong> 시점의 캡처입니다.
+  이후 Electron 창에 대한 macOS 접근성 접근이 끊겨(시스템 설정에서 권한 토글이 필요한 상태)
+  전체 패널을 다시 촬영하지 못했습니다. 2차 변경분은 아래에 빌드된 실제 CSS로 렌더한 비교로 싣습니다.
 </div>
 
 <h2>대비 실측 (WCAG AA 기준 본문 4.5:1)</h2>
@@ -209,10 +216,16 @@
       <td>모델 설치 버튼. primary-500 → primary-700</td>
     </tr>
     <tr>
-      <td>선택된 테마 카드 라벨</td><td>라이트</td>
+      <td>선택된 테마 라벨</td><td>라이트</td>
       <td class="num"><span class="pill bad">3.01:1</span></td>
-      <td class="num"><span class="pill ok">4.66:1</span></td>
-      <td>primary-500 → primary-700</td>
+      <td class="num"><span class="pill ok">17.74:1</span></td>
+      <td>2차에서 카드가 세그먼티드 컨트롤로 바뀌며 선택 칸이 흰 배경 + gray-900이 됨</td>
+    </tr>
+    <tr>
+      <td>비선택 세그먼트</td><td>라이트</td>
+      <td class="num">—</td>
+      <td class="num"><span class="pill ok">6.87:1</span></td>
+      <td>gray-500은 트랙(gray-100) 위에서 4.39:1로 미달이라 gray-600</td>
     </tr>
     <tr>
       <td>업데이트 알림 버튼 본문</td><td>라이트</td>
@@ -263,6 +276,8 @@
 <div class="finding">
   <div class="hd"><span class="id">F-010</span><span class="ti">섹션 제목 처리가 제각각</span><span class="pill warn">MEDIUM</span></div>
   <p>다섯 섹션 중 AI·단축키만 아이콘이 있고 테마·데이터·버전 정보는 텍스트만 있어, 같은 위계인데 다르게 보였다. <code>SectionHeading</code> 하나로 통일.</p>
+  <p class="why">1차에서는 모든 제목에 아이콘을 <strong>추가</strong>하는 방향으로 맞췄는데, 그건 장식을 늘리는 선택이었다.
+  2차에서 전부 <strong>제거</strong>하는 쪽으로 뒤집었다 — 의미가 있는 아이콘(경고·잠금·내려받기·연결 상태)만 남겼다.</p>
 </div>
 
 <div class="finding">
@@ -318,6 +333,47 @@
   <strong>덤으로 붙인 접근성 보강:</strong> 아이콘만 있던 닫기 버튼에 <code>aria-label="설정 닫기"</code>,
   테마 카드에 <code>aria-pressed</code>를 추가했습니다. 스크린리더에서 닫기 버튼은 이름이 없었고,
   두 테마 카드는 어느 쪽이 선택됐는지 알 수 없었습니다.
+</div>
+
+<h2 id="round2">2차 — 피드백 반영: 테마 선택 다시 설계</h2>
+
+<p>
+  1차 결과를 보고 받은 지적: <strong>① 2지 선택에 공간을 너무 씀 ② 디자인·아이콘·설명이 AI스러움
+  ③ 직관적이지 않음</strong>. 셋 다 맞는 지적이었습니다.
+</p>
+
+<p>
+  이전 테마 선택은 카드 두 장에 “미리보기”를 넣은 형태였는데, 그 미리보기는 실제 테마를 보여주는 게 아니라
+  <strong>아이콘 하나를 담은 상자</strong>였습니다. 즉 정보를 주지 않으면서 공간만 쓰는 장식이었고,
+  카드가 인터랙션의 단위도 아니었습니다(누르는 대상은 “테마 값” 하나뿐). 카드로 만들 이유가 없었습니다.
+</p>
+
+<figure style="margin: 20px 0;">
+  <img src="assets/2026-07-29-settings/theme-before-after.png" alt="테마 선택 UI 변경 전후 비교 — 카드 2장에서 세그먼티드 컨트롤로" />
+  <figcaption>빌드된 실제 CSS로 렌더해 <code>offsetHeight</code>로 측정. 변경 전 마크업은 소스에서 제거되며 Tailwind가 해당 클래스를 더 이상 생성하지 않으므로, 원본과 같아 보이도록 색만 인라인으로 고정해 재현했습니다.</figcaption>
+</figure>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th></th><th>변경 전</th><th>변경 후</th><th>차이</th></tr></thead>
+  <tbody>
+    <tr><td>테마 섹션 전체</td><td class="num">128px</td><td class="num">64px</td><td class="num"><span class="pill ok">−50%</span></td></tr>
+    <tr><td>컨트롤만</td><td class="num">96px</td><td class="num">32px</td><td class="num"><span class="pill ok">−67%</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<ul>
+  <li><strong>세그먼티드 컨트롤</strong> — macOS 관례이고, 현재 값이 어느 쪽인지 한눈에 보입니다. 라벨도 “다크 모드/라이트 모드” → “다크/라이트”로 줄였습니다. 섹션 제목이 이미 “테마”라 ‘모드’는 중복입니다.</li>
+  <li><strong>네이티브 <code>&lt;input type="radio"&gt;</code> + <code>&lt;label&gt;</code></strong>로 구현했습니다. <code>role="radio"</code>를 붙인 버튼보다 낫습니다 — 방향키 이동이 공짜로 따라오고, 스크린리더에 “2개 중 1번째”가 그대로 전달됩니다. 숨긴 input의 포커스는 <code>peer-focus-visible</code>로 라벨에 링을 그립니다.</li>
+  <li><strong>섹션 제목 아이콘 전부 제거</strong> — 1차에서 제가 일관성을 “아이콘을 모두에 추가”로 맞춘 게 장식을 늘리는 방향이었습니다. 걷어내는 쪽이 맞았습니다.</li>
+  <li><strong>중복 설명 정리</strong> — “로컬 전용 <em>(외부 AI 차단)</em>” + “켜면 <em>외부 제공자를 선택할 수 없어</em>…”가 같은 말을 두 번 했습니다. 라벨은 “로컬 전용”으로 줄이고 설명이 한 번만 말하게 했습니다.</li>
+</ul>
+
+<div class="note">
+  <strong>남은 장식 판단 기준:</strong> 아이콘은 <em>상태나 동작을 알려주는 것</em>만 남겼습니다 —
+  경고 삼각형(위험), 잠금(프라이버시 토글), 내려받기(내보내기·설치), Wi-Fi(연결 상태).
+  섹션 제목의 팔레트·데이터베이스·정보 아이콘처럼 <em>옆의 글자를 그림으로 한 번 더 말하는</em> 것은 전부 뺐습니다.
 </div>
 
 <h2>제안으로 남긴 5건 (제품 판단 필요)</h2>
@@ -376,6 +432,7 @@
     <tr><td class="num"><code>27dc156</code></td><td>F-010/011/015 — 섹션 제목 통일, 이모지를 lucide로, 체크박스 스타일</td></tr>
     <tr><td class="num"><code>ea3793f</code></td><td>F-013~019 — 용어 통일, 단축키 문구를 실제 동작과 일치</td></tr>
     <tr><td class="num"><code>b01b386</code></td><td>F-020/022/023 — 섹션 여백, 창 제목, VERSION 정합</td></tr>
+    <tr><td class="num"><code>4e6a263</code></td><td>2차 — 테마 선택을 세그먼티드 컨트롤로, 장식용 아이콘 제거</td></tr>
   </tbody>
 </table>
 </div>
