@@ -250,3 +250,15 @@ html.dark select option {
     rgba(0, 0, 0, 0.08) 12px
   );
 }
+
+/* 노트 에디터(@atomic-editor) 텍스트 컬럼 정렬.
+   기본값은 .cm-content { max-width: 70ch; margin-inline: auto }로 중앙 정렬돼
+   좁은 우측 상세 패널에서 왼쪽에 여백이 생긴다. 왼쪽 정렬 + 넉넉한 읽기 폭으로 조정:
+   - max-width는 --atomic-editor-measure 변수로 재정의(CSS 로드 순서와 무관하게 적용)
+   - margin-inline은 변수가 아니라 하드코딩이라 !important로 왼쪽 정렬 강제 */
+.atomic-cm-editor {
+  --atomic-editor-measure: 90ch;
+}
+.atomic-cm-editor .cm-content {
+  margin-inline: 0 !important;
+}
