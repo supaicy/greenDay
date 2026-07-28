@@ -38,9 +38,26 @@ const headingText = (isDark: boolean) => (isDark ? 'text-gray-200' : 'text-gray-
 const labelText = (isDark: boolean) => (isDark ? 'text-gray-300' : 'text-gray-600')
 const hintText = (isDark: boolean) => (isDark ? 'text-gray-400' : 'text-gray-500')
 const dividerLine = (isDark: boolean) => (isDark ? 'border-gray-700' : 'border-gray-200')
-const fieldSurface = (isDark: boolean) => (isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-800')
 const successText = (isDark: boolean) => (isDark ? 'text-green-400' : 'text-green-700')
 const errorText = (isDark: boolean) => (isDark ? 'text-red-400' : 'text-red-600')
+
+// 키보드 포커스 링. 렌더러 전체에 focus 스타일이 하나도 없어서 Tab으로 이동하면
+// 지금 어디에 있는지 전혀 보이지 않았다. 버튼은 focus-visible(마우스 클릭 시 링 없음),
+// 입력 필드는 focus로 항상 표시한다.
+// Tailwind JIT는 소스에 그대로 적힌 클래스만 생성하므로 문자열을 조합하지 않고 전부 적어 둔다.
+const FOCUS_RING_DARK =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#2C2C2E]'
+const FOCUS_RING_LIGHT =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white'
+const FIELD_FOCUS_DARK =
+  'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-[#2C2C2E]'
+const FIELD_FOCUS_LIGHT =
+  'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-white'
+const focusRing = (isDark: boolean) => (isDark ? FOCUS_RING_DARK : FOCUS_RING_LIGHT)
+const fieldSurface = (isDark: boolean) =>
+  isDark
+    ? `bg-gray-700 text-gray-100 ${FIELD_FOCUS_DARK}`
+    : `bg-gray-100 text-gray-800 ${FIELD_FOCUS_LIGHT}`
 
 // Ollama 모델 안내 + 한국어 추천 모델 원클릭 설치. 설치 상태(진행/연결됨/미연결/완료)를
 // 중첩 삼항 대신 상호배타 가드 블록으로 나눠 스캔하기 쉽게 한다.
@@ -89,7 +106,7 @@ function OllamaModelHint({
           <button
             type="button"
             onClick={onInstall}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-700 text-white hover:bg-primary-800"
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-700 text-white hover:bg-primary-800 ${focusRing(isDark)}`}
           >
             <Download size={12} /> 한국어 모델 설치 (exaone3.5)
           </button>
@@ -199,7 +216,7 @@ export function Settings() {
 
   // 테마 카드. 선택/비선택 스타일을 한 곳에서 정하고 두 카드가 같은 규칙을 쓰게 한다.
   const themeCard = (active: boolean) =>
-    `flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+    `flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${focusRing(isDark)} ${
       active
         ? 'border-primary-500 bg-primary-500/10'
         : isDark
@@ -255,7 +272,7 @@ export function Settings() {
             aria-label="설정 닫기"
             // 라이트 모드에서 hover:text-gray-300은 흰 배경 위 1.6:1 — 마우스를 올리면
             // 오히려 사라졌다. 두 테마 모두 hover 시 더 진해지도록.
-            className={`transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'}`}
+            className={`rounded transition-colors ${focusRing(isDark)} ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <X size={18} />
           </button>
@@ -302,10 +319,8 @@ export function Settings() {
                 exportData()
                 toggleSettings()
               }}
-              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${
-                theme === 'dark'
-                  ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${focusRing(isDark)} ${
+                isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
               }`}
             >
               <Download size={18} />
@@ -381,7 +396,12 @@ export function Settings() {
 
               {/* 로컬 전용 잠금 (프라이버시 모드) */}
               <label className="flex items-start gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={aiLocalOnly} onChange={toggleLocalOnly} className="mt-0.5" />
+                <input
+                  type="checkbox"
+                  checked={aiLocalOnly}
+                  onChange={toggleLocalOnly}
+                  className={`mt-0.5 accent-primary-600 ${focusRing(isDark)}`}
+                />
                 <span>
                   <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                     🔒 로컬 전용 (외부 AI 차단)
@@ -432,7 +452,7 @@ export function Settings() {
                       type="button"
                       onClick={aiCheckConnection}
                       title="모델 목록 새로고침"
-                      className={`px-2.5 rounded-lg ${theme === 'dark' ? 'bg-gray-700 text-gray-400 hover:text-gray-200' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                      className={`px-2.5 rounded-lg ${focusRing(isDark)} ${isDark ? 'bg-gray-700 text-gray-400 hover:text-gray-200' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}
                     >
                       <RefreshCw size={14} />
                     </button>
@@ -498,7 +518,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={handleAiSave}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors"
+                className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
               >
                 저장 및 연결 테스트
               </button>
@@ -573,7 +593,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => window.api.openExternal(updateAvailable.downloadUrl)}
-                className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${
+                className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${focusRing(isDark)} ${
                   isDark
                     ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-200'
                     : 'bg-primary-50 hover:bg-primary-100 text-primary-800'
