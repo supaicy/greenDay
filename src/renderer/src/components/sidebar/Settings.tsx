@@ -21,15 +21,18 @@ import {
 import { useStore } from '../../store/useStore'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 
+// 설명은 실제 동작과 1:1로 맞춘다. Cmd+N/Cmd+Shift+A는 토글이고,
+// Cmd+D·Delete·1-4는 할 일이 선택돼 있어야만 동작한다(선택이 없으면 아무 일도
+// 일어나지 않는데 이전 문구에는 그 전제가 없었다).
 const SHORTCUTS = [
-  { keys: 'Cmd+N', desc: '할 일 추가' },
-  { keys: 'Cmd+Shift+A', desc: '빠른 추가' },
+  { keys: 'Cmd+N', desc: '할 일 추가 열기/닫기' },
+  { keys: 'Cmd+Shift+A', desc: '빠른 추가 열기/닫기' },
   { keys: 'Cmd+F', desc: '검색' },
   { keys: 'Cmd+Z', desc: '되돌리기' },
   { keys: 'Cmd+E', desc: '데이터 내보내기' },
-  { keys: 'Cmd+D', desc: '오늘 마감일 설정' },
-  { keys: 'Delete', desc: '선택 태스크 삭제' },
-  { keys: '1-4', desc: '우선순위 변경 (없음~높음)' },
+  { keys: 'Cmd+D', desc: '선택한 할 일을 오늘 마감으로' },
+  { keys: 'Delete', desc: '선택한 할 일 삭제' },
+  { keys: '1-4', desc: '선택한 할 일 우선순위 (없음~높음)' },
   { keys: 'Esc', desc: '선택 해제 / 닫기' }
 ]
 
@@ -107,7 +110,7 @@ function OllamaModelHint({
   const manualOnly = !hasRecommended && !aiPull?.active && aiConnected !== true
   return (
     <div className={`mt-1 space-y-1.5 text-xs ${hintText(isDark)}`}>
-      <p>한국어 답변 품질은 8B 이상 모델을 권장합니다.</p>
+      {!canInstall && <p>한국어 답변은 8B 이상 모델을 권장합니다.</p>}
 
       {installing && aiPull && (
         <div className="space-y-1">
@@ -129,7 +132,7 @@ function OllamaModelHint({
 
       {canInstall && (
         <div className="space-y-1">
-          <p>한국어 특화 모델(EXAONE)이 더 정확합니다.</p>
+          <p>한국어 답변은 8B 이상, 그중 한국어 특화 모델(EXAONE)이 가장 정확합니다.</p>
           <button
             type="button"
             onClick={onInstall}
@@ -143,7 +146,7 @@ function OllamaModelHint({
 
       {manualOnly && (
         <p>
-          한국어 특화 모델(EXAONE, EEVE)이 더 정확합니다. Ollama 실행 후 설치 —{' '}
+          한국어 특화 모델(EXAONE)이 더 정확합니다. Ollama 실행 후 설치 —{' '}
           <code className={labelText(isDark)}>ollama pull exaone3.5</code>
         </p>
       )}
@@ -494,7 +497,7 @@ export function Settings() {
                     aiModels={aiModels}
                     aiConnected={aiConnected}
                     aiPull={aiPull}
-                    isDark={theme === 'dark'}
+                    isDark={isDark}
                     onInstall={() => aiPullModel('exaone3.5')}
                   />
                 )}
@@ -544,7 +547,7 @@ export function Settings() {
               >
                 저장 및 연결 테스트
               </button>
-              {aiConnected === true && <p className={`text-xs ${successText(isDark)}`}>AI 서비스에 연결되었습니다</p>}
+              {aiConnected === true && <p className={`text-xs ${successText(isDark)}`}>AI 어시스턴트에 연결되었습니다</p>}
               {aiConnected === false && (
                 <p className={`text-xs ${errorText(isDark)}`}>
                   연결 실패 — {aiProvider === 'ollama' ? 'Ollama 실행 상태를 확인하세요' : 'API URL과 키를 확인하세요'}
@@ -562,7 +565,7 @@ export function Settings() {
                   <span className={`text-xs ${labelText(isDark)}`}>{s.desc}</span>
                   <kbd
                     className={`text-xs px-2 py-0.5 rounded font-mono ${
-                      theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
+                      isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
                     }`}
                   >
                     {s.keys}
@@ -575,14 +578,9 @@ export function Settings() {
           {/* 버전 및 업데이트 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
             <SectionHeading isDark={isDark} icon={<Info size={16} />} label="버전 정보" />
-            <div className={`rounded-lg px-4 py-3 mb-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                  haru v{__APP_VERSION__}
-                </span>
-                <span className={`text-xs ${hintText(isDark)}`}>
-                  Electron + React
-                </span>
+            <div className={`rounded-lg px-4 py-3 mb-3 ${isDark ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
+              <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                haru v{__APP_VERSION__}
               </div>
               {isMas ? (
                 // App Store 빌드: 앱 내 업데이트 확인/다운로드는 비활성(App Store가 담당)
@@ -600,7 +598,7 @@ export function Settings() {
               ) : !updateChecked ? (
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className={`text-xs ${hintText(isDark)}`}>
-                    업데이트 확인 중...
+                    업데이트 확인 중…
                   </span>
                 </div>
               ) : null}
