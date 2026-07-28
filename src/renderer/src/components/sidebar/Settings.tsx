@@ -89,7 +89,7 @@ function OllamaModelHint({
           <button
             type="button"
             onClick={onInstall}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-500 text-white hover:bg-primary-600"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-700 text-white hover:bg-primary-800"
           >
             <Download size={12} /> 한국어 모델 설치 (exaone3.5)
           </button>
@@ -197,6 +197,19 @@ export function Settings() {
     aiCheckConnection()
   }
 
+  // 테마 카드. 선택/비선택 스타일을 한 곳에서 정하고 두 카드가 같은 규칙을 쓰게 한다.
+  const themeCard = (active: boolean) =>
+    `flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+      active
+        ? 'border-primary-500 bg-primary-500/10'
+        : isDark
+          ? 'border-gray-600 hover:border-gray-500'
+          : 'border-gray-300 hover:border-gray-400'
+    }`
+  // 선택된 라벨이 라이트 모드에서 primary-500이면 3.01:1로 AA 미달이라 primary-700을 쓴다.
+  const themeCardLabel = (active: boolean) =>
+    `text-xs font-medium ${active ? (isDark ? 'text-primary-300' : 'text-primary-700') : labelText(isDark)}`
+
   // 로컬 전용 잠금을 켜면 외부 제공자를 쓸 수 없으므로, 외부였다면 Ollama 로컬로 되돌린다.
   const toggleLocalOnly = () => {
     const next = !aiLocalOnly
@@ -256,36 +269,24 @@ export function Settings() {
               <button
                 type="button"
                 onClick={() => setTheme('dark')}
-                className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                  theme === 'dark' ? 'border-primary-500 bg-primary-500/10' : 'border-gray-300 hover:border-gray-400'
-                }`}
+                aria-pressed={isDark}
+                className={themeCard(isDark)}
               >
                 <div className="w-16 h-10 rounded-lg bg-[#1C1C1E] border border-gray-600 flex items-center justify-center">
                   <Moon size={16} className="text-gray-400" />
                 </div>
-                <span className={`text-xs font-medium ${theme === 'dark' ? 'text-primary-400' : 'text-gray-500'}`}>
-                  다크 모드
-                </span>
+                <span className={themeCardLabel(isDark)}>다크 모드</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTheme('light')}
-                className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                  theme === 'light'
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : theme === 'dark'
-                      ? 'border-gray-600 hover:border-gray-500'
-                      : 'border-gray-300 hover:border-gray-400'
-                }`}
+                aria-pressed={!isDark}
+                className={themeCard(!isDark)}
               >
                 <div className="w-16 h-10 rounded-lg bg-white border border-gray-300 flex items-center justify-center">
                   <Sun size={16} className="text-yellow-500" />
                 </div>
-                <span
-                  className={`text-xs font-medium ${theme === 'light' ? 'text-primary-500' : labelText(isDark)}`}
-                >
-                  라이트 모드
-                </span>
+                <span className={themeCardLabel(!isDark)}>라이트 모드</span>
               </button>
             </div>
           </div>
@@ -322,7 +323,7 @@ export function Settings() {
             <h3
               className={`flex items-center gap-2 text-sm font-medium mb-3 ${headingText(isDark)}`}
             >
-              <Bot size={16} className="text-blue-500" /> AI 어시스턴트
+              <Bot size={16} className="text-primary-500" /> AI 어시스턴트
               {aiConnected === true && <Wifi size={14} className={successText(isDark)} />}
               {aiConnected === false && <WifiOff size={14} className={errorText(isDark)} />}
             </h3>
@@ -497,7 +498,7 @@ export function Settings() {
               <button
                 type="button"
                 onClick={handleAiSave}
-                className="w-full px-3 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                className="w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors"
               >
                 저장 및 연결 테스트
               </button>
