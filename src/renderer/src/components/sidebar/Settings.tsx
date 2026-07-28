@@ -11,7 +11,12 @@ import {
   WifiOff,
   Download,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Palette,
+  Database,
+  Info,
+  Lock,
+  AlertTriangle
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
@@ -58,6 +63,28 @@ const fieldSurface = (isDark: boolean) =>
   isDark
     ? `bg-gray-700 text-gray-100 ${FIELD_FOCUS_DARK}`
     : `bg-gray-100 text-gray-800 ${FIELD_FOCUS_LIGHT}`
+
+// 섹션 제목. 다섯 개 섹션 중 AI/단축키만 아이콘이 있고 테마/데이터/버전은 없어서
+// 같은 위계인데 다르게 보였다. 아이콘 + 라벨 한 줄로 통일한다.
+function SectionHeading({
+  isDark,
+  icon,
+  label,
+  children
+}: {
+  isDark: boolean
+  icon: React.ReactNode
+  label: string
+  children?: React.ReactNode
+}) {
+  return (
+    <h3 className={`flex items-center gap-2 text-sm font-medium mb-3 ${headingText(isDark)}`}>
+      <span className="text-primary-500">{icon}</span>
+      {label}
+      {children}
+    </h3>
+  )
+}
 
 // Ollama 모델 안내 + 한국어 추천 모델 원클릭 설치. 설치 상태(진행/연결됨/미연결/완료)를
 // 중첩 삼항 대신 상호배타 가드 블록으로 나눠 스캔하기 쉽게 한다.
@@ -281,7 +308,7 @@ export function Settings() {
         <div className="overflow-y-auto p-5 space-y-6">
           {/* 테마 */}
           <div>
-            <h3 className={`text-sm font-medium mb-3 ${headingText(isDark)}`}>테마</h3>
+            <SectionHeading isDark={isDark} icon={<Palette size={16} />} label="테마" />
             <div className="flex gap-3">
               <button
                 type="button"
@@ -310,9 +337,7 @@ export function Settings() {
 
           {/* 데이터 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <h3 className={`text-sm font-medium mb-3 ${headingText(isDark)}`}>
-              데이터
-            </h3>
+            <SectionHeading isDark={isDark} icon={<Database size={16} />} label="데이터" />
             <button
               type="button"
               onClick={() => {
@@ -335,13 +360,10 @@ export function Settings() {
 
           {/* AI 설정 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <h3
-              className={`flex items-center gap-2 text-sm font-medium mb-3 ${headingText(isDark)}`}
-            >
-              <Bot size={16} className="text-primary-500" /> AI 어시스턴트
+            <SectionHeading isDark={isDark} icon={<Bot size={16} />} label="AI 어시스턴트">
               {aiConnected === true && <Wifi size={14} className={successText(isDark)} />}
               {aiConnected === false && <WifiOff size={14} className={errorText(isDark)} />}
-            </h3>
+            </SectionHeading>
             <div className="space-y-3">
               <div>
                 <label
@@ -386,7 +408,7 @@ export function Settings() {
                     isDark ? 'text-amber-300' : 'text-amber-800'
                   }`}
                 >
-                  <span>⚠️</span>
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                   <span>
                     이 제공자를 사용하면 <b>대화·할일 내용이 외부 서버로 전송</b>됩니다. 프라이버시가 중요하면
                     Ollama(로컬)를 사용하세요.
@@ -403,8 +425,8 @@ export function Settings() {
                   className={`mt-0.5 accent-primary-600 ${focusRing(isDark)}`}
                 />
                 <span>
-                  <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                    🔒 로컬 전용 (외부 AI 차단)
+                  <span className={`flex items-center gap-1.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                    <Lock size={13} /> 로컬 전용 (외부 AI 차단)
                   </span>
                   <span className={`block text-xs mt-0.5 ${hintText(isDark)}`}>
                     켜면 외부 제공자를 선택할 수 없어, 데이터가 절대 기기를 벗어나지 않습니다.
@@ -533,11 +555,7 @@ export function Settings() {
 
           {/* 키보드 단축키 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <h3
-              className={`flex items-center gap-2 text-sm font-medium mb-3 ${headingText(isDark)}`}
-            >
-              <Keyboard size={16} /> 키보드 단축키
-            </h3>
+            <SectionHeading isDark={isDark} icon={<Keyboard size={16} />} label="키보드 단축키" />
             <div className="space-y-1.5">
               {SHORTCUTS.map((s) => (
                 <div key={s.keys} className="flex items-center justify-between">
@@ -556,9 +574,7 @@ export function Settings() {
 
           {/* 버전 및 업데이트 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <h3 className={`text-sm font-medium mb-3 ${headingText(isDark)}`}>
-              버전 정보
-            </h3>
+            <SectionHeading isDark={isDark} icon={<Info size={16} />} label="버전 정보" />
             <div className={`rounded-lg px-4 py-3 mb-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
