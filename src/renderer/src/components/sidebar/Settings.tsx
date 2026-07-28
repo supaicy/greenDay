@@ -221,9 +221,11 @@ export function Settings() {
         }
       }}
     >
-      {/* 모달 콘텐츠: 클릭/키보드 전파 차단 (role=dialog) */}
+      {/* 모달 콘텐츠: 클릭/키보드 전파 차단 (role=dialog).
+          헤더는 고정하고 본문만 스크롤한다. 이전에는 카드 전체가 스크롤 컨테이너라
+          내용이 뷰포트의 ~2.8배인 이 패널에서 아래로 내려가면 닫기 버튼이 사라졌다. */}
       <div
-        className={`w-[480px] max-h-[80vh] overflow-y-auto rounded-xl shadow-2xl ${theme === 'dark' ? 'bg-[#2C2C2E] text-gray-100' : 'bg-white text-gray-800'}`}
+        className={`flex w-[480px] max-h-[80vh] flex-col overflow-hidden rounded-xl shadow-2xl ${isDark ? 'bg-[#2C2C2E] text-gray-100' : 'bg-white text-gray-800'}`}
         role="dialog"
         aria-modal="true"
         aria-label="설정"
@@ -231,19 +233,22 @@ export function Settings() {
         onKeyDown={(e) => e.stopPropagation()}
       >
         <div
-          className={`flex items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}
+          className={`flex shrink-0 items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}
         >
           <h2 className="text-base font-semibold">설정</h2>
           <button
             type="button"
             onClick={toggleSettings}
-            className="text-gray-500 hover:text-gray-300 transition-colors"
+            aria-label="설정 닫기"
+            // 라이트 모드에서 hover:text-gray-300은 흰 배경 위 1.6:1 — 마우스를 올리면
+            // 오히려 사라졌다. 두 테마 모두 hover 시 더 진해지도록.
+            className={`transition-colors ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'}`}
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-5 space-y-6">
+        <div className="overflow-y-auto p-5 space-y-6">
           {/* 테마 */}
           <div>
             <h3 className={`text-sm font-medium mb-3 ${headingText(isDark)}`}>테마</h3>
