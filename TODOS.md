@@ -127,3 +127,12 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **재검토:** 우측 패널 본문은 이미 단일 세로 컬럼(메모 히어로 flex-1 + 하위작업·첨부 스택, TaskDetail.tsx:393-412)이라 "2열 본문"이 존재하지 않음. 브레이크포인트 세로 스택 전환 대상 자체가 없음. 폭은 리사이즈 핸들로 조절.
 - **Design:** `docs/design/2026-07-24-bottom-task-detail-design.md` (Deferred follow-ups)
 - **Added:** 2026-07-24, bottom-detail 디자인 세션
+
+### [P2] Tailwind gray 팔레트를 중립 계열로 전면 교체
+- **What:** 프로젝트 전역 `gray-*` 토큰을 Apple 시스템 그레이(중립) 계열로 교체.
+- **Why:** 앱 표면은 채도 1~3%의 중립 그레이(`#1C1C1E` 캔버스 / `#2C2C2E` 사이드바·모달)인데, Tailwind 기본 `gray`는 채도 28~39%의 한랭 계열이다. 큰 면에서 맞붙으면 한쪽만 붕 뜬다. 2026-07-29 상세 패널이 정확히 그 사례였다 — `bg-gray-900`(#111827, 채도 39%, 파랑 편향 +22)이 옆 리스트(#1C1C1E, 채도 3%, 편향 +2)와 색 계열이 달라 이질적으로 보였다.
+- **Pros:** `tailwind.config.js`에서 `colors.gray`만 재정의하면 한 곳에서 전부 바뀐다. 나중에 테마 CSS 변수를 추출할 때 방향이 같다.
+- **Cons:** 2026-07-29 설정 화면에서 실측한 대비율(힌트 5.49:1 / 라벨 9.46:1 / 제목 11.26:1 등)이 전부 바뀌므로 재검증이 필요하다.
+- **Context:** 같은 혼용이 15개 컴포넌트에 남아 있다 — calendar/{CalendarView,TimeBlock,WeeklyCalendar}, eisenhower, habits, kanban, pomodoro, stats, timeline, tasks/{AddTask,SubtaskList,TaskItem,TaskList,TrashView}. 상세 패널(TaskDetail)만 `surface-*` 토큰으로 이미 전환됨(커밋 `4329ece`). 대비 측정 방법은 `docs/reports/2026-07-29-settings-design-review.html`의 "검증 방법" 참조.
+- **Depends on / blocked by:** 없음. 동기화 계획과 독립. 다만 **동기화 재작성과 같은 브랜치에서 돌리지 말 것** — 뭔가 깨졌을 때 원인 분리가 어려워진다.
+- **Added:** 2026-07-29, /plan-eng-review (동기화 설계 리뷰 중 발견)
