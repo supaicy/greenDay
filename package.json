@@ -1,6 +1,6 @@
 {
   "name": "ticktick",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "TickTick 스타일 일정관리 macOS 앱",
   "main": "./out/main/index.js",
   "author": "supaicy",
