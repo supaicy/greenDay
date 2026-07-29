@@ -21,13 +21,73 @@ jobs:
 
       - run: npm ci
 
+      # 서명·공증 시크릿이 하나라도 비어 있으면 여기서 멈춘다.
+      # 없으면 electron-builder가 조용히 서명 없이 빌드해서 Gatekeeper에 막히는
+      # dmg를 릴리스로 내보내게 된다. 그 실패는 사용자가 먼저 발견한다.
+      - name: Preflight — 서명·공증 시크릿 확인
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_B64: ${{ secrets.APPLE_API_KEY_B64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=""
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_B64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::필수 시크릿 누락:$missing"
+            echo "이대로 진행하면 서명 없는 dmg가 릴리스됩니다. Settings → Secrets에 등록 후 다시 태그하세요."
+            exit 1
+          fi
+          echo "시크릿 6종 확인 완료"
+
+      - name: App Store Connect API 키 파일 생성
+        env:
+          APPLE_API_KEY_B64: ${{ secrets.APPLE_API_KEY_B64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          printf '%s' "$APPLE_API_KEY_B64" | base64 --decode > "$RUNNER_TEMP/private_keys/AuthKey.p8"
+          # 형식만 확인(내용은 출력하지 않는다)
+          head -1 "$RUNNER_TEMP/private_keys/AuthKey.p8" | grep -q "BEGIN PRIVATE KEY" \
+            || { echo "::error::.p8 디코드 실패 — APPLE_API_KEY_B64가 올바른 base64인지 확인하세요"; exit 1; }
+
       - name: Build app
         run: npx electron-vite build
 
-      - name: Package and publish
+      # 공증은 APPLE_API_KEY / _KEY_ID / _ISSUER 환경변수 존재로 활성화된다
+      # (electron-builder 25.x가 보안상 권장하는 방식).
+      # 릴리스는 draft로 올라가고, 아래 검증을 통과해야 공개된다.
+      - name: Package and publish (draft)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ runner.temp }}/private_keys/AuthKey.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac --arm64 --x64 --publish always
+
+      # 공개 전 마지막 관문. 실패하면 릴리스는 draft로 남아 사용자에게 안 나간다.
+      - name: 서명·공증 검증
+        run: |
+          fail=0
+          for app in dist/mac-arm64/haru.app dist/mac/haru.app dist/mac-x64/haru.app; do
+            [ -d "$app" ] || continue
+            echo "── $app"
+            codesign --verify --deep --strict --verbose=2 "$app" || fail=1
+            codesign -dv --verbose=4 "$app" 2>&1 | grep -E "Authority|TeamIdentifier" || true
+            # 공증+스테이플이 끝났으면 "source=Notarized Developer ID"가 나온다
+            if spctl -a -vvv -t install "$app" 2>&1 | tee /tmp/spctl.txt | grep -q "Notarized Developer ID"; then
+              echo "  공증 확인됨"
+            else
+              echo "::error::$app 이 공증되지 않았습니다"; cat /tmp/spctl.txt; fail=1
+            fi
+          done
+          [ "$fail" = "0" ] || { echo "::error::검증 실패 — 릴리스를 draft로 남깁니다"; exit 1; }
 
       - name: Publish release
         env:
