@@ -187,8 +187,10 @@ export function TaskDetail() {
   }
   const removeTag = (tag: string) => save({ tags: task.tags.filter((t) => t !== tag) })
 
-  const inputCls = isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-gray-100 text-gray-700 border-gray-300'
-  const labelCls = isDark ? 'text-gray-500' : 'text-gray-400'
+  const inputCls = isDark
+    ? 'bg-surface-sunken text-gray-100 border-surface-line'
+    : 'bg-gray-100 text-gray-700 border-gray-300'
+  const labelCls = isDark ? 'text-gray-400' : 'text-gray-500'
 
   // 우측 패널 폭: 드래그 중이면 라이브값, 아니면 저장값(없으면 기본 400).
   // read 시점에도 clamp해서 큰 저장값이 좁은 창에서 목록을 0으로 짓누르지 않게 한다.
@@ -219,7 +221,7 @@ export function TaskDetail() {
   return (
     <div
       ref={panelRef}
-      className={`relative flex-shrink-0 border-l flex flex-col transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}
+      className={`relative flex-shrink-0 border-l flex flex-col transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] ${isDark ? 'bg-surface-raised border-surface-line' : 'bg-white border-gray-200'}`}
       style={{ width, transform: shown ? 'translateX(0)' : 'translateX(100%)' }}
     >
       {/* 좌측 경계 드래그 핸들: 폭 조절 */}
@@ -231,7 +233,7 @@ export function TaskDetail() {
       />
 
       {/* 헤더: 완료 + 제목 + 삭제/닫기 */}
-      <div className={`flex items-center gap-2 px-4 pt-4 pb-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+      <div className={`flex items-center gap-2 px-4 pt-4 pb-3 border-b ${isDark ? 'border-surface-divider' : 'border-gray-200'}`}>
         <button
           type="button"
           onClick={() => toggleTask(task.id)}
@@ -251,7 +253,7 @@ export function TaskDetail() {
         <button
           type="button"
           onClick={() => removeTask(task.id)}
-          className="shrink-0 text-gray-500 hover:text-red-400 transition-colors"
+          className="shrink-0 text-gray-400 hover:text-red-400 transition-colors"
           aria-label="삭제"
         >
           <Trash2 size={16} />
@@ -267,9 +269,9 @@ export function TaskDetail() {
       </div>
 
       {/* 메타: 마감일/시간 · 우선순위 · 리스트 · 알림 · 반복 · 태그 (좁은 폭에서 줄바꿈) */}
-      <div className={`flex flex-wrap items-center gap-2 px-4 py-3 border-b ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+      <div className={`flex flex-wrap items-center gap-2 px-4 py-3 border-b ${isDark ? 'border-surface-divider' : 'border-gray-100'}`}>
         {task.scheduledStart && task.scheduledEnd && (
-          <span className="flex items-center gap-1 text-xs text-gray-500 w-full">
+          <span className="flex items-center gap-1 text-xs text-gray-400 w-full">
             <Clock size={13} /> 예정 {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}
           </span>
         )}
@@ -321,9 +323,9 @@ export function TaskDetail() {
               }}
               className={`text-xs px-2 py-1 rounded transition-colors ${
                 priority === opt.value
-                  ? `${opt.color} ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`
+                  ? `${opt.color} ${isDark ? 'bg-surface-sunken' : 'bg-gray-200'}`
                   : isDark
-                    ? 'text-gray-500 hover:bg-gray-800'
+                    ? 'text-gray-400 hover:bg-surface-sunken'
                     : 'text-gray-400 hover:bg-gray-100'
               }`}
             >
@@ -355,7 +357,7 @@ export function TaskDetail() {
           onToggle={() => setShowReminder(!showReminder)}
           active={!!task.reminderAt}
           activeCls="text-primary-400 border-primary-500/30"
-          inactiveCls={`${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+          inactiveCls={`${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`}
           icon={<Bell size={13} />}
           label={task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
         >
@@ -374,7 +376,7 @@ export function TaskDetail() {
           onToggle={() => setShowRecurring(!showRecurring)}
           active={task.isRecurring}
           activeCls="text-purple-400 border-purple-500/30"
-          inactiveCls={`${labelCls} ${isDark ? 'border-gray-700' : 'border-gray-300'}`}
+          inactiveCls={`${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`}
           icon={<Repeat size={13} />}
           label={task.isRecurring ? task.recurringPattern || '반복' : '반복'}
         >
@@ -392,7 +394,7 @@ export function TaskDetail() {
           {task.tags.map((tag) => (
             <span
               key={tag}
-              className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}
+              className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-surface-sunken text-gray-200' : 'bg-gray-200 text-gray-600'}`}
             >
               {tag}
               <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-400">
@@ -427,7 +429,7 @@ export function TaskDetail() {
           />
         </div>
         {/* 하위작업 · 첨부 */}
-        <div className={`flex-shrink-0 max-h-[38%] overflow-y-auto border-t px-4 py-3 space-y-3 ${isDark ? 'border-gray-800' : 'border-gray-100'}`}>
+        <div className={`flex-shrink-0 max-h-[38%] overflow-y-auto border-t px-4 py-3 space-y-3 ${isDark ? 'border-surface-divider' : 'border-gray-100'}`}>
           <SubtaskList taskId={task.id} />
           <AttachmentList
             taskId={task.id}
