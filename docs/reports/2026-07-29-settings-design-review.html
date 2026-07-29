@@ -136,7 +136,15 @@
   <li><strong>Tailwind 생성 확인</strong> — 포커스 유틸리티는 JIT가 클래스를 만들지 못하면 조용히 실패하므로, <code>npm run build</code> 후 번들 CSS에 <code>.focus-visible\:ring-2</code> 등이 실제로 생성되는지 직접 확인.</li>
   <li><strong>재현 캡처</strong> — 사용자 DB를 건드리지 않도록 격리된 <code>--user-data-dir</code>로 dev 빌드를 띄워 수정 후 화면을 다크/라이트 모두 캡처.</li>
   <li><strong>Health stack</strong> — <code>tsc --build --force</code> 통과, <code>biome lint</code> 78파일 clean, <code>vitest</code> 222 tests 통과.</li>
+  <li><strong>최종 확인</strong> — 수정본을 실제로 띄워 접근성 트리와 스크린샷으로 다크·라이트 양쪽을 재확인. 트리에 <code>라디오 버튼 (settable) 다크 / 라이트</code>가 잡히는 것으로 네이티브 radio 구현도 확인.</li>
 </ul>
+
+<div class="note">
+  <strong>주의 — 설치본은 자동으로 바뀌지 않습니다.</strong> 이 변경은 소스에 있고,
+  <code>/Applications/haru.app</code>은 별도로 <code>npm run package</code>를 돌려 재설치해야 반영됩니다.
+  두 빌드의 <code>package.json</code> 버전이 모두 <code>2.0.0</code>이라 앱 화면의 “haru v2.0.0” 표시로는
+  신구를 구분할 수 없으니, 패키징 시 버전을 올리는 것을 권합니다.
+</div>
 
 <h2>Before / After</h2>
 
@@ -146,23 +154,21 @@
     <figcaption><strong>Before</strong> — 힌트 텍스트 2.88:1, 🔒 이모지, 헤더가 본문과 함께 스크롤, 테마 선택에 96px.</figcaption>
   </figure>
   <figure>
-    <img src="assets/2026-07-29-settings/after-dark.png" alt="1차 수정 후 설정 모달, 다크 모드" />
-    <figcaption><strong>After (1차)</strong> — 힌트 5.49:1, Lock 아이콘, 헤더 고정. 여기 보이는 섹션 제목 아이콘과 테마 카드는 <a href="#round2">2차에서 다시 걷어냈습니다</a>.</figcaption>
+    <img src="assets/2026-07-29-settings/final-dark.png" alt="최종 설정 모달, 다크 모드" />
+    <figcaption><strong>After</strong> — 테마는 세그먼티드 컨트롤 한 줄, 섹션 제목에 장식 아이콘 없음, 힌트 5.49:1, 헤더 고정.</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-07-29-settings/final-light.png" alt="최종 설정 모달, 라이트 모드" />
+    <figcaption><strong>라이트 모드</strong> — 힌트 2.54:1 → 4.83:1. 선택된 세그먼트는 흰 배경으로 떠 보인다.</figcaption>
   </figure>
   <figure>
     <img src="assets/2026-07-29-settings/after-focus-ring.png" alt="AI 제공자 셀렉트에 파란 포커스 링이 표시된 상태" />
-    <figcaption><strong>포커스 링</strong> — AI 제공자 셀렉트에 링이 표시됨. 수정 전에는 어떤 컨트롤에도 포커스 표시가 없었다.</figcaption>
+    <figcaption><strong>포커스 링</strong> — AI 제공자 셀렉트에 링이 표시됨. 수정 전에는 어떤 컨트롤에도 포커스 표시가 없었다. (1차 시점 캡처)</figcaption>
   </figure>
   <figure>
-    <img src="assets/2026-07-29-settings/after-light.png" alt="1차 수정 후 설정 모달, 라이트 모드" />
-    <figcaption><strong>라이트 모드 (1차)</strong> — 힌트 2.54:1 → 4.83:1.</figcaption>
+    <img src="assets/2026-07-29-settings/after-dark.png" alt="1차 수정 후 설정 모달, 다크 모드" />
+    <figcaption><strong>참고: 1차 중간 상태</strong> — 섹션 제목마다 아이콘을 붙이고 테마 카드를 유지했던 단계. <a href="#round2">2차에서 둘 다 걷어냈습니다</a>.</figcaption>
   </figure>
-</div>
-
-<div class="note">
-  위 “After (1차)” 두 장은 <strong>테마 UI를 다시 설계하기 전</strong> 시점의 캡처입니다.
-  이후 Electron 창에 대한 macOS 접근성 접근이 끊겨(시스템 설정에서 권한 토글이 필요한 상태)
-  전체 패널을 다시 촬영하지 못했습니다. 2차 변경분은 아래에 빌드된 실제 CSS로 렌더한 비교로 싣습니다.
 </div>
 
 <h2>대비 실측 (WCAG AA 기준 본문 4.5:1)</h2>
