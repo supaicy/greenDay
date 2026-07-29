@@ -3,12 +3,15 @@ productName: haru
 directories:
   buildResources: resources
   output: dist
+# 허용 목록 방식. 이전에는 제외 패턴만 나열해서, 나중에 생긴 디렉터리는 전부
+# 앱 안으로 딸려 들어갔다. 실제로 docs/(설계·배포 문서), .gstack/(QA 리포트 +
+# 실제 할 일이 보이는 스크린샷 67장), .superpowers/, CLAUDE.md, TODOS.md가
+# 배포본에 포함돼 app.asar이 59.6MB였다.
+# 런타임에 필요한 건 out/(main·preload·renderer 번들)과 package.json뿐이고,
+# 프로덕션 node_modules는 electron-builder가 알아서 넣는다.
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - out/**/*
+  - package.json
 mac:
   target:
     - dmg
