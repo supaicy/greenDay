@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru 첫 배포 — 지금 하실 일 (2026-07-29)</title>
+<style>
+  :root {
+    --bg:#ffffff; --surface:#f7f8fa; --surface-2:#eef1f5;
+    --text:#1f2328; --text-dim:#57606a; --text-faint:#6e7781;
+    --line:#d8dee4; --accent:#2563eb;
+    --ok:#15803d; --warn:#92400e; --bad:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#16181d; --surface:#1e2128; --surface-2:#262a33;
+      --text:#e6e8eb; --text-dim:#a8b0ba; --text-faint:#8b939e;
+      --line:#303640; --accent:#7aa7f0;
+      --ok:#4ade80; --warn:#fcd34d; --bad:#f87171;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:880px; margin:0 auto; padding:56px 24px 96px; }
+
+  header.top { border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:40px; }
+  .eyebrow { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); margin:0 0 10px; }
+  h1 { font-size:30px; line-height:1.25; margin:0 0 12px; letter-spacing:-.01em; }
+  .lede { font-size:16px; color:var(--text-dim); margin:0; max-width:66ch; }
+
+  h2 { font-size:20px; margin:52px 0 16px; padding-top:24px; border-top:1px solid var(--line); letter-spacing:-.01em; }
+  h2:first-of-type { border-top:0; padding-top:0; }
+  p { margin:0 0 14px; }
+  a { color:var(--accent); }
+
+  .scroll-x { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table { width:100%; border-collapse:collapse; font-size:14px; margin:16px 0 8px; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); font-weight:600; white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:0; }
+
+  code { font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.12em .4em; border-radius:4px; }
+  pre { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; overflow-x:auto;
+    font-family:var(--mono); font-size:12.5px; line-height:1.6; margin:16px 0; }
+  pre code { background:none; padding:0; font-size:inherit; }
+
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .pill.ok { background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
+  .pill.bad { background:color-mix(in srgb,var(--bad) 16%,transparent); color:var(--bad); }
+  .pill.warn { background:color-mix(in srgb,var(--warn) 20%,transparent); color:var(--warn); }
+
+  .step { border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:0 0 16px; background:var(--surface); }
+  .step .n { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px;
+    border-radius:50%; background:var(--accent); color:#fff; font-weight:700; font-size:14px; margin-right:10px; }
+  .step h3 { display:inline; font-size:17px; margin:0; }
+  .step .body { margin-top:14px; }
+  .step p:last-child { margin-bottom:0; }
+
+  .note { background:var(--surface); border-left:3px solid var(--accent); border-radius:0 8px 8px 0;
+    padding:14px 18px; margin:20px 0; font-size:14px; color:var(--text-dim); }
+  .note.danger { border-left-color:var(--bad); }
+  .note.warn { border-left-color:var(--warn); }
+  .note strong { color:var(--text); }
+
+  ul { margin:0 0 14px; padding-left:22px; }
+  li { margin-bottom:6px; }
+  footer { margin-top:64px; padding-top:20px; border-top:1px solid var(--line); font-size:13px; color:var(--text-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">haru · 배포 설정</p>
+  <h1>첫 배포까지 — 지금 하실 일은 두 가지</h1>
+  <p class="lede">
+    Apple 개발자 계정 결제와 인증서 발급은 끝났습니다. 남은 건 <strong>앱 암호 발급</strong>과
+    <strong>맥에 한 번 저장</strong>, 이 둘뿐입니다. 5분이면 끝납니다.
+  </p>
+</header>
+
+<h2>궁금해하신 것에 대한 답</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>질문</th><th>답</th></tr></thead>
+  <tbody>
+    <tr><td>내가 뭘 해야 해?</td><td><strong>앱 암호 만들기 → 맥에 한 번 저장하기.</strong> 그게 전부입니다</td></tr>
+    <tr><td>GitHub 시크릿은 왜 등록해?</td><td><strong>이제 안 하셔도 됩니다.</strong> 사장님 맥에서 직접 배포하기로 했으니까요</td></tr>
+    <tr><td>인증서 내보내기는 왜 해?</td><td><strong>안 하셔도 됩니다.</strong> 도장이 이미 이 맥에 있고, 여기서 빌드하니까요</td></tr>
+    <tr><td>새 앱 암호를 만들어야 해?</td><td><strong>네, 하나.</strong> 이 방식에서 Apple에 로그인하는 수단이 그겁니다</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  앞서 GitHub 시크릿 6개와 인증서 내보내기를 안내드렸던 건 <strong>GitHub에서 자동으로 빌드하는 경우</strong>였습니다.
+  맥에서 직접 하기로 정하셨으니 그 준비는 전부 불필요해졌습니다.
+</div>
+
+<h2>왜 이런 구조인가</h2>
+
+<p>핵심은 하나입니다. <strong>앱을 어느 컴퓨터에서 만드느냐.</strong></p>
+
+<pre><code>[ GitHub에서 빌드 ]                    [ 내 맥에서 빌드 ]  ← 선택하신 방식
+
+  깨끗한 새 맥을 빌려 씀                  이미 쓰던 내 맥
+  도장 없음  → 복사해 보내야 함            도장 이미 있음  ✔
+  Apple 로그인 없음 → 키 보내야 함         로그인만 한 번 저장하면 끝
+
+  준비: 인증서 내보내기 + 시크릿 6개       준비: 앱 암호 1개
+  이후: git tag 하나로 자동                이후: npm run release</code></pre>
+
+<p>
+  "인증서 내보내기"는 맥 Keychain 안에 잠겨 있는 도장을 <strong>파일로 꺼내</strong> 다른 컴퓨터가 쓸 수 있게 하는 작업이었습니다.
+  같은 맥에서 빌드하면 꺼낼 이유가 없습니다.
+</p>
+
+<h2>현재 상태</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>항목</th><th>상태</th></tr></thead>
+  <tbody>
+    <tr><td>Apple Developer Program</td><td><span class="pill ok">결제 완료</span></td></tr>
+    <tr><td>Developer ID Application 인증서</td><td><span class="pill ok">발급됨</span> <code>MINSEOK SHIN (32R6RHXU36)</code></td></tr>
+    <tr><td>팀 ID</td><td><span class="pill ok">확인됨</span> <code>32R6RHXU36</code></td></tr>
+    <tr><td>배포 스크립트</td><td><span class="pill ok">추가됨</span> <code>npm run release</code></td></tr>
+    <tr><td>공증용 앱 암호</td><td><span class="pill bad">없음 — 아래 ①</span></td></tr>
+    <tr><td>맥에 자격증명 저장</td><td><span class="pill bad">안 됨 — 아래 ②</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>하실 일</h2>
+
+<div class="step">
+  <span class="n">1</span><h3>앱 암호 발급 (웹, 2분)</h3>
+  <div class="body">
+    <p><a href="https://account.apple.com">account.apple.com</a> 로그인 → <strong>로그인 및 보안</strong> → <strong>앱 암호</strong> → <code>+</code></p>
+    <p>이름은 자유롭게, 예: <code>haru 공증</code></p>
+    <p><code>abcd-efgh-ijkl-mnop</code> 형태 16자가 나옵니다.</p>
+    <div class="note danger" style="margin-bottom:0">
+      <strong>이 창을 닫으면 다시 볼 수 없습니다.</strong> 바로 다음 단계에 붙여넣으세요.
+      그리고 다른 세션에서 만든 앱 암호는 그대로 두세요 — 섞어 쓰면 하나를 폐기할 때 둘 다 죽습니다.
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <span class="n">2</span><h3>맥에 한 번 저장 (터미널, 1분)</h3>
+  <div class="body">
+    <pre><code>xcrun notarytool store-credentials "haru" \
+  --apple-id &lt;사장님 Apple ID&gt; \
+  --team-id 32R6RHXU36 \
+  --password &lt;방금 받은 앱 암호&gt;</code></pre>
+    <p>
+      팀 ID <code>32R6RHXU36</code>은 인증서에서 확인된 값이라 그대로 쓰시면 됩니다.
+      이걸로 앱 암호가 <strong>Keychain에 들어가고 앞으로 다시 입력할 일이 없습니다.</strong>
+    </p>
+    <p style="margin-bottom:0">
+      셸 히스토리에 남기지 않으려면 명령 맨 앞에 <strong>공백 한 칸</strong>을 넣고 실행하세요.
+    </p>
+  </div>
+</div>
+
+<h2>그 다음 — 배포</h2>
+
+<pre><code>npm run release</code></pre>
+
+<p>이 한 줄이 아래를 순서대로 합니다.</p>
+
+<pre><code>1/4  사전 확인 ──┬── Developer ID 인증서가 Keychain에 있는가
+                 ├── 공증 자격증명 "haru" 가 유효한가
+                 └── GitHub 토큰이 있는가
+                        │
+                        └─ 하나라도 없으면 여기서 중단 ✋
+
+2/4  빌드        electron-vite build
+
+3/4  패키징      서명 → 공증 → GitHub draft 릴리스 게시
+                 (arm64 + x64 dmg)
+
+4/4  검증        codesign --verify
+                 spctl → "Notarized Developer ID" 확인
+                        │
+                        └─ 실패하면 draft로 남김 (사용자에게 안 나감) ✋
+
+완료 → 공개 명령어를 알려줍니다</code></pre>
+
+<div class="note warn">
+  <strong>이 안전장치가 왜 필요한가.</strong>
+  electron-builder는 공증 자격증명이 없으면 <strong>조용히 건너뛰고 성공한 척</strong> 합니다
+  (<code>macPackager.js</code>: <em>"if no credentials provided, skip silently"</em>).
+  그대로 나가면 사용자가 다운로드해서 열 때 <strong>"손상되었거나 열 수 없습니다"</strong>를 만납니다.
+  개발자는 성공했다고 믿고 있는데 사용자만 아는 실패입니다. 그래서 앞뒤로 두 번 확인합니다.
+</div>
+
+<h2>공개하기</h2>
+
+<p><code>npm run release</code>가 끝나면 릴리스가 <strong>draft</strong>로 올라갑니다. 확인 후 공개하세요.</p>
+
+<pre><code>gh release edit v2.0.1 --draft=false --latest</code></pre>
+
+<p>
+  공개하는 순간 <a href="https://github.com/supaicy/homebrew-haru">Homebrew cask</a>도 자동 갱신돼서
+  <code>brew upgrade haru</code> 쓰는 분들에게도 나갑니다.
+</p>
+
+<div class="note">
+  이게 <strong>v1.4.1(2026-04-20) 이후 3개월 만의 첫 배포</strong>입니다.
+  CHANGELOG에 "첫 정식 공개 릴리스"라고 적힌 v2.0.0은 실제로는 GitHub에 올라간 적이 없습니다.
+</div>
+
+<h2>나중에 자동화하고 싶어지면</h2>
+
+<p>
+  GitHub Actions 워크플로는 <strong>이미 준비돼 있습니다</strong>(커밋 <code>fe700b0</code>).
+  그때는 인증서를 <code>.p12</code>로 내보내고 App Store Connect API 키를 발급해 시크릿 6개를 등록하면,
+  이후로는 <code>git tag</code> 하나로 전부 자동입니다.
+</p>
+
+<p>
+  지금은 그 워크플로가 시크릿이 없으면 <strong>Preflight에서 멈추도록</strong> 해뒀습니다.
+  로컬 배포에는 방해가 안 되고, 실수로 태그를 밀었을 때 서명 없는 dmg가 나가는 걸 막아줍니다.
+</p>
+
+<h2>정리</h2>
+
+<pre><code>지금        ① 앱 암호 발급 (account.apple.com)
+            ② xcrun notarytool store-credentials "haru" ...
+
+배포할 때   npm run release
+            gh release edit v2.0.1 --draft=false --latest
+
+나중에      시크릿 6개 등록 → git tag 만으로 자동화</code></pre>
+
+<footer>
+  2026-07-29 · 브랜치 <code>supaicy/coordinate</code> · PR
+  <a href="https://github.com/supaicy/haru/pull/19">#19</a><br />
+  관련 문서: <code>docs/DEPLOYMENT.md</code> (두 채널 전체 가이드) ·
+  <code>scripts/release.sh</code> (이 스크립트 소스) ·
+  <code>.github/workflows/release.yml</code> (자동화용, 시크릿 대기 중)
+</footer>
+
+</div>
+</body>
+</html>
