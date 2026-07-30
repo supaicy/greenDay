@@ -50,17 +50,40 @@ export APPLE_KEYCHAIN_PROFILE="$PROFILE"
 npx electron-builder --mac --arm64 --x64 --publish always
 
 echo "── 4/4  검증"
+# 사용자가 실제로 받는 건 dmg다. 빌드 중간산출물(dist/mac-*/haru.app)이 아니라
+# dmg를 마운트해 그 안의 앱을 검사해야 실제 Gatekeeper 판정과 일치한다.
+# (dmg 컨테이너 자체는 서명하지 않는 것이 electron-builder 기본값이며,
+#  안의 앱이 스테이플돼 있으면 사용자 실행에 문제가 없다.)
 fail=0
-for app in dist/mac-arm64/haru.app dist/mac/haru.app dist/mac-x64/haru.app; do
-  [ -d "$app" ] || continue
-  echo "  $app"
-  codesign --verify --deep --strict "$app" || fail=1
-  if spctl -a -vvv -t install "$app" 2>&1 | grep -q "Notarized Developer ID"; then
-    echo "    공증 확인됨"
-  else
-    echo "    ERROR: 공증되지 않았습니다" >&2; fail=1
+found=0
+for dmg in dist/haru-*.dmg; do
+  [ -f "$dmg" ] || continue
+  found=1
+  echo "  $(basename "$dmg")"
+  mnt="$(mktemp -d)"
+  if ! hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$mnt" 2>/dev/null; then
+    echo "    ERROR: dmg 마운트 실패" >&2; fail=1; rmdir "$mnt" 2>/dev/null; continue
   fi
+  app="$mnt/haru.app"
+  if [ ! -d "$app" ]; then
+    echo "    ERROR: dmg 안에 haru.app 이 없습니다" >&2; fail=1
+  else
+    codesign --verify --deep --strict "$app" 2>/dev/null || { echo "    ERROR: 서명 검증 실패" >&2; fail=1; }
+    if xcrun stapler validate "$app" >/dev/null 2>&1; then
+      echo "    스테이플 티켓 OK"
+    else
+      echo "    ERROR: 공증 티켓이 앱에 붙어 있지 않습니다" >&2; fail=1
+    fi
+    if spctl -a -vvv -t exec "$app" 2>&1 | grep -q "source=Notarized Developer ID"; then
+      echo "    Gatekeeper 통과 (Notarized Developer ID)"
+    else
+      echo "    ERROR: Gatekeeper가 거부합니다 — 사용자가 실행하지 못합니다" >&2; fail=1
+    fi
+  fi
+  hdiutil detach "$mnt" -quiet 2>/dev/null || true
+  rmdir "$mnt" 2>/dev/null || true
 done
+[ "$found" = "1" ] || { echo "ERROR: 검증할 dmg가 없습니다" >&2; exit 1; }
 [ "$fail" = "0" ] || { echo "검증 실패 — 릴리스는 draft로 남겨둡니다." >&2; exit 1; }
 
 echo
