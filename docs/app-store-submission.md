@@ -150,7 +150,7 @@ https://supaicy.github.io/haru/
 ```
 https://supaicy.github.io/haru/privacy.html
 ```
-> 🤖 문서는 `docs/privacy.html`에 작성 완료. **GitHub Pages를 켜야 이 URL이 열립니다** (아래 5절).
+> ✅ 게시 완료 — 이 주소는 지금 열립니다 (HTTP 200 확인). 원본은 `docs/privacy.html`.
 
 **저작권**
 ```
