@@ -269,25 +269,37 @@ Privacy policy: https://supaicy.github.io/haru/privacy.html
 
 ---
 
-## 5. GitHub Pages 활성화 (개인정보처리방침 URL용)
+## 5. GitHub Pages ✅ 완료
 
-⬜ 현재 **비활성**입니다. 켜지 않으면 개인정보처리방침 URL이 404가 되고 **심사가 반려됩니다.**
+`gh-pages` 브랜치에 **공개용 파일만** 담아 서빙합니다 (`index.html`, `privacy.html`, `icon-128.png`).
+`main:docs/`의 설계 문서·리뷰 리포트·가격 계획은 **웹사이트로 노출되지 않습니다** (404 확인 완료).
 
-Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / 폴더: `/docs` → Save
+| URL | 상태 |
+|---|---|
+| `https://supaicy.github.io/haru/` | ✅ 200 |
+| `https://supaicy.github.io/haru/privacy.html` | ✅ 200 ← **이 주소를 심사에 제출** |
 
-몇 분 뒤 아래가 열립니다:
-- `https://supaicy.github.io/haru/` (랜딩)
-- `https://supaicy.github.io/haru/privacy.html` (방침)
-
-> ⚠️ `docs/` 전체가 공개 웹사이트가 됩니다. 설계 문서·리뷰 리포트도 포함됩니다.
-> 저장소가 이미 공개라 내용 자체는 볼 수 있었지만, 웹으로 탐색 가능해진다는 점은 알고 계세요.
-> 원치 않으면 방침 파일만 별도 브랜치나 다른 호스팅으로 올리면 됩니다.
+> 방침을 고치면 `main:docs/privacy.html`을 먼저 고치고 `gh-pages` 브랜치로 복사하세요.
 
 ---
 
-## 6. 스크린샷
+## 6. 스크린샷 ✅ 6장 준비됨
 
-⬜ **최소 1장, 권장 4~6장.** 아래 해상도 중 하나로 통일해야 합니다.
+`docs/app-store/screenshots/` 에 **2880×1800** 6장이 있습니다. 그대로 업로드하시면 됩니다.
+
+| 파일 | 화면 |
+|---|---|
+| `01-오늘.png` | 마감·우선순위·태그가 붙은 할 일 목록 |
+| `02-캘린더-주.png` | 시간 블록 배치 |
+| `03-칸반보드.png` | 할 일 / 진행 중 / 완료 |
+| `04-아이젠하워.png` | 중요도·긴급도 4분면 |
+| `05-습관.png` | 주간 체크와 연속 기록 |
+| `06-설정-프라이버시.png` | 로컬 전용 잠금 · 로컬 AI |
+
+실제 개인 할 일이 들어가지 않도록 격리된 데모 데이터로 촬영했습니다.
+재촬영 절차는 `docs/app-store/README.md` 참조.
+
+<details><summary>허용 해상도 (참고)</summary>
 
 | 허용 크기 | 비고 |
 |---|---|
@@ -296,7 +308,9 @@ Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / 폴�
 | 1440 × 900 | 비Retina |
 | 1280 × 800 | |
 
-**추천 구성**
+</details>
+
+<details><summary>원래 추천했던 구성 (참고)</summary>
 
 1. 목록 뷰 — 할 일이 채워진 오늘 화면
 2. 캘린더 (주) — 시간 블록이 배치된 상태
@@ -308,6 +322,8 @@ Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / 폴�
 > 스크린샷에 **실제 개인 할 일이 보이지 않게** 주의하세요. 데모용 데이터를 따로 만드는 게 안전합니다.
 > 격리 실행으로 빈 데이터에서 시작할 수 있습니다:
 > `npx electron-vite dev -- --user-data-dir=/tmp/haru-demo`
+
+</details>
 
 ---
 
@@ -357,9 +373,10 @@ Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / 폴�
 | MAS에서 updater/전역단축키 비활성 | ✅ `process.mas` 가드 |
 | 아이콘 | ✅ 원본 1920×1920 (1024 요구 충족) |
 | 카테고리 | ✅ `public.app-category.productivity` |
-| 개인정보처리방침 | 🤖 `docs/privacy.html` (한/영) |
+| 개인정보처리방침 | ✅ 게시됨 https://supaicy.github.io/haru/privacy.html |
 | 메타데이터 텍스트 | 🤖 이 문서 3절 |
 | App Privacy 답안 + 심사 노트 | 🤖 이 문서 4절 |
+| 스크린샷 6장 (2880×1800) | ✅ `docs/app-store/screenshots/` |
 
 ---
 
