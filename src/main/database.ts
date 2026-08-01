@@ -108,6 +108,7 @@ export function initDatabase(): void {
   dbPath = path.join(userDataPath, 'ticktick-data.json')
   aiConfigPath = path.join(userDataPath, 'ai-config.json')
   chatHistoryPath = path.join(userDataPath, 'ai-chat.json')
+  calendarConfigPath = path.join(userDataPath, 'calendar-config.json')
   attachmentsDir = path.join(userDataPath, 'attachments')
   if (!existsSync(attachmentsDir)) mkdirSync(attachmentsDir, { recursive: true })
   data = load()
@@ -425,6 +426,12 @@ export function listAttachmentFiles(): string[] {
 // === AI Config ===
 let aiConfigPath: string
 let chatHistoryPath: string
+let calendarConfigPath: string
+
+/** 캘린더 설정 파일 경로. initDatabase 전에는 빈 문자열. */
+export function getCalendarConfigPath(): string {
+  return calendarConfigPath ?? ''
+}
 
 export interface KeyCrypto {
   available(): boolean
@@ -432,7 +439,7 @@ export interface KeyCrypto {
   decrypt(b64: string): string
 }
 
-const realCrypto: KeyCrypto = {
+export const realCrypto: KeyCrypto = {
   available: () => {
     try {
       return safeStorage.isEncryptionAvailable()
