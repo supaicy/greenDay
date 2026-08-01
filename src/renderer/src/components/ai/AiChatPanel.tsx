@@ -314,9 +314,12 @@ export function AiChatPanel() {
       {aiPendingAction && (
         <div className={`mx-3 mb-2 rounded-lg border p-3 ${isDark ? 'border-amber-500/30 bg-amber-500/10' : 'border-amber-300 bg-amber-50'}`}>
           <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+            {/* components를 명시해 i18next 기본 태그 허용목록에 의존하지 않게 한다 —
+                누락되면 사용자에게 <strong> 태그가 그대로 보인다. */}
             <Trans
               i18nKey="ai.confirmAction"
               values={{ action: actionOpLabel(aiPendingAction.op, aiPendingAction.dueDate) }}
+              components={{ strong: <strong /> }}
             />
           </p>
           <p className={`text-sm font-medium mt-0.5 truncate ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>

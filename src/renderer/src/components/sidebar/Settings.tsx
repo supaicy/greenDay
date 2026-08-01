@@ -430,7 +430,7 @@ export function Settings() {
                 >
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                   <span>
-                    <Trans i18nKey="settings.externalWarning" />
+                    <Trans i18nKey="settings.externalWarning" components={{ strong: <strong /> }} />
                   </span>
                 </div>
               )}
