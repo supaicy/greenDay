@@ -141,6 +141,16 @@ const api = {
   // 메인이 직접 띄우는 알림 문구를 위해 UI 언어를 알려 준다.
   setLanguage: (language: string) => ipcRenderer.invoke('set-language', language),
 
+  // 캘린더 연동. 비밀번호는 저장하러 보낼 때만 오가고, 읽어올 때는 절대 넘어오지 않는다.
+  calendarGetConfig: () => ipcRenderer.invoke('calendar:get-config'),
+  calendarSaveCredentials: (input: { serverUrl?: string; username?: string; password?: string }) =>
+    ipcRenderer.invoke('calendar:save-credentials', input),
+  calendarTestConnection: () => ipcRenderer.invoke('calendar:test-connection'),
+  calendarSelect: (url: string, name: string) => ipcRenderer.invoke('calendar:select', url, name),
+  calendarSetEnabled: (enabled: boolean) => ipcRenderer.invoke('calendar:set-enabled', enabled),
+  calendarSyncNow: () => ipcRenderer.invoke('calendar:sync-now'),
+  calendarDisconnect: () => ipcRenderer.invoke('calendar:disconnect'),
+
   // IPC events
   onGlobalQuickAdd: (callback: () => void) => {
     const handler = (_: Electron.IpcRendererEvent): void => callback()

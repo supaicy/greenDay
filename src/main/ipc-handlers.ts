@@ -5,6 +5,16 @@ import { v4 as uuid } from 'uuid'
 import * as db from './database'
 import * as ai from './ai-service'
 import { validateTaskInput, validateTaskUpdate } from './validate'
+import {
+  readConfigFile,
+  writeConfigFile,
+  toPublicConfig,
+  DEFAULT_CONFIG,
+  type CalendarConfig
+} from './calendar-config'
+import { CalDavClient, CalDavError } from './caldav/client'
+import { runSync } from './calendar-sync'
+import type { TaskRow } from './caldav/sync'
 
 function csvCell(value: unknown): string {
   const s = String(value ?? '')
@@ -177,6 +187,121 @@ export function setupIpcHandlers(): void {
         if (!sender.isDestroyed()) sender.send('ai:pull-error', error)
       }
     )
+  })
+
+  // === 캘린더 연동 (CalDAV) ===
+  // 설정은 파일에 두고, 비밀번호만 safeStorage로 암호화한다. 렌더러에는 절대 넘기지 않는다.
+  const loadCalendarConfig = (): CalendarConfig =>
+    readConfigFile(db.getCalendarConfigPath(), db.realCrypto)
+  const storeCalendarConfig = (config: CalendarConfig): void =>
+    writeConfigFile(db.getCalendarConfigPath(), config, db.realCrypto)
+
+  // CalDAV 오류는 사용자에게 그대로 보여줄 수 있게 다듬어져 있다. 그 외 예외는
+  // 내부 정보가 새지 않도록 일반 문구로 바꾼다.
+  const describeError = (error: unknown): string =>
+    error instanceof CalDavError ? error.message : '알 수 없는 오류가 발생했습니다.'
+
+  ipcMain.handle('calendar:get-config', () => toPublicConfig(loadCalendarConfig()))
+
+  ipcMain.handle(
+    'calendar:save-credentials',
+    (_, input: { serverUrl?: string; username?: string; password?: string }) => {
+      const config = loadCalendarConfig()
+      const next: CalendarConfig = {
+        ...config,
+        serverUrl: String(input?.serverUrl || config.serverUrl || DEFAULT_CONFIG.serverUrl),
+        username: String(input?.username ?? config.username),
+        // 빈 문자열이 오면 기존 비밀번호를 유지한다 — UI가 값을 되채우지 않기 때문에
+        // 사용자가 다른 항목만 고칠 때 비밀번호가 지워지면 안 된다.
+        password: input?.password ? String(input.password) : config.password,
+        lastError: null
+      }
+      storeCalendarConfig(next)
+      return toPublicConfig(next)
+    }
+  )
+
+  ipcMain.handle('calendar:test-connection', async () => {
+    const config = loadCalendarConfig()
+    if (!config.username || !config.password) {
+      return { ok: false, message: '계정과 앱 암호를 먼저 입력하세요.', calendars: [] }
+    }
+    try {
+      const client = new CalDavClient({
+        serverUrl: config.serverUrl,
+        username: config.username,
+        password: config.password
+      })
+      const calendars = await client.discoverCalendars()
+      storeCalendarConfig({ ...config, lastError: null })
+      // 일정을 담을 수 없는 컬렉션(미리알림 등)은 고를 수 없게 미리 걸러 보낸다.
+      return { ok: true, message: null, calendars: calendars.filter((c) => c.supportsEvents) }
+    } catch (error) {
+      const message = describeError(error)
+      storeCalendarConfig({ ...config, lastError: message })
+      return { ok: false, message, calendars: [] }
+    }
+  })
+
+  ipcMain.handle('calendar:select', (_, url: string, name: string) => {
+    const config = loadCalendarConfig()
+    // 다른 캘린더로 옮기면 이전 캘린더의 동기화 상태는 의미가 없다. 남겨 두면 새
+    // 캘린더에서 존재하지 않는 리소스를 갱신하려다 매번 실패한다.
+    const changed = config.calendarUrl !== url
+    const next: CalendarConfig = {
+      ...config,
+      calendarUrl: String(url),
+      calendarName: String(name),
+      enabled: true,
+      syncState: changed ? {} : config.syncState
+    }
+    storeCalendarConfig(next)
+    return toPublicConfig(next)
+  })
+
+  ipcMain.handle('calendar:set-enabled', (_, enabled: boolean) => {
+    const next = { ...loadCalendarConfig(), enabled: Boolean(enabled) }
+    storeCalendarConfig(next)
+    return toPublicConfig(next)
+  })
+
+  ipcMain.handle('calendar:sync-now', async () => {
+    const config = loadCalendarConfig()
+    if (!config.username || !config.password || !config.calendarUrl) {
+      return { ok: false, message: '연동 설정을 먼저 마치세요.', result: null }
+    }
+    try {
+      const result = await runSync({
+        credentials: {
+          serverUrl: config.serverUrl,
+          username: config.username,
+          password: config.password
+        },
+        calendarUrl: config.calendarUrl,
+        tasks: db.getTasks() as unknown as TaskRow[],
+        state: config.syncState,
+        now: new Date().toISOString()
+      })
+      storeCalendarConfig({
+        ...config,
+        syncState: result.state,
+        lastSyncAt: new Date().toISOString(),
+        lastError: null
+      })
+      const { state, ...summary } = result
+      return { ok: true, message: null, result: summary }
+    } catch (error) {
+      const message = describeError(error)
+      storeCalendarConfig({ ...config, lastError: message })
+      return { ok: false, message, result: null }
+    }
+  })
+
+  ipcMain.handle('calendar:disconnect', () => {
+    // 자격증명과 동기화 상태를 모두 버린다. 서버의 일정은 건드리지 않는다 —
+    // 연동 해제가 사용자의 캘린더를 비우는 동작이면 되돌릴 방법이 없다.
+    storeCalendarConfig({ ...DEFAULT_CONFIG })
+    return toPublicConfig(DEFAULT_CONFIG)
   })
 
   // Quick add (global shortcut)

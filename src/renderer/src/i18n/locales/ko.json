@@ -418,5 +418,33 @@
     "deleteSelected": "선택한 할 일 삭제",
     "priority": "선택한 할 일 우선순위 (없음~높음)",
     "escape": "선택 해제 / 닫기"
+  },
+  "calendarSync": {
+    "title": "캘린더 동기화",
+    "desc": "haru의 날짜가 있는 할일을 iCloud 캘린더에 올립니다. iPhone·iPad의 캘린더 앱에서 그대로 보입니다.",
+    "provider": "서비스",
+    "providerIcloud": "iCloud",
+    "providerCustom": "직접 입력 (CalDAV)",
+    "serverUrl": "서버 주소",
+    "appleId": "Apple ID",
+    "appPassword": "앱 암호",
+    "appPasswordHint": "계정 암호가 아니라 <strong>앱 암호</strong>가 필요합니다. account.apple.com에서 발급하세요.",
+    "appPasswordLink": "앱 암호 발급 페이지 열기",
+    "appPasswordSaved": "저장됨 — 바꾸려면 새로 입력하세요",
+    "connect": "연결 확인",
+    "connecting": "확인 중…",
+    "pickCalendar": "동기화할 캘린더",
+    "noWritableCalendar": "일정을 저장할 수 있는 캘린더가 없습니다. 캘린더 앱에서 하나 만들어 주세요.",
+    "syncNow": "지금 동기화",
+    "syncing": "동기화 중…",
+    "lastSync": "마지막 동기화: {{when}}",
+    "neverSynced": "아직 동기화한 적 없음",
+    "syncResult": "올림 {{created}} · 갱신 {{updated}} · 삭제 {{deleted}}",
+    "syncSkipped": "날짜가 없어 건너뛴 할일 {{count}}개",
+    "syncFailures": "실패 {{count}}건 — 다음 동기화에서 다시 시도합니다",
+    "disconnect": "연동 해제",
+    "disconnectHint": "저장된 계정 정보를 지웁니다. 캘린더에 올라간 일정은 지우지 않습니다.",
+    "oneWayNote": "haru → 캘린더 한 방향입니다. 캘린더에서 고친 내용은 haru로 돌아오지 않습니다.",
+    "connected": "{{name}}에 연결됨"
   }
 }

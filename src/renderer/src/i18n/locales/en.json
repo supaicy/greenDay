@@ -418,5 +418,33 @@
     "deleteSelected": "Delete selected task",
     "priority": "Selected task priority (none–high)",
     "escape": "Deselect / close"
+  },
+  "calendarSync": {
+    "title": "Calendar sync",
+    "desc": "Publishes your dated haru tasks to an iCloud calendar, so they show up in Calendar on iPhone and iPad.",
+    "provider": "Service",
+    "providerIcloud": "iCloud",
+    "providerCustom": "Custom (CalDAV)",
+    "serverUrl": "Server URL",
+    "appleId": "Apple ID",
+    "appPassword": "App-specific password",
+    "appPasswordHint": "This needs an <strong>app-specific password</strong>, not your account password. Create one at account.apple.com.",
+    "appPasswordLink": "Open the app password page",
+    "appPasswordSaved": "Saved — enter a new one to replace it",
+    "connect": "Test connection",
+    "connecting": "Checking…",
+    "pickCalendar": "Calendar to sync to",
+    "noWritableCalendar": "No calendar here can store events. Create one in the Calendar app first.",
+    "syncNow": "Sync now",
+    "syncing": "Syncing…",
+    "lastSync": "Last synced: {{when}}",
+    "neverSynced": "Never synced",
+    "syncResult": "{{created}} added · {{updated}} updated · {{deleted}} removed",
+    "syncSkipped": "{{count}} task(s) skipped — no date to place them on",
+    "syncFailures": "{{count}} failed — will retry on the next sync",
+    "disconnect": "Disconnect",
+    "disconnectHint": "Clears the saved account. Events already in your calendar are left alone.",
+    "oneWayNote": "This is one-way: haru → calendar. Edits made in Calendar do not come back to haru.",
+    "connected": "Connected to {{name}}"
   }
 }
