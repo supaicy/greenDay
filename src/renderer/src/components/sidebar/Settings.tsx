@@ -1,27 +1,33 @@
 import { useState, useEffect } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { X, ArrowUpCircle, CheckCircle2, Wifi, WifiOff, Download, Loader2, RefreshCw, Lock, AlertTriangle } from 'lucide-react'
 import { useStore, type Theme } from '../../store/useStore'
+import { LANGUAGES, type Language } from '../../i18n'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 
 // 설명은 실제 동작과 1:1로 맞춘다. Cmd+N/Cmd+Shift+A는 토글이고,
 // Cmd+D·Delete·1-4는 할 일이 선택돼 있어야만 동작한다(선택이 없으면 아무 일도
 // 일어나지 않는데 이전 문구에는 그 전제가 없었다).
 const SHORTCUTS = [
-  { keys: 'Cmd+N', desc: '할 일 추가 열기/닫기' },
-  { keys: 'Cmd+Shift+A', desc: '빠른 추가 열기/닫기' },
-  { keys: 'Cmd+F', desc: '검색' },
-  { keys: 'Cmd+Z', desc: '되돌리기' },
-  { keys: 'Cmd+E', desc: '데이터 내보내기' },
-  { keys: 'Cmd+D', desc: '선택한 할 일을 오늘 마감으로' },
-  { keys: 'Delete', desc: '선택한 할 일 삭제' },
-  { keys: '1-4', desc: '선택한 할 일 우선순위 (없음~높음)' },
-  { keys: 'Esc', desc: '선택 해제 / 닫기' }
+  { keys: 'Cmd+N', key: 'addTask' },
+  { keys: 'Cmd+Shift+A', key: 'quickAdd' },
+  { keys: 'Cmd+F', key: 'search' },
+  { keys: 'Cmd+Z', key: 'undo' },
+  { keys: 'Cmd+E', key: 'export' },
+  { keys: 'Cmd+D', key: 'dueToday' },
+  { keys: 'Delete', key: 'deleteSelected' },
+  { keys: '1-4', key: 'priority' },
+  { keys: 'Esc', key: 'escape' }
 ]
 
-const THEMES: { value: Theme; label: string }[] = [
-  { value: 'dark', label: '다크' },
-  { value: 'light', label: '라이트' }
+const THEMES: { value: Theme; key: string }[] = [
+  { value: 'dark', key: 'settings.themeDark' },
+  { value: 'light', key: 'settings.themeLight' }
 ]
+
+// 언어 이름은 번역하지 않는다 — 영어 UI에서 '한국어'를 'Korean'으로 바꿔 두면
+// 한국어를 찾는 사람이 자기 언어의 이름을 못 알아본다.
+const LANGUAGE_LABELS: Record<Language, string> = { ko: '한국어', en: 'English' }
 
 // 진행률 불확정(manifest/verify 등 percent=null) 단계에서 보여줄 바 폭(%).
 const INDETERMINATE_BAR_PCT = 8
@@ -93,20 +99,21 @@ function OllamaModelHint({
   isDark: boolean
   onInstall: () => void
 }) {
+  const { t } = useTranslation()
   const hasRecommended = hasKoreanRecommendedModel(aiModels)
   const installing = !hasRecommended && aiPull?.active
   const canInstall = !hasRecommended && !aiPull?.active && aiConnected === true
   const manualOnly = !hasRecommended && !aiPull?.active && aiConnected !== true
   return (
     <div className={`mt-1 space-y-1.5 text-xs ${hintText(isDark)}`}>
-      {!canInstall && <p>한국어 답변은 8B 이상 모델을 권장합니다.</p>}
+      {!canInstall && <p>{t('settings.modelHint8b')}</p>}
 
       {installing && aiPull && (
         <div className="space-y-1">
           <div className="flex items-center gap-1.5">
             <Loader2 size={12} className="animate-spin" />
             <span>
-              설치 중: <b>{aiPull.model}</b> · {aiPull.status}
+              {t('settings.modelInstalling')}: <b>{aiPull.model}</b> · {aiPull.status}
               {aiPull.percent != null ? ` ${aiPull.percent}%` : ''}
             </span>
           </div>
@@ -121,36 +128,43 @@ function OllamaModelHint({
 
       {canInstall && (
         <div className="space-y-1">
-          <p>한국어 답변은 8B 이상, 그중 한국어 특화 모델(EXAONE)이 가장 정확합니다.</p>
+          <p>{t('settings.modelHintExaone')}</p>
           <button
             type="button"
             onClick={onInstall}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary-700 text-white hover:bg-primary-800 ${focusRing(isDark)}`}
           >
-            <Download size={12} /> 한국어 모델 설치 (exaone3.5)
+            <Download size={12} /> {t('settings.modelInstall')}
           </button>
-          {aiPull?.error && <p className={errorText(isDark)}>설치 실패: {aiPull.error}</p>}
+          {aiPull?.error && (
+            <p className={errorText(isDark)}>
+              {t('settings.modelInstallFailed')}: {aiPull.error}
+            </p>
+          )}
         </div>
       )}
 
       {manualOnly && (
         <p>
-          한국어 특화 모델(EXAONE)이 더 정확합니다. Ollama 실행 후 설치 —{' '}
+          {t('settings.modelHintManual')}{' '}
           <code className={labelText(isDark)}>ollama pull exaone3.5</code>
         </p>
       )}
 
       {hasRecommended && aiPull && !aiPull.active && !aiPull.error && (
-        <p className={successText(isDark)}>✓ {aiPull.model} 설치 완료 — 모델로 선택됨</p>
+        <p className={successText(isDark)}>✓ {t('settings.modelInstallDone', { model: aiPull.model })}</p>
       )}
     </div>
   )
 }
 
 export function Settings() {
+  const { t } = useTranslation()
   const {
     theme,
     setTheme,
+    language,
+    setLanguage,
     showSettings,
     toggleSettings,
     exportData,
@@ -277,18 +291,18 @@ export function Settings() {
         className={`flex w-[480px] max-h-[80vh] flex-col overflow-hidden rounded-xl shadow-2xl ${isDark ? 'bg-[#2C2C2E] text-gray-100' : 'bg-white text-gray-800'}`}
         role="dialog"
         aria-modal="true"
-        aria-label="설정"
+        aria-label={t('settings.title')}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
         <div
           className={`flex shrink-0 items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}
         >
-          <h2 className="text-base font-semibold">설정</h2>
+          <h2 className="text-base font-semibold">{t('settings.title')}</h2>
           <button
             type="button"
             onClick={toggleSettings}
-            aria-label="설정 닫기"
+            aria-label={t('settings.close')}
             // 라이트 모드에서 hover:text-gray-300은 흰 배경 위 1.6:1 — 마우스를 올리면
             // 오히려 사라졌다. 두 테마 모두 hover 시 더 진해지도록.
             className={`rounded transition-colors ${focusRing(isDark)} ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'}`}
@@ -302,10 +316,10 @@ export function Settings() {
         <div className="overflow-y-auto p-5 space-y-8">
           {/* 테마 */}
           <div>
-            <SectionHeading isDark={isDark} label="테마" />
+            <SectionHeading isDark={isDark} label={t('settings.theme')} />
             <fieldset className={`inline-flex rounded-lg p-0.5 ${isDark ? 'bg-black/20' : 'bg-gray-100'}`}>
-              <legend className="sr-only">테마</legend>
-              {THEMES.map(({ value, label }) => (
+              <legend className="sr-only">{t('settings.theme')}</legend>
+              {THEMES.map(({ value, key }) => (
                 <label key={value} className={segment(theme === value)}>
                   <input
                     type="radio"
@@ -315,7 +329,28 @@ export function Settings() {
                     onChange={() => setTheme(value)}
                     className="sr-only peer"
                   />
-                  {label}
+                  {t(key)}
+                </label>
+              ))}
+            </fieldset>
+          </div>
+
+          {/* 언어 */}
+          <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
+            <SectionHeading isDark={isDark} label={t('settings.language')} />
+            <fieldset className={`inline-flex rounded-lg p-0.5 ${isDark ? 'bg-black/20' : 'bg-gray-100'}`}>
+              <legend className="sr-only">{t('settings.language')}</legend>
+              {LANGUAGES.map((value) => (
+                <label key={value} className={segment(language === value)}>
+                  <input
+                    type="radio"
+                    name="language"
+                    value={value}
+                    checked={language === value}
+                    onChange={() => setLanguage(value)}
+                    className="sr-only peer"
+                  />
+                  {LANGUAGE_LABELS[value]}
                 </label>
               ))}
             </fieldset>
@@ -323,7 +358,7 @@ export function Settings() {
 
           {/* 데이터 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} label="데이터" />
+            <SectionHeading isDark={isDark} label={t('settings.data')} />
             <button
               type="button"
               onClick={() => {
@@ -336,17 +371,15 @@ export function Settings() {
             >
               <Download size={18} />
               <div className="text-left">
-                <div className="text-sm font-medium">데이터 내보내기</div>
-                <div className={`text-xs ${labelText(isDark)}`}>
-                  JSON 또는 CSV로 백업
-                </div>
+                <div className="text-sm font-medium">{t('settings.exportData')}</div>
+                <div className={`text-xs ${labelText(isDark)}`}>{t('settings.exportDesc')}</div>
               </div>
             </button>
           </div>
 
           {/* AI 설정 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} label="AI 어시스턴트">
+            <SectionHeading isDark={isDark} label={t('settings.ai')}>
               {aiConnected === true && <Wifi size={14} className={successText(isDark)} />}
               {aiConnected === false && <WifiOff size={14} className={errorText(isDark)} />}
             </SectionHeading>
@@ -356,7 +389,7 @@ export function Settings() {
                   htmlFor="ai-provider"
                   className={`text-xs ${labelText(isDark)}`}
                 >
-                  AI 제공자
+                  {t('settings.aiProvider')}
                 </label>
                 <select
                   id="ai-provider"
@@ -375,12 +408,13 @@ export function Settings() {
                   }}
                   className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${fieldSurface(isDark)}`}
                 >
-                  <option value="ollama">Ollama (로컬)</option>
+                  <option value="ollama">{t('settings.aiProviderOllama')}</option>
                   <option value="openai" disabled={aiLocalOnly}>
-                    OpenAI{aiLocalOnly ? ' (로컬 전용 잠금됨)' : ''}
+                    OpenAI{aiLocalOnly ? t('settings.localOnlyLocked') : ''}
                   </option>
                   <option value="custom" disabled={aiLocalOnly}>
-                    커스텀 API{aiLocalOnly ? ' (로컬 전용 잠금됨)' : ''}
+                    {t('settings.aiProviderCustom')}
+                    {aiLocalOnly ? t('settings.localOnlyLocked') : ''}
                   </option>
                 </select>
               </div>
@@ -396,8 +430,7 @@ export function Settings() {
                 >
                   <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                   <span>
-                    이 제공자를 사용하면 <b>대화·할일 내용이 외부 서버로 전송</b>됩니다. 프라이버시가 중요하면
-                    Ollama(로컬)를 사용하세요.
+                    <Trans i18nKey="settings.externalWarning" />
                   </span>
                 </div>
               )}
@@ -414,10 +447,10 @@ export function Settings() {
                   {/* 라벨의 '(외부 AI 차단)'과 설명이 같은 말을 두 번 하고 있었다. 라벨은 짧게,
                       설명이 한 번만 말하게 한다. */}
                   <span className={`flex items-center gap-1.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                    <Lock size={13} /> 로컬 전용
+                    <Lock size={13} /> {t('settings.localOnly')}
                   </span>
                   <span className={`block text-xs mt-0.5 ${hintText(isDark)}`}>
-                    외부 AI 제공자를 차단해 데이터가 기기를 벗어나지 않습니다.
+                    {t('settings.localOnlyDesc')}
                   </span>
                 </span>
               </label>
@@ -426,7 +459,7 @@ export function Settings() {
                   htmlFor="ai-base-url"
                   className={`text-xs ${labelText(isDark)}`}
                 >
-                  API URL
+                  {t('settings.apiUrl')}
                 </label>
                 <input
                   id="ai-base-url"
@@ -438,7 +471,7 @@ export function Settings() {
               </div>
               <div>
                 <label htmlFor="ai-model" className={`text-xs ${labelText(isDark)}`}>
-                  모델
+                  {t('settings.model')}
                 </label>
                 {aiProvider === 'ollama' && aiModels.length > 0 ? (
                   // Ollama: 설치된 모델을 드롭다운으로. 저장값이 목록에 없으면 맨 위에 표시.
@@ -450,18 +483,21 @@ export function Settings() {
                       className={`flex-1 px-3 py-2 rounded-lg text-sm ${fieldSurface(isDark)}`}
                     >
                       {aiModel && !aiModels.includes(aiModel) && (
-                        <option value={aiModel}>{aiModel} (미설치)</option>
+                        <option value={aiModel}>
+                          {aiModel}
+                          {t('settings.modelNotInstalled')}
+                        </option>
                       )}
                       {aiModels.map((m) => (
                         <option key={m} value={m}>
-                          {isKoreanRecommendedModel(m) ? `${m} · 한국어 추천` : m}
+                          {isKoreanRecommendedModel(m) ? `${m}${t('settings.modelKoRecommended')}` : m}
                         </option>
                       ))}
                     </select>
                     <button
                       type="button"
                       onClick={aiCheckConnection}
-                      title="모델 목록 새로고침"
+                      title={t('settings.modelRefresh')}
                       className={`px-2.5 rounded-lg ${focusRing(isDark)} ${isDark ? 'bg-gray-700 text-gray-400 hover:text-gray-200' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}
                     >
                       <RefreshCw size={14} />
@@ -493,7 +529,7 @@ export function Settings() {
                     htmlFor="ai-api-key"
                     className={`text-xs ${labelText(isDark)}`}
                   >
-                    API 키
+                    {t('settings.apiKey')}
                   </label>
                   <input
                     id="ai-api-key"
@@ -510,7 +546,7 @@ export function Settings() {
                   htmlFor="ai-max-history"
                   className={`text-xs ${labelText(isDark)}`}
                 >
-                  채팅 기록 보관 개수
+                  {t('settings.chatHistoryLimit')}
                 </label>
                 <input
                   id="ai-max-history"
@@ -521,21 +557,19 @@ export function Settings() {
                   onChange={(e) => setAiMaxHistory(Math.max(0, parseInt(e.target.value, 10) || 0))}
                   className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${fieldSurface(isDark)}`}
                 />
-                <p className={`text-xs mt-1 ${hintText(isDark)}`}>
-                  오래된 메시지부터 자동 삭제됩니다. 0이면 보관 안 함.
-                </p>
+                <p className={`text-xs mt-1 ${hintText(isDark)}`}>{t('settings.chatHistoryDesc')}</p>
               </div>
               <button
                 type="button"
                 onClick={handleAiSave}
                 className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
               >
-                저장 및 연결 테스트
+                {t('settings.saveAndTest')}
               </button>
-              {aiConnected === true && <p className={`text-xs ${successText(isDark)}`}>AI 어시스턴트에 연결되었습니다</p>}
+              {aiConnected === true && <p className={`text-xs ${successText(isDark)}`}>{t('settings.connected')}</p>}
               {aiConnected === false && (
                 <p className={`text-xs ${errorText(isDark)}`}>
-                  연결 실패 — {aiProvider === 'ollama' ? 'Ollama 실행 상태를 확인하세요' : 'API URL과 키를 확인하세요'}
+                  {aiProvider === 'ollama' ? t('settings.connectFailedOllama') : t('settings.connectFailedApi')}
                 </p>
               )}
             </div>
@@ -543,11 +577,11 @@ export function Settings() {
 
           {/* 키보드 단축키 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} label="키보드 단축키" />
+            <SectionHeading isDark={isDark} label={t('settings.shortcuts')} />
             <div className="space-y-1.5">
               {SHORTCUTS.map((s) => (
                 <div key={s.keys} className="flex items-center justify-between">
-                  <span className={`text-xs ${labelText(isDark)}`}>{s.desc}</span>
+                  <span className={`text-xs ${labelText(isDark)}`}>{t(`shortcuts.${s.key}`)}</span>
                   <kbd
                     className={`text-xs px-2 py-0.5 rounded font-mono ${
                       isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'
@@ -562,7 +596,7 @@ export function Settings() {
 
           {/* 버전 및 업데이트 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
-            <SectionHeading isDark={isDark} label="버전 정보" />
+            <SectionHeading isDark={isDark} label={t('settings.version')} />
             <div className={`rounded-lg px-4 py-3 mb-3 ${isDark ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
               <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                 haru v{__APP_VERSION__}
@@ -571,20 +605,16 @@ export function Settings() {
                 // App Store 빌드: 앱 내 업데이트 확인/다운로드는 비활성(App Store가 담당)
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className={successText(isDark)} />
-                  <span className={`text-xs ${labelText(isDark)}`}>
-                    Mac App Store를 통해 자동으로 업데이트됩니다
-                  </span>
+                  <span className={`text-xs ${labelText(isDark)}`}>{t('settings.updateViaAppStore')}</span>
                 </div>
               ) : updateChecked && !updateAvailable ? (
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className={successText(isDark)} />
-                  <span className={`text-xs ${successText(isDark)}`}>최신 버전입니다</span>
+                  <span className={`text-xs ${successText(isDark)}`}>{t('settings.upToDate')}</span>
                 </div>
               ) : !updateChecked ? (
                 <div className="flex items-center gap-1.5 mt-1">
-                  <span className={`text-xs ${hintText(isDark)}`}>
-                    업데이트 확인 중…
-                  </span>
+                  <span className={`text-xs ${hintText(isDark)}`}>{t('settings.checkingUpdate')}</span>
                 </div>
               ) : null}
             </div>
@@ -600,9 +630,9 @@ export function Settings() {
               >
                 <ArrowUpCircle size={18} />
                 <div className="text-left flex-1">
-                  <div className="text-sm font-medium">새 버전 사용 가능</div>
+                  <div className="text-sm font-medium">{t('settings.updateAvailable')}</div>
                   <div className={`text-xs ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>
-                    haru v{updateAvailable.version} — 클릭하여 다운로드 페이지 열기
+                    {t('settings.updateDownload', { version: updateAvailable.version })}
                   </div>
                 </div>
               </button>

@@ -27,6 +27,7 @@ import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
 import { type ActionOp, type TaskActionInterpretation, looksLikeTaskAction, resolveActionTarget } from '../utils/aiActions'
 import { isCapableModel } from '../utils/aiModels'
+import { detectLanguage, persistLanguage, type Language } from '../i18n'
 
 export type Theme = 'dark' | 'light'
 
@@ -49,6 +50,7 @@ interface Store {
   showAddTask: boolean
   editingListId: string | null
   theme: Theme
+  language: Language
   detailPanelWidthPx: number | null
   showSettings: boolean
   sortBy: SortBy
@@ -124,6 +126,7 @@ interface Store {
   setViewType: (type: ViewType) => void
   setSearchQuery: (query: string) => void
   setTheme: (theme: Theme) => void
+  setLanguage: (lang: Language) => void
   setDetailPanelWidthPx: (px: number, windowWidth: number) => void
   toggleSettings: () => void
   setShowQuickAdd: (show: boolean) => void
@@ -286,6 +289,7 @@ export const useStore = create<Store>((set, get) => ({
   showAddTask: false,
   editingListId: null,
   theme: (localStorage.getItem('ticktick-theme') as Theme) || 'dark',
+  language: detectLanguage(),
   detailPanelWidthPx: ((): number | null => {
     const n = Number(localStorage.getItem('ticktick-detail-width'))
     return Number.isFinite(n) && n > 0 ? n : null
@@ -662,6 +666,10 @@ export const useStore = create<Store>((set, get) => ({
   setTheme: (theme) => {
     localStorage.setItem('ticktick-theme', theme)
     set({ theme })
+  },
+  setLanguage: (lang) => {
+    persistLanguage(lang)
+    set({ language: lang })
   },
   setDetailPanelWidthPx: (px, windowWidth) => {
     const clamped = clampDetailWidth(px, windowWidth, get().showAiChat)
