@@ -1,18 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import i18n from '../../i18n'
 
 type TimerMode = 'work' | 'shortBreak' | 'longBreak'
 
-const MODES: { key: TimerMode; label: string; duration: number; color: string }[] = [
-  { key: 'work', label: '집중', duration: 25 * 60, color: '#E74C3C' },
-  { key: 'shortBreak', label: '짧은 휴식', duration: 5 * 60, color: '#2ECC71' },
-  { key: 'longBreak', label: '긴 휴식', duration: 15 * 60, color: '#4A90D9' }
+const MODES: { key: TimerMode; labelKey: string; duration: number; color: string }[] = [
+  { key: 'work', labelKey: 'pomodoro.work', duration: 25 * 60, color: '#E74C3C' },
+  { key: 'shortBreak', labelKey: 'pomodoro.shortBreak', duration: 5 * 60, color: '#2ECC71' },
+  { key: 'longBreak', labelKey: 'pomodoro.longBreak', duration: 15 * 60, color: '#4A90D9' }
 ]
 
 const SESSION_DOTS = ['dot-a', 'dot-b', 'dot-c', 'dot-d'] as const
 
 export function PomodoroTimer() {
+  const { t } = useTranslation()
   const { theme, savePomodoroSession } = useStore()
   const isDark = theme === 'dark'
   const [mode, setMode] = useState<TimerMode>('work')
@@ -70,8 +73,8 @@ export function PomodoroTimer() {
               clearInterval(intervalRef.current)
               intervalRef.current = null
             }
-            new Notification('포모도로', {
-              body: mode === 'work' ? '집중 시간이 끝났습니다! 휴식하세요.' : '휴식이 끝났습니다! 집중하세요.'
+            new Notification(i18n.t('pomodoro.title'), {
+              body: i18n.t(mode === 'work' ? 'pomodoro.workDone' : 'pomodoro.breakDone')
             })
             setTimeout(() => skipToNext(), 0)
             return 0
@@ -112,7 +115,7 @@ export function PomodoroTimer() {
             }`}
             style={mode === m.key ? { backgroundColor: `${m.color}33`, color: m.color } : {}}
           >
-            {m.label}
+            {t(m.labelKey)}
           </button>
         ))}
       </div>
@@ -120,7 +123,7 @@ export function PomodoroTimer() {
       {/* 원형 타이머 */}
       <div className="relative w-80 h-80 mb-10">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 300 300">
-          <title>포모도로 타이머 진행률</title>
+          <title>{t('pomodoro.progress')}</title>
           {/* 배경 원 */}
           <circle cx="150" cy="150" r="140" fill="none" stroke={isDark ? '#333' : '#E5E5E5'} strokeWidth="6" />
           {/* 진행 원 */}
@@ -141,7 +144,7 @@ export function PomodoroTimer() {
           <span className={`text-6xl font-light tabular-nums ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
             {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
           </span>
-          <span className="text-sm text-gray-500 mt-2">{currentMode.label}</span>
+          <span className="text-sm text-gray-500 mt-2">{t(currentMode.labelKey)}</span>
         </div>
       </div>
 
@@ -185,7 +188,7 @@ export function PomodoroTimer() {
             style={i < sessions % 4 ? { backgroundColor: currentMode.color } : {}}
           />
         ))}
-        <span className="text-xs text-gray-500 ml-2">#{sessions} 세션</span>
+        <span className="text-xs text-gray-500 ml-2">{t('pomodoro.sessions', { n: sessions })}</span>
       </div>
     </div>
   )

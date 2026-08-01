@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { X, FileJson, FileSpreadsheet, Check, AlertCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 
 type ExportStatus = 'idle' | 'loading' | 'success' | 'error'
 
 export function ExportDialog() {
+  const { t } = useTranslation()
   const { showExport, setShowExport, exportData, theme } = useStore()
   const isDark = theme === 'dark'
   const [status, setStatus] = useState<ExportStatus>('idle')
@@ -52,7 +54,7 @@ export function ExportDialog() {
         }`}
         role="dialog"
         aria-modal="true"
-        aria-label="데이터 내보내기"
+        aria-label={t('export.title')}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -62,7 +64,7 @@ export function ExportDialog() {
             isDark ? 'border-gray-700' : 'border-gray-200'
           }`}
         >
-          <h2 className="text-base font-semibold">데이터 내보내기</h2>
+          <h2 className="text-base font-semibold">{t('export.title')}</h2>
           <button
             type="button"
             onClick={handleClose}
@@ -77,7 +79,7 @@ export function ExportDialog() {
         {/* 본문 */}
         <div className="p-5 space-y-3">
           <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            모든 태스크, 리스트, 습관 데이터를 파일로 내보냅니다.
+            {t('export.description')}
           </p>
 
           {/* JSON 내보내기 */}
@@ -99,9 +101,9 @@ export function ExportDialog() {
               <FileJson size={20} className="text-blue-400" />
             </div>
             <div className="text-left flex-1">
-              <div className="text-sm font-medium">JSON 내보내기</div>
+              <div className="text-sm font-medium">{t('export.json')}</div>
               <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                전체 데이터를 JSON 형식으로 저장
+                {t('export.jsonDesc')}
               </div>
             </div>
           </button>
@@ -125,9 +127,9 @@ export function ExportDialog() {
               <FileSpreadsheet size={20} className="text-green-400" />
             </div>
             <div className="text-left flex-1">
-              <div className="text-sm font-medium">CSV 내보내기</div>
+              <div className="text-sm font-medium">{t('export.csv')}</div>
               <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                태스크 목록을 스프레드시트 형식으로 저장
+                {t('export.csvDesc')}
               </div>
             </div>
           </button>
@@ -136,14 +138,14 @@ export function ExportDialog() {
           {status === 'success' && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 text-green-400 text-sm">
               <Check size={16} />
-              내보내기가 완료되었습니다.
+              {t('export.done')}
             </div>
           )}
 
           {status === 'error' && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 text-red-400 text-sm">
               <AlertCircle size={16} />
-              내보내기에 실패했습니다. 다시 시도해주세요.
+              {t('export.failed')}
             </div>
           )}
         </div>

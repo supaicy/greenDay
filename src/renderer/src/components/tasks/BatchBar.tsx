@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { CheckCircle2, Trash2, ArrowRight, Flag, XCircle, CheckSquare } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
 
 export function BatchBar() {
+  const { t } = useTranslation()
   const {
     batchMode,
     batchSelectedIds,
@@ -31,7 +33,7 @@ export function BatchBar() {
       }`}
     >
       {/* 선택 개수 */}
-      <span className={`text-sm mr-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{count}개 선택</span>
+      <span className={`text-sm mr-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{t('batch.selected', { n: count })}</span>
 
       {/* 전체 선택 */}
       <button
@@ -40,10 +42,10 @@ export function BatchBar() {
         className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors ${
           isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
         }`}
-        title="전체선택"
+        title={t('batch.selectAll')}
       >
         <CheckSquare size={15} />
-        전체선택
+        {t('batch.selectAll')}
       </button>
 
       {/* 구분선 */}
@@ -57,10 +59,10 @@ export function BatchBar() {
         className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 ${
           isDark ? 'text-green-400 hover:bg-green-900/30' : 'text-green-600 hover:bg-green-50'
         }`}
-        title="완료"
+        title={t('batch.complete')}
       >
         <CheckCircle2 size={15} />
-        완료
+        {t('batch.complete')}
       </button>
 
       {/* 이동 */}
@@ -75,10 +77,10 @@ export function BatchBar() {
           className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 ${
             isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
           }`}
-          title="이동"
+          title={t('batch.move')}
         >
           <ArrowRight size={15} />
-          이동
+          {t('batch.move')}
         </button>
         {showMoveMenu && (
           <div
@@ -118,10 +120,10 @@ export function BatchBar() {
           className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 ${
             isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
           }`}
-          title="우선순위"
+          title={t('priority.label')}
         >
           <Flag size={15} />
-          우선순위
+          {t('priority.label')}
         </button>
         {showPriorityMenu && (
           <div
@@ -141,7 +143,7 @@ export function BatchBar() {
                   isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
                 }`}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             ))}
           </div>
@@ -157,10 +159,10 @@ export function BatchBar() {
         onClick={batchDelete}
         disabled={count === 0}
         className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30"
-        title="삭제"
+        title={t('common.delete')}
       >
         <Trash2 size={15} />
-        삭제
+        {t('common.delete')}
       </button>
 
       {/* 취소 */}
@@ -170,10 +172,10 @@ export function BatchBar() {
         className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors ${
           isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'
         }`}
-        title="취소"
+        title={t('common.cancel')}
       >
         <XCircle size={15} />
-        취소
+        {t('common.cancel')}
       </button>
     </div>
   )

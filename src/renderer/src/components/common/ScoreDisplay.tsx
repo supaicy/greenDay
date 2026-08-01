@@ -1,13 +1,16 @@
 import { Trophy, Star } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { tList } from '../../i18n'
 
 interface ScoreDisplayProps {
   compact?: boolean
 }
 
-const LEVEL_NAMES = ['초보자', '도전자', '실천가', '달인', '마스터', '그랜드마스터', '전설']
+
 
 function getLevel(score: number): { level: number; name: string; progress: number } {
+  const LEVEL_NAMES = tList('score.levels')
   const level = Math.floor(score / 100)
   const cappedLevel = Math.min(level, LEVEL_NAMES.length - 1)
   const progress = score % 100
@@ -19,6 +22,7 @@ function getLevel(score: number): { level: number; name: string; progress: numbe
 }
 
 export function ScoreDisplay({ compact = false }: ScoreDisplayProps) {
+  const { t } = useTranslation()
   const { score, theme } = useStore()
   const isDark = theme === 'dark'
   const { level, name, progress } = getLevel(score.total)
@@ -57,7 +61,7 @@ export function ScoreDisplay({ compact = false }: ScoreDisplayProps) {
           </div>
           <div>
             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{name}</div>
-            <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>레벨 {level}</div>
+            <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{t('score.level', { level })}</div>
           </div>
         </div>
 
@@ -70,7 +74,7 @@ export function ScoreDisplay({ compact = false }: ScoreDisplayProps) {
       {/* 프로그레스 바 */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>다음 레벨까지</span>
+          <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{t('score.toNextLevel')}</span>
           <span className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{progress}/100</span>
         </div>
         <div className={`w-full h-2.5 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
@@ -90,9 +94,9 @@ export function ScoreDisplay({ compact = false }: ScoreDisplayProps) {
             .map((event) => (
               <div key={`${event.date}-${event.type}-${event.points}`} className="flex items-center justify-between">
                 <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                  {event.type === 'taskComplete' && '태스크 완료'}
-                  {event.type === 'habitComplete' && '습관 달성'}
-                  {event.type === 'pomodoroComplete' && '포모도로 완료'}
+                  {event.type === 'taskComplete' && t('score.taskComplete')}
+                  {event.type === 'habitComplete' && t('score.habitComplete')}
+                  {event.type === 'pomodoroComplete' && t('score.pomodoroComplete')}
                 </span>
                 <span className="text-xs font-medium text-yellow-500">+{event.points}</span>
               </div>

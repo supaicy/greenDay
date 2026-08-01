@@ -138,6 +138,9 @@ const api = {
   // Global shortcut
   registerGlobalShortcut: () => ipcRenderer.invoke('register-global-shortcut'),
 
+  // 메인이 직접 띄우는 알림 문구를 위해 UI 언어를 알려 준다.
+  setLanguage: (language: string) => ipcRenderer.invoke('set-language', language),
+
   // IPC events
   onGlobalQuickAdd: (callback: () => void) => {
     const handler = (_: Electron.IpcRendererEvent): void => callback()

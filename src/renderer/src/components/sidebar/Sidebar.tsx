@@ -29,34 +29,36 @@ import {
   Trophy,
   Bot
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { SMART_LIST_PREDICATES, tagListId } from '../../utils/smartLists'
 import type { SmartList, ViewType } from '../../types'
 
-const SMART_LISTS: { id: SmartList; label: string; icon: React.ReactNode }[] = [
-  { id: 'all', label: '전체', icon: <ListTodo size={18} /> },
-  { id: 'today', label: '오늘', icon: <CalendarDays size={18} /> },
-  { id: 'tomorrow', label: '내일', icon: <CalendarClock size={18} /> },
-  { id: 'next7days', label: '다음 7일', icon: <CalendarRange size={18} /> },
-  { id: 'inbox', label: '기본함', icon: <Inbox size={18} /> },
-  { id: 'summary', label: '요약', icon: <LayoutList size={18} /> },
-  { id: 'completed', label: '완료됨', icon: <CheckCircle2 size={18} /> },
-  { id: 'trash', label: '휴지통', icon: <Trash2 size={18} /> }
+const SMART_LISTS: { id: SmartList; icon: React.ReactNode }[] = [
+  { id: 'all', icon: <ListTodo size={18} /> },
+  { id: 'today', icon: <CalendarDays size={18} /> },
+  { id: 'tomorrow', icon: <CalendarClock size={18} /> },
+  { id: 'next7days', icon: <CalendarRange size={18} /> },
+  { id: 'inbox', icon: <Inbox size={18} /> },
+  { id: 'summary', icon: <LayoutList size={18} /> },
+  { id: 'completed', icon: <CheckCircle2 size={18} /> },
+  { id: 'trash', icon: <Trash2 size={18} /> }
 ]
 
-const VIEW_ITEMS: { type: ViewType; label: string; icon: React.ReactNode }[] = [
-  { type: 'calendar', label: '캘린더 (월)', icon: <Calendar size={18} /> },
-  { type: 'calendarWeekly', label: '캘린더 (주)', icon: <CalendarClock size={18} /> },
-  { type: 'calendarDaily', label: '캘린더 (일)', icon: <Clock size={18} /> },
-  { type: 'kanban', label: '칸반 보드', icon: <Columns3 size={18} /> },
-  { type: 'timeline', label: '타임라인', icon: <CalendarRange size={18} /> },
-  { type: 'eisenhower', label: '아이젠하워', icon: <Grid2X2 size={18} /> },
-  { type: 'pomodoro', label: '포모도로', icon: <Timer size={18} /> },
-  { type: 'habits', label: '습관', icon: <Target size={18} /> },
-  { type: 'stats', label: '통계', icon: <BarChart3 size={18} /> }
+const VIEW_ITEMS: { type: ViewType; icon: React.ReactNode }[] = [
+  { type: 'calendar', icon: <Calendar size={18} /> },
+  { type: 'calendarWeekly', icon: <CalendarClock size={18} /> },
+  { type: 'calendarDaily', icon: <Clock size={18} /> },
+  { type: 'kanban', icon: <Columns3 size={18} /> },
+  { type: 'timeline', icon: <CalendarRange size={18} /> },
+  { type: 'eisenhower', icon: <Grid2X2 size={18} /> },
+  { type: 'pomodoro', icon: <Timer size={18} /> },
+  { type: 'habits', icon: <Target size={18} /> },
+  { type: 'stats', icon: <BarChart3 size={18} /> }
 ]
 
 export function Sidebar() {
+  const { t } = useTranslation()
   const lists = useStore((s) => s.lists)
   const tasks = useStore((s) => s.tasks)
   const trashTasks = useStore((s) => s.trashTasks)
@@ -177,7 +179,7 @@ export function Sidebar() {
           {/* 색상 변경 버튼 (Pattern A: 순수 클릭 요소 → button) */}
           <button
             type="button"
-            aria-label="색상 변경"
+            aria-label={t('common.changeColor')}
             className="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer appearance-none border-0 p-0"
             style={{ backgroundColor: editColor }}
             onClick={() => {
@@ -237,7 +239,7 @@ export function Sidebar() {
             onClick={() => startEdit(list.id, list.name, list.color)}
             className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${isDark ? 'text-sidebar-text hover:bg-sidebar-hover' : 'text-gray-700 hover:bg-gray-100'}`}
           >
-            <Edit3 size={14} /> 편집
+            <Edit3 size={14} /> {t('common.edit')}
           </button>
           <button
             type="button"
@@ -247,7 +249,7 @@ export function Sidebar() {
             }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
           >
-            <Trash2 size={14} /> 삭제
+            <Trash2 size={14} /> {t('common.delete')}
           </button>
         </div>
       )}
@@ -272,7 +274,7 @@ export function Sidebar() {
               className={btnClass(selectedListId === item.id && viewType === 'tasks')}
             >
               <span className={mutedClass}>{item.icon}</span>
-              <span className="flex-1 text-left">{item.label}</span>
+              <span className="flex-1 text-left">{t(`nav.${item.id}`)}</span>
               <span className={`text-xs ${mutedClass}`}>{taskCounts[item.id] || ''}</span>
             </button>
           ))}
@@ -280,7 +282,7 @@ export function Sidebar() {
 
         {/* 뷰 */}
         <div className={`mb-3 border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
-          <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>뷰</div>
+          <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>{t('nav.sectionViews')}</div>
           {VIEW_ITEMS.map((item) => (
             <button
               type="button"
@@ -289,7 +291,7 @@ export function Sidebar() {
               className={btnClass(viewType === item.type)}
             >
               <span className={mutedClass}>{item.icon}</span>
-              <span className="flex-1 text-left">{item.label}</span>
+              <span className="flex-1 text-left">{t(`views.${item.type}`)}</span>
             </button>
           ))}
         </div>
@@ -297,7 +299,7 @@ export function Sidebar() {
         {/* 태그 */}
         {tagList.length > 0 && (
           <div className={`mb-3 border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
-            <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>태그</div>
+            <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>{t('nav.sectionTags')}</div>
             {tagList.map(([tag, count]) => (
               <button
                 type="button"
@@ -318,13 +320,13 @@ export function Sidebar() {
         {/* 리스트 + 폴더 */}
         <div className={`border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
           <div className="flex items-center justify-between px-3 mb-1">
-            <span className={`text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>리스트</span>
+            <span className={`text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>{t('nav.sectionLists')}</span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setShowNewFolder(true)}
                 className={`${mutedClass} hover:text-white transition-colors`}
-                title="폴더 추가"
+                title={t('nav.addFolder')}
               >
                 <FolderPlus size={14} />
               </button>
@@ -332,7 +334,7 @@ export function Sidebar() {
                 type="button"
                 onClick={() => setShowNewList(true)}
                 className={`${mutedClass} hover:text-white transition-colors`}
-                title="리스트 추가"
+                title={t('nav.addList')}
               >
                 <Plus size={16} />
               </button>
@@ -352,7 +354,7 @@ export function Sidebar() {
                   if (e.key === 'Enter') handleAddFolder()
                   if (e.key === 'Escape') setShowNewFolder(false)
                 }}
-                placeholder="폴더 이름"
+                placeholder={t('nav.folderNamePlaceholder')}
                 className={`flex-1 text-sm px-2 py-1 rounded outline-none ${isDark ? 'bg-sidebar-hover text-white placeholder-sidebar-muted' : 'bg-gray-200 text-gray-800 placeholder-gray-400'}`}
               />
               <button type="button" onClick={handleAddFolder} className="text-green-400">
@@ -410,7 +412,7 @@ export function Sidebar() {
               {/* 색상 변경 버튼 (Pattern A: 순수 클릭 요소 → button) */}
               <button
                 type="button"
-                aria-label="색상 변경"
+                aria-label={t('common.changeColor')}
                 className="w-3 h-3 rounded-full flex-shrink-0 cursor-pointer appearance-none border-0 p-0"
                 style={{ backgroundColor: newListColor }}
                 onClick={() => {
@@ -430,7 +432,7 @@ export function Sidebar() {
                     setNewListFolderId(null)
                   }
                 }}
-                placeholder="리스트 이름"
+                placeholder={t('nav.listNamePlaceholder')}
                 className={`flex-1 text-sm px-2 py-1 rounded outline-none ${isDark ? 'bg-sidebar-hover text-white placeholder-sidebar-muted' : 'bg-gray-200 text-gray-800 placeholder-gray-400'}`}
               />
               <button type="button" onClick={handleAddList} className="text-green-400">
@@ -459,7 +461,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
           <Trophy size={16} className="text-yellow-500" />
           <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            Lv.{level} · {score.total}점
+            {t('nav.level', { level, score: score.total })}
           </span>
           <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}>
             <div
@@ -474,7 +476,7 @@ export function Sidebar() {
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full transition-colors ${isDark ? 'text-sidebar-muted hover:text-white hover:bg-sidebar-hover' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'}`}
         >
           <Bot size={18} className="text-blue-500" />
-          <span>AI 어시스턴트</span>
+          <span>{t('nav.aiAssistant')}</span>
         </button>
         <button
           type="button"
@@ -485,7 +487,7 @@ export function Sidebar() {
             <Settings size={18} />
             {updateAvailable && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full" />}
           </div>
-          <span>설정</span>
+          <span>{t('nav.settings')}</span>
         </button>
       </div>
     </div>

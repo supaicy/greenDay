@@ -4,10 +4,12 @@ import { useStore } from '../../store/useStore'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
 import { formatDueDate } from '../../utils/date'
 import type { Priority } from '../../types'
+import { useTranslation } from 'react-i18next'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
 import { isVirtualSmartList } from '../../utils/smartLists'
 
 export function AddTask({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   const { addTask, selectedListId, theme, aiCreateTaskFromNL, aiConnected } = useStore()
   const isDark = theme === 'dark'
   const [title, setTitle] = useState('')
@@ -129,7 +131,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
             if (e.key === 'Enter') handleSubmit()
             if (e.key === 'Escape') onClose()
           }}
-          placeholder='할 일을 입력하세요... (예: "내일 장보기")'
+          placeholder={t('task.placeholder')}
           className={`flex-1 bg-transparent text-sm outline-none ${isDark ? 'text-gray-100 placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'}`}
         />
         <button
@@ -145,8 +147,8 @@ export function AddTask({ onClose }: { onClose: () => void }) {
       {naturalDateHint && (
         <div className={`px-3 py-1 text-xs ${isDark ? 'text-primary-400' : 'text-primary-600'}`}>
           📅 {formatDueDate(naturalDateHint)}
-          {naturalTimeHint ? ` ${naturalTimeHint}` : ''} ({naturalDateHint}
-          {naturalTimeHint ? ` ${naturalTimeHint}` : ''})로 설정됨
+          {naturalTimeHint ? ` ${naturalTimeHint}` : ''}{' '}
+          {t('task.dueSetTo', { date: naturalDateHint, time: naturalTimeHint ? ` ${naturalTimeHint}` : '' })}
         </div>
       )}
 
@@ -168,7 +170,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
             }`}
           >
             <Calendar size={14} />
-            {dueDate || '마감일'}
+            {dueDate || t('task.dueDate')}
           </span>
         </div>
 
@@ -185,7 +187,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
             }`}
           >
             <Flag size={14} />
-            {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label}
+            {t(PRIORITY_OPTIONS.find((p) => p.value === priority)?.labelKey ?? 'priority.none')}
           </button>
           {showPriority && (
             <div
@@ -201,7 +203,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
                   }}
                   className={`w-full text-left px-3 py-1.5 text-xs ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'} ${opt.color}`}
                 >
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </button>
               ))}
             </div>
@@ -215,7 +217,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
             onClick={handleAiCreate}
             disabled={!title.trim() || aiLoading}
             className="text-xs px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-30 hover:bg-blue-700 transition-colors flex items-center gap-1"
-            title="AI가 서브태스크와 우선순위를 자동으로 설정합니다"
+            title={t('task.aiAutofill')}
           >
             {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             AI
@@ -227,7 +229,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
           disabled={!title.trim()}
           className="text-xs px-3 py-1 rounded bg-primary-500 text-white disabled:opacity-30 hover:bg-primary-600 transition-colors"
         >
-          추가
+          {t('task.add')}
         </button>
       </div>
     </div>

@@ -1,19 +1,21 @@
 import { useState } from 'react'
 import { Bell, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import i18n from '../../i18n'
 
 interface QuickOption {
-  label: string
+  labelKey: string
   getDate: (dueDate: string) => string
 }
 
 const QUICK_OPTIONS: QuickOption[] = [
   {
-    label: '마감 시',
+    labelKey: 'reminder.atDue',
     getDate: (dueDate) => dueDate
   },
   {
-    label: '5분 전',
+    labelKey: 'reminder.min5',
     getDate: (dueDate) => {
       const d = new Date(dueDate)
       d.setMinutes(d.getMinutes() - 5)
@@ -21,7 +23,7 @@ const QUICK_OPTIONS: QuickOption[] = [
     }
   },
   {
-    label: '30분 전',
+    labelKey: 'reminder.min30',
     getDate: (dueDate) => {
       const d = new Date(dueDate)
       d.setMinutes(d.getMinutes() - 30)
@@ -29,7 +31,7 @@ const QUICK_OPTIONS: QuickOption[] = [
     }
   },
   {
-    label: '1시간 전',
+    labelKey: 'reminder.hour1',
     getDate: (dueDate) => {
       const d = new Date(dueDate)
       d.setHours(d.getHours() - 1)
@@ -37,7 +39,7 @@ const QUICK_OPTIONS: QuickOption[] = [
     }
   },
   {
-    label: '1일 전',
+    labelKey: 'reminder.day1',
     getDate: (dueDate) => {
       const d = new Date(dueDate)
       d.setDate(d.getDate() - 1)
@@ -47,7 +49,7 @@ const QUICK_OPTIONS: QuickOption[] = [
 ]
 
 function formatReminderDisplay(value: string | null): string {
-  if (!value) return '알림'
+  if (!value) return i18n.t('reminder.label')
   try {
     const d = new Date(value)
     const month = d.getMonth() + 1
@@ -56,7 +58,7 @@ function formatReminderDisplay(value: string | null): string {
     const minutes = d.getMinutes().toString().padStart(2, '0')
     return `${month}/${day} ${hours}:${minutes}`
   } catch {
-    return '알림'
+    return i18n.t('reminder.label')
   }
 }
 
@@ -69,6 +71,7 @@ export function ReminderPicker({
   value: string | null
   onChange: (reminderAt: string | null) => void
 }) {
+  const { t } = useTranslation()
   const { theme } = useStore()
   const isDark = theme === 'dark'
   const [open, setOpen] = useState(false)
@@ -136,13 +139,13 @@ export function ReminderPicker({
             {QUICK_OPTIONS.map((option) => (
               <button
                 type="button"
-                key={option.label}
+                key={option.labelKey}
                 onClick={() => handleQuickOption(option)}
                 className={`w-full text-left px-4 py-2 text-sm transition-colors ${
                   isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </div>
@@ -152,7 +155,7 @@ export function ReminderPicker({
 
           {/* 사용자 지정 */}
           <div className="p-3">
-            <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>사용자 지정</div>
+            <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('reminder.custom')}</div>
             <div className="flex gap-2 mb-2">
               <input
                 type="date"
@@ -177,7 +180,7 @@ export function ReminderPicker({
               disabled={!customDate}
               className="w-full text-xs px-3 py-1.5 rounded bg-primary-500 text-white disabled:opacity-30 hover:bg-primary-600 transition-colors"
             >
-              설정
+              {t('reminder.set')}
             </button>
           </div>
 
@@ -193,7 +196,7 @@ export function ReminderPicker({
                 }`}
               >
                 <X size={14} />
-                알림 해제
+                {t('reminder.clear')}
               </button>
             </>
           )}

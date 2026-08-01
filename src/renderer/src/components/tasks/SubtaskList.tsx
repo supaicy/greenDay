@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Circle, CheckCircle2, Plus, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 
 export function SubtaskList({ taskId }: { taskId: string }) {
+  const { t } = useTranslation()
   const tasks = useStore((s) => s.tasks)
   const addTask = useStore((s) => s.addTask)
   const toggleTask = useStore((s) => s.toggleTask)
@@ -38,7 +40,7 @@ export function SubtaskList({ taskId }: { taskId: string }) {
       {/* 헤더 */}
       {subtasks.length > 0 && (
         <div className={`text-xs mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-          하위 작업 {completedCount}/{subtasks.length}
+          {t('detail.subtasks', { done: completedCount, total: subtasks.length })}
         </div>
       )}
 
@@ -116,7 +118,7 @@ export function SubtaskList({ taskId }: { taskId: string }) {
                 setNewTitle('')
               }
             }}
-            placeholder="하위 작업 추가..."
+            placeholder={t('detail.addSubtaskPlaceholder')}
             className={`flex-1 bg-transparent text-sm outline-none ${
               isDark ? 'text-gray-200 placeholder-gray-600' : 'text-gray-700 placeholder-gray-400'
             }`}
@@ -143,7 +145,7 @@ export function SubtaskList({ taskId }: { taskId: string }) {
           }`}
         >
           <Plus size={16} />
-          하위 작업 추가
+          {t('detail.addSubtask')}
         </button>
       )}
     </div>

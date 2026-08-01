@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Repeat, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { formatRecurringPattern } from '../../utils/recurrence'
+import { tList } from '../../i18n'
 
 type RecurringType = 'daily' | 'weekly' | 'monthly' | 'yearly'
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
-const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
 
 function parsePattern(pattern: string | null): {
   type: RecurringType
@@ -62,7 +63,10 @@ export function RecurringPicker({
   value: string | null
   onChange: (pattern: string | null) => void
 }) {
+  const { t } = useTranslation()
   const { theme } = useStore()
+  const WEEKDAYS = tList('date.weekdaysShort')
+  const MONTHS = tList('date.months')
   const isDark = theme === 'dark'
   const [open, setOpen] = useState(false)
 
@@ -99,30 +103,13 @@ export function RecurringPicker({
   }
 
   const typeLabels: Record<RecurringType, string> = {
-    daily: '매일',
-    weekly: '매주',
-    monthly: '매월',
-    yearly: '매년'
+    daily: t('recurring.daily'),
+    weekly: t('recurring.weekly'),
+    monthly: t('recurring.monthly'),
+    yearly: t('recurring.yearly')
   }
 
-  const displayLabel = value
-    ? value === 'daily'
-      ? '매일'
-      : value.startsWith('weekly:')
-        ? `매주 ${value
-            .replace('weekly:', '')
-            .split(',')
-            .map((d) => WEEKDAYS[Number(d)])
-            .join(', ')}`
-        : value.startsWith('monthly:')
-          ? `매월 ${value.replace('monthly:', '')}일`
-          : value.startsWith('yearly:')
-            ? (() => {
-                const [m, d] = value.replace('yearly:', '').split('-')
-                return `매년 ${m}월 ${d}일`
-              })()
-            : '반복'
-    : null
+  const displayLabel = formatRecurringPattern(value)
 
   return (
     <div className="relative">
@@ -139,7 +126,7 @@ export function RecurringPicker({
         }`}
       >
         <Repeat size={14} />
-        {displayLabel || '반복'}
+        {displayLabel || t('recurring.label')}
       </button>
 
       {/* 드롭다운 */}
@@ -172,7 +159,7 @@ export function RecurringPicker({
           {/* 요일 선택 (매주) */}
           {type === 'weekly' && (
             <div className="mb-3">
-              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>요일 선택</div>
+              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.pickWeekdays')}</div>
               <div className="flex gap-1">
                 {WEEKDAYS.map((label, idx) => (
                   <button
@@ -197,7 +184,7 @@ export function RecurringPicker({
           {/* 날짜 선택 (매월) */}
           {type === 'monthly' && (
             <div className="mb-3">
-              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>매월 몇 일</div>
+              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.pickMonthDay')}</div>
               <input
                 type="number"
                 min={1}
@@ -208,14 +195,14 @@ export function RecurringPicker({
                   isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
                 }`}
               />
-              <span className={`ml-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>일</span>
+              <span className={`ml-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.dayUnit')}</span>
             </div>
           )}
 
           {/* 월+일 선택 (매년) */}
           {type === 'yearly' && (
             <div className="mb-3">
-              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>매년 날짜</div>
+              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.pickYearDate')}</div>
               <div className="flex items-center gap-2">
                 <select
                   value={yearMonth}
@@ -240,7 +227,7 @@ export function RecurringPicker({
                     isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
                   }`}
                 />
-                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>일</span>
+                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.dayUnit')}</span>
               </div>
             </div>
           )}
@@ -255,14 +242,14 @@ export function RecurringPicker({
               }`}
             >
               <X size={12} />
-              해제
+              {t('common.clear')}
             </button>
             <button
               type="button"
               onClick={handleApply}
               className="text-xs px-3 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 transition-colors"
             >
-              적용
+              {t('common.apply')}
             </button>
           </div>
         </div>

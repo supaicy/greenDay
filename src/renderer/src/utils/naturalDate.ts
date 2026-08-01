@@ -12,6 +12,7 @@ import {
   startOfDay,
   format
 } from 'date-fns'
+import i18n from '../i18n'
 
 const DAY_MAP: Record<string, number> = {
   일요일: 0,
@@ -29,6 +30,43 @@ const DAY_MAP: Record<string, number> = {
   토요일: 6,
   토: 6
 }
+
+// 영어 요일. 한국어 표와 나란히 두고 두 언어를 항상 같이 인식한다 — UI 언어를
+// 영어로 두고도 "내일"이라 적는 사용자가 있고, 그 반대도 있다.
+const EN_DAY_MAP: Record<string, number> = {
+  sunday: 0,
+  sun: 0,
+  monday: 1,
+  mon: 1,
+  tuesday: 2,
+  tue: 2,
+  tues: 2,
+  wednesday: 3,
+  wed: 3,
+  thursday: 4,
+  thu: 4,
+  thur: 4,
+  thurs: 4,
+  friday: 5,
+  fri: 5,
+  saturday: 6,
+  sat: 6
+}
+
+const EN_MONTHS = [
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'may',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'oct',
+  'nov',
+  'dec'
+]
 
 const NEXT_DAY_FN = [nextSunday, nextMonday, nextTuesday, nextWednesday, nextThursday, nextFriday, nextSaturday]
 
@@ -91,13 +129,28 @@ function parseNaturalTime(tokens: string[]): { time: string; consumed: number } 
     return { time: fmtTime(h, 0), consumed }
   }
 
-  // "14:50", "9:30"
-  const colonTime = tokens[0].match(/^(\d{1,2}):(\d{2})$/)
+  // 영어: "3pm", "3 pm", "3:30 pm", "at 5pm".
+  // 아래 "14:50" 분기보다 먼저 봐야 한다 — "3:30 pm"이 24시간제로 03:30이 되면 안 된다.
+  const hasAt = /^at\s+/i.test(joined)
+  const en = joined.toLowerCase().replace(/^at\s+/, '')
+  const ampmEn = en.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
+  if (ampmEn) {
+    let h = parseInt(ampmEn[1], 10)
+    const m = ampmEn[2] ? parseInt(ampmEn[2], 10) : 0
+    if (h >= 1 && h <= 12 && m <= 59) {
+      if (ampmEn[3] === 'pm' && h < 12) h += 12
+      if (ampmEn[3] === 'am' && h === 12) h = 0
+      return { time: fmtTime(h, m), consumed: countConsumed(tokens, (hasAt ? 'at' : '') + ampmEn[0]) }
+    }
+  }
+
+  // "14:50", "9:30" — 앞에 "at"이 붙어도 받는다.
+  const colonTime = (hasAt ? tokens[1] : tokens[0])?.match(/^(\d{1,2}):(\d{2})$/)
   if (colonTime) {
     const h = parseInt(colonTime[1], 10)
     const m = parseInt(colonTime[2], 10)
     if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      return { time: fmtTime(h, m), consumed: 1 }
+      return { time: fmtTime(h, m), consumed: hasAt ? 2 : 1 }
     }
   }
 
@@ -152,7 +205,8 @@ export function parseNaturalDateTime(input: string): ParsedDateTime | null {
     }
   }
 
-  // 붙여쓰기 처리: "내일14시50분" → 첫 토큰에서 날짜+시간을 분리
+  // 붙여쓰기 처리: "내일14시50분" → 첫 토큰에서 날짜+시간을 분리.
+  // (영어는 단어를 붙여 쓰지 않으므로 한국어 키워드만 본다.)
   if (!dateStr && tokens.length > 0) {
     const first = tokens[0]
     const dateKeywords = ['오늘', '내일', '모레', '글피']
@@ -263,6 +317,62 @@ function parseDateExpression(text: string, today: Date): string | null {
     return fmt(new Date(parseInt(isoDate[1], 10), parseInt(isoDate[2], 10) - 1, parseInt(isoDate[3], 10)))
   }
 
+  return parseEnglishDateExpression(text.toLowerCase(), today)
+}
+
+/** 영어 날짜 표현. 한국어 패턴이 모두 실패한 뒤에만 시도한다. */
+function parseEnglishDateExpression(text: string, today: Date): string | null {
+  if (text === 'today') return fmt(today)
+  if (text === 'tomorrow' || text === 'tmr' || text === 'tmrw') return fmt(addDays(today, 1))
+  if (text === 'day after tomorrow' || text === 'overmorrow') return fmt(addDays(today, 2))
+
+  // "in 3 days", "3 days later", "in 2 weeks", "in 1 month"
+  const relative = text.match(/^(?:in\s+)?(\d+)\s*(day|week|month)s?(?:\s+later|\s+from\s+now)?$/)
+  if (relative) {
+    const n = parseInt(relative[1], 10)
+    if (relative[2] === 'day') return fmt(addDays(today, n))
+    if (relative[2] === 'week') return fmt(addWeeks(today, n))
+    return fmt(addMonths(today, n))
+  }
+
+  if (/^next\s+week$/.test(text)) return fmt(nextMonday(today))
+
+  // "next monday", "next fri"
+  const nextWeekDay = text.match(/^next\s+(.+)$/)
+  if (nextWeekDay) {
+    const dayNum = EN_DAY_MAP[nextWeekDay[1].trim()]
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](addDays(today, 6)))
+  }
+
+  // "this friday" — 이번 주 안에 남아 있을 때만.
+  const thisWeekDay = text.match(/^this\s+(.+)$/)
+  if (thisWeekDay) {
+    const dayNum = EN_DAY_MAP[thisWeekDay[1].trim()]
+    if (dayNum !== undefined) {
+      const target = NEXT_DAY_FN[dayNum](addDays(today, -1))
+      if (target >= today) return fmt(target)
+    }
+  }
+
+  // 요일만: "monday", "fri"
+  if (EN_DAY_MAP[text] !== undefined) return fmt(NEXT_DAY_FN[EN_DAY_MAP[text]](today))
+
+  // "mar 5", "march 5th", "5 mar"
+  const monthDay = text.match(/^([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?$/) || null
+  const dayMonth = text.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})$/) || null
+  const monthName = monthDay?.[1] ?? dayMonth?.[2]
+  const dayOfMonth = monthDay?.[2] ?? dayMonth?.[1]
+  if (monthName && dayOfMonth) {
+    const m = EN_MONTHS.indexOf(monthName.slice(0, 3))
+    const d = parseInt(dayOfMonth, 10)
+    if (m >= 0 && d >= 1 && d <= 31) {
+      const year = today.getFullYear()
+      let date = new Date(year, m, d)
+      if (date < today) date = new Date(year + 1, m, d)
+      return fmt(date)
+    }
+  }
+
   return null
 }
 
@@ -279,14 +389,18 @@ export function getDateSuggestions(input: string): { label: string; date: string
     suggestions.push({ label: input, date: parsed })
   }
 
+  // 기본 칩은 현재 UI 언어의 표현으로 만든다. 라벨만 번역하고 파싱 원문은 그대로
+  // 두면 영어 UI에서 "Today"를 눌러도 파서가 못 알아듣는다.
+  const isEn = i18n.language?.startsWith('en')
   const defaults = [
-    { label: '오늘', text: '오늘' },
-    { label: '내일', text: '내일' },
-    { label: '다음 주', text: '다음주' }
+    { label: i18n.t('quickDate.today'), text: isEn ? 'today' : '오늘' },
+    { label: i18n.t('quickDate.tomorrow'), text: isEn ? 'tomorrow' : '내일' },
+    { label: i18n.t('quickDate.nextWeek'), text: isEn ? 'next week' : '다음주' }
   ]
 
+  const needle = input.toLowerCase()
   for (const d of defaults) {
-    if (d.label.includes(input) || d.text.includes(input)) {
+    if (d.label.toLowerCase().includes(needle) || d.text.includes(needle)) {
       const date = parseNaturalDate(d.text)
       if (date && !suggestions.find((s) => s.date === date)) {
         suggestions.push({ label: d.label, date })

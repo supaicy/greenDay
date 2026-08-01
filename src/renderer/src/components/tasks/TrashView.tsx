@@ -1,7 +1,10 @@
 import { Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 
 export function TrashView() {
+  const { t, i18n } = useTranslation()
+  const dateLocale = i18n.language?.startsWith('en') ? 'en-US' : 'ko-KR'
   const { trashTasks, restoreTask, permanentDeleteTask, emptyTrash, theme } = useStore()
   const isDark = theme === 'dark'
 
@@ -15,7 +18,7 @@ export function TrashView() {
       >
         <div className="flex items-center gap-2">
           <Trash2 size={20} className={isDark ? 'text-gray-400' : 'text-gray-500'} />
-          <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>휴지통</h2>
+          <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{t('trash.title')}</h2>
           {trashTasks.length > 0 && (
             <span
               className={`text-xs px-2 py-0.5 rounded-full ${
@@ -34,7 +37,7 @@ export function TrashView() {
             className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <AlertTriangle size={14} />
-            휴지통 비우기
+            {t('trash.empty')}
           </button>
         )}
       </div>
@@ -44,7 +47,7 @@ export function TrashView() {
         {trashTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full">
             <Trash2 size={48} className={isDark ? 'text-gray-700' : 'text-gray-300'} />
-            <p className={`mt-3 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>휴지통이 비어있습니다</p>
+            <p className={`mt-3 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{t('trash.isEmpty')}</p>
           </div>
         ) : (
           <div className="py-2">
@@ -62,7 +65,7 @@ export function TrashView() {
                   <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{task.title}</p>
                   {task.deletedAt && (
                     <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-                      삭제: {new Date(task.deletedAt).toLocaleDateString('ko-KR')}
+                      {t('trash.deletedAt', { date: new Date(task.deletedAt).toLocaleDateString(dateLocale) })}
                     </p>
                   )}
                 </div>
@@ -77,7 +80,7 @@ export function TrashView() {
                     }`}
                   >
                     <RotateCcw size={13} />
-                    복구
+                    {t('trash.restore')}
                   </button>
                   <button
                     type="button"
@@ -85,7 +88,7 @@ export function TrashView() {
                     className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <Trash2 size={13} />
-                    영구삭제
+                    {t('trash.deleteForever')}
                   </button>
                 </div>
               </div>

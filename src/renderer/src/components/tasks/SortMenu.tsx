@@ -1,19 +1,20 @@
 import { useState } from 'react'
 import { ArrowUpDown, ArrowUp, ArrowDown, Check } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import type { SortBy } from '../../types'
 
 interface SortOption {
   value: SortBy
-  label: string
+  labelKey: string
 }
 
 const SORT_OPTIONS: SortOption[] = [
-  { value: 'default', label: '기본' },
-  { value: 'dueDate', label: '마감일' },
-  { value: 'priority', label: '우선순위' },
-  { value: 'title', label: '제목' },
-  { value: 'createdAt', label: '생성일' }
+  { value: 'default', labelKey: 'sort.default' },
+  { value: 'dueDate', labelKey: 'sort.dueDate' },
+  { value: 'priority', labelKey: 'sort.priority' },
+  { value: 'title', labelKey: 'sort.title' },
+  { value: 'createdAt', labelKey: 'sort.createdAt' }
 ]
 
 interface SortMenuProps {
@@ -21,6 +22,7 @@ interface SortMenuProps {
 }
 
 export function SortMenu({ onClose }: SortMenuProps = {}) {
+  const { t } = useTranslation()
   const { sortBy, sortDir, setSortBy, setSortDir, theme } = useStore()
   const isDark = theme === 'dark'
   const [open, setOpen] = useState(false)
@@ -40,7 +42,7 @@ export function SortMenu({ onClose }: SortMenuProps = {}) {
     }
   }
 
-  const currentLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label || '기본'
+  const currentLabel = t(SORT_OPTIONS.find((o) => o.value === sortBy)?.labelKey ?? 'sort.default')
 
   return (
     <div className="relative">
@@ -67,7 +69,7 @@ export function SortMenu({ onClose }: SortMenuProps = {}) {
           {/* 배경 클릭으로 닫기 (Pattern A: 순수 클릭 → button) */}
           <button
             type="button"
-            aria-label="닫기"
+            aria-label={t('common.close')}
             className="fixed inset-0 z-40"
             onClick={close}
           />
@@ -95,7 +97,7 @@ export function SortMenu({ onClose }: SortMenuProps = {}) {
                   <span className="flex items-center gap-2">
                     {isSelected && <Check size={14} />}
                     {!isSelected && <span className="w-[14px]" />}
-                    {option.label}
+                    {t(option.labelKey)}
                   </span>
                   {isSelected && option.value !== 'default' && (
                     <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>

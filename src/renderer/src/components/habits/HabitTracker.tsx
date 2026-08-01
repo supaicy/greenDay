@@ -1,12 +1,15 @@
 import { useState, useMemo } from 'react'
 import { Plus, Trash2, X, Check, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { tList } from '../../i18n'
 import { toDateString } from '../../utils/date'
 import { addDays, startOfWeek, isToday } from 'date-fns'
 
 const COLORS = ['#4A90D9', '#E74C3C', '#F39C12', '#2ECC71', '#9B59B6', '#1ABC9C', '#E91E63', '#FF5722']
 
 export function HabitTracker() {
+  const { t } = useTranslation()
   const { habits, habitLogs, addHabit, removeHabit, toggleHabitLog, theme } = useStore()
   const isDark = theme === 'dark'
   const [showAdd, setShowAdd] = useState(false)
@@ -54,7 +57,7 @@ export function HabitTracker() {
     setShowAdd(false)
   }
 
-  const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일']
+  const WEEKDAY_LABELS = tList('date.weekdaysFromMonday')
 
   return (
     <div className={`flex-1 flex flex-col min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
@@ -63,7 +66,7 @@ export function HabitTracker() {
         className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}
       >
         <div className="flex items-center gap-4">
-          <h1 className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>습관 트래커</h1>
+          <h1 className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{t('habits.title')}</h1>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -77,7 +80,7 @@ export function HabitTracker() {
               onClick={() => setWeekOffset(0)}
               className={`px-2 py-0.5 rounded text-xs ${isDark ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-500 hover:bg-gray-200'}`}
             >
-              이번 주
+              {t('habits.thisWeek')}
             </button>
             <button
               type="button"
@@ -93,7 +96,7 @@ export function HabitTracker() {
           onClick={() => setShowAdd(true)}
           className="flex items-center gap-1 text-sm text-primary-400 hover:text-primary-300"
         >
-          <Plus size={16} /> 습관 추가
+          <Plus size={16} /> {t('habits.add')}
         </button>
       </div>
 
@@ -120,7 +123,7 @@ export function HabitTracker() {
             <div className="w-48 flex items-center gap-3 pr-4">
               <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: habit.color }} />
               <span className={`text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{habit.name}</span>
-              <span className="text-xs text-gray-500 flex-shrink-0">{streaks[habit.id] || 0}일 연속</span>
+              <span className="text-xs text-gray-500 flex-shrink-0">{t('habits.streak', { days: streaks[habit.id] || 0 })}</span>
               <button
                 type="button"
                 onClick={() => removeHabit(habit.id)}
@@ -159,13 +162,13 @@ export function HabitTracker() {
           <div
             className={`flex flex-col items-center justify-center py-20 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
           >
-            <p className="text-sm">추적 중인 습관이 없습니다</p>
+            <p className="text-sm">{t('habits.empty')}</p>
             <button
               type="button"
               onClick={() => setShowAdd(true)}
               className="mt-2 text-sm text-primary-400 hover:text-primary-300"
             >
-              첫 습관 추가하기
+              {t('habits.addFirst')}
             </button>
           </div>
         )}
@@ -178,7 +181,7 @@ export function HabitTracker() {
             {/* 색상 변경 버튼 (Pattern A: 순수 클릭 요소 → button) */}
             <button
               type="button"
-              aria-label="색상 변경"
+              aria-label={t('common.changeColor')}
               className="w-6 h-6 rounded-full cursor-pointer flex-shrink-0 appearance-none border-0 p-0"
               style={{ backgroundColor: color }}
               onClick={() => {
@@ -194,7 +197,7 @@ export function HabitTracker() {
                 if (e.key === 'Enter') handleAdd()
                 if (e.key === 'Escape') setShowAdd(false)
               }}
-              placeholder="습관 이름..."
+              placeholder={t('habits.namePlaceholder')}
               className={`flex-1 bg-transparent text-sm outline-none ${isDark ? 'text-gray-200 placeholder-gray-600' : 'text-gray-700 placeholder-gray-400'}`}
             />
             <button type="button" onClick={handleAdd} className="text-green-400 hover:text-green-300">

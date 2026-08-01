@@ -9,6 +9,7 @@
  *
  * TZ 드리프트 방지를 위해 Date(y, m, d) 로컬 생성, Date.now()/new Date() 비인수 호출 금지.
  */
+import i18n, { tList } from '../i18n'
 
 /** 'YYYY-MM-DD' → [year, month(0-based), day] */
 function parseDate(iso: string): [number, number, number] {
@@ -115,4 +116,36 @@ export function daysBetween(fromISODate: string, toISODate: string): number {
   const fromMs = new Date(fy, fm, fd).getTime()
   const toMs = new Date(ty, tm, td).getTime()
   return Math.round((toMs - fromMs) / 86400000)
+}
+
+/**
+ * 반복 패턴을 사람이 읽는 문구로. RecurringPicker의 트리거 버튼과 TaskDetail의
+ * 칩이 같은 문구를 쓰도록 한곳에 둔다.
+ */
+export function formatRecurringPattern(pattern: string | null): string | null {
+  if (!pattern) return null
+
+  if (pattern === 'daily') return i18n.t('recurring.daily')
+
+  if (pattern.startsWith('weekly:')) {
+    const names = tList('date.weekdaysShort')
+    const days = pattern
+      .replace('weekly:', '')
+      .split(',')
+      .map((d) => names[Number(d)])
+      .filter(Boolean)
+      .join(', ')
+    return i18n.t('recurring.weeklyOn', { days })
+  }
+
+  if (pattern.startsWith('monthly:')) {
+    return i18n.t('recurring.monthlyOn', { day: pattern.replace('monthly:', '') })
+  }
+
+  if (pattern.startsWith('yearly:')) {
+    const [month, day] = pattern.replace('yearly:', '').split('-')
+    return i18n.t('recurring.yearlyOn', { month, day })
+  }
+
+  return i18n.t('recurring.label')
 }

@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { tList } from '../../i18n'
 import { getCalendarDays, formatDate, toDateString } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
 import { isToday, isSameMonth } from 'date-fns'
@@ -9,6 +11,7 @@ import { isToday, isSameMonth } from 'date-fns'
 // 드래그(DND_MIME.TASK_BLOCK)와 MIME을 분리해 서로 오탐되지 않게 한다.
 
 export function CalendarView() {
+  const { t } = useTranslation()
   const { tasks, selectTask, updateTask, theme } = useStore()
   const isDark = theme === 'dark'
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -35,7 +38,7 @@ export function CalendarView() {
   const nextMonth = () => setCurrentDate(new Date(year, month + 1))
   const goToday = () => setCurrentDate(new Date())
 
-  const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+  const WEEKDAYS = tList('date.weekdaysShort')
 
   return (
     <div className={`flex-1 flex flex-col min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
@@ -44,7 +47,7 @@ export function CalendarView() {
       >
         <div className="flex items-center gap-4">
           <h1 className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
-            {formatDate(currentDate, 'yyyy년 M월')}
+            {formatDate(currentDate, t('date.yearMonth'))}
           </h1>
           <div className="flex items-center gap-1">
             <button
@@ -59,7 +62,7 @@ export function CalendarView() {
               onClick={goToday}
               className={`px-2 py-0.5 rounded text-xs transition-colors ${isDark ? 'text-gray-400 hover:bg-gray-800' : 'text-gray-500 hover:bg-gray-200'}`}
             >
-              오늘
+              {t('common.today')}
             </button>
             <button
               type="button"
@@ -140,7 +143,7 @@ export function CalendarView() {
                       }}
                       onDragEnd={() => setDragOverDate(null)}
                       onClick={() => selectTask(task.id)}
-                      title="드래그해서 다른 날로 이동"
+                      title={t('calendar.dragHint')}
                       className={`w-full text-left text-[10px] px-1 py-0.5 rounded truncate transition-colors cursor-grab active:cursor-grabbing ${
                         isDark
                           ? 'bg-primary-900/40 text-primary-300 hover:bg-primary-900/60'
@@ -152,7 +155,7 @@ export function CalendarView() {
                   ))}
                   {dayTasks.length > 3 && (
                     <span className={`text-[10px] px-1 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                      +{dayTasks.length - 3}개
+                      {t('calendar.moreTasks', { n: dayTasks.length - 3 })}
                     </span>
                   )}
                 </div>

@@ -5,9 +5,13 @@ import { autoUpdater } from 'electron-updater'
 import { initDatabase, closeDatabase, getTasks } from './database'
 import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
+import { isMainLanguage, mainStrings, type MainLanguage } from '../shared/main-strings'
 
 // 리마인더 폴러 인터벌 핸들 (모듈 스코프에서 선언해 will-quit 핸들러에서 접근 가능)
 let reminderInterval: ReturnType<typeof setInterval> | null = null
+
+// 렌더러가 알려 주는 UI 언어. 메인이 직접 띄우는 알림 문구에만 쓴다.
+let uiLanguage: MainLanguage = 'ko'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -58,6 +62,10 @@ app.whenReady().then(() => {
 
   initDatabase()
   setupIpcHandlers()
+
+  ipcMain.handle('set-language', (_, language: unknown) => {
+    if (isMainLanguage(language)) uiLanguage = language
+  })
   createWindow()
 
   // 리마인더 폴러: 60초마다 도래한 리마인더를 확인하고 시스템 알림 발화
@@ -66,7 +74,7 @@ app.whenReady().then(() => {
     const now = new Date().toISOString()
     const due = dueReminders(getTasks() as Record<string, unknown>[], lastReminderCheck, now)
     for (const t of due) {
-      new Notification({ title: '리마인더', body: String(t.title ?? '') }).show()
+      new Notification({ title: mainStrings(uiLanguage).reminder, body: String(t.title ?? '') }).show()
     }
     lastReminderCheck = now
   }, 60 * 1000)

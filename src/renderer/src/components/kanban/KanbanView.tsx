@@ -1,5 +1,6 @@
 import type React from 'react'
 import { useState, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
 import type { Task } from '../../types'
@@ -8,17 +9,18 @@ import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
 
 interface ColumnDef {
   id: 'todo' | 'inProgress' | 'done'
-  title: string
-  emptyText: string
+  titleKey: string
+  emptyKey: string
 }
 
 const columns: ColumnDef[] = [
-  { id: 'todo', title: '할 일', emptyText: '할 일이 없습니다' },
-  { id: 'inProgress', title: '진행 중', emptyText: '오늘 할 작업이 없습니다' },
-  { id: 'done', title: '완료', emptyText: '완료된 작업이 없습니다' }
+  { id: 'todo', titleKey: 'kanban.todo', emptyKey: 'kanban.todoEmpty' },
+  { id: 'inProgress', titleKey: 'kanban.inProgress', emptyKey: 'kanban.inProgressEmpty' },
+  { id: 'done', titleKey: 'kanban.done', emptyKey: 'kanban.doneEmpty' }
 ]
 
 export function KanbanView(): React.ReactElement {
+  const { t } = useTranslation()
   const { theme, tasks, selectTask, selectedTaskId, toggleTask, updateTask } = useStore()
   const isDark = theme === 'dark'
 
@@ -163,7 +165,7 @@ export function KanbanView(): React.ReactElement {
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>칸반 보드</h2>
+        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('kanban.title')}</h2>
       </div>
 
       {/* 칸반 보드 */}
@@ -174,7 +176,7 @@ export function KanbanView(): React.ReactElement {
           return (
             <section
               key={col.id}
-              aria-label={col.title}
+              aria-label={t(col.titleKey)}
               className={`flex-1 min-w-[280px] flex flex-col rounded-xl border-t-2 ${getHeaderColor(col.id)} ${getColumnBg(col.id)} transition-colors`}
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={handleDragLeave}
@@ -182,7 +184,7 @@ export function KanbanView(): React.ReactElement {
             >
               {/* 칼럼 헤더 */}
               <div className="px-4 py-3 flex items-center justify-between">
-                <h3 className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{col.title}</h3>
+                <h3 className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{t(col.titleKey)}</h3>
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full ${
                     isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-200 text-gray-500'
@@ -196,7 +198,7 @@ export function KanbanView(): React.ReactElement {
               <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2">
                 {colTasks.length === 0 ? (
                   <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {col.emptyText}
+                    {t(col.emptyKey)}
                   </div>
                 ) : (
                   colTasks.map((task) => {

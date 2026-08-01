@@ -7,27 +7,19 @@ import { TrashView } from './TrashView'
 import { SortMenu } from './SortMenu'
 import { BatchBar } from './BatchBar'
 import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue } from '../../utils/date'
+import { useTranslation } from 'react-i18next'
 import { SMART_LIST_PREDICATES, tagFromListId } from '../../utils/smartLists'
 import { DND_MIME } from '../../utils/dnd'
 import type { Task, SortBy, SortDir } from '../../types'
 
-const SMART_LABELS: Record<string, string> = {
-  all: '전체',
-  today: '오늘',
-  tomorrow: '내일',
-  next7days: '다음 7일',
-  inbox: '기본함',
-  summary: '요약',
-  completed: '완료됨',
-  trash: '휴지통'
-}
+const SMART_LIST_IDS = ['all', 'today', 'tomorrow', 'next7days', 'inbox', 'summary', 'completed', 'trash']
 
 // '요약' 뷰의 시간대 그룹 정의 (위→아래 표시 순서). 각 태스크는 첫 매칭 그룹에 들어간다.
-const SUMMARY_GROUPS: { key: string; label: string; match: (dueDate: string | null) => boolean }[] = [
-  { key: 'overdue', label: '지남', match: isOverdue },
-  { key: 'today', label: '오늘', match: isDueToday },
-  { key: 'tomorrow', label: '내일', match: isDueTomorrow },
-  { key: 'upcoming', label: '향후 7일', match: isDueInNext7Days }
+const SUMMARY_GROUPS: { key: string; labelKey: string; match: (dueDate: string | null) => boolean }[] = [
+  { key: 'overdue', labelKey: 'task.groupOverdue', match: isOverdue },
+  { key: 'today', labelKey: 'task.groupToday', match: isDueToday },
+  { key: 'tomorrow', labelKey: 'task.groupTomorrow', match: isDueTomorrow },
+  { key: 'upcoming', labelKey: 'task.groupUpcoming', match: isDueInNext7Days }
 ]
 
 function matchesSearch(t: Task, query: string): boolean {
@@ -65,6 +57,7 @@ function sortTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
 }
 
 export function TaskListView() {
+  const { t } = useTranslation()
   const {
     tasks,
     lists,
@@ -87,9 +80,9 @@ export function TaskListView() {
   const listName = useMemo(() => {
     const tag = tagFromListId(selectedListId as string)
     if (tag) return `#${tag}`
-    if (selectedListId in SMART_LABELS) return SMART_LABELS[selectedListId]
+    if (SMART_LIST_IDS.includes(selectedListId as string)) return t(`nav.${selectedListId}`)
     return lists.find((l) => l.id === selectedListId)?.name || ''
-  }, [selectedListId, lists])
+  }, [selectedListId, lists, t])
 
   const filteredTasks = useMemo(() => {
     const tag = tagFromListId(selectedListId as string)
@@ -195,7 +188,7 @@ export function TaskListView() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="검색... (Cmd+F)"
+              placeholder={t('task.search')}
               className={`text-sm rounded-lg pl-8 pr-3 py-1.5 outline-none border focus:border-primary-500 w-48 ${
                 isDark
                   ? 'bg-gray-800 text-gray-300 border-gray-700 placeholder-gray-600'
@@ -208,7 +201,7 @@ export function TaskListView() {
               type="button"
               onClick={() => setShowSort(!showSort)}
               className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-200 text-gray-500'}`}
-              title="정렬"
+              title={t('task.sort')}
             >
               <ArrowUpDown size={16} />
             </button>
@@ -218,7 +211,7 @@ export function TaskListView() {
             type="button"
             onClick={toggleBatchMode}
             className={`p-1.5 rounded-lg transition-colors ${batchMode ? 'text-primary-400 bg-primary-900/30' : isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-200 text-gray-500'}`}
-            title="일괄 편집"
+            title={t('task.batchEdit')}
           >
             <CheckSquare size={16} />
           </button>
@@ -236,7 +229,7 @@ export function TaskListView() {
             onClick={() => setShowAddTask(true)}
             className="flex items-center gap-2 px-6 py-3 text-sm text-primary-500 hover:text-primary-400 transition-colors w-full"
           >
-            <Plus size={18} /> 할 일 추가 (Cmd+N)
+            <Plus size={18} /> {t('task.addWithShortcut')}
           </button>
         )}
 
@@ -246,7 +239,7 @@ export function TaskListView() {
               <div
                 className={`px-6 py-2 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
               >
-                {g.label} ({g.tasks.length})
+                {t(g.labelKey)} ({g.tasks.length})
               </div>
               {g.tasks.map((task) => (
                 <TaskItem key={task.id} task={task} onDrop={handleDrop} />
@@ -265,7 +258,7 @@ export function TaskListView() {
                 <div
                   className={`px-6 py-2 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
                 >
-                  완료됨 ({completedTasks.length})
+                  {t('task.completedCount', { n: completedTasks.length })}
                 </div>
                 {completedTasks.map((task) => (
                   <TaskItem key={task.id} task={task} onDrop={handleDrop} />
@@ -279,13 +272,13 @@ export function TaskListView() {
           <div
             className={`flex flex-col items-center justify-center py-20 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}
           >
-            <p className="text-sm">할 일이 없습니다</p>
+            <p className="text-sm">{t('task.empty')}</p>
             <button
               type="button"
               onClick={() => setShowAddTask(true)}
               className="mt-2 text-sm text-primary-500 hover:text-primary-400"
             >
-              새 할 일 추가하기
+              {t('task.addFirst')}
             </button>
           </div>
         )}

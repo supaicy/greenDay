@@ -1,5 +1,6 @@
 import type React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
 import type { Task } from '../../types'
@@ -8,13 +9,14 @@ import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
 
 interface TimelineGroup {
   id: string
-  label: string
+  labelKey: string
   icon: React.ReactNode
   tasks: Task[]
   color: string // 타임라인 원 색상
 }
 
 export function TimelineView(): React.ReactElement {
+  const { t } = useTranslation()
   const { theme, tasks, selectTask, selectedTaskId, toggleTask } = useStore()
   const isDark = theme === 'dark'
 
@@ -71,7 +73,7 @@ export function TimelineView(): React.ReactElement {
     if (overdue.length > 0) {
       result.push({
         id: 'overdue',
-        label: '기한 초과',
+        labelKey: 'timeline.overdue',
         icon: <AlertTriangle size={14} />,
         tasks: overdue,
         color: 'bg-red-500'
@@ -80,7 +82,7 @@ export function TimelineView(): React.ReactElement {
     if (today.length > 0) {
       result.push({
         id: 'today',
-        label: '오늘',
+        labelKey: 'timeline.today',
         icon: <Clock size={14} />,
         tasks: today,
         color: 'bg-blue-500'
@@ -89,7 +91,7 @@ export function TimelineView(): React.ReactElement {
     if (tomorrowTasks.length > 0) {
       result.push({
         id: 'tomorrow',
-        label: '내일',
+        labelKey: 'timeline.tomorrow',
         icon: <Clock size={14} />,
         tasks: tomorrowTasks,
         color: 'bg-amber-500'
@@ -98,7 +100,7 @@ export function TimelineView(): React.ReactElement {
     if (thisWeek.length > 0) {
       result.push({
         id: 'thisWeek',
-        label: '이번 주',
+        labelKey: 'timeline.thisWeek',
         icon: <Clock size={14} />,
         tasks: thisWeek,
         color: 'bg-green-500'
@@ -107,7 +109,7 @@ export function TimelineView(): React.ReactElement {
     if (later.length > 0) {
       result.push({
         id: 'later',
-        label: '나중에',
+        labelKey: 'timeline.later',
         icon: <Clock size={14} />,
         tasks: later,
         color: 'bg-gray-500'
@@ -116,7 +118,7 @@ export function TimelineView(): React.ReactElement {
     if (noDueDate.length > 0) {
       result.push({
         id: 'noDue',
-        label: '마감일 없음',
+        labelKey: 'timeline.noDueDate',
         icon: <Clock size={14} />,
         tasks: noDueDate,
         color: isDark ? 'bg-gray-600' : 'bg-gray-400'
@@ -132,8 +134,8 @@ export function TimelineView(): React.ReactElement {
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>타임라인</h2>
-        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{totalTasks}개의 할 일</p>
+        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('timeline.title')}</h2>
+        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('timeline.taskCount', { count: totalTasks })}</p>
       </div>
 
       {/* 타임라인 본문 */}
@@ -141,7 +143,7 @@ export function TimelineView(): React.ReactElement {
         {groups.length === 0 ? (
           <div className={`text-center py-16 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             <Clock size={40} className="mx-auto mb-3 opacity-50" />
-            <p>할 일이 없습니다</p>
+            <p>{t('task.empty')}</p>
           </div>
         ) : (
           <div className="relative">
@@ -164,10 +166,10 @@ export function TimelineView(): React.ReactElement {
                 {/* 그룹 라벨 */}
                 <div className="mb-3">
                   <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                    {group.label}
+                    {t(group.labelKey)}
                   </h3>
                   <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {group.tasks.length}개
+                    {t('task.count', { count: group.tasks.length })}
                   </span>
                 </div>
 

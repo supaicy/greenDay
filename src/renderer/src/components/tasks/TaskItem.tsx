@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, memo } from 'react'
 import { Circle, CheckCircle2, Flag, Calendar, Trash2, Copy, ArrowRight, Square, CheckSquare2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { formatDueDate, isOverdue } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
@@ -32,6 +33,7 @@ function useSubtaskCount(taskId: string) {
 }
 
 export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; onDrop?: (targetId: string) => void }) {
+  const { t } = useTranslation()
   const toggleTask = useStore((s) => s.toggleTask)
   const selectTask = useStore((s) => s.selectTask)
   const selectedTaskId = useStore((s) => s.selectedTaskId)
@@ -164,10 +166,10 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
             {task.priority !== 'none' && (
               <span className={`flex items-center gap-1 text-xs ${PRIORITY_COLORS[task.priority]}`}>
                 <Flag size={12} />
-                {{ low: '낮음', medium: '중간', high: '높음' }[task.priority]}
+                {t(`priority.${task.priority}`)}
               </span>
             )}
-            {task.isRecurring && <span className="text-xs text-purple-400">🔄 반복</span>}
+            {task.isRecurring && <span className="text-xs text-purple-400">🔄 {t('task.recurring')}</span>}
             {subtaskCount > 0 && (
               <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                 ✓ {completedSubtasks}/{subtaskCount}
@@ -209,7 +211,7 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
             className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
           >
             <CheckCircle2 size={15} />
-            {task.completed ? '미완료로 변경' : '완료로 변경'}
+            {task.completed ? t('task.markIncomplete') : t('task.markComplete')}
           </button>
           <div className="relative">
             <button
@@ -221,7 +223,7 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
               className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
             >
               <ArrowRight size={15} />
-              다른 리스트로 이동
+              {t('task.moveToList')}
             </button>
             {showMoveMenu && (
               <div
@@ -259,7 +261,7 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
             className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
           >
             <Copy size={15} />
-            제목 복사
+            {t('task.copyTitle')}
           </button>
           <div className={`my-1 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`} />
           <button
@@ -271,7 +273,7 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
           >
             <Trash2 size={15} />
-            삭제
+            {t('common.delete')}
           </button>
         </div>
       )}

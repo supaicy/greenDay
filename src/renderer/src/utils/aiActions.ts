@@ -1,4 +1,5 @@
 import type { Task } from '../types'
+import i18n from '../i18n'
 
 export type ActionOp = 'complete' | 'reschedule' | 'delete' | 'none'
 
@@ -38,7 +39,24 @@ const ACTION_HINTS = [
   '삭제',
   '지워',
   '없애',
-  '제거'
+  '제거',
+  // 영어. 한국어와 같은 기준 — 질문이 아니라 명령형만 넣는다. 'done'/'complete'
+  // 단독은 "what did I complete today?"에서 오탐하므로 'mark ... done' 형태만 본다.
+  'mark it done',
+  'mark as done',
+  'mark done',
+  'check off',
+  'tick off',
+  'postpone',
+  'reschedule',
+  'push it to',
+  'move it to',
+  'push to tomorrow',
+  'move to tomorrow',
+  'delete',
+  'remove',
+  'get rid of',
+  'throw away'
 ]
 
 export function looksLikeTaskAction(message: string): boolean {
@@ -68,11 +86,11 @@ export function resolveActionTarget(taskTitle: string, tasks: Task[]): Task | nu
 export function actionOpLabel(op: ActionOp, dueDate: string | null): string {
   switch (op) {
     case 'complete':
-      return '완료 처리'
+      return i18n.t('ai.opComplete')
     case 'delete':
-      return '삭제(휴지통으로)'
+      return i18n.t('ai.opDelete')
     case 'reschedule':
-      return dueDate ? `마감일을 ${dueDate}(으)로 변경` : '마감일 변경'
+      return dueDate ? i18n.t('ai.opRescheduleTo', { date: dueDate }) : i18n.t('ai.opReschedule')
     default:
       return ''
   }

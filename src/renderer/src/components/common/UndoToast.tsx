@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Undo2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 
 export function UndoToast() {
+  const { t } = useTranslation()
   const { undoStack, popUndo, theme } = useStore()
   const isDark = theme === 'dark'
   const [visible, setVisible] = useState(false)
@@ -59,7 +61,7 @@ export function UndoToast() {
           }`}
         >
           <Undo2 size={14} />
-          되돌리기
+          {t('undo.label')}
         </button>
       </div>
     </div>

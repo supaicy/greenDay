@@ -7,10 +7,9 @@ import { ChevronLeft, ChevronRight, Flag, CheckCircle2, Circle } from 'lucide-re
 import { TimeBlock } from './TimeBlock'
 import { layoutOverlappingBlocks } from '../../utils/timeBlockLayout'
 import { getScheduledForOccurrence, snapTo15Min } from '../../utils/scheduledTime'
+import { useTranslation } from 'react-i18next'
 import { DND_MIME } from '../../utils/dnd'
-
-// 요일 이름
-const dayLabels = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
+import i18n, { tList } from '../../i18n'
 
 // 시간 슬롯 (6:00 ~ 23:00, 30분 단위)
 interface TimeSlot {
@@ -19,10 +18,15 @@ interface TimeSlot {
   label: string
 }
 
-const timeSlots: TimeSlot[] = []
-for (let h = 6; h <= 23; h++) {
-  timeSlots.push({ hour: h, minute: 0, label: formatTime(h, 0) })
-  timeSlots.push({ hour: h, minute: 30, label: '' })
+// 라벨이 언어에 따라 달라지므로 모듈 상수가 아니라 렌더 시점에 만든다.
+// language를 인자로 받아 useMemo 의존성이 실제 값과 일치하게 한다.
+function buildTimeSlots(language: string): TimeSlot[] {
+  const slots: TimeSlot[] = []
+  for (let h = 6; h <= 23; h++) {
+    slots.push({ hour: h, minute: 0, label: formatTime(h, 0, language) })
+    slots.push({ hour: h, minute: 30, label: '' })
+  }
+  return slots
 }
 
 // Pixels per minute: derived from the time-slot row height in the JSX below.
@@ -34,10 +38,13 @@ const PX_PER_MIN = 40 / 30
 const DAY_START_HOUR = 6
 const DAY_END_HOUR_EXCLUSIVE = 24
 
-function formatTime(h: number, m: number): string {
-  const period = h < 12 ? '오전' : '오후'
+function formatTime(h: number, m: number, language: string): string {
+  const t = i18n.getFixedT(language)
+  const period = t(h < 12 ? 'date.am' : 'date.pm')
   const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return m === 0 ? `${period} ${hour12}시` : `${period} ${hour12}:${m.toString().padStart(2, '0')}`
+  return m === 0
+    ? t('date.hour', { period, hour: hour12 })
+    : t('date.hourMinute', { period, hour: hour12, minute: m.toString().padStart(2, '0') })
 }
 
 function dateToStr(d: Date): string {
@@ -59,6 +66,8 @@ const priorityBg: Record<Priority, { dark: string; light: string }> = {
 }
 
 export function DailyCalendar(): React.ReactElement {
+  const { t, i18n: i18nInstance } = useTranslation()
+  const timeSlots = useMemo(() => buildTimeSlots(i18nInstance.language), [i18nInstance.language])
   const { theme, tasks, selectTask, selectedTaskId, toggleTask, updateTask } = useStore()
   const isDark = theme === 'dark'
 
@@ -147,9 +156,11 @@ export function DailyCalendar(): React.ReactElement {
     const y = currentDate.getFullYear()
     const m = currentDate.getMonth() + 1
     const d = currentDate.getDate()
-    const dayLabel = dayLabels[currentDate.getDay()]
-    return `${y}년 ${m}월 ${d}일 ${dayLabel}`
-  }, [currentDate])
+    const dayLabel = tList('date.weekdaysLong')[currentDate.getDay()]
+    return i18nInstance.language?.startsWith('en')
+      ? `${dayLabel}, ${tList('date.months')[m - 1]} ${d}, ${y}`
+      : `${y}년 ${m}월 ${d}일 ${dayLabel}`
+  }, [currentDate, i18nInstance.language])
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -161,7 +172,7 @@ export function DailyCalendar(): React.ReactElement {
       >
         <div>
           <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{headerText}</h2>
-          {isToday && <span className="text-xs text-blue-500 font-medium">오늘</span>}
+          {isToday && <span className="text-xs text-blue-500 font-medium">{t('common.today')}</span>}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -173,7 +184,7 @@ export function DailyCalendar(): React.ReactElement {
                 : 'border-gray-300 text-gray-600 hover:bg-gray-100'
             }`}
           >
-            오늘
+            {t('common.today')}
           </button>
           <button
             type="button"
@@ -201,7 +212,7 @@ export function DailyCalendar(): React.ReactElement {
         {/* 종일 태스크 */}
         {allDayTasks.length > 0 && (
           <div className={`px-6 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>종일</div>
+            <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('date.allDay')}</div>
             <div className="space-y-1.5">
               {allDayTasks.map((task) => {
                 // 종일 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
@@ -264,7 +275,7 @@ export function DailyCalendar(): React.ReactElement {
 
         {/* 시간 슬롯 (드래그 드롭 대상: <section>으로 의미론적 표현) */}
         <section
-          aria-label="시간 슬롯"
+          aria-label={t('calendar.timeSlot')}
           className="px-2 relative"
           style={{
             minHeight: `${(DAY_END_HOUR_EXCLUSIVE - DAY_START_HOUR) * 60 * PX_PER_MIN}px`

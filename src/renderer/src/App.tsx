@@ -52,6 +52,7 @@ export default function App() {
   const loadData = useStore((s) => s.loadData)
   const selectedTaskId = useStore((s) => s.selectedTaskId)
   const theme = useStore((s) => s.theme)
+  const language = useStore((s) => s.language)
   const showQuickAdd = useStore((s) => s.showQuickAdd)
 
   useKeyboardShortcuts()
@@ -86,6 +87,11 @@ export default function App() {
       cleanupDownloaded?.()
     }
   }, [loadData])
+
+  // 저장된 언어를 메인에 알린다(첫 실행 포함). 이후 변경은 setLanguage가 직접 보낸다.
+  useEffect(() => {
+    window.api.setLanguage?.(language)
+  }, [language])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import {
   Bot,
@@ -21,6 +22,7 @@ import { buildAiTaskContext } from '../../utils/aiContext'
 import { actionOpLabel } from '../../utils/aiActions'
 
 export function AiChatPanel() {
+  const { t } = useTranslation()
   const [input, setInput] = useState('')
   // 채팅 메시지 → 할일 추가 상태 (메시지 id별)
   const [taskAdds, setTaskAdds] = useState<Record<string, 'adding' | 'added' | 'error'>>({})
@@ -131,22 +133,22 @@ export function AiChatPanel() {
       >
         <div className="flex items-center gap-2">
           <Bot size={18} className="text-blue-500" />
-          <span className="font-medium text-sm">AI 어시스턴트</span>
-          {aiConnected === true && <span className="w-2 h-2 rounded-full bg-green-500" title="연결됨" />}
-          {aiConnected === false && <span className="w-2 h-2 rounded-full bg-red-500" title="연결 안 됨" />}
+          <span className="font-medium text-sm">{t('ai.title')}</span>
+          {aiConnected === true && <span className="w-2 h-2 rounded-full bg-green-500" title={t('ai.connected')} />}
+          {aiConnected === false && <span className="w-2 h-2 rounded-full bg-red-500" title={t('ai.disconnected')} />}
           {dest && (
             <span
               title={
                 dest.isLocal
-                  ? `데이터가 기기를 벗어나지 않습니다 (→ ${dest.host})`
-                  : `대화·할일 내용이 외부 서버로 전송됩니다 (→ ${dest.host})`
+                  ? t('ai.destLocal', { host: dest.host })
+                  : t('ai.destExternal', { host: dest.host })
               }
               className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                 dest.isLocal ? 'bg-green-500/15 text-green-600' : 'bg-amber-500/15 text-amber-600'
               }`}
             >
               {dest.isLocal ? <ShieldCheck size={11} /> : <Cloud size={11} />}{' '}
-              {dest.isLocal ? '온디바이스' : `외부 · ${dest.host}`}
+              {dest.isLocal ? t('ai.onDevice') : t('ai.external', { host: dest.host })}
             </span>
           )}
         </div>
@@ -156,7 +158,7 @@ export function AiChatPanel() {
               type="button"
               onClick={aiClearMessages}
               className={`p-1 rounded hover:${isDark ? 'bg-gray-600' : 'bg-gray-200'}`}
-              title="대화 지우기"
+              title={t('ai.clearChat')}
             >
               <Trash2 size={14} className="opacity-50" />
             </button>
@@ -177,25 +179,23 @@ export function AiChatPanel() {
           type="button"
           onClick={() => setShowContext((v) => !v)}
           className={`flex items-center gap-1.5 w-full px-4 py-1.5 text-[11px] ${isDark ? 'text-gray-400 hover:bg-gray-700/40' : 'text-gray-500 hover:bg-gray-200/60'}`}
-          title="이 대화에서 모델로 전송되는 할일 데이터"
+          title={t('ai.contextTitle')}
         >
           {showContext ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           <Database size={11} />
-          전송 데이터 미리보기 · {sentContext.length}건
+          {t('ai.contextToggle', { n: sentContext.length })}
         </button>
         {showContext && (
           <div className={`max-h-40 overflow-y-auto px-4 pb-2 text-[11px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-            <p className="mb-1 opacity-70">
-              메시지·대화 기록과 함께 아래 할일 요약이 전송됩니다.
-            </p>
+            <p className="mb-1 opacity-70">{t('ai.contextDesc')}</p>
             {sentContext.length === 0 ? (
-              <p className="opacity-70">전송할 할일이 없습니다.</p>
+              <p className="opacity-70">{t('ai.contextEmpty')}</p>
             ) : (
               <ul className="space-y-0.5">
                 {sentContext.map((c, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: 읽기 전용 미리보기 목록 — 행별 state가 없고 제목 중복 가능해 index가 안정적
                   <li key={`${c.title}-${i}`} className="flex items-start gap-1">
-                    <span className={c.completed ? 'line-through opacity-50' : ''}>{c.title || '(제목 없음)'}</span>
+                    <span className={c.completed ? 'line-through opacity-50' : ''}>{c.title || t('ai.untitled')}</span>
                     {c.dueDate && <span className="opacity-60">· {c.dueDate}</span>}
                     {c.priority !== 'none' && <span className="opacity-60">· {c.priority}</span>}
                     {c.tags.length > 0 && <span className="opacity-60">· #{c.tags.join(' #')}</span>}
@@ -214,20 +214,20 @@ export function AiChatPanel() {
             className={`flex flex-col items-center gap-2 py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
           >
             <WifiOff size={32} className="opacity-50" />
-            <p className="text-sm font-medium">AI 서비스에 연결할 수 없습니다</p>
+            <p className="text-sm font-medium">{t('ai.unreachable')}</p>
             <p className="text-xs opacity-70">
               {aiConfig?.provider === 'ollama' ? (
                 <>
-                  Ollama가 실행 중인지 확인하세요.
+                  {t('ai.checkOllama')}
                   <br />
-                  설치: <span className="text-blue-400">ollama.com</span>
+                  {t('ai.install')} <span className="text-blue-400">ollama.com</span>
                 </>
               ) : (
-                '설정에서 API URL과 키를 확인하세요.'
+                t('ai.checkApiSettings')
               )}
             </p>
             <button type="button" onClick={aiCheckConnection} className="mt-2 text-xs text-blue-500 hover:underline">
-              다시 연결 시도
+              {t('ai.reconnect')}
             </button>
           </div>
         )}
@@ -237,9 +237,9 @@ export function AiChatPanel() {
             className={`flex flex-col items-center gap-3 py-8 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
           >
             <Bot size={40} className="opacity-30" />
-            <p className="text-sm">무엇이든 물어보세요</p>
+            <p className="text-sm">{t('ai.askAnything')}</p>
             <div className="space-y-1">
-              {['이번 주에 뭐 해야 하지?', '가장 급한 거 3개 알려줘', '오늘 뭘 완료했지?'].map((q) => (
+              {[t('ai.suggestion1'), t('ai.suggestion2'), t('ai.suggestion3')].map((q) => (
                 <button
                   type="button"
                   key={q}
@@ -278,7 +278,7 @@ export function AiChatPanel() {
               <div className="mt-1">
                 {taskAdds[msg.id] === 'added' ? (
                   <span className="flex items-center gap-1 text-[11px] text-green-500">
-                    <Check size={11} /> 할일 추가됨
+                    <Check size={11} /> {t('ai.taskAdded')}
                   </span>
                 ) : taskAdds[msg.id] === 'error' ? (
                   <button
@@ -286,7 +286,7 @@ export function AiChatPanel() {
                     onClick={() => handleAddTask(msg.id, msg.content)}
                     className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-300"
                   >
-                    <ListPlus size={11} /> 추가 실패 · 다시 시도
+                    <ListPlus size={11} /> {t('ai.taskAddFailed')}
                   </button>
                 ) : (
                   <button
@@ -300,7 +300,7 @@ export function AiChatPanel() {
                     ) : (
                       <ListPlus size={11} />
                     )}
-                    할일로 추가
+                    {t('ai.addAsTask')}
                   </button>
                 )}
               </div>
@@ -314,7 +314,10 @@ export function AiChatPanel() {
       {aiPendingAction && (
         <div className={`mx-3 mb-2 rounded-lg border p-3 ${isDark ? 'border-amber-500/30 bg-amber-500/10' : 'border-amber-300 bg-amber-50'}`}>
           <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-            다음 할일을 <b>{actionOpLabel(aiPendingAction.op, aiPendingAction.dueDate)}</b>할까요?
+            <Trans
+              i18nKey="ai.confirmAction"
+              values={{ action: actionOpLabel(aiPendingAction.op, aiPendingAction.dueDate) }}
+            />
           </p>
           <p className={`text-sm font-medium mt-0.5 truncate ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
             “{aiPendingAction.taskTitle}”
@@ -327,14 +330,14 @@ export function AiChatPanel() {
                 aiPendingAction.op === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary-500 hover:bg-primary-600'
               }`}
             >
-              <Check size={12} /> 확인
+              <Check size={12} /> {t('common.confirm')}
             </button>
             <button
               type="button"
               onClick={aiCancelAction}
               className={`text-xs px-3 py-1 rounded-md ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-600'}`}
             >
-              취소
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -349,7 +352,7 @@ export function AiChatPanel() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="메시지를 입력하세요..."
+            placeholder={t('ai.inputPlaceholder')}
             disabled={aiConnected === false}
             className={`flex-1 bg-transparent text-sm outline-none placeholder-gray-500 ${isDark ? 'text-white' : 'text-gray-800'}`}
           />

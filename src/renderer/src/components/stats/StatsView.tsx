@@ -1,12 +1,14 @@
 import type React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { tList } from '../../i18n'
 import { Trophy, CheckCircle2, Flame, Timer, Target, TrendingUp, Star, Calendar } from 'lucide-react'
 
-// 요일 이름
-const dayNames = ['일', '월', '화', '수', '목', '금', '토']
-
 export function StatsView(): React.ReactElement {
+  const { t, i18n } = useTranslation()
+  // tList는 매번 새 배열을 돌려주므로 메모해야 아래 useMemo가 매 렌더 재계산되지 않는다.
+  const dayNames = useMemo(() => tList('date.weekdaysShort', i18n.language), [i18n.language])
   const { theme, tasks, pomodoroSessions, habitLogs, habits, score } = useStore()
   const isDark = theme === 'dark'
 
@@ -94,7 +96,7 @@ export function StatsView(): React.ReactElement {
       dayCount,
       maxDayCount
     }
-  }, [tasks, pomodoroSessions, habitLogs, habits, score])
+  }, [tasks, pomodoroSessions, habitLogs, habits, score, dayNames])
 
   // 카드 스타일
   const cardClass = `rounded-xl border p-4 ${isDark ? 'bg-gray-800/60 border-gray-700' : 'bg-white border-gray-200'}`
@@ -107,7 +109,7 @@ export function StatsView(): React.ReactElement {
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>통계</h2>
+        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('stats.title')}</h2>
       </div>
 
       {/* 통계 콘텐츠 */}
@@ -119,10 +121,10 @@ export function StatsView(): React.ReactElement {
               <Trophy size={20} className="text-amber-500" />
             </div>
             <div>
-              <p className={labelClass}>레벨 & 점수</p>
+              <p className={labelClass}>{t('stats.levelAndScore')}</p>
               <div className="flex items-baseline gap-2">
                 <span className={valueClass}>Lv.{stats.level}</span>
-                <span className={subValueClass}>{stats.totalScore}점</span>
+                <span className={subValueClass}>{t('stats.points', { points: stats.totalScore })}</span>
               </div>
             </div>
           </div>
@@ -137,7 +139,7 @@ export function StatsView(): React.ReactElement {
             <div className="flex justify-between mt-1">
               <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{stats.levelProgress}/100</span>
               <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                다음 레벨까지 {100 - stats.levelProgress}점
+                {t('stats.toNextLevel', { points: 100 - stats.levelProgress })}
               </span>
             </div>
           </div>
@@ -148,21 +150,21 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 size={16} className="text-green-500" />
-              <span className={labelClass}>오늘 완료</span>
+              <span className={labelClass}>{t('stats.completedToday')}</span>
             </div>
             <p className={valueClass}>{stats.completedToday}</p>
           </div>
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-2">
               <Calendar size={16} className="text-blue-500" />
-              <span className={labelClass}>이번 주 완료</span>
+              <span className={labelClass}>{t('stats.completedThisWeek')}</span>
             </div>
             <p className={valueClass}>{stats.completedThisWeek}</p>
           </div>
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-2">
               <Star size={16} className="text-amber-500" />
-              <span className={labelClass}>전체 완료</span>
+              <span className={labelClass}>{t('stats.completedTotal')}</span>
             </div>
             <p className={valueClass}>{stats.totalCompleted}</p>
           </div>
@@ -173,7 +175,7 @@ export function StatsView(): React.ReactElement {
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={16} className={isDark ? 'text-blue-400' : 'text-blue-500'} />
             <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-              최근 14일 완료 추이
+              {t('stats.trend14d')}
             </span>
           </div>
           <div className="flex items-end gap-1.5 h-32">
@@ -192,7 +194,7 @@ export function StatsView(): React.ReactElement {
                     height: day.count > 0 ? `${Math.max((day.count / stats.maxDailyCount) * 100, 8)}%` : '2px',
                     minHeight: day.count > 0 ? '8px' : '2px'
                   }}
-                  title={`${day.date}: ${day.count}개 완료`}
+                  title={t('stats.dayTooltip', { date: day.date, done: day.count })}
                 />
                 {/* 숫자 */}
                 {day.count > 0 && (
@@ -211,19 +213,19 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-3">
               <Timer size={16} className="text-red-500" />
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>포모도로</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{t('stats.pomodoro')}</span>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className={labelClass}>세션 수</span>
+                <span className={labelClass}>{t('stats.sessionCount')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {stats.pomodoroCount}회
+                  {t('stats.sessions', { sessions: stats.pomodoroCount })}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className={labelClass}>총 집중 시간</span>
+                <span className={labelClass}>{t('stats.totalFocus')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {stats.totalFocusHours}시간 {stats.remainingMinutes}분
+                  {t('stats.hoursMinutes', { hours: stats.totalFocusHours, minutes: stats.remainingMinutes })}
                 </span>
               </div>
             </div>
@@ -233,19 +235,19 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-3">
               <Flame size={16} className="text-orange-500" />
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>습관 & 생산성</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{t('stats.habitsAndProductivity')}</span>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className={labelClass}>습관 완료율</span>
+                <span className={labelClass}>{t('stats.habitRate')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                   {stats.habitCompletionRate}%
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className={labelClass}>최고 생산 요일</span>
+                <span className={labelClass}>{t('stats.mostProductiveDay')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {stats.mostProductiveDay}요일
+                  {t('date.dayLabel', { day: stats.mostProductiveDay })}
                 </span>
               </div>
             </div>
@@ -257,7 +259,7 @@ export function StatsView(): React.ReactElement {
           <div className="flex items-center gap-2 mb-4">
             <Target size={16} className={isDark ? 'text-green-400' : 'text-green-500'} />
             <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-              요일별 완료 분포
+              {t('stats.weekdayDistribution')}
             </span>
           </div>
           <div className="flex items-end gap-3 h-20">

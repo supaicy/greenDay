@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { Command, CornerDownLeft, Calendar } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
 
 export function QuickAdd() {
+  const { t } = useTranslation()
   const { showQuickAdd, setShowQuickAdd, addTask, theme } = useStore()
   const isDark = theme === 'dark'
   const [input, setInput] = useState('')
@@ -74,7 +76,7 @@ export function QuickAdd() {
         }`}
         role="dialog"
         aria-modal="true"
-        aria-label="빠른 할 일 추가"
+        aria-label={t('task.quickAdd')}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -90,7 +92,7 @@ export function QuickAdd() {
               if (e.key === 'Enter') handleSubmit()
               if (e.key === 'Escape') setShowQuickAdd(false)
             }}
-            placeholder="할 일을 입력하세요... (예: 내일 장보기)"
+            placeholder={t('task.quickAddPlaceholder')}
             className={`w-full text-lg bg-transparent outline-none ${
               isDark ? 'text-gray-100 placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'
             }`}
@@ -101,11 +103,11 @@ export function QuickAdd() {
             <div className={`flex items-center gap-2 mt-3 text-sm ${isDark ? 'text-primary-400' : 'text-primary-600'}`}>
               <Calendar size={14} />
               <span>
-                마감일: {parsedDate}
+                {t('task.parsedDue', { date: parsedDate })}
                 {parsedTime ? ` ${parsedTime}` : ''}
               </span>
               <span className={`${isDark ? 'text-gray-500' : 'text-gray-400'}`}>|</span>
-              <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>제목: {parsedTitle}</span>
+              <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('task.parsedTitle', { title: parsedTitle })}</span>
             </div>
           )}
         </div>
@@ -119,9 +121,9 @@ export function QuickAdd() {
           <div className={`flex items-center gap-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             <span className="flex items-center gap-1">
               <CornerDownLeft size={12} />
-              추가
+              {t('task.add')}
             </span>
-            <span>Esc 닫기</span>
+            <span>{t('task.escToClose')}</span>
           </div>
           <div className={`flex items-center gap-1 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
             <Command size={11} />

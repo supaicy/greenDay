@@ -1,4 +1,5 @@
 import { Paperclip, X, Plus } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 
 function parseAttachment(entry: string): { name: string; path: string } {
@@ -23,6 +24,7 @@ export function AttachmentList({
   attachments: string[]
   onUpdate: (attachments: string[]) => void
 }) {
+  const { t } = useTranslation()
   const { pickAttachment, theme } = useStore()
   const isDark = theme === 'dark'
 
@@ -96,7 +98,7 @@ export function AttachmentList({
         }`}
       >
         <Plus size={16} />
-        파일 추가
+        {t('detail.addAttachment')}
       </button>
     </div>
   )

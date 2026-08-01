@@ -84,4 +84,55 @@ describe('parseNaturalDateTime', () => {
       expect(result?.consumed).toBe(2)
     })
   })
+
+  // 2026-03-25는 수요일이다.
+  describe('영어 표현', () => {
+    it('"tomorrow" → 내일 날짜', () => {
+      expect(parseNaturalDateTime('groceries tomorrow')).toBeNull() // 날짜는 앞에 와야 한다
+      expect(parseNaturalDateTime('tomorrow groceries')?.date).toBe('2026-03-26')
+    })
+
+    it('"today"/"day after tomorrow"', () => {
+      expect(parseNaturalDateTime('today standup')?.date).toBe('2026-03-25')
+      expect(parseNaturalDateTime('day after tomorrow dentist')?.date).toBe('2026-03-27')
+    })
+
+    it('"in N days/weeks/months"', () => {
+      expect(parseNaturalDateTime('in 3 days review')?.date).toBe('2026-03-28')
+      expect(parseNaturalDateTime('in 2 weeks review')?.date).toBe('2026-04-08')
+      expect(parseNaturalDateTime('in 1 month review')?.date).toBe('2026-04-25')
+    })
+
+    it('"next week" → 다음 월요일', () => {
+      expect(parseNaturalDateTime('next week planning')?.date).toBe('2026-03-30')
+    })
+
+    it('요일: "friday"는 다가오는 금요일, "next friday"는 그 다음 주', () => {
+      expect(parseNaturalDateTime('friday demo')?.date).toBe('2026-03-27')
+      expect(parseNaturalDateTime('next friday demo')?.date).toBe('2026-04-03')
+    })
+
+    it('"mar 5" / "5 mar" — 이미 지난 날짜는 내년으로', () => {
+      expect(parseNaturalDateTime('mar 5 taxes')?.date).toBe('2027-03-05')
+      expect(parseNaturalDateTime('april 2 taxes')?.date).toBe('2026-04-02')
+      expect(parseNaturalDateTime('2 apr taxes')?.date).toBe('2026-04-02')
+    })
+
+    it('오전/오후 시간: "3pm", "3:30 pm", "at 5pm"', () => {
+      expect(parseNaturalDateTime('tomorrow 3pm call')?.time).toBe('15:00')
+      expect(parseNaturalDateTime('tomorrow 3:30 pm call')?.time).toBe('15:30')
+      expect(parseNaturalDateTime('tomorrow at 5pm call')?.time).toBe('17:00')
+      expect(parseNaturalDateTime('tomorrow 12am call')?.time).toBe('00:00')
+    })
+
+    it('24시간제는 그대로: "tomorrow 14:50"', () => {
+      expect(parseNaturalDateTime('tomorrow 14:50 call')?.time).toBe('14:50')
+    })
+
+    it('영어 날짜 뒤 consumed 토큰 수', () => {
+      expect(parseNaturalDateTime('tomorrow groceries')?.consumed).toBe(1)
+      expect(parseNaturalDateTime('next week planning')?.consumed).toBe(2)
+      expect(parseNaturalDateTime('tomorrow at 5pm call')?.consumed).toBe(3)
+    })
+  })
 })

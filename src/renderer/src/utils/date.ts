@@ -14,16 +14,23 @@ import {
   startOfWeek,
   endOfWeek
 } from 'date-fns'
-import { ko } from 'date-fns/locale'
+import { ko, enUS } from 'date-fns/locale'
+import i18n from '../i18n'
+
+// date-fns 로케일은 요일·월 이름을 담당하고, 포맷 문자열('M월 d일' vs 'MMM d')은
+// 언어마다 어순이 달라 번역 리소스에서 가져온다.
+function dfLocale(): typeof ko {
+  return i18n.language?.startsWith('en') ? enUS : ko
+}
 
 export function formatDueDate(dateStr: string | null): string {
   if (!dateStr) return ''
   const date = new Date(dateStr)
-  if (isToday(date)) return '오늘'
-  if (isTomorrow(date)) return '내일'
-  if (isYesterday(date)) return '어제'
-  if (isThisWeek(date)) return format(date, 'EEEE', { locale: ko })
-  return format(date, 'M월 d일', { locale: ko })
+  if (isToday(date)) return i18n.t('date.today')
+  if (isTomorrow(date)) return i18n.t('date.tomorrow')
+  if (isYesterday(date)) return i18n.t('date.yesterday')
+  if (isThisWeek(date)) return format(date, 'EEEE', { locale: dfLocale() })
+  return format(date, i18n.t('date.monthDay'), { locale: dfLocale() })
 }
 
 export function isOverdue(dateStr: string | null): boolean {
@@ -72,7 +79,7 @@ export function getDayOfWeek(date: Date): number {
 }
 
 export function formatDate(date: Date, fmt: string): string {
-  return format(date, fmt, { locale: ko })
+  return format(date, fmt, { locale: dfLocale() })
 }
 
 export function toDateString(date: Date): string {

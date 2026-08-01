@@ -7,10 +7,9 @@ import { ChevronLeft, ChevronRight, Flag } from 'lucide-react'
 import { TimeBlock } from './TimeBlock'
 import { layoutOverlappingBlocks } from '../../utils/timeBlockLayout'
 import { getScheduledForOccurrence, snapTo15Min } from '../../utils/scheduledTime'
+import { useTranslation } from 'react-i18next'
 import { DND_MIME } from '../../utils/dnd'
-
-// 요일 이름
-const dayLabels = ['일', '월', '화', '수', '목', '금', '토']
+import i18n, { tList } from '../../i18n'
 
 // 시간 슬롯 (8시~22시)
 const timeSlots: number[] = []
@@ -41,9 +40,9 @@ const priorityBgLight: Record<Priority, string> = {
 }
 
 function formatHour(h: number): string {
-  const period = h < 12 ? '오전' : '오후'
+  const period = i18n.t(h < 12 ? 'date.am' : 'date.pm')
   const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${period} ${hour12}시`
+  return i18n.t('date.hour', { period, hour: hour12 })
 }
 
 function getMonday(date: Date): Date {
@@ -67,6 +66,7 @@ function parseTime(timeStr: string): { hour: number; minute: number } | null {
 }
 
 export function WeeklyCalendar(): React.ReactElement {
+  const { t } = useTranslation()
   const { theme, tasks, selectTask, selectedTaskId, updateTask } = useStore()
   const isDark = theme === 'dark'
 
@@ -164,14 +164,24 @@ export function WeeklyCalendar(): React.ReactElement {
   const headerMonth = useMemo(() => {
     const first = weekDays[0]
     const last = weekDays[6]
+    const months = tList('date.months')
     if (first.getMonth() === last.getMonth()) {
-      return `${first.getFullYear()}년 ${first.getMonth() + 1}월`
+      return t('calendar.weekRangeSameMonth', { year: first.getFullYear(), month: months[first.getMonth()] })
     }
     if (first.getFullYear() === last.getFullYear()) {
-      return `${first.getFullYear()}년 ${first.getMonth() + 1}월 - ${last.getMonth() + 1}월`
+      return t('calendar.weekRangeSameYear', {
+        year: first.getFullYear(),
+        from: months[first.getMonth()],
+        to: months[last.getMonth()]
+      })
     }
-    return `${first.getFullYear()}년 ${first.getMonth() + 1}월 - ${last.getFullYear()}년 ${last.getMonth() + 1}월`
-  }, [weekDays])
+    return t('calendar.weekRangeCrossYear', {
+      fromYear: first.getFullYear(),
+      from: months[first.getMonth()],
+      toYear: last.getFullYear(),
+      to: months[last.getMonth()]
+    })
+  }, [weekDays, t])
 
   const taskCardClass = (task: Task) => {
     const base = isDark ? priorityBg[task.priority] : priorityBgLight[task.priority]
@@ -201,7 +211,7 @@ export function WeeklyCalendar(): React.ReactElement {
                 : 'border-gray-300 text-gray-600 hover:bg-gray-100'
             }`}
           >
-            오늘
+            {t('common.today')}
           </button>
           <button
             type="button"
@@ -244,7 +254,7 @@ export function WeeklyCalendar(): React.ReactElement {
                   className={`flex-1 text-center py-2 border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
                 >
                   <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    {dayLabels[day.getDay()]}
+                    {tList('date.weekdaysShort')[day.getDay()]}
                   </div>
                   <div
                     className={`text-sm font-medium mt-0.5 ${
@@ -273,7 +283,7 @@ export function WeeklyCalendar(): React.ReactElement {
                   isDark ? 'text-gray-500' : 'text-gray-400'
                 }`}
               >
-                종일
+                {t('date.allDay')}
               </div>
               {weekDays.map((day) => {
                 const dateStr = dateToStr(day)

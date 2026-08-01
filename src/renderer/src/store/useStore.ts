@@ -27,7 +27,7 @@ import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
 import { type ActionOp, type TaskActionInterpretation, looksLikeTaskAction, resolveActionTarget } from '../utils/aiActions'
 import { isCapableModel } from '../utils/aiModels'
-import { detectLanguage, persistLanguage, type Language } from '../i18n'
+import i18n, { detectLanguage, persistLanguage, type Language } from '../i18n'
 
 export type Theme = 'dark' | 'light'
 
@@ -539,7 +539,12 @@ export const useStore = create<Store>((set, get) => ({
   removeTask: async (id) => {
     const task = get().tasks.find((t) => t.id === id)
     if (task) {
-      get().pushUndo({ type: 'deleteTask', description: `"${task.title}" 삭제됨`, data: task, timestamp: Date.now() })
+      get().pushUndo({
+      type: 'deleteTask',
+      description: i18n.t('undo.taskDeleted', { title: task.title }),
+      data: task,
+      timestamp: Date.now()
+    })
     }
     const now = new Date().toISOString()
     set((s) => {
@@ -626,7 +631,7 @@ export const useStore = create<Store>((set, get) => ({
     // 삭제 전 undo 스택에 ID 목록 저장 (popUndo deleteTasks 핸들러가 trashTasks에서 ID로 복원)
     get().pushUndo({
       type: 'deleteTasks',
-      description: `${allDeletedIds.length}개 삭제됨`,
+      description: i18n.t('undo.tasksDeleted', { count: allDeletedIds.length }),
       data: allDeletedIds,
       timestamp: Date.now()
     })
@@ -669,6 +674,7 @@ export const useStore = create<Store>((set, get) => ({
   },
   setLanguage: (lang) => {
     persistLanguage(lang)
+    // 메인 프로세스로의 통지는 App의 language 이펙트가 담당한다(첫 실행도 같은 경로).
     set({ language: lang })
   },
   setDetailPanelWidthPx: (px, windowWidth) => {
@@ -801,7 +807,7 @@ export const useStore = create<Store>((set, get) => ({
   aiPullModel: (model) => {
     // 이미 설치 중이면 중복 실행 방지
     if (get().aiPull?.active) return
-    set({ aiPull: { model, status: '준비 중…', percent: null, error: null, active: true } })
+    set({ aiPull: { model, status: i18n.t('ai.pullPreparing'), percent: null, error: null, active: true } })
 
     // 리스너 정리는 done/error 어느 쪽이든 한 번만. (aiSendMessage와 동일 패턴)
     const cleanup = (): void => {
@@ -811,11 +817,11 @@ export const useStore = create<Store>((set, get) => ({
     }
     const offProgress = window.api.onAiPullProgress?.((p) => {
       set({
-        aiPull: { model, status: p.status || '내려받는 중…', percent: p.percent, error: null, active: true }
+        aiPull: { model, status: p.status || i18n.t('ai.pullDownloading'), percent: p.percent, error: null, active: true }
       })
     })
     const offDone = window.api.onAiPullDone?.(() => {
-      set({ aiPull: { model, status: '설치 완료', percent: 100, error: null, active: false } })
+      set({ aiPull: { model, status: i18n.t('ai.pullDone'), percent: 100, error: null, active: false } })
       cleanup()
       // 새 모델을 목록에 반영하고 방금 설치한 모델을 활성 모델로 지정.
       // 'exaone3.5'로 pull하면 Ollama는 'exaone3.5:latest'로 저장하므로, 새로고침된
@@ -828,7 +834,7 @@ export const useStore = create<Store>((set, get) => ({
         })
     })
     const offError = window.api.onAiPullError?.((error) => {
-      set({ aiPull: { model, status: '설치 실패', percent: null, error, active: false } })
+      set({ aiPull: { model, status: i18n.t('ai.pullFailed'), percent: null, error, active: false } })
       cleanup()
     })
     void window.api.aiPullModel?.(model)
@@ -912,7 +918,7 @@ export const useStore = create<Store>((set, get) => ({
     })
     const cleanupError = window.api.onAiStreamError?.((error: string) => {
       const withError = get().aiMessages.map((m) =>
-        m.id === assistantMsg.id ? { ...m, content: `오류: ${error}` } : m
+        m.id === assistantMsg.id ? { ...m, content: i18n.t('ai.error', { message: error }) } : m
       )
       const cap = get().aiConfig?.maxHistoryMessages ?? 200
       const trimmed = trimHistory(withError, cap)
@@ -929,7 +935,7 @@ export const useStore = create<Store>((set, get) => ({
       set((s) => ({
         aiLoading: false,
         aiMessages: s.aiMessages.map((m) =>
-          m.id === assistantMsg.id ? { ...m, content: 'AI 서비스에 연결할 수 없습니다.' } : m
+          m.id === assistantMsg.id ? { ...m, content: i18n.t('ai.serviceUnavailable') } : m
         )
       }))
       cleanup()
@@ -964,18 +970,18 @@ export const useStore = create<Store>((set, get) => ({
       const res = (await window.api.aiInterpretAction(message, tasks)) as TaskActionInterpretation
       if (res.op === 'none') {
         set({ aiLoading: false })
-        pushAssistant('무엇을 하려는지 정확히 파악하지 못했어요. 어떤 할일을 어떻게 할지 다시 말씀해 주세요.')
+        pushAssistant(i18n.t('ai.actionUnclear'))
         return
       }
       if (res.op === 'reschedule' && !res.dueDate) {
         set({ aiLoading: false })
-        pushAssistant('며칠로 옮길지 구체적으로 알려주세요 (예: "내일로", "25일로").')
+        pushAssistant(i18n.t('ai.actionNeedDate'))
         return
       }
       const target = resolveActionTarget(res.taskTitle, get().tasks)
       if (!target) {
         set({ aiLoading: false })
-        pushAssistant(`"${res.taskTitle}"에 해당하는 할일을 찾지 못했어요.`)
+        pushAssistant(i18n.t('ai.actionNoMatch', { title: res.taskTitle }))
         return
       }
       set({
@@ -986,7 +992,7 @@ export const useStore = create<Store>((set, get) => ({
       // 연결 실패뿐 아니라 모델이 예상과 다른 형식을 반환한 경우(sanitize throw)도 여기로
       // 온다 — 특정해 "연결 불가"라 단정하지 않고 일반 메시지로 안내한다.
       set({ aiLoading: false })
-      pushAssistant('요청을 처리하지 못했어요. 다시 시도해 주세요.')
+      pushAssistant(i18n.t('ai.actionFailed'))
     }
   },
   aiConfirmAction: async () => {
@@ -1002,23 +1008,23 @@ export const useStore = create<Store>((set, get) => ({
     // 정직하게 알린다(예전 코드는 toggleTask가 이미 완료된 태스크를 도로 미완료로 되돌렸음).
     const task = get().tasks.find((t) => t.id === pending.taskId && !t.deletedAt)
     if (!task) {
-      pushAssistant(`"${pending.taskTitle}"을(를) 찾을 수 없어요 (이미 삭제되었을 수 있어요).`)
+      pushAssistant(i18n.t('ai.actionGone', { title: pending.taskTitle }))
       return
     }
     let done = ''
     if (pending.op === 'complete') {
       if (task.completed) {
-        pushAssistant(`"${pending.taskTitle}"은(는) 이미 완료되어 있어요.`)
+        pushAssistant(i18n.t('ai.actionAlreadyDone', { title: pending.taskTitle }))
         return
       }
       await get().toggleTask(pending.taskId) // 미완료 확인 후이므로 완료로 전환됨
-      done = `"${pending.taskTitle}"을(를) 완료 처리했어요.`
+      done = i18n.t('ai.actionCompleted', { title: pending.taskTitle })
     } else if (pending.op === 'delete') {
       await get().removeTask(pending.taskId)
-      done = `"${pending.taskTitle}"을(를) 삭제했어요 (휴지통에서 되돌릴 수 있어요).`
+      done = i18n.t('ai.actionDeleted', { title: pending.taskTitle })
     } else if (pending.op === 'reschedule') {
       await get().updateTask({ id: pending.taskId, dueDate: pending.dueDate })
-      done = `"${pending.taskTitle}"의 마감일을 ${pending.dueDate}(으)로 변경했어요.`
+      done = i18n.t('ai.actionRescheduled', { title: pending.taskTitle, date: pending.dueDate })
     }
     pushAssistant(done)
   },
@@ -1026,7 +1032,7 @@ export const useStore = create<Store>((set, get) => ({
     if (!get().aiPendingAction) return
     set((s) => ({
       aiPendingAction: null,
-      aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content: '취소했어요.', timestamp: new Date().toISOString() }]
+      aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content: i18n.t('ai.actionCancelled'), timestamp: new Date().toISOString() }]
     }))
   },
   aiCreateTaskFromNL: async (input) => {

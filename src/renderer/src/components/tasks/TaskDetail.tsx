@@ -3,12 +3,14 @@ import { X, Trash2, Tag, List, Clock, Bell, Repeat, Calendar, Circle, CheckCircl
 import { EditorView } from '@codemirror/view'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
 import '@atomic-editor/editor/styles.css'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { SubtaskList } from './SubtaskList'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { AttachmentList } from './AttachmentList'
 import { PRIORITY_OPTIONS } from '../../utils/priority'
+import { formatRecurringPattern } from '../../utils/recurrence'
 import { clampDetailWidth } from '../../store/detailWidth'
 import type { Priority } from '../../types'
 
@@ -84,6 +86,9 @@ function PickerRow({
 }
 
 export function TaskDetail() {
+  const { t, i18n } = useTranslation()
+  // 날짜·시간 표시는 브라우저 로케일이 아니라 앱에서 고른 언어를 따른다.
+  const i18nLocale = i18n.language?.startsWith('en') ? 'en-US' : 'ko-KR'
   // 개별 셀렉터로 구독 — 무선택자 useStore()는 아무 store 쓰기에도 리렌더된다.
   // (액션은 안정 참조라 리렌더를 유발하지 않음)
   const tasks = useStore((s) => s.tasks)
@@ -227,7 +232,7 @@ export function TaskDetail() {
       {/* 좌측 경계 드래그 핸들: 폭 조절 */}
       <button
         type="button"
-        aria-label="상세 패널 폭 조절"
+        aria-label={t('detail.resizePanel')}
         onMouseDown={startResize}
         className="absolute left-0 top-0 h-full w-2 -ml-1 cursor-col-resize z-10 hover:bg-primary-500/40 transition-colors"
       />
@@ -237,7 +242,7 @@ export function TaskDetail() {
         <button
           type="button"
           onClick={() => toggleTask(task.id)}
-          aria-label={task.completed ? '완료 취소' : '완료'}
+          aria-label={task.completed ? t('detail.uncomplete') : t('detail.complete')}
           className={`shrink-0 transition-colors ${task.completed ? 'text-primary-500' : priorityColor}`}
         >
           {task.completed ? <CheckCircle2 size={22} /> : <Circle size={22} />}
@@ -254,7 +259,7 @@ export function TaskDetail() {
           type="button"
           onClick={() => removeTask(task.id)}
           className="shrink-0 text-gray-400 hover:text-red-400 transition-colors"
-          aria-label="삭제"
+          aria-label={t('common.delete')}
         >
           <Trash2 size={16} />
         </button>
@@ -262,7 +267,7 @@ export function TaskDetail() {
           type="button"
           onClick={() => selectTask(null)}
           className={`shrink-0 transition-colors ${labelCls} hover:text-gray-300`}
-          aria-label="닫기"
+          aria-label={t('common.close')}
         >
           <X size={18} />
         </button>
@@ -272,7 +277,8 @@ export function TaskDetail() {
       <div className={`flex flex-wrap items-center gap-2 px-4 py-3 border-b ${isDark ? 'border-surface-divider' : 'border-gray-100'}`}>
         {task.scheduledStart && task.scheduledEnd && (
           <span className="flex items-center gap-1 text-xs text-gray-400 w-full">
-            <Clock size={13} /> 예정 {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}
+            <Clock size={13} />{' '}
+            {t('detail.scheduled', { range: formatScheduledRange(task.scheduledStart, task.scheduledEnd) })}
           </span>
         )}
         {/* 마감일 + 시간 */}
@@ -305,7 +311,7 @@ export function TaskDetail() {
                 save({ dueDate: null, dueTime: null })
               }}
               className={labelCls}
-              aria-label="마감일 지우기"
+              aria-label={t('detail.clearDueDate')}
             >
               <X size={14} />
             </button>
@@ -329,7 +335,7 @@ export function TaskDetail() {
                     : 'text-gray-400 hover:bg-gray-100'
               }`}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           ))}
         </div>
@@ -359,7 +365,7 @@ export function TaskDetail() {
           activeCls="text-primary-400 border-primary-500/30"
           inactiveCls={`${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`}
           icon={<Bell size={13} />}
-          label={task.reminderAt ? new Date(task.reminderAt).toLocaleString('ko') : '알림'}
+          label={task.reminderAt ? new Date(task.reminderAt).toLocaleString(i18nLocale) : t('reminder.label')}
         >
           <ReminderPicker
             dueDate={task.dueDate}
@@ -378,7 +384,7 @@ export function TaskDetail() {
           activeCls="text-purple-400 border-purple-500/30"
           inactiveCls={`${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`}
           icon={<Repeat size={13} />}
-          label={task.isRecurring ? task.recurringPattern || '반복' : '반복'}
+          label={(task.isRecurring && formatRecurringPattern(task.recurringPattern)) || t('recurring.label')}
         >
           <RecurringPicker
             value={task.recurringPattern}
@@ -410,7 +416,7 @@ export function TaskDetail() {
               if (e.nativeEvent.isComposing) return
               if (e.key === 'Enter') addTag()
             }}
-            placeholder="태그..."
+            placeholder={t('detail.tagsPlaceholder')}
             className={`flex-1 min-w-[60px] text-xs bg-transparent outline-none ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
           />
         </div>

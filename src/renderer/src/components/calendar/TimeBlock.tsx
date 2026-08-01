@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import type { Task } from '../../types'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { snapTo15Min } from '../../utils/scheduledTime'
 import { DND_MIME } from '../../utils/dnd'
@@ -22,6 +23,7 @@ interface Props {
 const MIN_BLOCK_MIN = 15
 
 export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark }: Props): React.ReactElement {
+  const { t } = useTranslation()
   const { updateTask } = useStore()
   const elRef = useRef<HTMLDivElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -150,14 +152,14 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
             className="px-3 py-1 text-xs hover:bg-gray-500/20 block w-full text-left"
             onClick={unschedule}
           >
-            일정 해제
+            {t('calendar.unschedule')}
           </button>
           <button
             type="button"
             className="px-3 py-1 text-xs hover:bg-gray-500/20 block w-full text-left"
             onClick={() => setMenuOpen(false)}
           >
-            취소
+            {t('common.cancel')}
           </button>
         </div>
       )}
