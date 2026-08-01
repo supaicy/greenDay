@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import i18n, { tList } from './index'
 import ko from './locales/ko.json'
 import en from './locales/en.json'
 
@@ -104,3 +105,56 @@ function* walk(dir: string): Generator<string> {
     }
   }
 }
+
+describe('조합된 문구', () => {
+  // "2026년 7월월"처럼 토큰과 템플릿이 접미사를 이중으로 붙이던 회귀를 막는다.
+  // date.months 항목은 한국어에서 이미 '월'을 포함하므로 템플릿은 붙이면 안 된다.
+  it('주간 캘린더 헤더에 월 표기가 중복되지 않는다', () => {
+    const tKo = i18n.getFixedT('ko')
+    const months = tList('date.months', 'ko')
+    expect(tKo('calendar.weekRangeSameMonth', { year: 2026, month: months[6] })).toBe('2026년 7월')
+    expect(tKo('calendar.weekRangeSameYear', { year: 2026, from: months[6], to: months[7] })).toBe(
+      '2026년 7월 - 8월'
+    )
+    expect(
+      tKo('calendar.weekRangeCrossYear', {
+        fromYear: 2026,
+        from: months[11],
+        toYear: 2027,
+        to: months[0]
+      })
+    ).toBe('2026년 12월 - 2027년 1월')
+  })
+
+  it('영어 주간 캘린더 헤더', () => {
+    const tEn = i18n.getFixedT('en')
+    const months = tList('date.months', 'en')
+    expect(tEn('calendar.weekRangeSameMonth', { year: 2026, month: months[7] })).toBe('Aug 2026')
+    expect(tEn('calendar.weekRangeSameYear', { year: 2026, from: months[6], to: months[7] })).toBe(
+      'Jul – Aug 2026'
+    )
+  })
+
+  it('시각 표기는 언어별 어순을 따른다', () => {
+    const tKo = i18n.getFixedT('ko')
+    const tEn = i18n.getFixedT('en')
+    expect(tKo('date.hour', { period: tKo('date.pm'), hour: 3 })).toBe('오후 3시')
+    expect(tEn('date.hour', { period: tEn('date.pm'), hour: 3 })).toBe('3 PM')
+    expect(tKo('date.hourMinute', { period: tKo('date.am'), hour: 9, minute: '30' })).toBe('오전 9:30')
+    expect(tEn('date.hourMinute', { period: tEn('date.am'), hour: 9, minute: '30' })).toBe('9:30 AM')
+  })
+
+  it('영어 복수형이 count에 따라 갈린다', () => {
+    const tEn = i18n.getFixedT('en')
+    expect(tEn('task.count', { count: 1 })).toBe('1 task')
+    expect(tEn('task.count', { count: 3 })).toBe('3 tasks')
+    expect(tEn('timeline.taskCount', { count: 1 })).toBe('1 task')
+    expect(tEn('timeline.taskCount', { count: 2 })).toBe('2 tasks')
+  })
+
+  it('한국어는 수량에 관계없이 한 형태만 쓴다', () => {
+    const tKo = i18n.getFixedT('ko')
+    expect(tKo('task.count', { count: 1 })).toBe('1개')
+    expect(tKo('task.count', { count: 3 })).toBe('3개')
+  })
+})

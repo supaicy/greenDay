@@ -198,9 +198,9 @@
     "moreTasks": "+{{n}}개",
     "timeSlot": "시간 슬롯",
     "unschedule": "일정 해제",
-    "weekRangeSameMonth": "{{year}}년 {{month}}월",
-    "weekRangeSameYear": "{{year}}년 {{from}}월 - {{to}}월",
-    "weekRangeCrossYear": "{{fromYear}}년 {{from}}월 - {{toYear}}년 {{to}}월"
+    "weekRangeSameMonth": "{{year}}년 {{month}}",
+    "weekRangeSameYear": "{{year}}년 {{from}} - {{to}}",
+    "weekRangeCrossYear": "{{fromYear}}년 {{from}} - {{toYear}}년 {{to}}"
   },
   "kanban": {
     "title": "칸반 보드",
