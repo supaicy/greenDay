@@ -4,6 +4,7 @@
  */
 
 import { shell } from 'electron'
+import { OAUTH_REDIRECT_URI } from '../shared/app-id'
 import {
   buildAuthUrl,
   createPkcePair,
@@ -14,7 +15,7 @@ import {
   type TokenSet
 } from './google/oauth'
 
-export const REDIRECT_URI = 'com.haru.app:/oauth2redirect'
+export { OAUTH_REDIRECT_URI as REDIRECT_URI } from '../shared/app-id'
 
 /** 사용자가 브라우저에서 로그인을 끝내지 않으면 여기서 끊는다. */
 const FLOW_TIMEOUT_MS = 5 * 60 * 1000
@@ -62,7 +63,7 @@ export function startGoogleAuth(clientId: string): Promise<TokenSet> {
     // 앱 안의 웹뷰가 아니라 기본 브라우저로 연다. 구글은 임베디드 웹뷰에서의 로그인을
     // 차단하고, 사용자도 주소창에서 accounts.google.com을 직접 확인할 수 있어야 한다.
     void shell
-      .openExternal(buildAuthUrl({ clientId, redirectUri: REDIRECT_URI, challenge, state }))
+      .openExternal(buildAuthUrl({ clientId, redirectUri: OAUTH_REDIRECT_URI, challenge, state }))
       .catch((cause) => {
         const error = new OAuthError('open_failed', '브라우저를 열지 못했습니다.')
         error.cause = cause
@@ -72,7 +73,7 @@ export function startGoogleAuth(clientId: string): Promise<TokenSet> {
 }
 
 /**
- * `com.haru.app:` 스킴으로 돌아온 URL 처리. 기다리는 흐름이 없으면 무시한다 —
+ * 앱 커스텀 스킴으로 돌아온 URL 처리. 기다리는 흐름이 없으면 무시한다 —
  * 다른 앱이나 오래된 링크가 이 스킴을 열 수 있다.
  */
 export async function handleGoogleCallback(url: string): Promise<boolean> {
@@ -84,7 +85,7 @@ export async function handleGoogleCallback(url: string): Promise<boolean> {
     const tokens = await exchangeCode(
       {
         clientId: flow.clientId,
-        redirectUri: REDIRECT_URI,
+        redirectUri: OAUTH_REDIRECT_URI,
         code,
         verifier: flow.verifier,
         now: new Date().toISOString()

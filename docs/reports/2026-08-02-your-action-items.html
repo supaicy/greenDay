@@ -64,7 +64,7 @@
 
 <header class="top">
   <h1>사장님이 직접 하셔야 하는 일</h1>
-  <p class="sub">2026-08-02 · haru v2.0.1 · 코드 작업은 전부 끝났습니다</p>
+  <p class="sub">2026-08-02 · haru v2.0.1 · 코드 작업은 전부 끝났습니다 · 번들 ID <code>com.supaicy.haru</code></p>
 </header>
 
 <p class="lede">
@@ -72,6 +72,20 @@
   2단계 인증이 필요하거나, 결제·법적 동의가 얽혀 있기 때문입니다.
   나머지는 전부 코드에 반영해 뒀습니다.
 </p>
+
+<div class="callout warn">
+  <strong>번들 ID가 바뀌었습니다.</strong>
+  <code>com.haru.app</code>은 이미 다른 개발자가 선점해 쓸 수 없어서
+  <code>com.supaicy.haru</code>로 바꿨습니다 (기존 <code>com.supaicy.bicmac</code>과 같은 네임스페이스).
+  코드·빌드 설정·이 문서에 전부 반영했습니다.
+  <br><br>
+  <strong>기존 사용자 데이터는 그대로입니다.</strong> 확인해 봤는데 할 일 저장 위치는
+  <code>~/Library/Application Support/ticktick/</code>이고, 이 경로는 번들 ID가 아니라
+  앱 이름으로 정해집니다. 번들 ID를 바꿔도 데이터는 이사 가지 않습니다.
+  <br><br>
+  다만 macOS 입장에서는 <em>다른 앱</em>이 되므로, 새 빌드가 기존 <code>/Applications/haru.app</code>을
+  덮어쓰지 않습니다. 새로 설치하실 때 <strong>예전 것을 먼저 지워 주세요</strong> (안 지우면 두 개가 공존합니다).
+</div>
 
 <div class="callout">
   <strong>순서가 중요합니다.</strong> ①②③은 서로 물려 있어 이 순서대로 하셔야 합니다.
@@ -86,7 +100,7 @@
     <tr><th>#</th><th>할 일</th><th>어디서</th><th>걸리는 시간</th><th>상태</th></tr>
   </thead>
   <tbody>
-    <tr><td>①</td><td>App ID <code>com.haru.app</code> 등록</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
+    <tr><td>①</td><td>App ID <code>com.supaicy.haru</code> 등록</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
     <tr><td>②</td><td>프로비저닝 프로파일 발급</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
     <tr><td>③</td><td>App Store Connect 앱 레코드 생성</td><td>App Store Connect</td><td>20분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
     <tr><td>④</td><td>Google OAuth 클라이언트 ID 발급</td><td>Google Cloud 콘솔</td><td>20분</td><td><span class="pill wait">구글 연동 차단 중</span></td></tr>
@@ -105,14 +119,14 @@
 <h2>① App ID 등록</h2>
 
 <div class="task">
-  <h3><span class="num">1</span> Bundle ID <code>com.haru.app</code> 만들기 <span class="meta">약 5분</span></h3>
+  <h3><span class="num">1</span> Bundle ID <code>com.supaicy.haru</code> 만들기 <span class="meta">약 5분</span></h3>
 
   <p><a href="https://developer.apple.com/account/resources/identifiers/list">developer.apple.com → Certificates, Identifiers &amp; Profiles → Identifiers</a></p>
 
   <ol>
     <li><strong>+</strong> 버튼 → <strong>App IDs</strong> → <strong>App</strong> 선택</li>
     <li>Description: <code>haru</code></li>
-    <li>Bundle ID: <strong>Explicit</strong> 선택 후 <code>com.haru.app</code> 입력
+    <li>Bundle ID: <strong>Explicit</strong> 선택 후 <code>com.supaicy.haru</code> 입력
       <div class="callout stop" style="margin:10px 0">
         <strong>정확히 이 값이어야 합니다.</strong> 앱의 <code>Info.plist</code>·프로비저닝 프로파일·
         App Store Connect 레코드 세 곳이 전부 이 값으로 맞아야 업로드가 통과합니다.
@@ -134,7 +148,7 @@
 
   <ol>
     <li><strong>+</strong> → Distribution 아래 <strong>Mac App Store Connect</strong> 선택</li>
-    <li>App ID: 방금 만든 <code>com.haru.app</code> 선택</li>
+    <li>App ID: 방금 만든 <code>com.supaicy.haru</code> 선택</li>
     <li>Certificate: <code>Apple Distribution: MINSEOK SHIN</code> 선택</li>
     <li>Profile Name: <code>haru MAS</code> (아무 이름이나 괜찮습니다)</li>
     <li>Generate → Download</li>
@@ -175,7 +189,7 @@
       <tr><td>플랫폼</td><td>macOS</td></tr>
       <tr><td>이름</td><td><code>haru</code> <span class="meta">(이미 쓰이고 있으면 <code>haru - 할 일 관리</code>)</span></td></tr>
       <tr><td>기본 언어</td><td>한국어</td></tr>
-      <tr><td>번들 ID</td><td>①에서 만든 <code>com.haru.app</code></td></tr>
+      <tr><td>번들 ID</td><td>①에서 만든 <code>com.supaicy.haru</code></td></tr>
       <tr><td>SKU</td><td><code>haru-mac-001</code> <span class="meta">(내부 식별용, 아무 값이나)</span></td></tr>
       <tr><td>사용자 액세스</td><td>전체 액세스</td></tr>
     </tbody>
@@ -269,7 +283,7 @@
         <thead><tr><th>항목</th><th>값</th></tr></thead>
         <tbody>
           <tr><td>애플리케이션 유형</td><td><strong>iOS</strong></td></tr>
-          <tr><td>번들 ID</td><td><code>com.haru.app</code></td></tr>
+          <tr><td>번들 ID</td><td><code>com.supaicy.haru</code></td></tr>
         </tbody>
       </table>
       </div>
@@ -310,11 +324,18 @@
     <tbody>
       <tr>
         <td><strong>A. 지금 공개</strong></td>
-        <td>웹에서 바로 받을 수 있게 됩니다. 다만 <strong>이번에 만든 한/영 지원과 캘린더 동기화가 빠진 버전</strong>입니다.</td>
+        <td>
+          웹에서 바로 받을 수 있게 됩니다. 다만 <strong>한/영 지원과 캘린더 동기화가 빠진 버전</strong>이고,
+          <strong>번들 ID도 옛날 것(<code>com.haru.app</code>)</strong>입니다.
+          받은 사람은 나중에 새 버전을 설치할 때 옛 앱을 따로 지워야 합니다.
+        </td>
       </tr>
       <tr>
         <td><strong>B. 기다렸다 v2.1.0으로</strong> <span class="meta">권장</span></td>
-        <td>새 기능까지 담아 한 번에 공개. 첫인상이 더 좋습니다.</td>
+        <td>
+          새 기능과 새 번들 ID를 한 번에 담아 공개. 첫인상도 좋고,
+          사용자가 앱을 두 번 지우고 설치하는 일도 없습니다.
+        </td>
       </tr>
     </tbody>
   </table>

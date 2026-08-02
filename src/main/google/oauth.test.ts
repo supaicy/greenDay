@@ -16,7 +16,7 @@ import {
 } from './oauth'
 
 const CLIENT_ID = '123-abc.apps.googleusercontent.com'
-const REDIRECT = 'com.haru.app:/oauth2redirect'
+const REDIRECT = 'com.supaicy.haru:/oauth2redirect'
 const NOW = '2026-08-02T00:00:00.000Z'
 
 function jsonFetch(payload: unknown, status = 200): { fetchImpl: FetchLike; bodies: string[] } {

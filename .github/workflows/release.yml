@@ -133,8 +133,8 @@ jobs:
 
             zap trash: [
               "~/Library/Application Support/haru",
-              "~/Library/Preferences/com.haru.app.plist",
-              "~/Library/Saved Application State/com.haru.app.savedState",
+              "~/Library/Preferences/com.supaicy.haru.plist",
+              "~/Library/Saved Application State/com.supaicy.haru.savedState",
             ]
           end
           EOF

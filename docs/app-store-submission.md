@@ -28,7 +28,7 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
 ## 1. Apple Developer 포털에서
 
 - ⬜ **Bundle ID 등록** — [Identifiers](https://developer.apple.com/account/resources/identifiers/list) → `+` → App IDs → App
-  - Bundle ID: `com.haru.app` (Explicit)
+  - Bundle ID: `com.supaicy.haru` (Explicit)
   - Capabilities: 추가할 것 없음 (haru는 iCloud·푸시·인앱결제 미사용)
 
 - ⬜ **인증서 2종 발급** — [Certificates](https://developer.apple.com/account/resources/certificates/list) → `+`
@@ -41,7 +41,7 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
   > `Developer ID Application`은 웹사이트 직접 배포 전용입니다.
 
 - ⬜ **프로비저닝 프로파일** — [Profiles](https://developer.apple.com/account/resources/profiles/list) → `+` → **Mac App Store Connect**
-  - App ID: `com.haru.app`, 인증서: 방금 만든 Apple Distribution
+  - App ID: `com.supaicy.haru`, 인증서: 방금 만든 Apple Distribution
   - 다운로드 후 저장소에 배치:
     ```
     cp ~/Downloads/*.provisionprofile resources/embedded.provisionprofile
@@ -59,7 +59,7 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
 | 플랫폼 | macOS |
 | 이름 | `haru` |
 | 기본 언어 | 한국어 |
-| Bundle ID | `com.haru.app` |
+| Bundle ID | `com.supaicy.haru` |
 | SKU | `haru-macos-001` (내부 식별용, 아무 값이나 가능) |
 | 사용자 액세스 | 전체 액세스 |
 
@@ -291,7 +291,7 @@ in between:
   encrypted via Electron safeStorage (macOS keychain) and never leaves the device.
 - Google: standard OAuth 2.0 with PKCE opened in the user's default browser (not an
   embedded web view). The app is a public client with no client secret. The callback
-  arrives via the custom URL scheme com.haru.app:, so no local HTTP server is opened and
+  arrives via the custom URL scheme com.supaicy.haru:, so no local HTTP server is opened and
   the app does not need the network.server entitlement. The only scope requested is
   https://www.googleapis.com/auth/calendar.app.created, which limits access to events the
   app itself created; haru cannot read the user's existing calendar entries.
@@ -346,7 +346,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 | 요청 범위 | `https://www.googleapis.com/auth/calendar.app.created` |
 | 범위 등급 | 비민감(non-sensitive) — 앱이 만든 일정만 접근 |
 | 앱 유형 | 데스크톱 앱 (공개 클라이언트, PKCE) |
-| 리디렉션 | `com.haru.app:/oauth2redirect` (커스텀 스킴) |
+| 리디렉션 | `com.supaicy.haru:/oauth2redirect` (커스텀 스킴) |
 
 > `calendar.events`나 `calendar`(전체)를 요청했다면 민감 범위 심사 + 보안 평가가 필요했을
 > 것입니다. 앱이 만든 일정만 다루면 되므로 그 범위를 요청하지 않았습니다.

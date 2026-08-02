@@ -7,7 +7,15 @@
 # 사용:  npm run mas:preflight
 set -uo pipefail
 
-BUNDLE_ID="com.haru.app"
+# 번들 ID는 어디에도 하드코딩하지 않는다. electron-builder.yml 을 권위로 삼고,
+# 소스(src/shared/app-id.ts)가 같은 값을 쓰는지 아래에서 대조한다.
+BUNDLE_ID="$(awk -F': *' '/^appId:/{print $2; exit}' electron-builder.yml)"
+if [ -z "$BUNDLE_ID" ]; then
+  echo "ERROR: electron-builder.yml 에서 appId를 읽지 못했습니다." >&2
+  exit 1
+fi
+echo "번들 ID: $BUNDLE_ID"
+echo
 PROFILE="${MAS_PROVISIONING_PROFILE:-resources/embedded.provisionprofile}"
 fail=0
 
@@ -52,8 +60,8 @@ else
       | plutil -extract TeamIdentifier.0 raw -o - - 2>/dev/null)"
     expires="$(printf '%s' "$decoded" | plutil -extract ExpirationDate raw -o - - 2>/dev/null)"
 
-    # application-identifier는 "TEAMID.com.haru.app" 형태다.
-    if [ "${profile_app_id##*.}" = "app" ] && [[ "$profile_app_id" == *".$BUNDLE_ID" ]]; then
+    # application-identifier는 "TEAMID.com.supaicy.haru" 형태다.
+    if [[ "$profile_app_id" == *".$BUNDLE_ID" ]]; then
       ok "프로파일 App ID 일치: $profile_app_id"
     else
       bad "프로파일이 다른 앱의 것입니다: ${profile_app_id:-알 수 없음}"
@@ -108,13 +116,27 @@ else
   bad "전역 단축키에 process.mas 가드가 없습니다 (샌드박스에서 등록 불가)"
 fi
 
-echo "── 5/5  URL 스킴 등록"
+echo "── 5/5  번들 ID 일관성"
 
-if grep -q "com.haru.app" electron-builder.yml; then
-  ok "electron-builder.yml에 커스텀 URL 스킴 선언됨"
+# 세 곳이 어긋나면 조용히 깨진다: 구글 로그인은 브라우저에서 성공하는데 그 콜백을
+# 받을 앱이 없어 앱은 영원히 기다린다. 여기서 대조해 둔다.
+if grep -q "^        - $BUNDLE_ID\$" electron-builder.yml; then
+  ok "URL 스킴이 appId와 일치: $BUNDLE_ID"
 else
-  bad "URL 스킴이 선언되지 않았습니다 — 구글 로그인 후 앱으로 돌아오지 못합니다"
+  bad "URL 스킴이 appId와 다릅니다 — 구글 로그인 후 앱으로 돌아오지 못합니다"
+  note "electron-builder.yml 의 mac.protocols[].schemes 를 $BUNDLE_ID 로 맞추세요"
 fi
+
+if grep -q "APP_BUNDLE_ID = '$BUNDLE_ID'" src/shared/app-id.ts; then
+  ok "소스의 APP_BUNDLE_ID가 appId와 일치"
+else
+  bad "src/shared/app-id.ts 의 APP_BUNDLE_ID가 appId($BUNDLE_ID)와 다릅니다"
+fi
+
+echo "── 참고  Google OAuth 클라이언트"
+note "Google Cloud 콘솔에서 iOS 유형 클라이언트를 만들 때 번들 ID를"
+note "  $BUNDLE_ID"
+note "로 정확히 입력해야 콜백이 돌아옵니다."
 
 echo
 if [ "$fail" = "0" ]; then

@@ -7,6 +7,7 @@ import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
 import { isMainLanguage, mainStrings, type MainLanguage } from '../shared/main-strings'
 import { handleGoogleCallback } from './google-auth-flow'
+import { APP_BUNDLE_ID, isAppScheme } from '../shared/app-id'
 
 // 리마인더 폴러 인터벌 핸들 (모듈 스코프에서 선언해 will-quit 핸들러에서 접근 가능)
 let reminderInterval: ReturnType<typeof setInterval> | null = null
@@ -55,7 +56,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.haru.app')
+  electronApp.setAppUserModelId(APP_BUNDLE_ID)
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
@@ -65,9 +66,9 @@ app.whenReady().then(() => {
   // network.server 권한이 필요 없다.
   if (is.dev && process.platform === 'darwin') {
     // 개발 중에는 Electron 실행 파일이 아니라 이 프로젝트를 핸들러로 등록해야 한다.
-    app.setAsDefaultProtocolClient('com.haru.app', process.execPath, [join(__dirname, '../..')])
+    app.setAsDefaultProtocolClient(APP_BUNDLE_ID, process.execPath, [join(__dirname, '../..')])
   } else {
-    app.setAsDefaultProtocolClient('com.haru.app')
+    app.setAsDefaultProtocolClient(APP_BUNDLE_ID)
   }
 
   initDatabase()
@@ -148,7 +149,7 @@ app.whenReady().then(() => {
 // macOS는 이미 실행 중인 앱에 open-url로 콜백을 전달한다. whenReady 밖에 둬야
 // 앱이 스킴 링크로 처음 켜지는 경우도 놓치지 않는다.
 app.on('open-url', (event, url) => {
-  if (!url.startsWith('com.haru.app:')) return
+  if (!isAppScheme(url)) return
   event.preventDefault()
   void handleGoogleCallback(url)
   // 브라우저에서 돌아왔으니 창을 앞으로 가져온다.
