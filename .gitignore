@@ -7,3 +7,6 @@ docs/superpowers/
 .superpowers/
 .gstack/
 homebrew-haru/
+
+# App Store 프로비저닝 프로파일 (개인 자격증명 — 커밋 금지)
+resources/embedded.provisionprofile

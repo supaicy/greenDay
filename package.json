@@ -17,7 +17,9 @@
     "lint:fix": "biome check --write src electron.vite.config.ts",
     "format": "biome format --write src electron.vite.config.ts",
     "typecheck": "tsc --build",
-    "release": "bash scripts/release.sh"
+    "release": "bash scripts/release.sh",
+    "mas:preflight": "bash scripts/mas-preflight.sh",
+    "mas:build": "bash scripts/mas-preflight.sh && electron-vite build && electron-builder --mac mas --arm64 --x64"
   },
   "dependencies": {
     "@atomic-editor/editor": "^0.6.2",

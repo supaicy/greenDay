@@ -34,6 +34,10 @@ mas:
   entitlementsInherit: resources/entitlements.mas.inherit.plist
   hardenedRuntime: false
   category: public.app-category.productivity
+  # developer.apple.com에서 'Mac App Store' 유형으로 발급받아 이 경로에 둔다.
+  # App ID가 com.haru.app 이 아니면 빌드는 되고 업로드에서 거절되므로,
+  # scripts/mas-preflight.sh 가 미리 확인한다.
+  provisioningProfile: resources/embedded.provisionprofile
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 npmRebuild: true
