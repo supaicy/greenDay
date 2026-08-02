@@ -73,23 +73,20 @@
   나머지는 전부 코드에 반영해 뒀습니다.
 </p>
 
-<div class="callout warn">
-  <strong>번들 ID가 바뀌었습니다.</strong>
-  <code>com.Greenday.app</code>은 이미 다른 개발자가 선점해 쓸 수 없어서
-  <code>com.supaicy.haru</code>로 바꿨습니다 (기존 <code>com.supaicy.bicmac</code>과 같은 네임스페이스).
-  코드·빌드 설정·이 문서에 전부 반영했습니다.
-  <br><br>
-  <strong>기존 사용자 데이터는 그대로입니다.</strong> 확인해 봤는데 할 일 저장 위치는
-  <code>~/Library/Application Support/ticktick/</code>이고, 이 경로는 번들 ID가 아니라
-  앱 이름으로 정해집니다. 번들 ID를 바꿔도 데이터는 이사 가지 않습니다.
-  <br><br>
-  다만 macOS 입장에서는 <em>다른 앱</em>이 되므로, 새 빌드가 기존 <code>/Applications/Greenday.app</code>을
-  덮어쓰지 않습니다. 새로 설치하실 때 <strong>예전 것을 먼저 지워 주세요</strong> (안 지우면 두 개가 공존합니다).
+<div class="callout">
+  <strong>①②는 끝났습니다.</strong> App ID <code>com.supaicy.haru</code>와 프로비저닝 프로파일이
+  모두 준비돼 있고, 그걸로 <strong>실제 App Store 빌드까지 성공했습니다</strong> —
+  서명·프로파일 내장·샌드박스·pkg 서명 전부 통과. 남은 건 아래 넷입니다.
 </div>
 
-<div class="callout">
-  <strong>순서가 중요합니다.</strong> ①②③은 서로 물려 있어 이 순서대로 하셔야 합니다.
-  ④는 지금 바로 시작해두면 좋고(심사 대기가 있음), ⑤⑥은 아무 때나 하셔도 됩니다.
+<div class="callout warn">
+  <strong>앱 이름은 Greenday, 번들 ID는 com.supaicy.haru 입니다.</strong> 일부러 다르게 뒀습니다 —
+  번들 ID는 사용자에게 보이지 않는 내부 식별자라 이름과 달라도 상관없고
+  (Slack도 <code>com.tinyspeck.slackmacgap</code>입니다),
+  맞추자고 App ID와 프로파일을 다시 받으실 필요가 없어서입니다.
+  <br><br>
+  <strong>④ Google 클라이언트를 만드실 때 번들 ID 칸에는 <code>com.supaicy.haru</code>를 넣으세요.</strong>
+  Greenday가 아닙니다. 여기가 어긋나면 로그인은 되는데 앱으로 돌아오지 못합니다.
 </div>
 
 <h2>한눈에 보기</h2>
@@ -100,10 +97,10 @@
     <tr><th>#</th><th>할 일</th><th>어디서</th><th>걸리는 시간</th><th>상태</th></tr>
   </thead>
   <tbody>
-    <tr><td>①</td><td>App ID <code>com.supaicy.haru</code> 등록</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
-    <tr><td>②</td><td>프로비저닝 프로파일 발급</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
-    <tr><td>③</td><td>App Store Connect 앱 레코드 생성</td><td>App Store Connect</td><td>20분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
-    <tr><td>④</td><td>Google OAuth 클라이언트 ID 발급</td><td>Google Cloud 콘솔</td><td>20분</td><td><span class="pill wait">구글 연동 차단 중</span></td></tr>
+    <tr><td>①</td><td>App ID 등록</td><td>Apple 개발자 포털</td><td>—</td><td><span class="pill done">완료</span></td></tr>
+    <tr><td>②</td><td>프로비저닝 프로파일</td><td>Apple 개발자 포털</td><td>—</td><td><span class="pill done">완료</span></td></tr>
+    <tr><td>③</td><td>App Store Connect 메타데이터 + 제출</td><td>App Store Connect</td><td>20분</td><td><span class="pill wait">진행 중</span></td></tr>
+    <tr><td>④</td><td>Google OAuth 클라이언트 ID</td><td>Google Cloud 콘솔</td><td>20분</td><td><span class="pill wait">구글 연동 차단 중</span></td></tr>
     <tr><td>⑤</td><td>v2.0.1 공개 여부 결정</td><td>결정만</td><td>1분</td><td><span class="pill">선택</span></td></tr>
     <tr><td>⑥</td><td>실제 계정으로 캘린더 동기화 테스트</td><td>Greenday 앱</td><td>10분</td><td><span class="pill">권장</span></td></tr>
   </tbody>
@@ -116,63 +113,25 @@
   (팀 <code>32R6RHXU36</code>). 이건 안 하셔도 됩니다.
 </div>
 
-<h2>① App ID 등록</h2>
+<h2>①② 완료됨 — 더 하실 것 없습니다</h2>
 
 <div class="task">
-  <h3><span class="num">1</span> Bundle ID <code>com.supaicy.haru</code> 만들기 <span class="meta">약 5분</span></h3>
-
-  <p><a href="https://developer.apple.com/account/resources/identifiers/list">developer.apple.com → Certificates, Identifiers &amp; Profiles → Identifiers</a></p>
-
-  <ol>
-    <li><strong>+</strong> 버튼 → <strong>App IDs</strong> → <strong>App</strong> 선택</li>
-    <li>Description: <code>Greenday</code></li>
-    <li>Bundle ID: <strong>Explicit</strong> 선택 후 <code>com.supaicy.haru</code> 입력
-      <div class="callout stop" style="margin:10px 0">
-        <strong>정확히 이 값이어야 합니다.</strong> 앱의 <code>Info.plist</code>·프로비저닝 프로파일·
-        App Store Connect 레코드 세 곳이 전부 이 값으로 맞아야 업로드가 통과합니다.
-        오타가 있으면 빌드는 성공하고 업로드에서 거절됩니다.
-      </div>
-    </li>
-    <li>Capabilities: <strong>아무것도 체크하지 마세요.</strong> Greenday는 iCloud·푸시·Sign in with Apple을
-      쓰지 않습니다. 필요 없는 걸 켜면 심사에서 사유를 묻습니다.</li>
-    <li>Continue → Register</li>
-  </ol>
-</div>
-
-<h2>② 프로비저닝 프로파일</h2>
-
-<div class="task">
-  <h3><span class="num">2</span> Mac App Store 프로파일 재발급 <span class="meta">약 5분 · ①이 끝나야 가능</span></h3>
-
-  <p><a href="https://developer.apple.com/account/resources/profiles/list">developer.apple.com → Profiles</a></p>
-
-  <ol>
-    <li><strong>+</strong> → Distribution 아래 <strong>Mac App Store Connect</strong> 선택</li>
-    <li>App ID: 방금 만든 <code>com.supaicy.haru</code> 선택</li>
-    <li>Certificate: <code>Apple Distribution: MINSEOK SHIN</code> 선택</li>
-    <li>Profile Name: <code>Greenday MAS</code> (아무 이름이나 괜찮습니다)</li>
-    <li>Generate → Download</li>
-    <li>받은 파일을 <strong>이 경로에 저장</strong>:
-      <pre>~/orca/workspaces/ticktick/coordinate/resources/embedded.provisionprofile</pre>
-      파일 이름을 정확히 <code>embedded.provisionprofile</code>로 바꿔 주세요.
-    </li>
-  </ol>
-
-  <hr class="soft">
-
-  <p><strong>맞게 하셨는지 확인하는 방법.</strong> 터미널에서 이 명령을 실행하세요:</p>
-  <pre>cd ~/orca/workspaces/ticktick/coordinate &amp;&amp; npm run mas:preflight</pre>
-
-  <p>
-    전부 <code>✓</code>가 나오면 성공입니다. 프로파일이 <em>다른 앱 것</em>이면
-    <code>✗ 프로파일이 다른 앱의 것입니다</code>라고 잡아 줍니다 —
-    지난번에 <code>BicMac</code> 프로파일로 겪으셨던 그 문제를 여기서 미리 거릅니다.
-  </p>
-
-  <div class="callout">
-    통과하면 바로 빌드할 수 있습니다: <code>npm run mas:build</code>
-    <br>이 프로파일 파일은 개인 자격증명이라 git에 올라가지 않도록 제외해 뒀습니다.
+  <h3><span class="num">✓</span> App ID · 프로비저닝 프로파일</h3>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>항목</th><th>값</th></tr></thead>
+    <tbody>
+      <tr><td>App ID</td><td><code>com.supaicy.haru</code></td></tr>
+      <tr><td>프로파일</td><td><code>haru MAS</code> · 만료 2027-07-30</td></tr>
+      <tr><td>팀</td><td><code>32R6RHXU36</code></td></tr>
+      <tr><td>인증서</td><td>Apple Distribution + 3rd Party Mac Developer Installer</td></tr>
+    </tbody>
+  </table>
   </div>
+  <p>
+    프로파일은 <code>resources/embedded.provisionprofile</code>에 넣어 뒀습니다.
+    상태가 궁금하시면 언제든 <code>npm run mas:preflight</code>로 확인하실 수 있습니다.
+  </p>
 </div>
 
 <h2>③ App Store Connect 앱 레코드</h2>
