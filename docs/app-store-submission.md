@@ -79,7 +79,7 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
 
 **프로모션 텍스트 (170자 이내, 심사 없이 수시 변경 가능)**
 ```
-데이터가 기기를 벗어나지 않는 할 일 관리 앱. 캘린더, 칸반, 타임라인, 아이젠하워, 포모도로, 습관 추적까지 한 앱에 담았습니다. AI 어시스턴트도 내 맥에서 돌릴 수 있습니다.
+데이터가 기기를 벗어나지 않는 할 일 관리 앱. 캘린더, 칸반, 타임라인, 아이젠하워, 포모도로, 습관까지 한 앱에. iCloud·Google 캘린더로 폰에서도 보고, AI는 내 맥에서 돌립니다.
 ```
 
 **설명 (4000자 이내)**
@@ -115,6 +115,17 @@ Ollama를 설치하면 AI가 내 컴퓨터 안에서 돕니다. 인터넷으로 
 외부 AI(OpenAI 등)를 쓰고 싶으면 직접 설정할 수 있고, 그때는 무엇이 전송되는지
 앱에서 미리 확인할 수 있습니다. '로컬 전용' 잠금을 켜면 외부 선택 자체가 막힙니다.
 
+■ iPhone·안드로이드에서도 보기
+
+할 일을 iCloud 또는 Google 캘린더에 올리면 폰의 캘린더 앱에서 그대로 보입니다.
+계정 연결은 선택이고 기본은 꺼져 있습니다. haru가 만든 일정만 다루므로
+기존 캘린더 일정은 읽지도, 건드리지도 않습니다.
+
+■ 한국어와 영어
+
+앱 전체가 두 언어를 지원합니다. "내일 오후 3시" 처럼 한국어로 적어도,
+"tomorrow 3pm" 처럼 영어로 적어도 날짜를 알아듣습니다.
+
 ■ 그 밖에
 
 · 반복 일정 — 매일·매주·매월·매년
@@ -133,7 +144,7 @@ Ollama를 설치하면 AI가 내 컴퓨터 안에서 돕니다. 인터넷으로 
 
 **키워드 (100자 이내, 쉼표 구분, 공백 없이)**
 ```
-할일,투두,todo,일정관리,캘린더,포모도로,습관,생산성,GTD,태스크,체크리스트,아이젠하워,칸반
+할일,투두,todo,일정관리,캘린더,동기화,아이클라우드,구글캘린더,포모도로,습관,생산성,GTD,태스크,칸반
 ```
 
 **지원 URL**
@@ -172,7 +183,7 @@ Tasks, calendar, habits in one
 
 **Promotional Text (170자)**
 ```
-A task manager that keeps your data on your Mac. Calendar, kanban, timeline, Eisenhower matrix, pomodoro, and habit tracking in one app. The AI assistant can run entirely on your machine.
+A task manager that keeps your data on your Mac. Calendar, kanban, timeline, Eisenhower, pomodoro, habits. Publish to iCloud or Google Calendar. Run the AI locally.
 ```
 
 **Description**
@@ -207,6 +218,17 @@ Create tasks in natural language and ask questions about your schedule.
 You can configure an external provider such as OpenAI if you prefer. In that case the app shows you
 exactly what will be sent before it goes. Turning on "Local only" locks external providers out entirely.
 
+■ See your tasks on iPhone and Android
+
+Publish dated tasks to iCloud or Google Calendar and they show up in the calendar app on your
+phone. Connecting an account is optional and off by default. haru only manages the events it
+creates — it never reads or touches your existing calendar entries.
+
+■ Korean and English
+
+The whole app speaks both. Type "tomorrow 3pm" or "내일 오후 3시" and haru understands the date
+either way.
+
 ■ Also included
 
 · Recurring tasks — daily, weekly, monthly, yearly
@@ -220,7 +242,7 @@ exactly what will be sent before it goes. Turning on "Local only" locks external
 
 **Keywords**
 ```
-todo,task,tasks,calendar,pomodoro,habit,productivity,GTD,checklist,kanban,eisenhower,planner,local
+todo,task,calendar,sync,icloud,pomodoro,habit,productivity,GTD,kanban,eisenhower,planner,local
 ```
 
 ---
@@ -253,19 +275,81 @@ App Store Connect → App Privacy → **"Do you or your third-party partners col
 haru stores all user data locally on the device. There is no developer-operated server,
 no user account, and no analytics or tracking SDK of any kind.
 
-The app includes an optional AI assistant. By default it targets Ollama on localhost, so no
-data leaves the machine. If the user explicitly configures a third-party endpoint (e.g. OpenAI)
-in Settings, task titles/dates/priorities/tags and the user's chat messages are sent directly
-from the user's device to that endpoint the user chose. The developer neither receives nor
-relays that data. The app also provides a "Local only" lock that prevents selecting any
-external provider.
+OPTIONAL AI ASSISTANT
+By default it targets Ollama on localhost, so no data leaves the machine. If the user
+explicitly configures a third-party endpoint (e.g. OpenAI) in Settings, task
+titles/dates/priorities/tags and the user's chat messages are sent directly from the
+user's device to that endpoint the user chose. The developer neither receives nor relays
+that data. A "Local only" lock prevents selecting any external provider.
 
-In the Mac App Store build, the in-app updater and global shortcuts are disabled via a
-process.mas guard, since the App Store handles updates and the sandbox does not permit
-global shortcuts.
+OPTIONAL CALENDAR SYNC (off by default, one-way: haru -> calendar)
+Two providers, both connecting directly from the user's device with no developer server
+in between:
+
+- iCloud: CalDAV over HTTPS to caldav.icloud.com, authenticated with the user's Apple ID
+  and an app-specific password that the user creates and enters. The password is stored
+  encrypted via Electron safeStorage (macOS keychain) and never leaves the device.
+- Google: standard OAuth 2.0 with PKCE opened in the user's default browser (not an
+  embedded web view). The app is a public client with no client secret. The callback
+  arrives via the custom URL scheme com.haru.app:, so no local HTTP server is opened and
+  the app does not need the network.server entitlement. The only scope requested is
+  https://www.googleapis.com/auth/calendar.app.created, which limits access to events the
+  app itself created; haru cannot read the user's existing calendar entries.
+
+Only tasks that have a date are published, carrying title, date/time, note body, and
+completion state. Disconnecting deletes stored credentials (and revokes the Google grant)
+but intentionally leaves already-published events in the user's calendar rather than
+deleting data the user may want to keep.
+
+REVIEWING WITHOUT AN ACCOUNT
+No sign-in is required to use the app. Every feature except the two optional integrations
+above works with no account. If you would like to exercise calendar sync, please request
+test credentials and we will supply them.
+
+MAC APP STORE BUILD DIFFERENCES
+The in-app updater and global shortcuts are disabled via a process.mas guard, since the
+App Store handles updates and the sandbox does not permit global shortcuts.
 
 Privacy policy: https://supaicy.github.io/haru/privacy.html
 ```
+
+### ⬜ 캘린더 동기화가 App Privacy 답안을 바꾸는가 — 아니오 (근거)
+
+| 질문 | 답 |
+|---|---|
+| 개발자 서버로 가는가? | 아니오. 기기 → Apple/Google 직접 연결. 중계 서버 없음 |
+| 개발자가 데이터를 받는가? | 아니오 |
+| 추적·광고에 쓰는가? | 아니오 |
+| 데이터 브로커와 공유하는가? | 아니오 |
+| 사용자 선택인가? | 예. 기본 꺼짐이고 계정 연결이 필요 |
+
+Apple의 "collect"는 *개발자 또는 개발자의 서드파티 파트너가* 데이터를 가져가는 것을 뜻합니다.
+사용자가 자기 iCloud/Google 계정에 자기 데이터를 쓰는 것은 여기에 해당하지 않습니다.
+
+> **심사에서 되물어올 경우의 대비책.** 심사관이 "User Content를 신고하라"고 요구하면 다투지 말고
+> 아래로 신고하면 됩니다 — 답안이 바뀌어도 앱 동작이나 문구를 고칠 필요는 없습니다.
+>
+> - Data Type: **Other User Content**
+> - Purpose: **App Functionality**
+> - Linked to identity: **No**
+> - Used for tracking: **No**
+
+---
+
+## 4-B. Google OAuth 심사 (Apple과 별개, 병행 진행)
+
+Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니다. **다만 haru가 쓰는
+`calendar.app.created` 범위는 민감(sensitive) 범위가 아니라 심사 부담이 훨씬 작습니다.**
+
+| 항목 | 값 |
+|---|---|
+| 요청 범위 | `https://www.googleapis.com/auth/calendar.app.created` |
+| 범위 등급 | 비민감(non-sensitive) — 앱이 만든 일정만 접근 |
+| 앱 유형 | 데스크톱 앱 (공개 클라이언트, PKCE) |
+| 리디렉션 | `com.haru.app:/oauth2redirect` (커스텀 스킴) |
+
+> `calendar.events`나 `calendar`(전체)를 요청했다면 민감 범위 심사 + 보안 평가가 필요했을
+> 것입니다. 앱이 만든 일정만 다루면 되므로 그 범위를 요청하지 않았습니다.
 
 ---
 

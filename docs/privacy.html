@@ -145,7 +145,49 @@
   이 상태에서는 할 일 데이터가 어떤 경우에도 기기를 벗어나지 않습니다.
 </div>
 
-<h3>3-2. 업데이트 확인</h3>
+<h3>3-2. 캘린더 동기화 (사용자가 연결할 때만)</h3>
+
+<p>
+  캘린더 동기화는 <strong>기본적으로 꺼져 있습니다.</strong> 사용자가 설정에서 직접 계정을 연결한
+  경우에만 동작하며, 방향은 <strong>haru → 캘린더 한쪽</strong>입니다.
+</p>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>전송되는 것</th><th>어디로</th></tr></thead>
+  <tbody>
+    <tr><td>날짜가 있는 할 일의 제목</td><td rowspan="4">사용자가 선택한 캘린더 (Apple 또는 Google)</td></tr>
+    <tr><td>마감일 · 마감 시각 또는 예약된 시간 블록</td></tr>
+    <tr><td>메모 본문(있는 경우)</td></tr>
+    <tr><td>완료 여부</td></tr>
+    <tr><td>(첨부파일 · 습관 · 포모도로 기록 · AI 대화는 <strong>전송되지 않음</strong>)</td><td>—</td></tr>
+    <tr><td>날짜가 없는 할 일</td><td><strong>전송되지 않음</strong> (캘린더에 놓을 자리가 없음)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  <strong>iCloud.</strong> Apple ID와 <em>앱 암호</em>로 <code>caldav.icloud.com</code>에 직접 연결합니다.
+  개발자의 서버를 거치지 않습니다. 앱 암호는 macOS 키체인(<code>safeStorage</code>)으로 암호화해
+  이 맥에만 저장하며, 암호화를 쓸 수 없는 환경에서는 <strong>저장하지 않습니다</strong>.
+</p>
+
+<p>
+  <strong>Google.</strong> 브라우저를 통한 표준 OAuth 2.0(PKCE)으로 연결합니다. haru는 사용자의
+  Google 비밀번호를 보지 않습니다. 요청하는 권한은
+  <code>calendar.app.created</code> 하나이며, 이는 <strong>haru가 만든 일정만</strong> 다룰 수 있는
+  범위입니다. 사용자의 기존 캘린더 일정을 읽을 권한은 요청하지도, 가지고 있지도 않습니다.
+  발급받은 인증 토큰도 키체인으로 암호화해 이 맥에만 저장합니다.
+</p>
+
+<div class="callout">
+  <strong>연결 해제.</strong> 설정에서 언제든 연결을 끊을 수 있습니다. 저장된 계정 정보는 즉시
+  삭제되고, Google의 경우 Google 쪽 권한까지 회수합니다. 이미 캘린더에 올라간 일정은
+  <strong>지우지 않습니다</strong> — 사용자의 캘린더를 앱이 임의로 비우지 않기 위한 선택입니다.
+  필요하면 캘린더 앱에서 직접 삭제할 수 있습니다.
+</div>
+
+<h3>3-3. 업데이트 확인</h3>
 
 <p>
   <strong>Mac App Store 버전에는 해당하지 않습니다.</strong> App Store 버전은 앱 내 업데이트 확인 기능이
@@ -157,9 +199,9 @@
   이 요청에는 사용자 데이터가 포함되지 않으며, 일반적인 웹 요청과 마찬가지로 IP 주소가 GitHub에 남습니다.
 </p>
 
-<h3>3-3. 그 외</h3>
+<h3>3-4. 그 외</h3>
 
-<p>위 두 가지 외에 haru가 먼저 여는 외부 통신은 없습니다.</p>
+<p>위에 적은 것 외에 haru가 먼저 여는 외부 통신은 없습니다.</p>
 
 <h2>4. 제3자 제공 · 판매</h2>
 
@@ -251,7 +293,39 @@
   data can leave your device under any circumstance.
 </p>
 
-<h3>3-2. Update checks</h3>
+<h3>3-2. Calendar sync (only when you connect an account)</h3>
+<p>
+  Calendar sync is <strong>off by default</strong>. It runs only after you connect an account in
+  Settings, and it is <strong>one-way: haru → calendar</strong>.
+</p>
+<p>
+  What is sent to the calendar you choose: the <strong>title</strong> of tasks that have a date, their
+  <strong>due date and time</strong> (or scheduled time block), the <strong>note body</strong> if
+  present, and <strong>completion status</strong>. Attachments, habit logs, pomodoro sessions, and AI
+  conversations are <strong>not</strong> sent. Tasks with no date are not sent at all — there is nowhere
+  on a calendar to put them.
+</p>
+<p>
+  <strong>iCloud.</strong> haru connects directly to <code>caldav.icloud.com</code> using your Apple ID
+  and an <em>app-specific password</em>. Nothing passes through the developer's servers. The app
+  password is encrypted with the macOS keychain (<code>safeStorage</code>) and stored only on this Mac;
+  where encryption is unavailable it is <strong>not stored at all</strong>.
+</p>
+<p>
+  <strong>Google.</strong> haru uses standard OAuth 2.0 with PKCE through your browser and never sees
+  your Google password. It requests a single scope, <code>calendar.app.created</code>, which grants
+  access <strong>only to events haru itself created</strong>. haru neither requests nor holds permission
+  to read your existing calendar entries. Tokens are encrypted with the keychain and stored only on
+  this Mac.
+</p>
+<p>
+  <strong>Disconnecting.</strong> You can disconnect at any time in Settings. Stored credentials are
+  deleted immediately, and for Google the authorization is also revoked on Google's side. Events already
+  published are <strong>left in place</strong> — the app will not empty your calendar on your behalf.
+  You can delete them yourself in your calendar app.
+</p>
+
+<h3>3-3. Update checks</h3>
 <p>
   <strong>Not applicable to the Mac App Store version</strong>, where in-app update checking is disabled
   and updates are handled by the App Store. The directly downloaded version queries GitHub release
