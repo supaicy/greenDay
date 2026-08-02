@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>haru — 사장님이 직접 하셔야 하는 일</title>
+<title>Greenday — 사장님이 직접 하셔야 하는 일</title>
 <style>
   :root {
     --bg:#ffffff; --surface:#f7f8fa; --surface-2:#eef1f5;
@@ -64,7 +64,7 @@
 
 <header class="top">
   <h1>사장님이 직접 하셔야 하는 일</h1>
-  <p class="sub">2026-08-02 · haru v2.0.1 · 코드 작업은 전부 끝났습니다 · 번들 ID <code>com.supaicy.haru</code></p>
+  <p class="sub">2026-08-02 · Greenday v2.0.1 · 코드 작업은 전부 끝났습니다 · 번들 ID <code>com.supaicy.Greenday</code></p>
 </header>
 
 <p class="lede">
@@ -75,15 +75,15 @@
 
 <div class="callout warn">
   <strong>번들 ID가 바뀌었습니다.</strong>
-  <code>com.haru.app</code>은 이미 다른 개발자가 선점해 쓸 수 없어서
-  <code>com.supaicy.haru</code>로 바꿨습니다 (기존 <code>com.supaicy.bicmac</code>과 같은 네임스페이스).
+  <code>com.Greenday.app</code>은 이미 다른 개발자가 선점해 쓸 수 없어서
+  <code>com.supaicy.Greenday</code>로 바꿨습니다 (기존 <code>com.supaicy.bicmac</code>과 같은 네임스페이스).
   코드·빌드 설정·이 문서에 전부 반영했습니다.
   <br><br>
   <strong>기존 사용자 데이터는 그대로입니다.</strong> 확인해 봤는데 할 일 저장 위치는
   <code>~/Library/Application Support/ticktick/</code>이고, 이 경로는 번들 ID가 아니라
   앱 이름으로 정해집니다. 번들 ID를 바꿔도 데이터는 이사 가지 않습니다.
   <br><br>
-  다만 macOS 입장에서는 <em>다른 앱</em>이 되므로, 새 빌드가 기존 <code>/Applications/haru.app</code>을
+  다만 macOS 입장에서는 <em>다른 앱</em>이 되므로, 새 빌드가 기존 <code>/Applications/Greenday.app</code>을
   덮어쓰지 않습니다. 새로 설치하실 때 <strong>예전 것을 먼저 지워 주세요</strong> (안 지우면 두 개가 공존합니다).
 </div>
 
@@ -100,12 +100,12 @@
     <tr><th>#</th><th>할 일</th><th>어디서</th><th>걸리는 시간</th><th>상태</th></tr>
   </thead>
   <tbody>
-    <tr><td>①</td><td>App ID <code>com.supaicy.haru</code> 등록</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
+    <tr><td>①</td><td>App ID <code>com.supaicy.Greenday</code> 등록</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
     <tr><td>②</td><td>프로비저닝 프로파일 발급</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
     <tr><td>③</td><td>App Store Connect 앱 레코드 생성</td><td>App Store Connect</td><td>20분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
     <tr><td>④</td><td>Google OAuth 클라이언트 ID 발급</td><td>Google Cloud 콘솔</td><td>20분</td><td><span class="pill wait">구글 연동 차단 중</span></td></tr>
     <tr><td>⑤</td><td>v2.0.1 공개 여부 결정</td><td>결정만</td><td>1분</td><td><span class="pill">선택</span></td></tr>
-    <tr><td>⑥</td><td>실제 계정으로 캘린더 동기화 테스트</td><td>haru 앱</td><td>10분</td><td><span class="pill">권장</span></td></tr>
+    <tr><td>⑥</td><td>실제 계정으로 캘린더 동기화 테스트</td><td>Greenday 앱</td><td>10분</td><td><span class="pill">권장</span></td></tr>
   </tbody>
 </table>
 </div>
@@ -119,21 +119,21 @@
 <h2>① App ID 등록</h2>
 
 <div class="task">
-  <h3><span class="num">1</span> Bundle ID <code>com.supaicy.haru</code> 만들기 <span class="meta">약 5분</span></h3>
+  <h3><span class="num">1</span> Bundle ID <code>com.supaicy.Greenday</code> 만들기 <span class="meta">약 5분</span></h3>
 
   <p><a href="https://developer.apple.com/account/resources/identifiers/list">developer.apple.com → Certificates, Identifiers &amp; Profiles → Identifiers</a></p>
 
   <ol>
     <li><strong>+</strong> 버튼 → <strong>App IDs</strong> → <strong>App</strong> 선택</li>
-    <li>Description: <code>haru</code></li>
-    <li>Bundle ID: <strong>Explicit</strong> 선택 후 <code>com.supaicy.haru</code> 입력
+    <li>Description: <code>Greenday</code></li>
+    <li>Bundle ID: <strong>Explicit</strong> 선택 후 <code>com.supaicy.Greenday</code> 입력
       <div class="callout stop" style="margin:10px 0">
         <strong>정확히 이 값이어야 합니다.</strong> 앱의 <code>Info.plist</code>·프로비저닝 프로파일·
         App Store Connect 레코드 세 곳이 전부 이 값으로 맞아야 업로드가 통과합니다.
         오타가 있으면 빌드는 성공하고 업로드에서 거절됩니다.
       </div>
     </li>
-    <li>Capabilities: <strong>아무것도 체크하지 마세요.</strong> haru는 iCloud·푸시·Sign in with Apple을
+    <li>Capabilities: <strong>아무것도 체크하지 마세요.</strong> Greenday는 iCloud·푸시·Sign in with Apple을
       쓰지 않습니다. 필요 없는 걸 켜면 심사에서 사유를 묻습니다.</li>
     <li>Continue → Register</li>
   </ol>
@@ -142,15 +142,15 @@
 <h2>② 프로비저닝 프로파일</h2>
 
 <div class="task">
-  <h3><span class="num">2</span> Mac App Store 프로파일 발급 <span class="meta">약 5분 · ①이 끝나야 가능</span></h3>
+  <h3><span class="num">2</span> Mac App Store 프로파일 재발급 <span class="meta">약 5분 · ①이 끝나야 가능</span></h3>
 
   <p><a href="https://developer.apple.com/account/resources/profiles/list">developer.apple.com → Profiles</a></p>
 
   <ol>
     <li><strong>+</strong> → Distribution 아래 <strong>Mac App Store Connect</strong> 선택</li>
-    <li>App ID: 방금 만든 <code>com.supaicy.haru</code> 선택</li>
+    <li>App ID: 방금 만든 <code>com.supaicy.Greenday</code> 선택</li>
     <li>Certificate: <code>Apple Distribution: MINSEOK SHIN</code> 선택</li>
-    <li>Profile Name: <code>haru MAS</code> (아무 이름이나 괜찮습니다)</li>
+    <li>Profile Name: <code>Greenday MAS</code> (아무 이름이나 괜찮습니다)</li>
     <li>Generate → Download</li>
     <li>받은 파일을 <strong>이 경로에 저장</strong>:
       <pre>~/orca/workspaces/ticktick/coordinate/resources/embedded.provisionprofile</pre>
@@ -187,10 +187,10 @@
     <thead><tr><th>항목</th><th>입력할 값</th></tr></thead>
     <tbody>
       <tr><td>플랫폼</td><td>macOS</td></tr>
-      <tr><td>이름</td><td><code>haru</code> <span class="meta">(이미 쓰이고 있으면 <code>haru - 할 일 관리</code>)</span></td></tr>
+      <tr><td>이름</td><td><code>Greenday</code> <span class="meta">(이미 쓰이고 있으면 <code>Greenday - 할 일 관리</code>)</span></td></tr>
       <tr><td>기본 언어</td><td>한국어</td></tr>
-      <tr><td>번들 ID</td><td>①에서 만든 <code>com.supaicy.haru</code></td></tr>
-      <tr><td>SKU</td><td><code>haru-mac-001</code> <span class="meta">(내부 식별용, 아무 값이나)</span></td></tr>
+      <tr><td>번들 ID</td><td>①에서 만든 <code>com.supaicy.Greenday</code></td></tr>
+      <tr><td>SKU</td><td><code>Greenday-mac-001</code> <span class="meta">(내부 식별용, 아무 값이나)</span></td></tr>
       <tr><td>사용자 액세스</td><td>전체 액세스</td></tr>
     </tbody>
   </table>
@@ -242,7 +242,7 @@
   <ol>
     <li>
       <a href="https://console.cloud.google.com/projectcreate">프로젝트 생성</a> —
-      이름 <code>haru</code>
+      이름 <code>Greenday</code>
     </li>
     <li>
       <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Google Calendar API 사용 설정</a>
@@ -254,7 +254,7 @@
         <thead><tr><th>항목</th><th>값</th></tr></thead>
         <tbody>
           <tr><td>User Type</td><td>External</td></tr>
-          <tr><td>앱 이름</td><td><code>haru</code></td></tr>
+          <tr><td>앱 이름</td><td><code>Greenday</code></td></tr>
           <tr><td>지원 이메일</td><td>사장님 이메일</td></tr>
           <tr><td>앱 로고</td><td><code>docs/app-store/</code> 아이콘 사용 가능 (선택)</td></tr>
           <tr><td>개인정보처리방침</td><td><code>https://supaicy.github.io/haru/privacy.html</code></td></tr>
@@ -271,7 +271,7 @@
         <strong>이 범위를 고른 이유.</strong> 흔히 쓰는 <code>calendar.events</code>는
         사용자의 <em>기존</em> 캘린더까지 읽을 수 있어서 구글의 <strong>민감 범위 심사</strong>
         대상이 됩니다 — 보안 평가와 데모 영상까지 요구받습니다.
-        <code>calendar.app.created</code>는 <strong>haru가 만든 일정만</strong> 다루는 범위라
+        <code>calendar.app.created</code>는 <strong>Greenday가 만든 일정만</strong> 다루는 범위라
         비민감으로 분류되고, 우리에게 필요한 기능은 전부 됩니다.
         심사 부담을 크게 줄이려고 일부러 이 범위로 구현했습니다.
       </div>
@@ -283,7 +283,7 @@
         <thead><tr><th>항목</th><th>값</th></tr></thead>
         <tbody>
           <tr><td>애플리케이션 유형</td><td><strong>iOS</strong></td></tr>
-          <tr><td>번들 ID</td><td><code>com.supaicy.haru</code></td></tr>
+          <tr><td>번들 ID</td><td><code>com.supaicy.Greenday</code></td></tr>
         </tbody>
       </table>
       </div>
@@ -326,7 +326,7 @@
         <td><strong>A. 지금 공개</strong></td>
         <td>
           웹에서 바로 받을 수 있게 됩니다. 다만 <strong>한/영 지원과 캘린더 동기화가 빠진 버전</strong>이고,
-          <strong>번들 ID도 옛날 것(<code>com.haru.app</code>)</strong>입니다.
+          <strong>번들 ID도 옛날 것(<code>com.Greenday.app</code>)</strong>입니다.
           받은 사람은 나중에 새 버전을 설치할 때 옛 앱을 따로 지워야 합니다.
         </td>
       </tr>
@@ -366,13 +366,13 @@
   <ol>
     <li>
       <a href="https://account.apple.com/account/manage">account.apple.com</a>에서
-      <strong>앱 암호</strong>를 하나 새로 발급 (이름: <code>haru 캘린더</code>)
+      <strong>앱 암호</strong>를 하나 새로 발급 (이름: <code>Greenday 캘린더</code>)
       <div class="callout">
         이전에 만드신 앱 암호를 재사용하셔도 됩니다. 앱마다 따로 만들면
         나중에 하나만 취소하기 쉬워서 새로 만드는 걸 권합니다.
       </div>
     </li>
-    <li>haru 실행 → <strong>설정 → 캘린더 동기화</strong></li>
+    <li>Greenday 실행 → <strong>설정 → 캘린더 동기화</strong></li>
     <li>Apple ID와 방금 만든 앱 암호 입력 → <strong>연결 확인</strong></li>
     <li>캘린더 목록이 뜨면 하나 고르기 <span class="meta">(미리알림은 목록에 안 나옵니다 — 일정을 담을 수 없어서 제외했습니다)</span></li>
     <li>마감일이 있는 할 일을 하나 만들고 → <strong>지금 동기화</strong></li>
@@ -409,14 +409,14 @@
 
 <div class="callout">
   <strong>동기화 방향에 대해 한 가지.</strong>
-  현재는 <strong>haru → 캘린더 한 방향</strong>입니다. 캘린더 앱에서 일정을 옮겨도
-  haru의 마감일은 바뀌지 않습니다.
+  현재는 <strong>Greenday → 캘린더 한 방향</strong>입니다. 캘린더 앱에서 일정을 옮겨도
+  Greenday의 마감일은 바뀌지 않습니다.
   양방향으로 만들면 "캘린더에서 무심코 드래그했는데 할 일 마감일이 바뀌어 있는" 상황이 생겨서
   일부러 뺐습니다. 원하시면 읽기 기능을 따로 붙일 수 있으니 말씀해 주세요.
 </div>
 
 <footer>
-  haru · 2026-08-02 · 궁금한 점은 그냥 물어보세요
+  Greenday · 2026-08-02 · 궁금한 점은 그냥 물어보세요
 </footer>
 
 </div>

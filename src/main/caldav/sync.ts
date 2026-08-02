@@ -45,8 +45,18 @@ export interface SyncPlan {
 /** 일정 하나가 차지하는 기본 길이(분). 마감 시각만 있고 종료가 없을 때 쓴다. */
 const DEFAULT_DURATION_MIN = 60
 
+/**
+ * 캘린더 일정의 UID.
+ *
+ * 이 문자열은 사용자의 캘린더에 영구히 기록된다. 한 번 내보낸 뒤에 형식을 바꾸면
+ * 기존 일정과의 연결이 끊겨 전부 고아가 되고, 다음 동기화에서 같은 할일이 새 일정으로
+ * 다시 만들어진다(= 캘린더에 중복이 쌓인다).
+ *
+ * 그래서 APP_BUNDLE_ID 같은 상수에서 유도하지 않고 여기에 직접 적어 둔다 —
+ * 앱 이름이나 번들 ID가 또 바뀌더라도 이 값은 따라 바뀌면 안 된다.
+ */
 export function eventUid(taskId: string): string {
-  return `haru-${taskId}@haru.app`
+  return `greenday-${taskId}@supaicy.github.io`
 }
 
 /** 서버에 둘 파일 이름. UID 기준이라 같은 할일은 항상 같은 경로다. */

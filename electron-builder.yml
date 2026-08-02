@@ -1,5 +1,5 @@
-appId: com.supaicy.haru
-productName: haru
+appId: com.supaicy.greenday
+productName: Greenday
 directories:
   buildResources: resources
   output: dist
@@ -26,16 +26,16 @@ mac:
   # 구글 OAuth 콜백을 받는 커스텀 스킴. 루프백 서버를 열지 않아 MAS 샌드박스에서
   # network.server 권한이 필요 없다.
   protocols:
-    - name: haru
+    - name: Greenday
       schemes:
-        - com.supaicy.haru
+        - com.supaicy.greenday
 mas:
   entitlements: resources/entitlements.mas.plist
   entitlementsInherit: resources/entitlements.mas.inherit.plist
   hardenedRuntime: false
   category: public.app-category.productivity
   # developer.apple.com에서 'Mac App Store' 유형으로 발급받아 이 경로에 둔다.
-  # App ID가 com.supaicy.haru 가 아니면 빌드는 되고 업로드에서 거절되므로,
+  # App ID가 com.supaicy.greenday 가 아니면 빌드는 되고 업로드에서 거절되므로,
   # scripts/mas-preflight.sh 가 미리 확인한다.
   provisioningProfile: resources/embedded.provisionprofile
 dmg:

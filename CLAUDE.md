@@ -1,4 +1,4 @@
-# haru
+# Greenday
 
 macOS 데스크탑 할일 관리 앱 (Electron + React + Zustand)
 

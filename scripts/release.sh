@@ -9,7 +9,11 @@
 # 사용:  npm run release
 set -euo pipefail
 
-PROFILE="${APPLE_KEYCHAIN_PROFILE:-haru}"
+PROFILE="${APPLE_KEYCHAIN_PROFILE:-haru}"   # notarytool 에 저장해 둔 자격증명 이름(앱 이름과 무관)
+
+# 앱 이름은 한곳에서만 정의한다. 이름이 바뀌어도 아래 경로들이 따라온다.
+APP_NAME="$(awk -F': *' '/^productName:/{print $2; exit}' electron-builder.yml)"
+[ -n "$APP_NAME" ] || { echo "ERROR: electron-builder.yml 에서 productName을 읽지 못했습니다." >&2; exit 1; }
 
 echo "── 1/4  사전 확인"
 
@@ -50,13 +54,13 @@ export APPLE_KEYCHAIN_PROFILE="$PROFILE"
 npx electron-builder --mac --arm64 --x64 --publish always
 
 echo "── 4/4  검증"
-# 사용자가 실제로 받는 건 dmg다. 빌드 중간산출물(dist/mac-*/haru.app)이 아니라
+# 사용자가 실제로 받는 건 dmg다. 빌드 중간산출물(dist/mac-*/*.app)이 아니라
 # dmg를 마운트해 그 안의 앱을 검사해야 실제 Gatekeeper 판정과 일치한다.
 # (dmg 컨테이너 자체는 서명하지 않는 것이 electron-builder 기본값이며,
 #  안의 앱이 스테이플돼 있으면 사용자 실행에 문제가 없다.)
 fail=0
 found=0
-for dmg in dist/haru-*.dmg; do
+for dmg in dist/"$APP_NAME"-*.dmg; do
   [ -f "$dmg" ] || continue
   found=1
   echo "  $(basename "$dmg")"
@@ -64,9 +68,9 @@ for dmg in dist/haru-*.dmg; do
   if ! hdiutil attach "$dmg" -nobrowse -quiet -mountpoint "$mnt" 2>/dev/null; then
     echo "    ERROR: dmg 마운트 실패" >&2; fail=1; rmdir "$mnt" 2>/dev/null; continue
   fi
-  app="$mnt/haru.app"
+  app="$mnt/$APP_NAME.app"
   if [ ! -d "$app" ]; then
-    echo "    ERROR: dmg 안에 haru.app 이 없습니다" >&2; fail=1
+    echo "    ERROR: dmg 안에 $APP_NAME.app 이 없습니다" >&2; fail=1
   else
     codesign --verify --deep --strict "$app" 2>/dev/null || { echo "    ERROR: 서명 검증 실패" >&2; fail=1; }
     if xcrun stapler validate "$app" >/dev/null 2>&1; then

@@ -103,7 +103,8 @@ export function eventToGoogle(event: CalendarEvent): Record<string, unknown> {
     start: toGoogleTime(event.start, event.allDay),
     end: toGoogleTime(event.end, event.allDay),
     // 완료 여부는 구글 일정에 대응 필드가 없다. 우리만 읽는 확장 속성에 싣는다.
-    extendedProperties: { private: { haruUid: event.uid, haruCompleted: String(event.completed) } }
+    // UID와 마찬가지로 사용자 캘린더에 남는 값이라 키 이름은 함부로 바꾸면 안 된다.
+    extendedProperties: { private: { greendayUid: event.uid, greendayCompleted: String(event.completed) } }
   }
 }
 
@@ -113,7 +114,7 @@ export function googleToEvent(raw: Record<string, unknown>): CalendarEvent | nul
   const end = fromGoogleTime(raw.end as { date?: string; dateTime?: string })
   const extended = (raw.extendedProperties as { private?: Record<string, string> } | undefined)?.private
   return {
-    uid: extended?.haruUid ?? String(raw.id ?? ''),
+    uid: extended?.greendayUid ?? String(raw.id ?? ''),
     summary: typeof raw.summary === 'string' ? raw.summary : '',
     description: typeof raw.description === 'string' ? raw.description : '',
     start: start.value,
@@ -122,7 +123,7 @@ export function googleToEvent(raw: Record<string, unknown>): CalendarEvent | nul
     rrule: Array.isArray(raw.recurrence) ? String(raw.recurrence[0] ?? '') || null : null,
     lastModified: typeof raw.updated === 'string' ? raw.updated : null,
     sequence: typeof raw.sequence === 'number' ? raw.sequence : 0,
-    completed: extended?.haruCompleted === 'true'
+    completed: extended?.greendayCompleted === 'true'
   }
 }
 

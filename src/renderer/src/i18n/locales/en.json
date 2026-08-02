@@ -399,7 +399,7 @@
     "upToDate": "You're up to date",
     "updateViaAppStore": "Updates are handled by the Mac App Store",
     "updateAvailable": "Update available",
-    "updateDownload": "haru v{{version}} — click to open the download page",
+    "updateDownload": "Greenday v{{version}} — click to open the download page",
     "modelHint8b": "For Korean answers, an 8B or larger model is recommended.",
     "modelHintExaone": "For Korean, use 8B or larger — EXAONE is the most accurate.",
     "modelHintManual": "Korean-tuned models (EXAONE) are more accurate. Start Ollama, then install —",
@@ -421,7 +421,7 @@
   },
   "calendarSync": {
     "title": "Calendar sync",
-    "desc": "Publishes your dated haru tasks to an iCloud calendar, so they show up in Calendar on iPhone and iPad.",
+    "desc": "Publishes your dated Greenday tasks to an iCloud calendar, so they show up in Calendar on iPhone and iPad.",
     "provider": "Service",
     "providerIcloud": "iCloud",
     "providerCustom": "Custom (CalDAV)",
@@ -444,12 +444,12 @@
     "syncFailures": "{{count}} failed — will retry on the next sync",
     "disconnect": "Disconnect",
     "disconnectHint": "Clears the saved account. Events already in your calendar are left alone.",
-    "oneWayNote": "This is one-way: haru → calendar. Edits made in Calendar do not come back to haru.",
+    "oneWayNote": "This is one-way: Greenday → calendar. Edits made in Calendar do not come back to Greenday.",
     "connected": "Connected to {{name}}"
   },
   "googleSync": {
     "title": "Google Calendar",
-    "desc": "Publishes your dated haru tasks to Google Calendar, visible on Android and the web.",
+    "desc": "Publishes your dated Greenday tasks to Google Calendar, visible on Android and the web.",
     "connect": "Connect Google account",
     "connecting": "Signing in via your browser…",
     "connectHint": "Your browser will open. Come back here after signing in.",
@@ -464,6 +464,6 @@
     "syncing": "Syncing…",
     "disconnect": "Disconnect",
     "disconnectHint": "Clears the saved sign-in and revokes access on Google's side. Events already published are left alone.",
-    "scopeNote": "haru only touches events it created. It never reads your existing calendar entries."
+    "scopeNote": "Greenday only touches events it created. It never reads your existing calendar entries."
   }
 }

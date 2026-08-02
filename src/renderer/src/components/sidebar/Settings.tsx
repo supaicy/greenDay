@@ -628,7 +628,7 @@ export function Settings() {
             <SectionHeading isDark={isDark} label={t('settings.version')} />
             <div className={`rounded-lg px-4 py-3 mb-3 ${isDark ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
               <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                haru v{__APP_VERSION__}
+                Greenday v{__APP_VERSION__}
               </div>
               {isMas ? (
                 // App Store 빌드: 앱 내 업데이트 확인/다운로드는 비활성(App Store가 담당)

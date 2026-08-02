@@ -1,6 +1,6 @@
 # App Store 제출 체크리스트 & 메타데이터
 
-haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트는 App Store Connect에
+Greenday를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트는 App Store Connect에
 **그대로 복사해 넣을 수 있게** 작성했습니다.
 
 > 일반 배포 가이드는 `docs/DEPLOYMENT.md`. 이 문서는 App Store 제출에만 집중합니다.
@@ -28,8 +28,8 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
 ## 1. Apple Developer 포털에서
 
 - ⬜ **Bundle ID 등록** — [Identifiers](https://developer.apple.com/account/resources/identifiers/list) → `+` → App IDs → App
-  - Bundle ID: `com.supaicy.haru` (Explicit)
-  - Capabilities: 추가할 것 없음 (haru는 iCloud·푸시·인앱결제 미사용)
+  - Bundle ID: `com.supaicy.Greenday` (Explicit)
+  - Capabilities: 추가할 것 없음 (Greenday는 iCloud·푸시·인앱결제 미사용)
 
 - ⬜ **인증서 2종 발급** — [Certificates](https://developer.apple.com/account/resources/certificates/list) → `+`
   - **Apple Distribution** — 앱 서명용
@@ -41,7 +41,7 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
   > `Developer ID Application`은 웹사이트 직접 배포 전용입니다.
 
 - ⬜ **프로비저닝 프로파일** — [Profiles](https://developer.apple.com/account/resources/profiles/list) → `+` → **Mac App Store Connect**
-  - App ID: `com.supaicy.haru`, 인증서: 방금 만든 Apple Distribution
+  - App ID: `com.supaicy.Greenday`, 인증서: 방금 만든 Apple Distribution
   - 다운로드 후 저장소에 배치:
     ```
     cp ~/Downloads/*.provisionprofile resources/embedded.provisionprofile
@@ -57,13 +57,13 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
 | 항목 | 값 |
 |---|---|
 | 플랫폼 | macOS |
-| 이름 | `haru` |
+| 이름 | `Greenday` |
 | 기본 언어 | 한국어 |
-| Bundle ID | `com.supaicy.haru` |
-| SKU | `haru-macos-001` (내부 식별용, 아무 값이나 가능) |
+| Bundle ID | `com.supaicy.Greenday` |
+| SKU | `Greenday-macos-001` (내부 식별용, 아무 값이나 가능) |
 | 사용자 액세스 | 전체 액세스 |
 
-> 이름 `haru`가 이미 선점됐다면 `haru - 할 일 관리` 같은 변형이 필요합니다.
+> 이름 `Greenday`가 이미 선점됐다면 `Greenday - 할 일 관리` 같은 변형이 필요합니다.
 > 표시 이름과 Bundle ID는 별개라 앱 자체는 그대로 둬도 됩니다.
 
 ---
@@ -84,7 +84,7 @@ haru를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍스트
 
 **설명 (4000자 이내)**
 ```
-haru는 맥을 위한 할 일 관리 앱입니다. 할 일, 일정, 습관을 한 곳에서 관리하면서도 데이터는 내 기기에만 둡니다.
+Greenday는 맥을 위한 할 일 관리 앱입니다. 할 일, 일정, 습관을 한 곳에서 관리하면서도 데이터는 내 기기에만 둡니다.
 
 ■ 하나의 앱, 여섯 가지 시선
 
@@ -103,7 +103,7 @@ haru는 맥을 위한 할 일 관리 앱입니다. 할 일, 일정, 습관을 �
 
 ■ 데이터가 기기를 벗어나지 않습니다
 
-haru에는 계정이 없습니다. 가입도, 로그인도 없습니다.
+Greenday에는 계정이 없습니다. 가입도, 로그인도 없습니다.
 할 일과 메모는 맥 안에만 저장되고, 개발자가 운영하는 서버로 전송되지 않습니다.
 분석 도구나 추적 코드도 넣지 않았습니다.
 
@@ -118,7 +118,7 @@ Ollama를 설치하면 AI가 내 컴퓨터 안에서 돕니다. 인터넷으로 
 ■ iPhone·안드로이드에서도 보기
 
 할 일을 iCloud 또는 Google 캘린더에 올리면 폰의 캘린더 앱에서 그대로 보입니다.
-계정 연결은 선택이고 기본은 꺼져 있습니다. haru가 만든 일정만 다루므로
+계정 연결은 선택이고 기본은 꺼져 있습니다. Greenday가 만든 일정만 다루므로
 기존 캘린더 일정은 읽지도, 건드리지도 않습니다.
 
 ■ 한국어와 영어
@@ -188,7 +188,7 @@ A task manager that keeps your data on your Mac. Calendar, kanban, timeline, Eis
 
 **Description**
 ```
-haru is a task manager for macOS. It brings your tasks, schedule, and habits together while keeping your data on your own device.
+Greenday is a task manager for macOS. It brings your tasks, schedule, and habits together while keeping your data on your own device.
 
 ■ One app, six ways to look at your work
 
@@ -206,7 +206,7 @@ haru is a task manager for macOS. It brings your tasks, schedule, and habits tog
 
 ■ Your data stays on your device
 
-haru has no accounts. No sign-up, no login.
+Greenday has no accounts. No sign-up, no login.
 Your tasks and notes are stored on your Mac and never sent to a developer-operated server.
 There is no analytics or tracking code in the app.
 
@@ -221,12 +221,12 @@ exactly what will be sent before it goes. Turning on "Local only" locks external
 ■ See your tasks on iPhone and Android
 
 Publish dated tasks to iCloud or Google Calendar and they show up in the calendar app on your
-phone. Connecting an account is optional and off by default. haru only manages the events it
+phone. Connecting an account is optional and off by default. Greenday only manages the events it
 creates — it never reads or touches your existing calendar entries.
 
 ■ Korean and English
 
-The whole app speaks both. Type "tomorrow 3pm" or "내일 오후 3시" and haru understands the date
+The whole app speaks both. Type "tomorrow 3pm" or "내일 오후 3시" and Greenday understands the date
 either way.
 
 ■ Also included
@@ -272,7 +272,7 @@ App Store Connect → App Privacy → **"Do you or your third-party partners col
 ### ⬜ App Review Notes에 넣을 문구
 
 ```
-haru stores all user data locally on the device. There is no developer-operated server,
+Greenday stores all user data locally on the device. There is no developer-operated server,
 no user account, and no analytics or tracking SDK of any kind.
 
 OPTIONAL AI ASSISTANT
@@ -282,7 +282,7 @@ titles/dates/priorities/tags and the user's chat messages are sent directly from
 user's device to that endpoint the user chose. The developer neither receives nor relays
 that data. A "Local only" lock prevents selecting any external provider.
 
-OPTIONAL CALENDAR SYNC (off by default, one-way: haru -> calendar)
+OPTIONAL CALENDAR SYNC (off by default, one-way: Greenday -> calendar)
 Two providers, both connecting directly from the user's device with no developer server
 in between:
 
@@ -291,10 +291,10 @@ in between:
   encrypted via Electron safeStorage (macOS keychain) and never leaves the device.
 - Google: standard OAuth 2.0 with PKCE opened in the user's default browser (not an
   embedded web view). The app is a public client with no client secret. The callback
-  arrives via the custom URL scheme com.supaicy.haru:, so no local HTTP server is opened and
+  arrives via the custom URL scheme com.supaicy.Greenday:, so no local HTTP server is opened and
   the app does not need the network.server entitlement. The only scope requested is
   https://www.googleapis.com/auth/calendar.app.created, which limits access to events the
-  app itself created; haru cannot read the user's existing calendar entries.
+  app itself created; Greenday cannot read the user's existing calendar entries.
 
 Only tasks that have a date are published, carrying title, date/time, note body, and
 completion state. Disconnecting deletes stored credentials (and revokes the Google grant)
@@ -338,7 +338,7 @@ Apple의 "collect"는 *개발자 또는 개발자의 서드파티 파트너가* 
 
 ## 4-B. Google OAuth 심사 (Apple과 별개, 병행 진행)
 
-Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니다. **다만 haru가 쓰는
+Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니다. **다만 Greenday가 쓰는
 `calendar.app.created` 범위는 민감(sensitive) 범위가 아니라 심사 부담이 훨씬 작습니다.**
 
 | 항목 | 값 |
@@ -346,7 +346,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 | 요청 범위 | `https://www.googleapis.com/auth/calendar.app.created` |
 | 범위 등급 | 비민감(non-sensitive) — 앱이 만든 일정만 접근 |
 | 앱 유형 | 데스크톱 앱 (공개 클라이언트, PKCE) |
-| 리디렉션 | `com.supaicy.haru:/oauth2redirect` (커스텀 스킴) |
+| 리디렉션 | `com.supaicy.Greenday:/oauth2redirect` (커스텀 스킴) |
 
 > `calendar.events`나 `calendar`(전체)를 요청했다면 민감 범위 심사 + 보안 평가가 필요했을
 > 것입니다. 앱이 만든 일정만 다루면 되므로 그 범위를 요청하지 않았습니다.
@@ -405,7 +405,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 
 > 스크린샷에 **실제 개인 할 일이 보이지 않게** 주의하세요. 데모용 데이터를 따로 만드는 게 안전합니다.
 > 격리 실행으로 빈 데이터에서 시작할 수 있습니다:
-> `npx electron-vite dev -- --user-data-dir=/tmp/haru-demo`
+> `npx electron-vite dev -- --user-data-dir=/tmp/Greenday-demo`
 
 </details>
 
@@ -417,10 +417,10 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
   ```
   NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection" npm run package:mas
   ```
-  결과: `dist/mas/haru-<버전>.pkg`
+  결과: `dist/mas/Greenday-<버전>.pkg`
 
 - ⬜ **Transporter** 앱(App Store에서 무료)으로 `.pkg` 업로드
-  또는 `xcrun altool --upload-app -f dist/mas/haru-*.pkg -t macos -u <Apple ID> -p <앱 암호>`
+  또는 `xcrun altool --upload-app -f dist/mas/Greenday-*.pkg -t macos -u <Apple ID> -p <앱 암호>`
 
 - ⬜ App Store Connect에서 업로드된 빌드 선택 → **심사 제출**
 

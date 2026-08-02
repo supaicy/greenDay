@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="resources/icon-128-rounded.png" alt="haru" width="128" height="128">
+  <img src="resources/icon-128-rounded.png" alt="Greenday" width="128" height="128">
 </p>
 
-<h1 align="center">haru</h1>
+<h1 align="center">Greenday</h1>
 
 <p align="center">
   <strong>All-in-one productivity app for macOS</strong><br>
@@ -56,43 +56,43 @@
 ### Homebrew (Recommended)
 
 ```bash
-brew install --cask supaicy/haru/haru
+brew install --cask supaicy/haru/Greenday
 ```
 
 If macOS shows a "damaged" warning on first launch, clear the quarantine flag:
 
 ```bash
-xattr -cr /Applications/haru.app
+xattr -cr /Applications/Greenday.app
 ```
 
 To upgrade:
 
 ```bash
-brew upgrade --cask haru
+brew upgrade --cask Greenday
 ```
 
 ### Download DMG
 
 1. Click the **Download** button above (or visit [Releases](https://github.com/supaicy/haru/releases))
-2. Open the downloaded `.dmg` and drag `haru` into your `Applications` folder
+2. Open the downloaded `.dmg` and drag `Greenday` into your `Applications` folder
 3. Before the first launch, run:
 
 ```bash
-xattr -cr /Applications/haru.app
+xattr -cr /Applications/Greenday.app
 ```
 
-> haru is open-source and isn't signed with an Apple Developer certificate, so macOS may show a *"damaged"* warning. The command above clears the quarantine flag and only needs to run once.
+> Greenday is open-source and isn't signed with an Apple Developer certificate, so macOS may show a *"damaged"* warning. The command above clears the quarantine flag and only needs to run once.
 
 ### Update
 
-- **Homebrew:** `brew upgrade --cask haru`
-- **DMG:** Open **Settings → Check for Updates** in-app. When a new version is available, download the latest `haru.dmg` from Releases and replace the existing app.
+- **Homebrew:** `brew upgrade --cask Greenday`
+- **DMG:** Open **Settings → Check for Updates** in-app. When a new version is available, download the latest `Greenday.dmg` from Releases and replace the existing app.
 
 ### Build from Source
 
 ```bash
 git clone https://github.com/supaicy/haru.git
-cd haru
+cd Greenday
 npm install
 npm run dev        # Development mode
 npm run package    # Build macOS app
@@ -100,7 +100,7 @@ npm run package    # Build macOS app
 
 ## AI Setup (Optional)
 
-haru's AI features work with a local or cloud model. Configure under **Settings → AI**.
+Greenday's AI features work with a local or cloud model. Configure under **Settings → AI**.
 
 | Provider | Default endpoint | Default model | Notes |
 |----------|------------------|---------------|-------|

@@ -30,8 +30,8 @@ function entryFor(t: TaskRow, extra: Partial<SyncState[string]> = {}): SyncState
 
 describe('eventUid / eventHref', () => {
   it('같은 할일은 항상 같은 UID·경로를 갖는다 (상태를 잃어도 중복 생성되지 않는다)', () => {
-    expect(eventUid('abc')).toBe('haru-abc@haru.app')
-    expect(eventHref(CALENDAR, 'abc')).toBe(`${CALENDAR}haru-abc%40haru.app.ics`)
+    expect(eventUid('abc')).toBe('greenday-abc@supaicy.github.io')
+    expect(eventHref(CALENDAR, 'abc')).toBe(`${CALENDAR}greenday-abc%40supaicy.github.io.ics`)
   })
 
   it('캘린더 URL 끝의 슬래시 유무에 관계없이 같은 경로를 만든다', () => {

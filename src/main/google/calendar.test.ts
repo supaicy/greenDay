@@ -11,7 +11,7 @@ import type { FetchLike } from './oauth'
 
 function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
-    uid: 'haru-t1@haru.app',
+    uid: 'greenday-t1@supaicy.github.io',
     summary: '장보기',
     description: '',
     start: '2026-08-03T06:00:00.000Z',
@@ -53,19 +53,19 @@ function fakeApi(statusFor: (method: string, url: string) => number = () => 200,
 
 describe('toGoogleEventId', () => {
   it('구글이 허용하는 문자만 쓴다 (소문자 a-v와 0-9)', () => {
-    expect(toGoogleEventId('haru-t1@haru.app')).toMatch(/^[a-v0-9]+$/)
+    expect(toGoogleEventId('greenday-t1@supaicy.github.io')).toMatch(/^[a-v0-9]+$/)
   })
 
   it('같은 UID는 항상 같은 id다 (상태를 잃어도 중복 생성되지 않는다)', () => {
-    expect(toGoogleEventId('haru-x@haru.app')).toBe(toGoogleEventId('haru-x@haru.app'))
+    expect(toGoogleEventId('greenday-x@supaicy.github.io')).toBe(toGoogleEventId('greenday-x@supaicy.github.io'))
   })
 
   it('다른 UID는 다른 id다', () => {
-    expect(toGoogleEventId('haru-a@haru.app')).not.toBe(toGoogleEventId('haru-b@haru.app'))
+    expect(toGoogleEventId('greenday-a@supaicy.github.io')).not.toBe(toGoogleEventId('greenday-b@supaicy.github.io'))
   })
 
   it('구글의 최소 길이(5자)를 넘는다', () => {
-    expect(toGoogleEventId('haru-1@haru.app').length).toBeGreaterThanOrEqual(5)
+    expect(toGoogleEventId('greenday-1@supaicy.github.io').length).toBeGreaterThanOrEqual(5)
   })
 })
 
@@ -91,8 +91,8 @@ describe('eventToGoogle', () => {
     const body = eventToGoogle(event({ completed: true })) as {
       extendedProperties: { private: Record<string, string> }
     }
-    expect(body.extendedProperties.private.haruCompleted).toBe('true')
-    expect(body.extendedProperties.private.haruUid).toBe('haru-t1@haru.app')
+    expect(body.extendedProperties.private.greendayCompleted).toBe('true')
+    expect(body.extendedProperties.private.greendayUid).toBe('greenday-t1@supaicy.github.io')
   })
 })
 
@@ -159,7 +159,7 @@ describe('upsertEvent', () => {
     await new GoogleCalendarClient('t', fetchImpl).upsertEvent('cal@x', event())
     expect(requests).toHaveLength(1)
     expect(requests[0].method).toBe('PUT')
-    expect(requests[0].url).toContain(`/events/${toGoogleEventId('haru-t1@haru.app')}`)
+    expect(requests[0].url).toContain(`/events/${toGoogleEventId('greenday-t1@supaicy.github.io')}`)
     expect(requests[0].url).toContain(encodeURIComponent('cal@x'))
   })
 
@@ -187,9 +187,9 @@ describe('upsertEvent', () => {
 describe('deleteEvent', () => {
   it('결정적 id로 지운다', async () => {
     const { requests, fetchImpl } = fakeApi(() => 204)
-    await new GoogleCalendarClient('t', fetchImpl).deleteEvent('cal', 'haru-t1@haru.app')
+    await new GoogleCalendarClient('t', fetchImpl).deleteEvent('cal', 'greenday-t1@supaicy.github.io')
     expect(requests[0].method).toBe('DELETE')
-    expect(requests[0].url).toContain(toGoogleEventId('haru-t1@haru.app'))
+    expect(requests[0].url).toContain(toGoogleEventId('greenday-t1@supaicy.github.io'))
   })
 })
 

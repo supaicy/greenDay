@@ -1,6 +1,6 @@
-# haru 배포 가이드 — 당신이 직접 설정할 것들
+# Greenday 배포 가이드 — 당신이 직접 설정할 것들
 
-이 문서는 haru를 **① 웹사이트 직접 다운로드(Developer ID + 공증)** 와 **② Mac App Store** 로 실제 출시하기 위해 **당신(계정 소유자)** 이 직접 준비/설정해야 하는 항목을 정리합니다. 코드/설정(electron-builder.yml, entitlements, updater 가드, 랜딩 페이지)은 이미 리포지토리에 준비돼 있습니다. 여기 있는 것은 **비밀키·인증서·계정** 처럼 코드에 넣으면 안 되는 것들입니다.
+이 문서는 Greenday를 **① 웹사이트 직접 다운로드(Developer ID + 공증)** 와 **② Mac App Store** 로 실제 출시하기 위해 **당신(계정 소유자)** 이 직접 준비/설정해야 하는 항목을 정리합니다. 코드/설정(electron-builder.yml, entitlements, updater 가드, 랜딩 페이지)은 이미 리포지토리에 준비돼 있습니다. 여기 있는 것은 **비밀키·인증서·계정** 처럼 코드에 넣으면 안 되는 것들입니다.
 
 > ⚠️ 이 환경 특이사항: 이 머신은 IPv6 경로가 막혀 있어 `npm`/electron 다운로드가 멈춥니다. 빌드/설치 명령 앞에
 > `NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"` 를 붙이세요. (오프라인 도구 tsc/biome/vitest는 불필요.)
@@ -34,7 +34,7 @@
 
 ### 1-3. 빌드 & 배포
 - [ ] 빌드: `NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection" npm run package`
-  - 결과: `dist/haru-2.0.0-arm64.dmg` (+ zip, blockmap, `latest-mac.yml`).
+  - 결과: `dist/Greenday-2.0.0-arm64.dmg` (+ zip, blockmap, `latest-mac.yml`).
 - [ ] GitHub Releases 발행(자동 업데이트 피드): `GH_TOKEN` 환경변수(repo 권한) 설정 후 `electron-builder`가 publish. 또는 `dist/`의 dmg·zip·`latest-mac.yml`·blockmap을 릴리스에 수동 업로드.
   - electron-updater가 `latest-mac.yml`을 읽어 자동 업데이트합니다. **dmg/zip/yml/blockmap을 반드시 함께 업로드**하세요.
 - [ ] (선택) Intel(x64)도 지원하려면 `--x64`도 빌드해 universal 또는 아키텍처별 아티팩트 제공.
@@ -48,14 +48,14 @@
 - [ ] **3rd Party Mac Developer Installer** 인증서 (`.pkg` 서명용) — 없으면 MAS 빌드가 실패합니다.
 
 ### 2-2. App Store Connect
-- [ ] https://appstoreconnect.apple.com 에서 **새 앱 등록**, Bundle ID = `com.supaicy.haru` (Apple Developer → Identifiers에 먼저 등록 필요).
+- [ ] https://appstoreconnect.apple.com 에서 **새 앱 등록**, Bundle ID = `com.supaicy.Greenday` (Apple Developer → Identifiers에 먼저 등록 필요).
 - [ ] **프로비저닝 프로파일**(Mac App Store 배포용) 생성 후 다운로드.
   - 파일을 `resources/embedded.provisionprofile` 로 두면 electron-builder가 자동 인식(또는 `electron-builder.yml`의 `mas.provisioningProfile`에 경로 지정).
 
 ### 2-3. 빌드 & 제출
 - [ ] MAS 빌드: `NODE_OPTIONS="..." npm run package:mas`
   - `mac.target`은 dmg/zip이라 일반 `package`는 MAS를 만들지 않습니다. **반드시 `package:mas`** 사용(내부적으로 `electron-builder --mac mas`).
-  - 결과: `dist/mas/haru-2.0.0.pkg` (Apple Distribution + Installer 인증서로 서명됨).
+  - 결과: `dist/mas/Greenday-2.0.0.pkg` (Apple Distribution + Installer 인증서로 서명됨).
 - [ ] **Transporter**(Mac App Store 앱) 또는 `xcrun altool`/`notarytool`로 `.pkg`를 App Store Connect에 업로드 → 심사 제출.
 
 ### 2-4. MAS 참고
@@ -70,14 +70,14 @@
 - [ ] `docs/index.html` 정적 랜딩 페이지가 준비돼 있습니다(다운로드 버튼·기능 소개).
 - [ ] GitHub 저장소 → **Settings → Pages → Source: "Deploy from a branch" → `main` / `/docs`** 선택.
   - 게시 후 `https://supaicy.github.io/haru/` 에서 랜딩이 열립니다. (커스텀 도메인은 Pages 설정에서 추가.)
-- [ ] 다운로드 버튼은 `releases/latest/download/haru.dmg` 를 가리킵니다 — 릴리스 아티팩트 파일명이 `haru.dmg`를 포함하거나, 릴리스에 `haru.dmg`라는 이름의 에셋을 함께 올려두면 항상 최신을 받습니다.
+- [ ] 다운로드 버튼은 `releases/latest/download/Greenday.dmg` 를 가리킵니다 — 릴리스 아티팩트 파일명이 `Greenday.dmg`를 포함하거나, 릴리스에 `Greenday.dmg`라는 이름의 에셋을 함께 올려두면 항상 최신을 받습니다.
 
 ---
 
 ## 4. (선택) Homebrew Cask
 
-README와 랜딩이 `brew install --cask supaicy/haru/haru` 를 안내합니다.
-- [ ] `homebrew-haru` 탭 저장소의 cask 수식을 새 버전(2.0.0)·SHA256으로 갱신(릴리스 dmg 기준).
+README와 랜딩이 `brew install --cask supaicy/haru/Greenday` 를 안내합니다.
+- [ ] `homebrew-Greenday` 탭 저장소의 cask 수식을 새 버전(2.0.0)·SHA256으로 갱신(릴리스 dmg 기준).
 
 ---
 

@@ -399,7 +399,7 @@
     "upToDate": "최신 버전입니다",
     "updateViaAppStore": "Mac App Store를 통해 자동으로 업데이트됩니다",
     "updateAvailable": "새 버전 사용 가능",
-    "updateDownload": "haru v{{version}} — 클릭하여 다운로드 페이지 열기",
+    "updateDownload": "Greenday v{{version}} — 클릭하여 다운로드 페이지 열기",
     "modelHint8b": "한국어 답변은 8B 이상 모델을 권장합니다.",
     "modelHintExaone": "한국어 답변은 8B 이상, 그중 한국어 특화 모델(EXAONE)이 가장 정확합니다.",
     "modelHintManual": "한국어 특화 모델(EXAONE)이 더 정확합니다. Ollama 실행 후 설치 —",
@@ -421,7 +421,7 @@
   },
   "calendarSync": {
     "title": "캘린더 동기화",
-    "desc": "haru의 날짜가 있는 할일을 iCloud 캘린더에 올립니다. iPhone·iPad의 캘린더 앱에서 그대로 보입니다.",
+    "desc": "Greenday의 날짜가 있는 할일을 iCloud 캘린더에 올립니다. iPhone·iPad의 캘린더 앱에서 그대로 보입니다.",
     "provider": "서비스",
     "providerIcloud": "iCloud",
     "providerCustom": "직접 입력 (CalDAV)",
@@ -444,7 +444,7 @@
     "syncFailures": "실패 {{count}}건 — 다음 동기화에서 다시 시도합니다",
     "disconnect": "연동 해제",
     "disconnectHint": "저장된 계정 정보를 지웁니다. 캘린더에 올라간 일정은 지우지 않습니다.",
-    "oneWayNote": "haru → 캘린더 한 방향입니다. 캘린더에서 고친 내용은 haru로 돌아오지 않습니다.",
+    "oneWayNote": "Greenday → 캘린더 한 방향입니다. 캘린더에서 고친 내용은 Greenday로 돌아오지 않습니다.",
     "connected": "{{name}}에 연결됨"
   },
   "googleSync": {
@@ -464,6 +464,6 @@
     "syncing": "동기화 중…",
     "disconnect": "연결 해제",
     "disconnectHint": "저장된 인증을 지우고 Google 쪽 권한도 회수합니다. 이미 올라간 일정은 지우지 않습니다.",
-    "scopeNote": "haru가 만든 일정만 접근합니다. 기존 캘린더 일정은 읽지 않습니다."
+    "scopeNote": "Greenday가 만든 일정만 접근합니다. 기존 캘린더 일정은 읽지 않습니다."
   }
 }

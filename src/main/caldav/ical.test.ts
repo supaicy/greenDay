@@ -14,7 +14,7 @@ const NOW = '2026-08-02T01:00:00.000Z'
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
-    uid: 'haru-1@haru.app',
+    uid: 'greenday-1@supaicy.github.io',
     summary: '장보기',
     description: '',
     start: '2026-08-03T15:00:00.000Z',
@@ -81,7 +81,7 @@ describe('serializeEvent', () => {
     const ics = serializeEvent(makeEvent(), NOW)
     expect(ics).toContain('BEGIN:VCALENDAR')
     expect(ics).toContain('BEGIN:VEVENT')
-    expect(ics).toContain('UID:haru-1@haru.app')
+    expect(ics).toContain('UID:greenday-1@supaicy.github.io')
     expect(ics).toContain('DTSTAMP:20260802T010000Z')
     expect(ics).toContain('DTSTART:20260803T150000Z')
     expect(ics).toContain('DTEND:20260803T160000Z')
