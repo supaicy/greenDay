@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday — 지금 어디까지 왔나</title>
+<style>
+  :root{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;--dim:#57606a;
+    --faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace}
+  @media (prefers-color-scheme:dark){:root{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+    --text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+    --ok:#4ade80;--warn:#fbbf24;--stop:#f87171}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.75;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:820px;margin:0 auto;padding:52px 24px 96px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+  h1{font-size:27px;margin:0 0 8px} .sub{color:var(--faint);font-size:14px;margin:0}
+  h2{font-size:19px;margin:44px 0 12px;padding-top:22px;border-top:1px solid var(--line)}
+  p{margin:0 0 14px} a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:.12em .4em;border-radius:4px}
+  .scroll-x{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  .callout{background:var(--surface);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:16px 20px;margin:20px 0}
+  .callout.warn{border-left-color:var(--warn)} .callout.stop{border-left-color:var(--stop)}
+  ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:8px}
+  .lede{font-size:16.5px;color:var(--dim);margin:22px 0 0}
+  .steps{margin:22px 0}
+  .step{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:0}
+  .dot{flex:none;width:26px;height:26px;border-radius:13px;display:flex;align-items:center;
+    justify-content:center;font-size:12px;font-weight:700;margin-top:2px}
+  .dot.done{background:var(--ok);color:#fff}
+  .dot.now{background:var(--warn);color:#fff}
+  .dot.todo{background:var(--surface-2);color:var(--faint)}
+  .step-body{flex:1;min-width:0}
+  .step-title{font-weight:600;margin-bottom:2px}
+  .step-desc{font-size:14px;color:var(--dim)}
+  .tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:8px;
+    background:var(--surface-2);color:var(--dim);white-space:nowrap}
+  .tag.done{background:rgba(21,128,61,.12);color:var(--ok)}
+  .tag.now{background:rgba(180,83,9,.14);color:var(--warn)}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>지금 어디까지 왔나</h1>
+  <p class="sub">Greenday 2.0.1 · 2026-08-02 16:54 업로드 완료</p>
+</header>
+
+<p class="lede">
+  방금 하신 건 <strong>인증을 받은 것도, 배포한 것도 아닙니다.</strong>
+  앱 파일을 사장님 계정 안에 올려둔 것뿐입니다. 아무도 못 봅니다.
+</p>
+
+<h2>전체 단계</h2>
+
+<div class="steps">
+  <div class="step">
+    <div class="dot done">✓</div>
+    <div class="step-body">
+      <div class="step-title">서명 · 프로파일 <span class="tag done">완료</span></div>
+      <div class="step-desc">
+        기술적으로 설치 가능한 앱이 되는 단계. 빌드할 때 이미 끝났습니다.
+        <strong>사장님이 말씀하신 "배포 가능한 상태"라는 인증이 있다면 이게 그것입니다.</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot done">✓</div>
+    <div class="step-body">
+      <div class="step-title">빌드 업로드 <span class="tag done">방금 완료</span></div>
+      <div class="step-desc">
+        파일이 사장님 App Store Connect 계정에 들어갔습니다.
+        승인이 아니라 <em>보관</em>입니다.
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot now">…</div>
+    <div class="step-body">
+      <div class="step-title">Apple 자동 처리 <span class="tag now">지금 여기 · 5~30분</span></div>
+      <div class="step-desc">
+        형식·서명·권한을 기계가 확인합니다. <strong>사람은 아직 아무도 안 봤습니다.</strong>
+        끝나면 <strong>빌드</strong> 탭에 나타납니다.
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot todo">4</div>
+    <div class="step-body">
+      <div class="step-title">스토어 화면 채우기</div>
+      <div class="step-desc">설명·스크린샷·키워드. 붙여넣기용 문서 드린 그것입니다.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot todo">5</div>
+    <div class="step-body">
+      <div class="step-title">심사 제출</div>
+      <div class="step-desc">빌드와 스토어 화면을 <strong>하나로 묶어</strong> 제출합니다.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot todo">6</div>
+    <div class="step-body">
+      <div class="step-title">사람이 하는 심사 <span class="tag">보통 24~48시간</span></div>
+      <div class="step-desc">Apple 직원이 앱을 실제로 실행해 보고 스토어 화면도 함께 봅니다.</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot todo">7</div>
+    <div class="step-body">
+      <div class="step-title">승인 후 출시</div>
+      <div class="step-desc">승인돼도 자동 공개가 아닙니다. 출시 시점은 사장님이 정합니다.</div>
+    </div>
+  </div>
+</div>
+
+<h2>한 가지 바로잡을 것</h2>
+
+<div class="callout warn">
+  <strong>"인증받고 나면 화면만 꾸미면 된다"는 순서가 아닙니다.</strong>
+  심사는 <strong>앱과 스토어 화면을 같이 봅니다.</strong>
+  둘을 묶어서 한 번에 제출하고, 심사관은 양쪽을 대조합니다.
+  <br><br>
+  그래서 스크린샷이 실제 앱과 다르거나, 설명에 적힌 기능이 앱에 없으면
+  <strong>제출 전체가 반려</strong>됩니다. 앱만 따로 승인받아 두고 나중에 화면을
+  마음대로 바꾸는 구조가 아닙니다.
+</div>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th></th><th>지금 상태</th></tr></thead>
+  <tbody>
+    <tr><td>앱이 승인됐나</td><td>아니오. 아무도 안 봤습니다</td></tr>
+    <tr><td>누가 볼 수 있나</td><td>사장님만</td></tr>
+    <tr><td>취소할 수 있나</td><td>예. 심사 제출 전이면 언제든</td></tr>
+    <tr><td>빌드를 다시 올릴 수 있나</td><td>예. 버전 번호만 올리면 됩니다</td></tr>
+    <tr><td>돈이 나가나</td><td>아니오</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>처리가 끝나면</h2>
+
+<ol>
+  <li>App Store Connect → <strong>Greenday</strong> → 왼쪽 <strong>빌드</strong> 탭에서 2.0.1 확인</li>
+  <li>버전 페이지 → <strong>빌드</strong> 섹션 → <strong>+</strong> → 방금 것 선택</li>
+  <li>스토어 화면 채우기 (붙여넣기용 문서 참고)</li>
+  <li><strong>App Privacy</strong> → <code>No, we do not collect data from this app</code></li>
+  <li><strong>App Review Information</strong> → 메모에 준비된 영문 붙여넣기</li>
+  <li><strong>심사에 추가</strong> → <strong>제출</strong></li>
+</ol>
+
+<div class="callout stop">
+  <strong>처리 중 이메일이 올 수 있습니다.</strong>
+  업로드 검증을 통과해도 Apple 서버가 추가로 검사하는 항목이 있어서,
+  <em>"빌드에 문제가 있다"</em>는 메일이 올 수 있습니다.
+  오면 내용을 그대로 보여주세요. 대개 권한이나 아이콘 같은 형식 문제라 고쳐서 다시 올리면 됩니다.
+</div>
+
+<footer>Greenday · 2026-08-02 · Delivery UUID 394d51ff-1659-4a46-a5c7-f60d7edd79c8</footer>
+
+</div>
+</body>
+</html>
