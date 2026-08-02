@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>haru — 사장님이 직접 하셔야 하는 일</title>
+<style>
+  :root {
+    --bg:#ffffff; --surface:#f7f8fa; --surface-2:#eef1f5;
+    --text:#1f2328; --text-dim:#57606a; --text-faint:#6e7781;
+    --line:#d8dee4; --accent:#2563eb; --ok:#15803d; --warn:#b45309; --stop:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#16181d; --surface:#1e2128; --surface-2:#262a33;
+      --text:#e6e8eb; --text-dim:#a8b0ba; --text-faint:#8b939e;
+      --line:#303640; --accent:#7aa7f0; --ok:#4ade80; --warn:#fbbf24; --stop:#f87171;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.7; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:820px; margin:0 auto; padding:56px 24px 96px; }
+  header.top { border-bottom:1px solid var(--line); padding-bottom:24px; margin-bottom:12px; }
+  h1 { font-size:28px; margin:0 0 8px; letter-spacing:-.01em; }
+  .sub { color:var(--text-faint); font-size:14px; margin:0; }
+  h2 { font-size:20px; margin:48px 0 14px; padding-top:24px; border-top:1px solid var(--line); }
+  h3 { font-size:15px; margin:26px 0 8px; }
+  p { margin:0 0 14px; }
+  a { color:var(--accent); }
+  code { font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.12em .4em; border-radius:4px; word-break:break-all; }
+  pre { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
+    overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.55; margin:12px 0; }
+  .scroll-x { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; margin:16px 0; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); font-weight:600; white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:0; }
+  .callout { background:var(--surface); border-left:3px solid var(--ok); border-radius:0 8px 8px 0; padding:16px 20px; margin:20px 0; }
+  .callout.warn { border-left-color:var(--warn); }
+  .callout.stop { border-left-color:var(--stop); }
+  ul,ol { margin:0 0 14px; padding-left:22px; }
+  li { margin-bottom:8px; }
+  .task { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 22px; margin:16px 0; }
+  .task > h3 { margin-top:0; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .num { display:inline-flex; align-items:center; justify-content:center;
+    min-width:24px; height:24px; padding:0 6px; border-radius:12px;
+    background:var(--accent); color:#fff; font-size:12px; font-weight:700; flex:none; }
+  .meta { font-size:12px; color:var(--text-faint); font-weight:400; }
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:11px;
+    background:var(--surface-2); color:var(--text-dim); white-space:nowrap; }
+  .pill.block { background:rgba(185,28,28,.12); color:var(--stop); }
+  .pill.wait { background:rgba(180,83,9,.14); color:var(--warn); }
+  .pill.done { background:rgba(21,128,61,.12); color:var(--ok); }
+  .lede { font-size:16px; color:var(--text-dim); margin:24px 0 0; }
+  footer { margin-top:64px; padding-top:20px; border-top:1px solid var(--line); font-size:13px; color:var(--text-faint); }
+  hr.soft { border:0; border-top:1px dashed var(--line); margin:18px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>사장님이 직접 하셔야 하는 일</h1>
+  <p class="sub">2026-08-02 · haru v2.0.1 · 코드 작업은 전부 끝났습니다</p>
+</header>
+
+<p class="lede">
+  아래 6가지는 <strong>제가 대신 할 수 없는 것</strong>들입니다. Apple·Google 계정 로그인과
+  2단계 인증이 필요하거나, 결제·법적 동의가 얽혀 있기 때문입니다.
+  나머지는 전부 코드에 반영해 뒀습니다.
+</p>
+
+<div class="callout">
+  <strong>순서가 중요합니다.</strong> ①②③은 서로 물려 있어 이 순서대로 하셔야 합니다.
+  ④는 지금 바로 시작해두면 좋고(심사 대기가 있음), ⑤⑥은 아무 때나 하셔도 됩니다.
+</div>
+
+<h2>한눈에 보기</h2>
+
+<div class="scroll-x">
+<table>
+  <thead>
+    <tr><th>#</th><th>할 일</th><th>어디서</th><th>걸리는 시간</th><th>상태</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>①</td><td>App ID <code>com.haru.app</code> 등록</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
+    <tr><td>②</td><td>프로비저닝 프로파일 발급</td><td>Apple 개발자 포털</td><td>5분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
+    <tr><td>③</td><td>App Store Connect 앱 레코드 생성</td><td>App Store Connect</td><td>20분</td><td><span class="pill block">MAS 차단 중</span></td></tr>
+    <tr><td>④</td><td>Google OAuth 클라이언트 ID 발급</td><td>Google Cloud 콘솔</td><td>20분</td><td><span class="pill wait">구글 연동 차단 중</span></td></tr>
+    <tr><td>⑤</td><td>v2.0.1 공개 여부 결정</td><td>결정만</td><td>1분</td><td><span class="pill">선택</span></td></tr>
+    <tr><td>⑥</td><td>실제 계정으로 캘린더 동기화 테스트</td><td>haru 앱</td><td>10분</td><td><span class="pill">권장</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <strong>좋은 소식.</strong> 인증서 2종은 이미 이 맥에 있습니다 —
+  <code>Apple Distribution</code>과 <code>3rd Party Mac Developer Installer</code>
+  (팀 <code>32R6RHXU36</code>). 이건 안 하셔도 됩니다.
+</div>
+
+<h2>① App ID 등록</h2>
+
+<div class="task">
+  <h3><span class="num">1</span> Bundle ID <code>com.haru.app</code> 만들기 <span class="meta">약 5분</span></h3>
+
+  <p><a href="https://developer.apple.com/account/resources/identifiers/list">developer.apple.com → Certificates, Identifiers &amp; Profiles → Identifiers</a></p>
+
+  <ol>
+    <li><strong>+</strong> 버튼 → <strong>App IDs</strong> → <strong>App</strong> 선택</li>
+    <li>Description: <code>haru</code></li>
+    <li>Bundle ID: <strong>Explicit</strong> 선택 후 <code>com.haru.app</code> 입력
+      <div class="callout stop" style="margin:10px 0">
+        <strong>정확히 이 값이어야 합니다.</strong> 앱의 <code>Info.plist</code>·프로비저닝 프로파일·
+        App Store Connect 레코드 세 곳이 전부 이 값으로 맞아야 업로드가 통과합니다.
+        오타가 있으면 빌드는 성공하고 업로드에서 거절됩니다.
+      </div>
+    </li>
+    <li>Capabilities: <strong>아무것도 체크하지 마세요.</strong> haru는 iCloud·푸시·Sign in with Apple을
+      쓰지 않습니다. 필요 없는 걸 켜면 심사에서 사유를 묻습니다.</li>
+    <li>Continue → Register</li>
+  </ol>
+</div>
+
+<h2>② 프로비저닝 프로파일</h2>
+
+<div class="task">
+  <h3><span class="num">2</span> Mac App Store 프로파일 발급 <span class="meta">약 5분 · ①이 끝나야 가능</span></h3>
+
+  <p><a href="https://developer.apple.com/account/resources/profiles/list">developer.apple.com → Profiles</a></p>
+
+  <ol>
+    <li><strong>+</strong> → Distribution 아래 <strong>Mac App Store Connect</strong> 선택</li>
+    <li>App ID: 방금 만든 <code>com.haru.app</code> 선택</li>
+    <li>Certificate: <code>Apple Distribution: MINSEOK SHIN</code> 선택</li>
+    <li>Profile Name: <code>haru MAS</code> (아무 이름이나 괜찮습니다)</li>
+    <li>Generate → Download</li>
+    <li>받은 파일을 <strong>이 경로에 저장</strong>:
+      <pre>~/orca/workspaces/ticktick/coordinate/resources/embedded.provisionprofile</pre>
+      파일 이름을 정확히 <code>embedded.provisionprofile</code>로 바꿔 주세요.
+    </li>
+  </ol>
+
+  <hr class="soft">
+
+  <p><strong>맞게 하셨는지 확인하는 방법.</strong> 터미널에서 이 명령을 실행하세요:</p>
+  <pre>cd ~/orca/workspaces/ticktick/coordinate &amp;&amp; npm run mas:preflight</pre>
+
+  <p>
+    전부 <code>✓</code>가 나오면 성공입니다. 프로파일이 <em>다른 앱 것</em>이면
+    <code>✗ 프로파일이 다른 앱의 것입니다</code>라고 잡아 줍니다 —
+    지난번에 <code>BicMac</code> 프로파일로 겪으셨던 그 문제를 여기서 미리 거릅니다.
+  </p>
+
+  <div class="callout">
+    통과하면 바로 빌드할 수 있습니다: <code>npm run mas:build</code>
+    <br>이 프로파일 파일은 개인 자격증명이라 git에 올라가지 않도록 제외해 뒀습니다.
+  </div>
+</div>
+
+<h2>③ App Store Connect 앱 레코드</h2>
+
+<div class="task">
+  <h3><span class="num">3</span> 앱 등록 + 메타데이터 입력 <span class="meta">약 20분 · ①이 끝나야 가능</span></h3>
+
+  <p><a href="https://appstoreconnect.apple.com/apps">appstoreconnect.apple.com → 앱 → +</a></p>
+
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>항목</th><th>입력할 값</th></tr></thead>
+    <tbody>
+      <tr><td>플랫폼</td><td>macOS</td></tr>
+      <tr><td>이름</td><td><code>haru</code> <span class="meta">(이미 쓰이고 있으면 <code>haru - 할 일 관리</code>)</span></td></tr>
+      <tr><td>기본 언어</td><td>한국어</td></tr>
+      <tr><td>번들 ID</td><td>①에서 만든 <code>com.haru.app</code></td></tr>
+      <tr><td>SKU</td><td><code>haru-mac-001</code> <span class="meta">(내부 식별용, 아무 값이나)</span></td></tr>
+      <tr><td>사용자 액세스</td><td>전체 액세스</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    그다음 설명·키워드·개인정보처리방침 URL 등을 채워야 하는데,
+    <strong>전부 복사해서 붙여넣을 수 있게 준비해 뒀습니다.</strong>
+    한국어·영어 양쪽 다 있고, Apple의 글자 수 제한도 전부 확인했습니다.
+  </p>
+
+  <pre>docs/app-store-submission.md  →  3절 "메타데이터 — 복사해서 붙여넣기"</pre>
+
+  <h3>이 화면에서 헷갈리기 쉬운 3가지</h3>
+  <ul>
+    <li>
+      <strong>App Privacy(개인정보) 설문</strong> → 답은
+      <strong>"No, we do not collect data from this app"</strong>입니다.
+      캘린더 동기화가 생겼어도 답은 그대로입니다 — 데이터가 사장님 서버로 오는 게 아니라
+      사용자 기기에서 사용자 본인의 iCloud/Google로 직접 가기 때문입니다.
+      근거와, 심사관이 되물어올 경우의 대비책까지 문서 4절에 적어 뒀습니다.
+    </li>
+    <li>
+      <strong>App Review Notes(심사 노트)</strong> → 문서 4절의 영문 블록을 그대로 붙여넣으세요.
+      캘린더 연동이 무엇을 읽고 무엇을 못 읽는지, 왜 서버 권한이 필요 없는지를
+      심사관이 묻기 전에 먼저 설명하는 내용입니다.
+    </li>
+    <li>
+      <strong>개인정보처리방침 URL</strong> →
+      <code>https://supaicy.github.io/haru/privacy.html</code>
+      <span class="meta">(이미 공개돼 있고, 캘린더 동기화 내용까지 갱신 완료)</span>
+    </li>
+  </ul>
+
+  <p><strong>스크린샷 6장은 이미 준비돼 있습니다</strong> (2880×1800, 실제 데이터 아닌 데모 데이터 사용):</p>
+  <pre>docs/app-store/screenshots/</pre>
+</div>
+
+<h2>④ Google OAuth 클라이언트 ID</h2>
+
+<div class="task">
+  <h3><span class="num">4</span> Google Cloud 콘솔 설정 <span class="meta">약 20분 + 심사 대기</span></h3>
+
+  <div class="callout warn">
+    <strong>먼저 시작해 두시는 걸 권합니다.</strong> 구글 쪽 확인에 며칠 걸릴 수 있어서,
+    Apple 작업과 병행하면 대기 시간이 겹칩니다.
+  </div>
+
+  <ol>
+    <li>
+      <a href="https://console.cloud.google.com/projectcreate">프로젝트 생성</a> —
+      이름 <code>haru</code>
+    </li>
+    <li>
+      <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Google Calendar API 사용 설정</a>
+    </li>
+    <li>
+      <strong>OAuth 동의 화면</strong> 구성 (APIs &amp; Services → OAuth consent screen)
+      <div class="scroll-x">
+      <table>
+        <thead><tr><th>항목</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>User Type</td><td>External</td></tr>
+          <tr><td>앱 이름</td><td><code>haru</code></td></tr>
+          <tr><td>지원 이메일</td><td>사장님 이메일</td></tr>
+          <tr><td>앱 로고</td><td><code>docs/app-store/</code> 아이콘 사용 가능 (선택)</td></tr>
+          <tr><td>개인정보처리방침</td><td><code>https://supaicy.github.io/haru/privacy.html</code></td></tr>
+          <tr><td>서비스 약관</td><td>비워도 됩니다</td></tr>
+          <tr><td>승인된 도메인</td><td><code>supaicy.github.io</code></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </li>
+    <li>
+      <strong>범위(Scopes)</strong> 추가 — 딱 이것 하나만:
+      <pre>https://www.googleapis.com/auth/calendar.app.created</pre>
+      <div class="callout">
+        <strong>이 범위를 고른 이유.</strong> 흔히 쓰는 <code>calendar.events</code>는
+        사용자의 <em>기존</em> 캘린더까지 읽을 수 있어서 구글의 <strong>민감 범위 심사</strong>
+        대상이 됩니다 — 보안 평가와 데모 영상까지 요구받습니다.
+        <code>calendar.app.created</code>는 <strong>haru가 만든 일정만</strong> 다루는 범위라
+        비민감으로 분류되고, 우리에게 필요한 기능은 전부 됩니다.
+        심사 부담을 크게 줄이려고 일부러 이 범위로 구현했습니다.
+      </div>
+    </li>
+    <li>
+      <strong>사용자 인증 정보 → OAuth 클라이언트 ID 만들기</strong>
+      <div class="scroll-x">
+      <table>
+        <thead><tr><th>항목</th><th>값</th></tr></thead>
+        <tbody>
+          <tr><td>애플리케이션 유형</td><td><strong>iOS</strong></td></tr>
+          <tr><td>번들 ID</td><td><code>com.haru.app</code></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <div class="callout warn">
+        <strong>"데스크톱 앱"이 아니라 "iOS"입니다.</strong> 헷갈리기 쉬운데,
+        구글에서 <em>커스텀 URL 스킴</em>으로 콜백을 받는 클라이언트는 iOS 유형으로 만들어야 합니다.
+        데스크톱 앱 유형은 루프백 서버(<code>http://127.0.0.1:포트</code>) 방식이라,
+        그걸 쓰면 앱이 로컬 서버를 열어야 하고 Mac App Store 심사에서
+        "왜 서버를 여느냐"는 질문을 받게 됩니다.
+      </div>
+    </li>
+    <li>
+      발급받은 <strong>클라이언트 ID</strong>를 알려주세요.
+      <code>123456-abc.apps.googleusercontent.com</code> 같은 형태입니다.
+      제가 빌드에 넣겠습니다.
+      <div class="callout">
+        이 값은 <strong>비밀이 아닙니다.</strong> 데스크톱 앱은 시크릿을 숨길 수 없어서
+        구글도 공개 클라이언트로 쓰도록 하고 있고, 대신 PKCE라는 방식으로 보호합니다.
+        그래서 앱에 담겨 배포돼도 안전합니다 — 이미 그렇게 구현해 뒀습니다.
+      </div>
+    </li>
+  </ol>
+</div>
+
+<h2>⑤ v2.0.1 공개 여부</h2>
+
+<div class="task">
+  <h3><span class="num">5</span> 결정만 하시면 됩니다 <span class="meta">1분</span></h3>
+
+  <p>
+    지난번에 서명·공증까지 마친 v2.0.1이 GitHub에 <strong>비공개(draft) 상태</strong>로 올라가 있습니다.
+    지금은 아무도 받을 수 없습니다.
+  </p>
+
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>선택</th><th>결과</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>A. 지금 공개</strong></td>
+        <td>웹에서 바로 받을 수 있게 됩니다. 다만 <strong>이번에 만든 한/영 지원과 캘린더 동기화가 빠진 버전</strong>입니다.</td>
+      </tr>
+      <tr>
+        <td><strong>B. 기다렸다 v2.1.0으로</strong> <span class="meta">권장</span></td>
+        <td>새 기능까지 담아 한 번에 공개. 첫인상이 더 좋습니다.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>A를 고르시면 이 명령입니다:</p>
+  <pre>gh release edit v2.0.1 --draft=false --latest</pre>
+
+  <div class="callout warn">
+    <strong>미리 말씀드리면</strong> — 공개하는 순간 GitHub Actions가 한 번 돌고
+    <strong>빨간 X로 실패합니다.</strong> 배포용 시크릿을 등록하지 않으셨기 때문인데,
+    이건 <em>고장이 아닙니다</em>. 릴리스 파일은 이미 다 올라가 있어서 사용자 다운로드에는
+    아무 영향이 없습니다. 워크플로가 시작하자마자 "시크릿 없음"으로 스스로 멈추는 것뿐입니다.
+  </div>
+</div>
+
+<h2>⑥ 실제 계정으로 동기화 테스트</h2>
+
+<div class="task">
+  <h3><span class="num">6</span> 제가 못 하는 검증 <span class="meta">약 10분 · 권장</span></h3>
+
+  <p>
+    캘린더 동기화 코드는 <strong>387개 테스트</strong>로 검증했지만, 그건 전부 가짜 서버를 상대로 한 것입니다.
+    <strong>진짜 Apple 서버에 붙는 것만은 사장님 계정으로만 확인할 수 있습니다</strong> —
+    제가 사장님 Apple ID로 로그인할 수는 없기 때문입니다.
+  </p>
+
+  <ol>
+    <li>
+      <a href="https://account.apple.com/account/manage">account.apple.com</a>에서
+      <strong>앱 암호</strong>를 하나 새로 발급 (이름: <code>haru 캘린더</code>)
+      <div class="callout">
+        이전에 만드신 앱 암호를 재사용하셔도 됩니다. 앱마다 따로 만들면
+        나중에 하나만 취소하기 쉬워서 새로 만드는 걸 권합니다.
+      </div>
+    </li>
+    <li>haru 실행 → <strong>설정 → 캘린더 동기화</strong></li>
+    <li>Apple ID와 방금 만든 앱 암호 입력 → <strong>연결 확인</strong></li>
+    <li>캘린더 목록이 뜨면 하나 고르기 <span class="meta">(미리알림은 목록에 안 나옵니다 — 일정을 담을 수 없어서 제외했습니다)</span></li>
+    <li>마감일이 있는 할 일을 하나 만들고 → <strong>지금 동기화</strong></li>
+    <li>iPhone 캘린더 앱에서 그 할 일이 보이는지 확인</li>
+  </ol>
+
+  <p><strong>확인해 주셨으면 하는 것:</strong></p>
+  <ul>
+    <li>한글 제목이 깨지지 않는지 <span class="meta">(줄바꿈 규칙을 바이트 단위로 처리했는데, 실제 애플 서버 반응은 확인이 필요합니다)</span></li>
+    <li>종일 할 일이 <strong>하루짜리로</strong> 보이는지 <span class="meta">(이틀에 걸쳐 보이면 알려주세요)</span></li>
+    <li>할 일을 수정하고 다시 동기화했을 때 <strong>새 일정이 생기지 않고 기존 게 바뀌는지</strong></li>
+  </ul>
+
+  <p>안 되는 게 있으면 화면에 나온 오류 문구를 그대로 알려주세요. 오류마다 다른 안내가 나오게 해 뒀습니다.</p>
+</div>
+
+<h2>제가 이미 끝낸 것</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>항목</th><th>내용</th></tr></thead>
+  <tbody>
+    <tr><td>한국어 / 영어</td><td>앱 전체. 영어로 <code>tomorrow 3pm</code>이라고 적어도 날짜를 알아듣게 파서까지 확장</td></tr>
+    <tr><td>iCloud 캘린더 동기화</td><td>CalDAV 직접 구현. 앱 암호는 키체인 암호화 저장</td></tr>
+    <tr><td>Google 캘린더 동기화</td><td>OAuth 2.0 + PKCE. 클라이언트 ID만 받으면 바로 동작</td></tr>
+    <tr><td>개인정보처리방침</td><td>캘린더 항목 추가 (한/영). 이미 웹에 공개됨</td></tr>
+    <tr><td>스토어 메타데이터</td><td>한/영 설명·키워드 갱신. 글자 수 제한 전부 확인 <span class="meta">(영문 프로모션 문구가 한도 초과였던 것도 수정)</span></td></tr>
+    <tr><td>심사 노트</td><td>캘린더 연동 설명 포함해 영문으로 작성 완료</td></tr>
+    <tr><td>MAS 사전 점검</td><td><code>npm run mas:preflight</code> — 프로파일 오류를 업로드 전에 잡아냄</td></tr>
+    <tr><td>테스트</td><td>222개 → <strong>387개</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout">
+  <strong>동기화 방향에 대해 한 가지.</strong>
+  현재는 <strong>haru → 캘린더 한 방향</strong>입니다. 캘린더 앱에서 일정을 옮겨도
+  haru의 마감일은 바뀌지 않습니다.
+  양방향으로 만들면 "캘린더에서 무심코 드래그했는데 할 일 마감일이 바뀌어 있는" 상황이 생겨서
+  일부러 뺐습니다. 원하시면 읽기 기능을 따로 붙일 수 있으니 말씀해 주세요.
+</div>
+
+<footer>
+  haru · 2026-08-02 · 궁금한 점은 그냥 물어보세요
+</footer>
+
+</div>
+</body>
+</html>
