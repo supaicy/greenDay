@@ -54,8 +54,22 @@ else
   if [ -z "$decoded" ]; then
     bad "프로파일을 읽지 못했습니다 (형식이 올바른지 확인하세요)"
   else
-    profile_app_id="$(printf '%s' "$decoded" \
-      | plutil -extract Entitlements.application-identifier raw -o - - 2>/dev/null)"
+    # macOS 프로파일은 com.apple.application-identifier 를, iOS 프로파일은 접두사 없는
+    # application-identifier 를 쓴다. 둘 다 시도한다 — macOS 키만 있는 정상 프로파일을
+    # iOS 키로만 찾으면 "다른 앱 것"으로 잘못 판정한다.
+    #
+    # plutil 이 아니라 PlistBuddy 를 쓴다: plutil 의 키 경로는 점이 구분자라
+    # 'com.apple.application-identifier' 가 com → apple → ... 중첩으로 해석된다.
+    # PlistBuddy 는 콜론이 구분자라 점이 든 키를 그대로 읽을 수 있다.
+    tmp_plist="$(mktemp -t haru-profile)"
+    printf '%s' "$decoded" > "$tmp_plist"
+    profile_app_id="$(/usr/libexec/PlistBuddy -c \
+      'Print :Entitlements:com.apple.application-identifier' "$tmp_plist" 2>/dev/null)"
+    if [ -z "$profile_app_id" ]; then
+      profile_app_id="$(/usr/libexec/PlistBuddy -c \
+        'Print :Entitlements:application-identifier' "$tmp_plist" 2>/dev/null)"
+    fi
+    rm -f "$tmp_plist"
     profile_team="$(printf '%s' "$decoded" \
       | plutil -extract TeamIdentifier.0 raw -o - - 2>/dev/null)"
     expires="$(printf '%s' "$decoded" | plutil -extract ExpirationDate raw -o - - 2>/dev/null)"
@@ -67,6 +81,14 @@ else
       bad "프로파일이 다른 앱의 것입니다: ${profile_app_id:-알 수 없음}"
       note "이 프로파일로 빌드하면 업로드 단계에서 거절됩니다"
       note "$BUNDLE_ID 용 프로파일을 새로 발급하세요"
+    fi
+
+    profile_platform="$(printf '%s' "$decoded" | plutil -extract Platform.0 raw -o - - 2>/dev/null)"
+    if [ "$profile_platform" = "OSX" ]; then
+      ok "플랫폼: macOS"
+    else
+      bad "macOS용 프로파일이 아닙니다 (플랫폼: ${profile_platform:-알 수 없음})"
+      note "Profiles에서 'Mac App Store Connect' 유형으로 다시 발급하세요"
     fi
 
     [ -n "$profile_team" ] && ok "팀: $profile_team"
