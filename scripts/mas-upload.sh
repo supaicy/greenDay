@@ -107,9 +107,18 @@ if ! xcrun altool --validate-app -f "$PKG" -t macos \
   exit 1
 fi
 
-if grep -qi "error" /tmp/mas-validate.log; then
+# altool은 성공 시 "VERIFY SUCCEEDED" 와 "No errors validating" 을 출력한다.
+# 단순히 'error' 를 찾으면 그 성공 문구의 "no errors" 에 걸려 성공을 실패로 읽는다.
+# 실제 실패 표식만 본다.
+if grep -qE "ERROR ITMS-|\*\*\* Error|error:|VERIFY FAILED" /tmp/mas-validate.log; then
   echo >&2
   echo "검증에서 오류가 보고됐습니다. 업로드는 시도하지 않았습니다." >&2
+  exit 1
+fi
+
+if ! grep -q "VERIFY SUCCEEDED" /tmp/mas-validate.log; then
+  echo >&2
+  echo "검증 성공 표식을 찾지 못했습니다. 위 출력을 확인하세요." >&2
   exit 1
 fi
 echo "  검증 통과"
