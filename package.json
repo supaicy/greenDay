@@ -19,7 +19,8 @@
     "typecheck": "tsc --build",
     "release": "bash scripts/release.sh",
     "mas:preflight": "bash scripts/mas-preflight.sh",
-    "mas:build": "bash scripts/mas-preflight.sh && electron-vite build && electron-builder --mac mas --arm64 --x64"
+    "mas:build": "bash scripts/mas-preflight.sh && electron-vite build && electron-builder --mac mas --universal",
+    "mas:upload": "bash scripts/mas-upload.sh"
   },
   "dependencies": {
     "@atomic-editor/editor": "^0.6.2",
