@@ -52,18 +52,48 @@ fi
 
 echo "── 2/3  Apple 계정"
 
+# 자격증명은 세 곳에서 찾는다. 키체인에 있으면 아무것도 묻지 않고 진행하므로
+# 사람이 지켜보지 않아도 돌릴 수 있다.
+KEYCHAIN_SERVICE="${MAS_KEYCHAIN_SERVICE:-AC_PASSWORD}"
+
 APPLE_ID="${APPLE_ID:-}"
+APPLE_APP_PASSWORD="${APPLE_APP_PASSWORD:-}"
+
+if [ -z "$APPLE_APP_PASSWORD" ]; then
+  # -w 는 비밀번호만 출력한다. 값이 셸 히스토리나 로그에 남지 않는다.
+  keychain_pw="$(security find-generic-password -s "$KEYCHAIN_SERVICE" -w 2>/dev/null)"
+  if [ -n "$keychain_pw" ]; then
+    APPLE_APP_PASSWORD="$keychain_pw"
+    [ -n "$APPLE_ID" ] || APPLE_ID="$(security find-generic-password -s "$KEYCHAIN_SERVICE" 2>/dev/null \
+      | awk -F'"' '/"acct"/{print $4}')"
+    echo "  키체인($KEYCHAIN_SERVICE)에서 자격증명을 읽었습니다."
+  fi
+fi
+
 if [ -z "$APPLE_ID" ]; then
-  read -r -p "  Apple ID: " APPLE_ID
+  if [ -t 0 ]; then
+    read -r -p "  Apple ID: " APPLE_ID
+  else
+    echo "ERROR: Apple ID가 없고 입력받을 수 있는 터미널도 아닙니다." >&2
+    echo "  터미널에서 직접 실행하시거나, 키체인에 한 번 저장해 두세요:" >&2
+    echo "    security add-generic-password -s $KEYCHAIN_SERVICE -a '<Apple ID>' -w" >&2
+    echo "  (-w 뒤에 값을 적지 않으면 화면에 안 보이게 따로 입력받습니다)" >&2
+    exit 1
+  fi
 fi
 [ -n "$APPLE_ID" ] || { echo "ERROR: Apple ID가 필요합니다." >&2; exit 1; }
 
-# 앱 암호는 화면에 찍지 않고 파일에도 남기지 않는다.
-APPLE_APP_PASSWORD="${APPLE_APP_PASSWORD:-}"
 if [ -z "$APPLE_APP_PASSWORD" ]; then
-  echo "  앱 암호 (appleid.apple.com에서 발급한 xxxx-xxxx-xxxx-xxxx 형식)"
-  read -r -s -p "  앱 암호: " APPLE_APP_PASSWORD
-  echo
+  if [ -t 0 ]; then
+    echo "  앱 암호 (appleid.apple.com에서 발급한 xxxx-xxxx-xxxx-xxxx 형식)"
+    read -r -s -p "  앱 암호: " APPLE_APP_PASSWORD
+    echo
+  else
+    echo "ERROR: 앱 암호가 없고 입력받을 수 있는 터미널도 아닙니다." >&2
+    echo "  키체인에 한 번 저장해 두면 다음부터는 묻지 않습니다:" >&2
+    echo "    security add-generic-password -s $KEYCHAIN_SERVICE -a '$APPLE_ID' -w" >&2
+    exit 1
+  fi
 fi
 [ -n "$APPLE_APP_PASSWORD" ] || { echo "ERROR: 앱 암호가 필요합니다." >&2; exit 1; }
 
