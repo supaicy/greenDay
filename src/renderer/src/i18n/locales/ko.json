@@ -446,5 +446,24 @@
     "disconnectHint": "저장된 계정 정보를 지웁니다. 캘린더에 올라간 일정은 지우지 않습니다.",
     "oneWayNote": "haru → 캘린더 한 방향입니다. 캘린더에서 고친 내용은 haru로 돌아오지 않습니다.",
     "connected": "{{name}}에 연결됨"
+  },
+  "googleSync": {
+    "title": "Google 캘린더",
+    "desc": "날짜가 있는 할일을 Google 캘린더에 올립니다. 안드로이드·웹 어디서든 보입니다.",
+    "connect": "Google 계정 연결",
+    "connecting": "브라우저에서 로그인 중…",
+    "connectHint": "브라우저가 열립니다. 로그인 후 이 앱으로 돌아옵니다.",
+    "notConfigured": "이 빌드에는 Google 연동이 설정되어 있지 않습니다.",
+    "connected": "{{name}}에 연결됨",
+    "connectedAccount": "계정: {{account}}",
+    "pickCalendar": "동기화할 캘린더",
+    "loadCalendars": "캘린더 목록 불러오기",
+    "noWritableCalendar": "일정을 만들 수 있는 캘린더가 없습니다.",
+    "primaryBadge": "기본",
+    "syncNow": "지금 동기화",
+    "syncing": "동기화 중…",
+    "disconnect": "연결 해제",
+    "disconnectHint": "저장된 인증을 지우고 Google 쪽 권한도 회수합니다. 이미 올라간 일정은 지우지 않습니다.",
+    "scopeNote": "haru가 만든 일정만 접근합니다. 기존 캘린더 일정은 읽지 않습니다."
   }
 }

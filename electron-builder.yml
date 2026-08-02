@@ -23,6 +23,12 @@ mac:
   entitlementsInherit: resources/entitlements.mac.plist
   category: public.app-category.productivity
   darkModeSupport: true
+  # 구글 OAuth 콜백을 받는 커스텀 스킴. 루프백 서버를 열지 않아 MAS 샌드박스에서
+  # network.server 권한이 필요 없다.
+  protocols:
+    - name: haru
+      schemes:
+        - com.haru.app
 mas:
   entitlements: resources/entitlements.mas.plist
   entitlementsInherit: resources/entitlements.mas.inherit.plist

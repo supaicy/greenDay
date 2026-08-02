@@ -5,6 +5,7 @@ import { useStore, type Theme } from '../../store/useStore'
 import { LANGUAGES, type Language } from '../../i18n'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 import { CalendarSyncSection } from './CalendarSyncSection'
+import { GoogleSyncSection } from './GoogleSyncSection'
 
 // 설명은 실제 동작과 1:1로 맞춘다. Cmd+N/Cmd+Shift+A는 토글이고,
 // Cmd+D·Delete·1-4는 할 일이 선택돼 있어야만 동작한다(선택이 없으면 아무 일도
@@ -385,6 +386,19 @@ export function Settings() {
               isDark={isDark}
               focusRing={focusRing(isDark)}
               fieldSurface={fieldSurface(isDark)}
+              labelText={labelText(isDark)}
+              hintText={hintText(isDark)}
+              successText={successText(isDark)}
+              errorText={errorText(isDark)}
+            />
+          </div>
+
+          {/* Google 캘린더 */}
+          <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
+            <SectionHeading isDark={isDark} label={t('googleSync.title')} />
+            <GoogleSyncSection
+              isDark={isDark}
+              focusRing={focusRing(isDark)}
               labelText={labelText(isDark)}
               hintText={hintText(isDark)}
               successText={successText(isDark)}

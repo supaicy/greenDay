@@ -151,6 +151,14 @@ const api = {
   calendarSyncNow: () => ipcRenderer.invoke('calendar:sync-now'),
   calendarDisconnect: () => ipcRenderer.invoke('calendar:disconnect'),
 
+  // 구글 캘린더. 토큰은 메인에만 있고 렌더러로 넘어오지 않는다.
+  googleGetConfig: () => ipcRenderer.invoke('google:get-config'),
+  googleConnect: () => ipcRenderer.invoke('google:connect'),
+  googleListCalendars: () => ipcRenderer.invoke('google:list-calendars'),
+  googleSelect: (id: string, name: string) => ipcRenderer.invoke('google:select', id, name),
+  googleSyncNow: () => ipcRenderer.invoke('google:sync-now'),
+  googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
+
   // IPC events
   onGlobalQuickAdd: (callback: () => void) => {
     const handler = (_: Electron.IpcRendererEvent): void => callback()

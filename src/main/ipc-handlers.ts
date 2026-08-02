@@ -15,6 +15,23 @@ import {
 import { CalDavClient, CalDavError } from './caldav/client'
 import { runSync } from './calendar-sync'
 import type { TaskRow } from './caldav/sync'
+import {
+  readGoogleConfig,
+  writeGoogleConfig,
+  toPublicGoogleConfig,
+  DEFAULT_GOOGLE_CONFIG,
+  type GoogleConfig
+} from './google-config'
+import { GoogleCalendarClient, GoogleApiError } from './google/calendar'
+import { needsRefresh, refreshTokens, revokeToken, OAuthError } from './google/oauth'
+import { startGoogleAuth } from './google-auth-flow'
+import { runGoogleSync } from './google-sync'
+
+// 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로
+// 이 값은 비밀이 아니다 — 인가 코드 가로채기는 PKCE가 막는다.
+declare const __GOOGLE_CLIENT_ID__: string
+const BUILTIN_GOOGLE_CLIENT_ID =
+  typeof __GOOGLE_CLIENT_ID__ === 'string' ? __GOOGLE_CLIENT_ID__ : ''
 
 function csvCell(value: unknown): string {
   const s = String(value ?? '')
@@ -302,6 +319,139 @@ export function setupIpcHandlers(): void {
     // 연동 해제가 사용자의 캘린더를 비우는 동작이면 되돌릴 방법이 없다.
     storeCalendarConfig({ ...DEFAULT_CONFIG })
     return toPublicConfig(DEFAULT_CONFIG)
+  })
+
+  // === 구글 캘린더 연동 ===
+  const googleConfigPath = (): string => db.getCalendarConfigPath().replace(/calendar-config\.json$/, 'google-config.json')
+  const loadGoogle = (): GoogleConfig => readGoogleConfig(googleConfigPath(), db.realCrypto)
+  const storeGoogle = (config: GoogleConfig): void =>
+    writeGoogleConfig(googleConfigPath(), config, db.realCrypto)
+
+  const describeGoogleError = (error: unknown): string =>
+    error instanceof GoogleApiError || error instanceof OAuthError
+      ? error.message
+      : '알 수 없는 오류가 발생했습니다.'
+
+  const resolveClientId = (): string =>
+    BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
+
+  /**
+   * 유효한 액세스 토큰을 확보한다. 만료가 가까우면 미리 갱신하고 갱신 결과를 저장한다.
+   * 갱신에 실패하면 토큰을 버린다 — 죽은 토큰을 들고 계속 시도해 봐야 소용없고,
+   * 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
+   */
+  const ensureGoogleToken = async (config: GoogleConfig): Promise<GoogleConfig> => {
+    if (!config.tokens) throw new OAuthError('not_connected', '구글 계정이 연결되어 있지 않습니다.')
+    if (!needsRefresh(config.tokens, new Date().toISOString())) return config
+    if (!config.tokens.refreshToken) {
+      throw new OAuthError('no_refresh_token', '구글 연결이 만료되었습니다. 다시 연결해 주세요.')
+    }
+    try {
+      const tokens = await refreshTokens(
+        {
+          clientId: resolveClientId(),
+          refreshToken: config.tokens.refreshToken,
+          now: new Date().toISOString()
+        },
+        (url, init) => fetch(url, init)
+      )
+      const next = { ...config, tokens }
+      storeGoogle(next)
+      return next
+    } catch (error) {
+      storeGoogle({ ...config, tokens: null, lastError: describeGoogleError(error) })
+      throw error
+    }
+  }
+
+  ipcMain.handle('google:get-config', () => ({
+    ...toPublicGoogleConfig(loadGoogle()),
+    clientIdConfigured: Boolean(resolveClientId())
+  }))
+
+  ipcMain.handle('google:connect', async () => {
+    const clientId = resolveClientId()
+    if (!clientId) {
+      return {
+        ok: false,
+        message: '구글 OAuth 클라이언트 ID가 설정되지 않았습니다. 빌드 설정을 확인하세요.'
+      }
+    }
+    const config = loadGoogle()
+    try {
+      const tokens = await startGoogleAuth(clientId)
+      storeGoogle({ ...config, tokens, lastError: null })
+      return { ok: true, message: null }
+    } catch (error) {
+      const message = describeGoogleError(error)
+      storeGoogle({ ...config, lastError: message })
+      return { ok: false, message }
+    }
+  })
+
+  ipcMain.handle('google:list-calendars', async () => {
+    try {
+      const config = await ensureGoogleToken(loadGoogle())
+      const client = new GoogleCalendarClient(config.tokens?.accessToken ?? '', (u, i) => fetch(u, i))
+      const calendars = await client.listCalendars()
+      // 읽기 전용 캘린더(공휴일 등)에는 일정을 만들 수 없다. 미리 걸러 낸다.
+      return { ok: true, message: null, calendars: calendars.filter((c) => c.writable) }
+    } catch (error) {
+      return { ok: false, message: describeGoogleError(error), calendars: [] }
+    }
+  })
+
+  ipcMain.handle('google:select', (_, id: string, name: string) => {
+    const config = loadGoogle()
+    // 캘린더를 바꾸면 이전 동기화 상태는 다른 캘린더의 것이라 쓸 수 없다.
+    const changed = config.calendarId !== id
+    const next: GoogleConfig = {
+      ...config,
+      calendarId: String(id),
+      calendarName: String(name),
+      enabled: true,
+      syncState: changed ? {} : config.syncState
+    }
+    storeGoogle(next)
+    return toPublicGoogleConfig(next)
+  })
+
+  ipcMain.handle('google:sync-now', async () => {
+    const loaded = loadGoogle()
+    if (!loaded.tokens || !loaded.calendarId) {
+      return { ok: false, message: '구글 계정과 캘린더를 먼저 선택하세요.', result: null }
+    }
+    try {
+      const config = await ensureGoogleToken(loaded)
+      const result = await runGoogleSync({
+        client: new GoogleCalendarClient(config.tokens?.accessToken ?? '', (u, i) => fetch(u, i)),
+        calendarId: config.calendarId ?? '',
+        tasks: db.getTasks() as unknown as TaskRow[],
+        state: config.syncState
+      })
+      storeGoogle({
+        ...config,
+        syncState: result.state,
+        lastSyncAt: new Date().toISOString(),
+        lastError: null
+      })
+      const { state, ...summary } = result
+      return { ok: true, message: null, result: summary }
+    } catch (error) {
+      const message = describeGoogleError(error)
+      storeGoogle({ ...loadGoogle(), lastError: message })
+      return { ok: false, message, result: null }
+    }
+  })
+
+  ipcMain.handle('google:disconnect', async () => {
+    const config = loadGoogle()
+    // 서버 쪽 권한까지 회수한다. 실패해도 로컬 토큰은 반드시 지운다.
+    if (config.tokens?.refreshToken || config.tokens?.accessToken) {
+      await revokeToken(config.tokens.refreshToken ?? config.tokens.accessToken, (u, i) => fetch(u, i))
+    }
+    storeGoogle({ ...DEFAULT_GOOGLE_CONFIG })
+    return toPublicGoogleConfig(DEFAULT_GOOGLE_CONFIG)
   })
 
   // Quick add (global shortcut)
