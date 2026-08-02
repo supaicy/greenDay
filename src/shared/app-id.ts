@@ -10,11 +10,15 @@
  * 그 콜백을 받을 앱이 없어 앱은 영원히 기다린다. 그래서 코드 쪽은 여기 한 곳에서만
  * 정의하고, scripts/mas-preflight.sh 가 이 값과 electron-builder.yml 을 대조한다.
  *
- * 앱 이름이 haru → Greenday 로 바뀌면서 번들 ID도 맞췄다.
- * (`com.haru.app` 은 Apple 전역에서 이미 선점돼 있어 애초에 쓸 수 없었다 — App ID는
- * 모든 개발자를 통틀어 고유하다.)
+ * 앱 이름은 Greenday지만 번들 ID는 com.supaicy.haru 다. 일부러 그렇게 뒀다 —
+ * 번들 ID는 사용자에게 보이지 않는 내부 식별자이고, 이미 등록해 둔 App ID와
+ * 프로비저닝 프로파일을 그대로 쓰기 위해서다. 이름과 다르다고 문제될 것은 없다
+ * (Slack의 번들 ID가 com.tinyspeck.slackmacgap 인 것과 같은 이유).
+ *
+ * 애초에 쓰려던 `com.haru.app` 은 Apple 전역에서 이미 선점돼 있어 쓸 수 없었다 —
+ * App ID는 모든 개발자를 통틀어 고유하다.
  */
-export const APP_BUNDLE_ID = 'com.supaicy.greenday'
+export const APP_BUNDLE_ID = 'com.supaicy.haru'
 
 /**
  * 구글 OAuth 콜백 주소. 루프백 서버(http://127.0.0.1:포트)가 아니라 커스텀 스킴을
