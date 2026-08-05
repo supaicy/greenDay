@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday — 동기화 준비할 것</title>
+<style>
+  :root{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;--dim:#57606a;
+    --faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace}
+  @media (prefers-color-scheme:dark){:root{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+    --text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+    --ok:#4ade80;--warn:#fbbf24;--stop:#f87171}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.75;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:840px;margin:0 auto;padding:52px 24px 96px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+  h1{font-size:27px;margin:0 0 8px} .sub{color:var(--faint);font-size:14px;margin:0}
+  h2{font-size:19.5px;margin:46px 0 12px;padding-top:24px;border-top:1px solid var(--line)}
+  h3{font-size:15.5px;margin:26px 0 8px}
+  p{margin:0 0 14px} a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:.14em .45em;
+    border-radius:4px;word-break:break-all}
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:13px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:13px;margin:10px 0;-webkit-user-select:all;user-select:all}
+  .scroll-x{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  .callout{background:var(--surface);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:16px 20px;margin:20px 0}
+  .callout.warn{border-left-color:var(--warn)} .callout.stop{border-left-color:var(--stop)}
+  ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:9px}
+  .lede{font-size:16.5px;color:var(--dim);margin:22px 0 0}
+  .none{border:2px solid var(--ok);border-radius:12px;padding:20px 24px;margin:20px 0;background:var(--surface)}
+  .none h3{margin-top:0;color:var(--ok)}
+  .fld{margin:12px 0}
+  .lbl{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:5px}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>동기화 준비할 것</h1>
+  <p class="sub">Greenday · 2026-08-05 · 코드는 양쪽 다 완성돼 있습니다</p>
+</header>
+
+<p class="lede">
+  동기화가 두 종류인데 <strong>준비할 게 있는 건 한쪽뿐</strong>입니다.
+</p>
+
+<h2>iCloud — 준비할 것 없음</h2>
+
+<div class="none">
+  <h3>✓ 지금 그대로 동작합니다</h3>
+  <p style="margin-bottom:0">
+    사용자가 자기 Apple ID와 앱 암호를 직접 입력하는 방식이라,
+    <strong>사장님이 등록하거나 신청할 것이 하나도 없습니다.</strong>
+    개발자 계정도, API 키도, 승인 절차도 필요 없습니다.
+  </p>
+</div>
+
+<p>
+  앱이 <code>caldav.icloud.com</code> 에 직접 붙습니다. 중간에 아무것도 없습니다.
+  사용자는 <a href="https://account.apple.com/account/manage">account.apple.com</a> 에서
+  앱 암호를 하나 만들어 넣기만 하면 됩니다.
+</p>
+
+<h2>Google — 여기만 준비가 필요합니다</h2>
+
+<p>
+  구글은 <strong>앱 단위로 등록</strong>을 요구합니다. 사용자별이 아니라 사장님이 한 번 등록하면
+  모든 사용자가 그걸 씁니다.
+</p>
+
+<h3>1. 프로젝트 만들기</h3>
+<p><a href="https://console.cloud.google.com/projectcreate">console.cloud.google.com/projectcreate</a> — 이름은 <code>Greenday</code></p>
+
+<h3>2. Calendar API 켜기</h3>
+<p><a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com">Google Calendar API 사용 설정</a></p>
+
+<h3>3. OAuth 동의 화면</h3>
+<p>APIs &amp; Services → OAuth consent screen</p>
+<div class="scroll-x">
+<table>
+  <thead><tr><th>항목</th><th>값</th></tr></thead>
+  <tbody>
+    <tr><td>User Type</td><td>External</td></tr>
+    <tr><td>앱 이름</td><td><code>Greenday</code></td></tr>
+    <tr><td>지원 이메일</td><td><code>developer@begreen.dev</code></td></tr>
+    <tr><td>개인정보처리방침 URL</td><td><code>https://supaicy.github.io/haru/privacy.html</code></td></tr>
+    <tr><td>승인된 도메인</td><td><code>supaicy.github.io</code></td></tr>
+    <tr><td>서비스 약관</td><td>비워도 됨</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>4. 범위(Scope) 추가 — 딱 이것 하나만</h3>
+<pre>https://www.googleapis.com/auth/calendar.app.created</pre>
+
+<div class="callout warn">
+  <strong>추가하실 때 화면에 뜨는 등급을 알려주세요.</strong>
+  구글 콘솔은 범위마다 <em>민감(Sensitive)</em> / <em>제한(Restricted)</em> / 일반 여부를 표시합니다.
+  이 범위는 <strong>앱이 만든 일정만</strong> 다루는 가장 좁은 것이라 일부러 골랐지만,
+  구글의 분류가 바뀌었을 수 있어 화면에 실제로 뭐라고 나오는지 확인이 필요합니다.
+  <br><br>
+  <strong>민감으로 뜨면</strong> 검증 절차(신청서 + 데모 영상)가 붙습니다. 며칠~몇 주 걸립니다.
+  <strong>일반으로 뜨면</strong> 그냥 게시하면 됩니다.
+  <br><br>
+  어느 쪽이든 <code>calendar.events</code>(사용자의 <em>기존</em> 일정까지 읽는 범위)보다는
+  훨씬 가볍습니다. 그래서 이 범위로 구현해 뒀습니다.
+</div>
+
+<h3>5. OAuth 클라이언트 ID 만들기</h3>
+<p>APIs &amp; Services → 사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID</p>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>항목</th><th>값</th></tr></thead>
+  <tbody>
+    <tr><td>애플리케이션 유형</td><td><strong>iOS</strong></td></tr>
+    <tr><td>번들 ID</td><td><code>com.supaicy.haru</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout stop">
+  <strong>두 가지를 헷갈리기 쉽습니다.</strong>
+  <br><br>
+  <strong>① "데스크톱 앱"이 아니라 "iOS"입니다.</strong>
+  맥 앱인데 왜 iOS냐 싶으시겠지만, 구글에서 <em>커스텀 URL 스킴</em>으로 콜백을 받는 클라이언트는
+  iOS 유형으로 만들어야 합니다. 데스크톱 앱 유형은 로컬 서버를 여는 방식이라,
+  그걸 쓰면 Mac App Store 심사에서 "왜 서버를 여느냐"는 질문을 받게 됩니다.
+  <br><br>
+  <strong>② 번들 ID는 <code>com.supaicy.haru</code> 입니다. Greenday가 아닙니다.</strong>
+  앱 이름과 번들 ID를 일부러 다르게 뒀습니다. 여기가 어긋나면
+  브라우저에서 로그인은 성공하는데 <strong>앱으로 돌아오지 못합니다</strong> —
+  화면에 오류도 안 뜨고 그냥 계속 기다리기만 해서 원인 찾기가 가장 어려운 종류입니다.
+</div>
+
+<h3>6. 발급받은 클라이언트 ID를 저에게 알려주세요</h3>
+<pre>123456789-abcdefg.apps.googleusercontent.com</pre>
+<p>이런 형태입니다. 빌드에 넣어드리겠습니다.</p>
+
+<div class="callout">
+  <strong>이 값은 비밀이 아닙니다.</strong> 데스크톱 앱은 시크릿을 숨길 수 없어서
+  구글도 공개 클라이언트로 쓰도록 하고 있고, 대신 PKCE라는 방식으로 보호합니다.
+  앱에 담겨 배포돼도 안전하고, 이미 그렇게 구현해 뒀습니다.
+</div>
+
+<h2>지금 상태에서 Google을 빼고 출시할 수 있습니다</h2>
+
+<div class="callout">
+  클라이언트 ID가 없으면 앱은 설정 화면에
+  <em>"이 빌드에는 Google 연동이 설정되어 있지 않습니다"</em> 라고만 표시하고
+  <strong>나머지는 정상 동작합니다.</strong> 오류도 빈 화면도 나오지 않습니다.
+  <br><br>
+  그래서 <strong>iCloud 동기화만으로 먼저 출시</strong>하고,
+  구글 심사가 끝난 뒤 다음 버전에 넣는 것도 가능합니다.
+  구글 쪽 대기 때문에 앱스토어 출시가 늦어질 이유는 없습니다.
+</div>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>선택</th><th>지금 출시</th><th>Google 동기화</th></tr></thead>
+  <tbody>
+    <tr><td><strong>iCloud만 먼저</strong></td><td>바로 가능</td><td>다음 버전에 추가</td></tr>
+    <tr><td>둘 다 갖추고 출시</td><td>구글 심사 기다림</td><td>처음부터 포함</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>정리</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th></th><th>사장님이 할 일</th><th>걸리는 시간</th></tr></thead>
+  <tbody>
+    <tr><td><strong>iCloud</strong></td><td>없음</td><td>—</td></tr>
+    <tr><td><strong>Google</strong></td><td>프로젝트·동의화면·클라이언트 ID</td><td>20분 + 심사 대기</td></tr>
+  </tbody>
+</table>
+</div>
+
+<footer>Greenday · 2026-08-05 · 범위 등급이 화면에 뭐라고 뜨는지 알려주시면 그다음 안내드리겠습니다</footer>
+
+</div>
+</body>
+</html>
