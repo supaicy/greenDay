@@ -1,12 +1,25 @@
+import { useState } from 'react'
 import { Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { ConfirmDialog } from '../common/ConfirmDialog'
+
+// 확인이 필요한 파괴적 동작. null이면 확인 창이 없는 상태.
+type PendingAction = { kind: 'empty' } | { kind: 'delete'; id: string; title: string } | null
 
 export function TrashView() {
   const { t, i18n } = useTranslation()
   const dateLocale = i18n.language?.startsWith('en') ? 'en-US' : 'ko-KR'
   const { trashTasks, restoreTask, permanentDeleteTask, emptyTrash, theme } = useStore()
   const isDark = theme === 'dark'
+  const [pending, setPending] = useState<PendingAction>(null)
+
+  const runPending = () => {
+    if (!pending) return
+    if (pending.kind === 'empty') emptyTrash()
+    else permanentDeleteTask(pending.id)
+    setPending(null)
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -33,7 +46,7 @@ export function TrashView() {
         {trashTasks.length > 0 && (
           <button
             type="button"
-            onClick={emptyTrash}
+            onClick={() => setPending({ kind: 'empty' })}
             className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <AlertTriangle size={14} />
@@ -84,7 +97,7 @@ export function TrashView() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => permanentDeleteTask(task.id)}
+                    onClick={() => setPending({ kind: 'delete', id: task.id, title: task.title })}
                     className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <Trash2 size={13} />
@@ -96,6 +109,20 @@ export function TrashView() {
           </div>
         )}
       </div>
+
+      {pending && (
+        <ConfirmDialog
+          title={pending.kind === 'empty' ? t('trash.confirmEmptyTitle') : t('trash.confirmDeleteTitle')}
+          body={
+            pending.kind === 'empty'
+              ? t('trash.confirmEmptyBody', { count: trashTasks.length })
+              : t('trash.confirmDeleteBody', { title: pending.title })
+          }
+          confirmLabel={pending.kind === 'empty' ? t('trash.empty') : t('trash.deleteForever')}
+          onConfirm={runPending}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </div>
   )
 }

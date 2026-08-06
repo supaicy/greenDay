@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron'
-import { readFileSync, writeFileSync, writeFile, existsSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, writeFile, existsSync, mkdirSync, copyFileSync } from 'node:fs'
 import path from 'node:path'
 
 interface DbData {
@@ -218,13 +218,6 @@ export function deleteList(id: string): void {
   })
   save()
 }
-export function reorderLists(orderedIds: string[]): void {
-  orderedIds.forEach((id, i) => {
-    const l = data.lists.find((l) => l.id === id)
-    if (l) l.sort_order = i
-  })
-  save()
-}
 
 // === Tasks ===
 export function getTasks(): unknown[] {
@@ -317,9 +310,13 @@ export function emptyTrash(): void {
   save()
 }
 export function reorderTasks(orderedIds: string[]): void {
-  orderedIds.forEach((id, i) => {
-    const t = data.tasks.find((t) => t.id === id)
-    if (t) t.sort_order = i
+  // 렌더러의 applyReorder와 같은 규칙: 0..n-1로 새로 매기지 않고, 재배치 대상이
+  // 이미 쥐고 있던 sort_order 슬롯만 새 순서대로 다시 나눠 준다. sort_order는
+  // 리스트별 카운터라서 전역 재번호는 다른 리스트의 순서를 덮어쓴다.
+  const moving = orderedIds.map((id) => data.tasks.find((t) => t.id === id)).filter((t) => t !== undefined)
+  const slots = moving.map((t) => (t.sort_order as number) || 0).sort((a, b) => a - b)
+  moving.forEach((t, i) => {
+    t.sort_order = slots[i]
   })
   save()
 }
@@ -398,18 +395,26 @@ export function capEvents<T>(events: T[], max = 200): T[] {
 export function getScore(): unknown {
   return data.score
 }
+export function addScoreEvents(events: Record<string, unknown>[]): void {
+  for (const event of events) {
+    data.score.events.push(event)
+    data.score.total = Math.max(0, data.score.total + (Number(event.points) || 0))
+  }
+  data.score.events = capEvents(data.score.events)
+  save()
+}
 export function addScoreEvent(event: Record<string, unknown>): void {
   data.score.events.push(event)
-  data.score.total += (event.points as number) || 0
+  // 회수(음수) 이벤트가 들어올 수 있다. 총점은 0 아래로 내려가지 않게 막는다 —
+  // 이 기능이 생기기 전 일괄 완료는 점수를 주지 않았으므로, 그때 완료한 항목을
+  // 지금 취소하면 준 적 없는 점수를 회수해 음수로 흐를 수 있다.
+  data.score.total = Math.max(0, data.score.total + (Number(event.points) || 0))
   // 상한 초과 시 가장 오래된 이벤트 제거 (write amplification 방지)
   data.score.events = capEvents(data.score.events)
   save()
 }
 
 // === Attachments ===
-export function getAttachmentsDir(): string {
-  return attachmentsDir
-}
 export function copyAttachment(sourcePath: string, destName: string): string {
   const safeName = path.basename(destName)
   const destPath = path.resolve(attachmentsDir, safeName)
@@ -418,9 +423,6 @@ export function copyAttachment(sourcePath: string, destName: string): string {
   }
   copyFileSync(sourcePath, destPath)
   return destPath
-}
-export function listAttachmentFiles(): string[] {
-  return existsSync(attachmentsDir) ? readdirSync(attachmentsDir) : []
 }
 
 // === AI Config ===

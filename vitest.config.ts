@@ -5,6 +5,9 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     include: ['src/**/*.test.{ts,tsx}'],
-    exclude: ['**/node_modules/**', 'out/**', 'dist/**']
+    exclude: ['**/node_modules/**', 'out/**', 'dist/**'],
+    // 시간대를 고정한다. 날짜 테스트가 실행 머신의 TZ를 따르면, UTC 머신에서는
+    // UTC와 로컬이 같아져 "UTC라 하루 밀린다"를 잡으려는 회귀 테스트가 통과해 버린다.
+    env: { TZ: 'Asia/Seoul' }
   }
 })

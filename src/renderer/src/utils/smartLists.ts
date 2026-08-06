@@ -31,14 +31,30 @@ export function isVirtualSmartList(id: string): boolean {
   return id.startsWith(TAG_PREFIX) || (VIRTUAL_SMART_LISTS as string[]).includes(id)
 }
 
+/**
+ * 하위작업은 부모 안에서만 보여 준다 — 목록·보드·뱃지 어디서도 독립 항목으로 세지 않는다.
+ *
+ * 이 규칙이 화면마다 인라인으로 복사돼 있어서 칸반·타임라인·아이젠하워에는 하위작업이
+ * 독립 카드로 새어 나왔고(2026-08-05 검증), 사이드바 뱃지는 목록과 개수가 갈렸다.
+ * 새 화면이 늘어도 어긋나지 않도록 판별식을 여기서만 정의한다.
+ */
+export function isTopLevel(t: Task): boolean {
+  return !t.parentId
+}
+
+/** 화면에 항목으로 설 수 있는 태스크: 살아 있고, 미완료이고, 최상위. */
+export function isActiveTopLevel(t: Task): boolean {
+  return !t.completed && !t.deletedAt && isTopLevel(t)
+}
+
 // 마감일 기반 스마트 리스트의 '미완료 태스크' 판별식 단일 출처.
 // 뷰 필터(TaskList)와 사이드바 뱃지 카운트가 반드시 같은 식을 쓰도록 공유한다.
 type DateSmartList = 'today' | 'tomorrow' | 'next7days' | 'summary'
 export const SMART_LIST_PREDICATES: Record<DateSmartList, (t: Task) => boolean> = {
-  today: (t) => !t.completed && (isDueToday(t.dueDate) || isOverdue(t.dueDate)),
-  tomorrow: (t) => !t.completed && isDueTomorrow(t.dueDate),
-  next7days: (t) => !t.completed && isDueInNext7Days(t.dueDate),
-  summary: (t) => !t.completed && (isOverdue(t.dueDate) || isDueInNext7Days(t.dueDate))
+  today: (t) => isActiveTopLevel(t) && (isDueToday(t.dueDate) || isOverdue(t.dueDate)),
+  tomorrow: (t) => isActiveTopLevel(t) && isDueTomorrow(t.dueDate),
+  next7days: (t) => isActiveTopLevel(t) && isDueInNext7Days(t.dueDate),
+  summary: (t) => isActiveTopLevel(t) && (isOverdue(t.dueDate) || isDueInNext7Days(t.dueDate))
 }
 
 // listId 로 마감일 기반 판별식을 조회 (없으면 undefined). 뷰/뱃지/일괄선택이

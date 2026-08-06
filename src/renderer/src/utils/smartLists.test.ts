@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   isVirtualSmartList,
+  isActiveTopLevel,
+  isTopLevel,
   smartListPredicate,
   SMART_LIST_PREDICATES,
   tagListId,
@@ -9,9 +11,10 @@ import {
 import { todayString, tomorrowString } from './date'
 import type { Task } from '../types'
 
-// 판별식은 completed/dueDate 만 참조하므로 최소 형태로 캐스팅해 검증한다.
-const task = (dueDate: string | null, completed = false): Task =>
-  ({ completed, dueDate }) as unknown as Task
+// 판별식이 참조하는 필드만 담아 캐스팅한다. parentId/deletedAt을 빼 두면
+// 하위작업·휴지통 제외가 검증되지 않은 채 통과하므로 기본값을 명시한다.
+const task = (dueDate: string | null, completed = false, over: Partial<Task> = {}): Task =>
+  ({ completed, dueDate, parentId: null, deletedAt: null, ...over }) as unknown as Task
 
 describe('isVirtualSmartList', () => {
   it('treats inbox as a real container, date/utility lists as virtual', () => {
@@ -71,5 +74,37 @@ describe('SMART_LIST_PREDICATES', () => {
   it('excludes tasks without a due date', () => {
     expect(SMART_LIST_PREDICATES.today(task(null))).toBe(false)
     expect(SMART_LIST_PREDICATES.summary(task(null))).toBe(false)
+  })
+})
+
+describe('isTopLevel / isActiveTopLevel', () => {
+  it('isTopLevel rejects only subtasks', () => {
+    expect(isTopLevel(task(null))).toBe(true)
+    expect(isTopLevel(task(null, true))).toBe(true) // 완료돼도 최상위는 최상위 (칸반 '완료' 칼럼)
+    expect(isTopLevel(task(null, false, { parentId: 'p' }))).toBe(false)
+  })
+
+  it('isActiveTopLevel rejects completed, trashed, and subtasks', () => {
+    expect(isActiveTopLevel(task(null))).toBe(true)
+    expect(isActiveTopLevel(task(null, true))).toBe(false)
+    expect(isActiveTopLevel(task(null, false, { deletedAt: '2026-08-05T00:00:00.000Z' }))).toBe(false)
+    expect(isActiveTopLevel(task(null, false, { parentId: 'p' }))).toBe(false)
+  })
+})
+
+describe('date smart lists exclude subtasks and trashed tasks', () => {
+  // 이 조건이 빠져 있어서 사이드바 뱃지가 목록보다 많이 세었다(2026-08-05 검증).
+  it('today', () => {
+    expect(SMART_LIST_PREDICATES.today(task(todayString()))).toBe(true)
+    expect(SMART_LIST_PREDICATES.today(task(todayString(), false, { parentId: 'p' }))).toBe(false)
+    expect(SMART_LIST_PREDICATES.today(task(todayString(), false, { deletedAt: '2026-08-05T00:00:00.000Z' }))).toBe(
+      false
+    )
+  })
+
+  it('tomorrow / next7days / summary', () => {
+    expect(SMART_LIST_PREDICATES.tomorrow(task(tomorrowString(), false, { parentId: 'p' }))).toBe(false)
+    expect(SMART_LIST_PREDICATES.next7days(task(tomorrowString(), false, { parentId: 'p' }))).toBe(false)
+    expect(SMART_LIST_PREDICATES.summary(task(todayString(), false, { parentId: 'p' }))).toBe(false)
   })
 })

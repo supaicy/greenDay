@@ -5,7 +5,8 @@ import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Clock, AlertTriangle } from 'lucide-react'
-import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
+import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { isActiveTopLevel } from '../../utils/smartLists'
 
 interface TimelineGroup {
   id: string
@@ -34,7 +35,7 @@ export function TimelineView(): React.ReactElement {
     endOfWeek.setDate(endOfWeek.getDate() + (6 - dayOfWeek))
     const endOfWeekStr = toDateString(endOfWeek)
 
-    const activeTasks = tasks.filter((t) => !t.completed && !t.deletedAt)
+    const activeTasks = tasks.filter(isActiveTopLevel)
 
     const overdue: Task[] = []
     const today: Task[] = []
@@ -60,13 +61,7 @@ export function TimelineView(): React.ReactElement {
     }
 
     // 각 그룹 우선순위 순 정렬
-    const sortFn = (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
-    overdue.sort(sortFn)
-    today.sort(sortFn)
-    tomorrowTasks.sort(sortFn)
-    thisWeek.sort(sortFn)
-    later.sort(sortFn)
-    noDueDate.sort(sortFn)
+    for (const group of [overdue, today, tomorrowTasks, thisWeek, later, noDueDate]) group.sort(byPriority)
 
     const result: TimelineGroup[] = []
 
@@ -135,7 +130,9 @@ export function TimelineView(): React.ReactElement {
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('timeline.title')}</h2>
-        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('timeline.taskCount', { count: totalTasks })}</p>
+        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          {t('timeline.taskCount', { count: totalTasks })}
+        </p>
       </div>
 
       {/* 타임라인 본문 */}
@@ -200,47 +197,50 @@ export function TimelineView(): React.ReactElement {
                               : 'hover:bg-gray-100 border border-transparent'
                         }`}
                       >
-                      {/* 체크박스 */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleTask(task.id)
-                        }}
-                        className="flex-shrink-0"
-                      >
-                        {task.completed ? (
-                          <CheckCircle2 size={16} className="text-green-500" />
-                        ) : (
-                          <Circle size={16} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
-                        )}
-                      </button>
-
-                      {/* 제목 */}
-                      <span className={`flex-1 text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                        {task.title}
-                      </span>
-
-                      {/* 우선순위 */}
-                      {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
-
-                      {/* 시간 */}
-                      {task.dueTime && (
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{task.dueTime}</span>
-                      )}
-
-                      {/* 날짜 */}
-                      {task.dueDate && (
-                        <span
-                          className={`text-xs ${
-                            group.id === 'overdue' ? 'text-red-500' : isDark ? 'text-gray-500' : 'text-gray-400'
-                          }`}
+                        {/* 체크박스 */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleTask(task.id)
+                          }}
+                          className="flex-shrink-0"
                         >
-                          {task.dueDate}
+                          {task.completed ? (
+                            <CheckCircle2 size={16} className="text-green-500" />
+                          ) : (
+                            <Circle size={16} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
+                          )}
+                        </button>
+
+                        {/* 제목 */}
+                        <span className={`flex-1 text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                          {task.title}
                         </span>
-                      )}
-                    </div>
-                  )})}
+
+                        {/* 우선순위 */}
+                        {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
+
+                        {/* 시간 */}
+                        {task.dueTime && (
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {task.dueTime}
+                          </span>
+                        )}
+
+                        {/* 날짜 */}
+                        {task.dueDate && (
+                          <span
+                            className={`text-xs ${
+                              group.id === 'overdue' ? 'text-red-500' : isDark ? 'text-gray-500' : 'text-gray-400'
+                            }`}
+                          >
+                            {task.dueDate}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}

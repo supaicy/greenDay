@@ -4,6 +4,7 @@ import { clampDetailWidth } from './detailWidth'
 import { isVirtualSmartList, tagFromListId } from '../utils/smartLists'
 import { getFilteredTaskIds } from '../utils/filteredTaskIds'
 import { todayString, tomorrowString } from '../utils/date'
+import { pointsForTask, POINTS_PER_HABIT, POINTS_PER_POMODORO } from '../utils/score'
 import type {
   Task,
   TaskList,
@@ -25,11 +26,24 @@ import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurre
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
-import { type ActionOp, type TaskActionInterpretation, looksLikeTaskAction, resolveActionTarget } from '../utils/aiActions'
+import {
+  type ActionOp,
+  type TaskActionInterpretation,
+  looksLikeTaskAction,
+  resolveActionTarget
+} from '../utils/aiActions'
 import { isCapableModel } from '../utils/aiModels'
 import i18n, { detectLanguage, persistLanguage, type Language } from '../i18n'
 
 export type Theme = 'dark' | 'light'
+
+// i18n/index.ts와 같은 가드. 스토어 생성 시점에 localStorage를 바로 읽으면 DOM 없는
+// 환경(vitest node)에서 import만으로 죽어, 스토어 로직 전체가 테스트 불가가 된다.
+const hasDom = typeof window !== 'undefined'
+const readLocal = (key: string): string | null => (hasDom ? localStorage.getItem(key) : null)
+const writeLocal = (key: string, value: string): void => {
+  if (hasDom) localStorage.setItem(key, value)
+}
 
 interface Store {
   // 데이터
@@ -40,7 +54,7 @@ interface Store {
   habits: Habit[]
   habitLogs: HabitLog[]
   pomodoroSessions: PomodoroSession[]
-  score: { total: number; events: { type: string; points: number; date: string }[] }
+  score: { total: number; events: { type: string; points: number; date: string; taskId?: string }[] }
 
   // UI
   selectedListId: string | SmartList
@@ -59,7 +73,6 @@ interface Store {
   batchMode: boolean
   undoStack: UndoAction[]
   showQuickAdd: boolean
-  showExport: boolean
   dragTaskId: string | null
   updateAvailable: { version: string; downloadUrl: string } | null
   updateChecked: boolean
@@ -80,7 +93,6 @@ interface Store {
   updateList: (id: string, updates: Partial<TaskList>) => Promise<void>
   removeList: (id: string) => Promise<void>
   setEditingList: (id: string | null) => void
-  reorderLists: (ids: string[]) => Promise<void>
 
   // 태스크
   addTask: (
@@ -130,23 +142,26 @@ interface Store {
   setDetailPanelWidthPx: (px: number, windowWidth: number) => void
   toggleSettings: () => void
   setShowQuickAdd: (show: boolean) => void
-  setShowExport: (show: boolean) => void
 
   // 되돌리기
   pushUndo: (action: UndoAction) => void
   popUndo: () => Promise<void>
-  clearUndo: () => void
 
   // 습관
   addHabit: (name: string, color: string, frequency: 'daily' | 'weekly', targetDays: number[]) => Promise<void>
   removeHabit: (id: string) => Promise<void>
   toggleHabitLog: (habitId: string, date: string) => Promise<void>
 
-  // 포모도로
+  // 포모도로 타이머 상태는 store/usePomodoroStore.ts — 1초 틱이 메인 스토어를
+  // 매초 갈아치우면 셀렉터 없이 구독하는 화면이 전부 리렌더된다.
   savePomodoroSession: (session: Omit<PomodoroSession, 'id'>) => Promise<void>
 
   // 점수
-  addScore: (type: string, points: number) => Promise<void>
+  addScore: (type: string, points: number, taskId?: string) => Promise<void>
+  /** 여러 건을 스토어 쓰기 1회 + IPC 1회로 반영한다(일괄 완료용). */
+  addScores: (entries: { type: string; points: number; taskId?: string }[]) => Promise<void>
+  /** 해당 태스크에 지급된 점수의 순합. 회수 금액 계산용(내부). */
+  _netScoreFor: (taskId: string) => number
 
   // 첨부파일
   pickAttachment: () => Promise<{ name: string; path: string }[]>
@@ -265,6 +280,24 @@ function mapPomodoroSession(row: Record<string, unknown>): PomodoroSession {
     completedAt: ((row.completed_at ?? row.completedAt) as string) || null
   }
 }
+/**
+ * 드래그로 바뀐 순서를 적용한다.
+ *
+ * 0..n-1로 새로 번호를 매기면 안 된다 — sortOrder는 리스트별 카운터인데(createTask가
+ * 같은 listId 안에서 maxOrder+1을 준다) '오늘'·태그·'전체' 뷰는 여러 리스트에 걸쳐 있어,
+ * 그 화면에서 두 개를 바꾸는 것만으로 다른 리스트의 자리까지 0,1로 덮어쓰게 된다.
+ * 대신 재배치 대상이 이미 쥐고 있던 슬롯을 모아 새 순서대로 다시 나눠 준다.
+ */
+export function applyReorder(tasks: Task[], ids: string[]): Task[] {
+  const moving = ids.map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t))
+  if (moving.length === 0) return tasks
+  const slots = moving.map((t) => t.sortOrder).sort((a, b) => a - b)
+  const nextOrder = new Map(moving.map((t, i) => [t.id, slots[i]]))
+  return tasks
+    .map((t) => (nextOrder.has(t.id) ? { ...t, sortOrder: nextOrder.get(t.id) as number } : t))
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
 function safeParseArray<T = unknown>(s: string | undefined | null): T[] {
   try {
     return JSON.parse(s || '[]') as T[]
@@ -288,10 +321,10 @@ export const useStore = create<Store>((set, get) => ({
   searchQuery: '',
   showAddTask: false,
   editingListId: null,
-  theme: (localStorage.getItem('ticktick-theme') as Theme) || 'dark',
+  theme: (readLocal('ticktick-theme') as Theme) || 'dark',
   language: detectLanguage(),
   detailPanelWidthPx: ((): number | null => {
-    const n = Number(localStorage.getItem('ticktick-detail-width'))
+    const n = Number(readLocal('ticktick-detail-width'))
     return Number.isFinite(n) && n > 0 ? n : null
   })(),
   showSettings: false,
@@ -301,7 +334,6 @@ export const useStore = create<Store>((set, get) => ({
   batchMode: false,
   undoStack: [],
   showQuickAdd: false,
-  showExport: false,
   dragTaskId: null,
   updateAvailable: null as { version: string; downloadUrl: string } | null,
   updateChecked: false,
@@ -394,24 +426,12 @@ export const useStore = create<Store>((set, get) => ({
     window.api.deleteList(id)
   },
   setEditingList: (id) => set({ editingListId: id }),
-  reorderLists: async (ids) => {
-    set((s) => ({
-      lists: s.lists
-        .map((l) => {
-          const idx = ids.indexOf(l.id)
-          return idx >= 0 ? { ...l, sortOrder: idx } : l
-        })
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-    }))
-    window.api.reorderLists(ids)
-  },
 
   // === 태스크 ===
   addTask: async (title, opts = {}) => {
     const currentList = get().selectedListId
     const targetList =
-      opts.listId ||
-      (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
+      opts.listId || (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
     // 오늘/내일 뷰에서 날짜 없이 추가하면, 방금 추가한 그 리스트에 보이도록 마감일을 채운다.
     let finalDueDate = opts.dueDate || null
     if (!finalDueDate && currentList === 'today') finalDueDate = todayString()
@@ -496,13 +516,21 @@ export const useStore = create<Store>((set, get) => ({
     }))
     window.api.updateTask({ id, completed: newCompleted })
 
+    // 완료를 취소하면 줬던 점수를 되돌린다. 예전에는 지급만 해서 같은 할일을
+    // 완료/취소 반복하는 것만으로 점수를 무한히 올릴 수 있었다(2026-08-05 검증).
+    // 회수는 현재 우선순위가 아니라 이 태스크에 실제로 지급된 순합으로 한다 —
+    // 완료 뒤 우선순위를 바꾸면 지급액과 회수액이 어긋나 총점이 계속 흘렀다.
     if (newCompleted) {
-      const points = task.priority === 'high' ? 3 : task.priority === 'medium' ? 2 : 1
-      get().addScore('taskComplete', points)
+      get().addScore('taskComplete', pointsForTask(task.priority), id)
+    } else {
+      const owed = get()._netScoreFor(id)
+      if (owed > 0) get().addScore('taskComplete', -owed, id)
+    }
 
+    if (newCompleted) {
       // 반복 task: 완료 시 다음 인스턴스 생성
       if (task.isRecurring && task.recurringPattern) {
-        const base = task.dueDate ?? new Date().toISOString().split('T')[0]
+        const base = task.dueDate ?? todayString()
         const next = nextRecurringDate(task.recurringPattern, base)
         if (next) {
           // 중복 인스턴스 방지: 같은 패턴·제목·기한의 미완료 task가 이미 있으면 생성 건너뜀
@@ -529,7 +557,7 @@ export const useStore = create<Store>((set, get) => ({
               isRecurring: true,
               recurringPattern: task.recurringPattern,
               tags: task.tags,
-              reminderAt: nextReminderAt,
+              reminderAt: nextReminderAt
             })
           }
         }
@@ -540,11 +568,11 @@ export const useStore = create<Store>((set, get) => ({
     const task = get().tasks.find((t) => t.id === id)
     if (task) {
       get().pushUndo({
-      type: 'deleteTask',
-      description: i18n.t('undo.taskDeleted', { title: task.title }),
-      data: task,
-      timestamp: Date.now()
-    })
+        type: 'deleteTask',
+        description: i18n.t('undo.taskDeleted', { title: task.title }),
+        data: task,
+        timestamp: Date.now()
+      })
     }
     const now = new Date().toISOString()
     set((s) => {
@@ -587,12 +615,9 @@ export const useStore = create<Store>((set, get) => ({
   selectTask: (id) => set((s) => ({ selectedTaskId: s.selectedTaskId === id ? null : id })),
   setShowAddTask: (show) => set({ showAddTask: show }),
   reorderTasks: async (ids) => {
-    set((s) => ({
-      tasks: s.tasks.map((t) => {
-        const idx = ids.indexOf(t.id)
-        return idx >= 0 ? { ...t, sortOrder: idx } : t
-      })
-    }))
+    // sortOrder 값만 갱신하면 화면은 그대로였다 — 'default' 정렬은 배열 순서를
+    // 그대로 쓰기 때문이다(2026-08-05 검증: 재시작해야 반영됨). 값과 함께 배열도 정렬한다.
+    set((s) => ({ tasks: applyReorder(s.tasks, ids) }))
     window.api.reorderTasks(ids)
   },
   setDragTaskId: (id) => set({ dragTaskId: id }),
@@ -606,20 +631,31 @@ export const useStore = create<Store>((set, get) => ({
         : [...s.batchSelectedIds, id]
     })),
   selectAllBatch: () => {
-    const { tasks, selectedListId } = get()
-    const filtered = getFilteredTaskIds(tasks, selectedListId)
+    const { tasks, selectedListId, searchQuery } = get()
+    const filtered = getFilteredTaskIds(tasks, selectedListId, searchQuery)
     set({ batchSelectedIds: filtered })
   },
   clearBatchSelection: () => set({ batchSelectedIds: [] }),
   batchComplete: async () => {
     const ids = get().batchSelectedIds
+    const idSet = new Set(ids)
     const now = new Date().toISOString()
+    // 미완료였던 것만 점수를 준다. 일괄 완료가 점수를 건너뛰면, 나중에 하나씩
+    // 완료 취소할 때 준 적 없는 점수가 회수돼 총점이 음수로 흘렀다.
+    // 합계를 한 번에 반영한다 — 건당 addScore는 선택 수만큼 스토어 쓰기와 IPC를 만든다.
+    const newlyCompleted = get().tasks.filter((t) => idSet.has(t.id) && !t.completed)
+    const newlyCompletedIds = newlyCompleted.map((t) => t.id)
     set((s) => ({
-      tasks: s.tasks.map((t) => (ids.includes(t.id) ? { ...t, completed: true, completedAt: now } : t)),
+      // 이미 완료였던 항목의 completedAt은 건드리지 않는다 — 덮어쓰면 완료 이력이
+      // 오늘로 밀려 통계의 '오늘 완료'와 14일 추이가 조용히 바뀐다.
+      tasks: s.tasks.map((t) => (idSet.has(t.id) && !t.completed ? { ...t, completed: true, completedAt: now } : t)),
       batchSelectedIds: [],
       batchMode: false
     }))
-    window.api.batchUpdateTasks(ids, { completed: true })
+    window.api.batchUpdateTasks(newlyCompletedIds, { completed: true })
+    await get().addScores(
+      newlyCompleted.map((t) => ({ type: 'taskComplete', points: pointsForTask(t.priority), taskId: t.id }))
+    )
   },
   batchDelete: async () => {
     const ids = get().batchSelectedIds
@@ -669,7 +705,7 @@ export const useStore = create<Store>((set, get) => ({
   setViewType: (type) => set({ viewType: type, selectedTaskId: null }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setTheme: (theme) => {
-    localStorage.setItem('ticktick-theme', theme)
+    writeLocal('ticktick-theme', theme)
     set({ theme })
   },
   setLanguage: (lang) => {
@@ -679,12 +715,11 @@ export const useStore = create<Store>((set, get) => ({
   },
   setDetailPanelWidthPx: (px, windowWidth) => {
     const clamped = clampDetailWidth(px, windowWidth, get().showAiChat)
-    localStorage.setItem('ticktick-detail-width', String(clamped))
+    writeLocal('ticktick-detail-width', String(clamped))
     set({ detailPanelWidthPx: clamped })
   },
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   setShowQuickAdd: (show) => set({ showQuickAdd: show }),
-  setShowExport: (show) => set({ showExport: show }),
 
   // === 되돌리기 ===
   pushUndo: (action) => set((s) => ({ undoStack: [...s.undoStack.slice(-19), action] })),
@@ -712,7 +747,6 @@ export const useStore = create<Store>((set, get) => ({
       for (const id of ids) window.api.restoreTask(id)
     }
   },
-  clearUndo: () => set({ undoStack: [] }),
 
   // === 습관 ===
   addHabit: async (name, color, frequency, targetDays) => {
@@ -734,10 +768,12 @@ export const useStore = create<Store>((set, get) => ({
     const id = uuid()
     if (existing) {
       set((s) => ({ habitLogs: s.habitLogs.filter((l) => !(l.habitId === habitId && l.date === date)) }))
+      // 체크 해제도 점수를 되돌린다 — 할일 완료 취소와 같은 규칙.
+      get().addScore('habitComplete', -POINTS_PER_HABIT)
     } else {
       const newLog: HabitLog = { id, habitId, date, completed: true }
       set((s) => ({ habitLogs: [...s.habitLogs, newLog] }))
-      get().addScore('habitComplete', 1)
+      get().addScore('habitComplete', POINTS_PER_HABIT)
     }
     window.api.toggleHabitLog(id, habitId, date)
   },
@@ -750,22 +786,44 @@ export const useStore = create<Store>((set, get) => ({
     window.api.savePomodoroSession({ ...session, id })
 
     if (session.type === 'work' && session.completedAt) {
-      get().addScore('pomodoroComplete', 2)
+      get().addScore('pomodoroComplete', POINTS_PER_POMODORO)
     }
   },
 
   // === 점수 ===
-  addScore: async (type, points) => {
-    const date = new Date().toISOString().split('T')[0]
+  addScore: async (type, points, taskId) => {
+    // 통계가 로컬 날짜로 집계하므로 이벤트 날짜도 로컬이어야 한다.
+    const date = todayString()
+    // main의 addScoreEvent와 같은 0 하한을 쓴다. 다르면 낙관적 표시와 저장값이 갈린다.
+    // 하한에 걸려 잘린 만큼은 이벤트에도 그대로 적어야 total과 이벤트 합계가 갈리지 않는다.
+    const applied = Math.max(points, -get().score.total)
     set((s) => ({
       score: {
-        total: s.score.total + points,
+        total: s.score.total + applied,
         // 인메모리 이벤트 배열 최대 200개로 제한 (total은 계속 누적)
-        events: [...s.score.events, { type, points, date }].slice(-200)
+        events: [...s.score.events, { type, points: applied, date, taskId }].slice(-200)
       }
     }))
-    window.api.addScoreEvent({ type, points, date })
+    window.api.addScoreEvent({ type, points: applied, date, taskId })
   },
+
+  addScores: async (entries) => {
+    if (entries.length === 0) return
+    const date = todayString()
+    // 하한을 누적으로 적용해, 각 이벤트에 실제 반영된 값만 남긴다.
+    let total = get().score.total
+    const applied = entries.map((e) => {
+      const p = Math.max(e.points, -total)
+      total += p
+      return { type: e.type, points: p, date, taskId: e.taskId }
+    })
+    set((s) => ({ score: { total, events: [...s.score.events, ...applied].slice(-200) } }))
+    window.api.addScoreEvents(applied)
+  },
+
+  // 이 태스크에 지금까지 순수하게 지급된 점수. 완료를 취소할 때 '현재 우선순위'로
+  // 다시 계산하면, 완료 후 우선순위를 바꾼 경우 준 것보다 적게/많이 회수돼 총점이 흘렀다.
+  _netScoreFor: (taskId) => get().score.events.reduce((sum, e) => (e.taskId === taskId ? sum + e.points : sum), 0),
 
   // === 첨부파일 ===
   pickAttachment: async () => {
@@ -817,7 +875,13 @@ export const useStore = create<Store>((set, get) => ({
     }
     const offProgress = window.api.onAiPullProgress?.((p) => {
       set({
-        aiPull: { model, status: p.status || i18n.t('ai.pullDownloading'), percent: p.percent, error: null, active: true }
+        aiPull: {
+          model,
+          status: p.status || i18n.t('ai.pullDownloading'),
+          percent: p.percent,
+          error: null,
+          active: true
+        }
       })
     })
     const offDone = window.api.onAiPullDone?.(() => {
@@ -1032,7 +1096,10 @@ export const useStore = create<Store>((set, get) => ({
     if (!get().aiPendingAction) return
     set((s) => ({
       aiPendingAction: null,
-      aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content: i18n.t('ai.actionCancelled'), timestamp: new Date().toISOString() }]
+      aiMessages: [
+        ...s.aiMessages,
+        { id: uuid(), role: 'assistant', content: i18n.t('ai.actionCancelled'), timestamp: new Date().toISOString() }
+      ]
     }))
   },
   aiCreateTaskFromNL: async (input) => {

@@ -5,7 +5,8 @@ import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, GripVertical, Calendar } from 'lucide-react'
-import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
+import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { isTopLevel } from '../../utils/smartLists'
 
 interface ColumnDef {
   id: 'todo' | 'inProgress' | 'done'
@@ -31,13 +32,14 @@ export function KanbanView(): React.ReactElement {
 
   // 칸반 칼럼별 태스크 분류
   const columnTasks = useMemo(() => {
-    const activeTasks = tasks.filter((t) => !t.deletedAt)
+    // 완료된 것도 '완료' 칼럼에 서야 하므로 isActiveTopLevel이 아니라 isTopLevel을 쓴다.
+    const boardTasks = tasks.filter((t) => !t.deletedAt && isTopLevel(t))
 
     const todo: Task[] = []
     const inProgress: Task[] = []
     const done: Task[] = []
 
-    for (const task of activeTasks) {
+    for (const task of boardTasks) {
       if (task.completed) {
         done.push(task)
       } else if (task.dueDate && task.dueDate <= todayStr) {
@@ -48,11 +50,8 @@ export function KanbanView(): React.ReactElement {
       }
     }
 
-    // 우선순위 순 정렬
-    const sortByPriority = (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
-
-    todo.sort(sortByPriority)
-    inProgress.sort(sortByPriority)
+    todo.sort(byPriority)
+    inProgress.sort(byPriority)
     done.sort((a, b) => {
       // 완료된 것은 최근 완료 순
       if (a.completedAt && b.completedAt) return b.completedAt.localeCompare(a.completedAt)
@@ -209,91 +208,95 @@ export function KanbanView(): React.ReactElement {
                         key={task.id}
                         role="button"
                         tabIndex={0}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, task.id)}
-                      onDragEnd={handleDragEnd}
-                      onClick={() => selectTask(task.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          selectTask(task.id)
-                        }
-                      }}
-                      className={`group rounded-lg p-3 cursor-pointer border transition-all ${
-                        draggingTaskId === task.id ? 'opacity-40' : 'opacity-100'
-                      } ${
-                        selectedTaskId === task.id
-                          ? isDark
-                            ? 'border-blue-500 bg-gray-700'
-                            : 'border-blue-400 bg-blue-50'
-                          : isDark
-                            ? 'border-gray-700 bg-gray-800 hover:border-gray-600'
-                            : 'border-gray-200 bg-white hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        {/* 드래그 핸들 */}
-                        <GripVertical
-                          size={14}
-                          className={`mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${
-                            isDark ? 'text-gray-500' : 'text-gray-400'
-                          }`}
-                        />
-
-                        {/* 체크박스 */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleTask(task.id)
-                          }}
-                          className="flex-shrink-0 mt-0.5"
-                        >
-                          {task.completed ? (
-                            <CheckCircle2 size={16} className="text-green-500" />
-                          ) : (
-                            <Circle size={16} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
-                          )}
-                        </button>
-
-                        {/* 내용 */}
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={`text-sm leading-snug ${
-                              task.completed ? 'line-through text-gray-500' : isDark ? 'text-gray-200' : 'text-gray-800'
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, task.id)}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => selectTask(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            selectTask(task.id)
+                          }
+                        }}
+                        className={`group rounded-lg p-3 cursor-pointer border transition-all ${
+                          draggingTaskId === task.id ? 'opacity-40' : 'opacity-100'
+                        } ${
+                          selectedTaskId === task.id
+                            ? isDark
+                              ? 'border-blue-500 bg-gray-700'
+                              : 'border-blue-400 bg-blue-50'
+                            : isDark
+                              ? 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          {/* 드래그 핸들 */}
+                          <GripVertical
+                            size={14}
+                            className={`mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ${
+                              isDark ? 'text-gray-500' : 'text-gray-400'
                             }`}
+                          />
+
+                          {/* 체크박스 */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleTask(task.id)
+                            }}
+                            className="flex-shrink-0 mt-0.5"
                           >
-                            {task.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            {/* 우선순위 */}
-                            {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
-                            {/* 마감일 */}
-                            {task.dueDate && (
-                              <span
-                                className={`text-xs flex items-center gap-1 ${
-                                  task.dueDate < todayStr && !task.completed
-                                    ? 'text-red-500'
-                                    : task.dueDate === todayStr
-                                      ? 'text-amber-500'
-                                      : isDark
-                                        ? 'text-gray-400'
-                                        : 'text-gray-500'
-                                }`}
-                              >
-                                <Calendar size={10} />
-                                {task.dueDate}
-                              </span>
+                            {task.completed ? (
+                              <CheckCircle2 size={16} className="text-green-500" />
+                            ) : (
+                              <Circle size={16} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
                             )}
-                            {/* 태그 */}
-                            {task.tags.length > 0 && (
-                              <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                #{task.tags[0]}
-                              </span>
-                            )}
+                          </button>
+
+                          {/* 내용 */}
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-sm leading-snug ${
+                                task.completed
+                                  ? 'line-through text-gray-500'
+                                  : isDark
+                                    ? 'text-gray-200'
+                                    : 'text-gray-800'
+                              }`}
+                            >
+                              {task.title}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              {/* 우선순위 */}
+                              {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
+                              {/* 마감일 */}
+                              {task.dueDate && (
+                                <span
+                                  className={`text-xs flex items-center gap-1 ${
+                                    task.dueDate < todayStr && !task.completed
+                                      ? 'text-red-500'
+                                      : task.dueDate === todayStr
+                                        ? 'text-amber-500'
+                                        : isDark
+                                          ? 'text-gray-400'
+                                          : 'text-gray-500'
+                                  }`}
+                                >
+                                  <Calendar size={10} />
+                                  {task.dueDate}
+                                </span>
+                              )}
+                              {/* 태그 */}
+                              {task.tags.length > 0 && (
+                                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                  #{task.tags[0]}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
                       </div>
                     )
                   })

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useStore } from '../store/useStore'
+import { todayString } from '../utils/date'
 import type { Priority } from '../types'
 
 const PRIORITY_MAP: Record<string, Priority> = {
@@ -10,22 +11,28 @@ const PRIORITY_MAP: Record<string, Priority> = {
 }
 
 export function useKeyboardShortcuts() {
-  const { setSearchQuery, popUndo, updateTask, removeTask, selectTask, exportData } = useStore()
-
+  // 스토어를 구독하지 않는다. 액션은 참조가 고정이라 핸들러 안에서 getState()로 꺼내면
+  // 되고, 구독을 만들면(특히 셀렉터 없는 useStore()) 모든 스토어 쓰기가 App을 리렌더시킨다.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey
       const key = e.key
-      const { selectedTaskId, showAddTask, showQuickAdd, showExport } = useStore.getState()
+      const {
+        selectedTaskId,
+        showAddTask,
+        showQuickAdd,
+        setSearchQuery,
+        popUndo,
+        updateTask,
+        removeTask,
+        selectTask,
+        exportData
+      } = useStore.getState()
 
       // Escape: 패널 닫기 / 선택 해제
       if (key === 'Escape') {
         if (showQuickAdd) {
           useStore.getState().setShowQuickAdd(false)
-          return
-        }
-        if (showExport) {
-          useStore.getState().setShowExport(false)
           return
         }
         if (showAddTask) {
@@ -78,14 +85,12 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Cmd+D: 선택된 태스크에 오늘 마감일 설정
+      // Cmd+D: 선택된 태스크에 오늘 마감일 설정.
+      // 로컬 날짜여야 한다 — toISOString()은 UTC라 KST 새벽에 '어제'가 박혔다.
       if (isMod && key === 'd') {
         e.preventDefault()
         const taskId = useStore.getState().selectedTaskId
-        if (taskId) {
-          const today = new Date().toISOString().split('T')[0]
-          updateTask({ id: taskId, dueDate: today })
-        }
+        if (taskId) updateTask({ id: taskId, dueDate: todayString() })
         return
       }
 
@@ -116,5 +121,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setSearchQuery, popUndo, updateTask, removeTask, selectTask, exportData])
+  }, [])
 }

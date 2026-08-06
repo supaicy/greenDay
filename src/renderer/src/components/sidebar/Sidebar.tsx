@@ -32,6 +32,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { SMART_LIST_PREDICATES, tagListId } from '../../utils/smartLists'
+import { levelFromScore, levelProgress } from '../../utils/score'
 import type { SmartList, ViewType } from '../../types'
 
 const SMART_LISTS: { id: SmartList; icon: React.ReactNode }[] = [
@@ -167,7 +168,7 @@ export function Sidebar() {
     }`
 
   const mutedClass = isDark ? 'text-sidebar-muted' : 'text-gray-400'
-  const level = Math.floor(score.total / 100)
+  const level = levelFromScore(score.total)
 
   const listsWithoutFolder = lists.filter((l) => l.id !== 'inbox' && !l.folderId)
   const listsByFolder = (folderId: string) => lists.filter((l) => l.folderId === folderId)
@@ -282,7 +283,9 @@ export function Sidebar() {
 
         {/* 뷰 */}
         <div className={`mb-3 border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
-          <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>{t('nav.sectionViews')}</div>
+          <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>
+            {t('nav.sectionViews')}
+          </div>
           {VIEW_ITEMS.map((item) => (
             <button
               type="button"
@@ -299,7 +302,9 @@ export function Sidebar() {
         {/* 태그 */}
         {tagList.length > 0 && (
           <div className={`mb-3 border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
-            <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>{t('nav.sectionTags')}</div>
+            <div className={`px-3 mb-1 text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>
+              {t('nav.sectionTags')}
+            </div>
             {tagList.map(([tag, count]) => (
               <button
                 type="button"
@@ -320,7 +325,9 @@ export function Sidebar() {
         {/* 리스트 + 폴더 */}
         <div className={`border-t pt-3 ${isDark ? 'border-sidebar-hover' : 'border-gray-300'}`}>
           <div className="flex items-center justify-between px-3 mb-1">
-            <span className={`text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>{t('nav.sectionLists')}</span>
+            <span className={`text-xs font-semibold uppercase tracking-wider ${mutedClass}`}>
+              {t('nav.sectionLists')}
+            </span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -466,7 +473,7 @@ export function Sidebar() {
           <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}>
             <div
               className="h-full bg-yellow-500 rounded-full transition-all"
-              style={{ width: `${score.total % 100}%` }}
+              style={{ width: `${levelProgress(score.total)}%` }}
             />
           </div>
         </div>

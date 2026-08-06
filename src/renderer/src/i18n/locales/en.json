@@ -191,7 +191,11 @@
     "isEmpty": "Trash is empty",
     "deletedAt": "Deleted {{date}}",
     "restore": "Restore",
-    "deleteForever": "Delete forever"
+    "deleteForever": "Delete forever",
+    "confirmEmptyTitle": "Empty the trash?",
+    "confirmEmptyBody": "{{count}} items will be deleted permanently. This cannot be undone.",
+    "confirmDeleteTitle": "Delete permanently?",
+    "confirmDeleteBody": "\"{{title}}\" will be deleted permanently. This cannot be undone."
   },
   "calendar": {
     "dragHint": "Drag to move to another day",
@@ -200,7 +204,10 @@
     "unschedule": "Unschedule",
     "weekRangeSameMonth": "{{month}} {{year}}",
     "weekRangeSameYear": "{{from}} – {{to}} {{year}}",
-    "weekRangeCrossYear": "{{from}} {{fromYear}} – {{to}} {{toYear}}"
+    "weekRangeCrossYear": "{{from}} {{fromYear}} – {{to}} {{toYear}}",
+    "unscheduledTitle": "Unscheduled",
+    "unscheduledEmpty": "Nothing left to schedule",
+    "unscheduledHint": "Drag onto the grid to block time"
   },
   "kanban": {
     "title": "Kanban Board",
@@ -255,23 +262,11 @@
     "progress": "Pomodoro timer progress",
     "sessions": "Session #{{n}}",
     "workDone": "Focus time is up! Take a break.",
-    "breakDone": "Break is over! Back to focus."
-  },
-  "score": {
-    "level": "Level {{level}}",
-    "toNextLevel": "To next level",
-    "taskComplete": "Task completed",
-    "habitComplete": "Habit completed",
-    "pomodoroComplete": "Pomodoro completed",
-    "levels": [
-      "Beginner",
-      "Challenger",
-      "Doer",
-      "Expert",
-      "Master",
-      "Grandmaster",
-      "Legend"
-    ]
+    "breakDone": "Break is over! Back to focus.",
+    "reset": "Reset",
+    "start": "Start",
+    "pause": "Pause",
+    "skip": "Skip"
   },
   "stats": {
     "title": "Stats",
@@ -292,16 +287,6 @@
     "habitRate": "Habit completion",
     "mostProductiveDay": "Most productive day",
     "weekdayDistribution": "Completions by weekday"
-  },
-  "export": {
-    "title": "Export data",
-    "description": "Export all tasks, lists, and habit data to a file.",
-    "json": "Export as JSON",
-    "jsonDesc": "Save everything in JSON format",
-    "csv": "Export as CSV",
-    "csvDesc": "Save the task list in spreadsheet format",
-    "done": "Export complete.",
-    "failed": "Export failed. Please try again."
   },
   "undo": {
     "label": "Undo",
@@ -406,7 +391,17 @@
     "modelInstall": "Install Korean model (exaone3.5)",
     "modelInstalling": "Installing",
     "modelInstallFailed": "Install failed",
-    "modelInstallDone": "{{model}} installed — selected as your model"
+    "modelInstallDone": "{{model}} installed — selected as your model",
+    "notifications": "Notifications",
+    "notifPermDefault": "Notifications are not allowed yet. Without permission, reminders disappear silently.",
+    "notifPermRequest": "Allow notifications",
+    "notifPermOpenSettings": "Open System Settings",
+    "updateDownloading": "Downloading... {{percent}}%",
+    "updateInstall": "Restart to install",
+    "updateDownloadNow": "Download now",
+    "updateViewRelease": "View release notes",
+    "notifPermProbeSent": "Sent a test notification. If you did not see a banner, allow Greenday in System Settings -> Notifications.",
+    "notifPermUnsupported": "This system cannot display notifications, so reminders will not arrive."
   },
   "shortcuts": {
     "addTask": "Toggle add task",

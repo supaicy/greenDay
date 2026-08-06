@@ -5,7 +5,8 @@ import { useStore } from '../../store/useStore'
 import { toDateString } from '../../utils/date'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Zap, Target, Clock, Coffee } from 'lucide-react'
-import { PRIORITY_COLOR, PRIORITY_ORDER } from '../../utils/priority'
+import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { isActiveTopLevel } from '../../utils/smartLists'
 
 interface Quadrant {
   id: 'do' | 'schedule' | 'delegate' | 'eliminate'
@@ -22,16 +23,18 @@ export function EisenhowerMatrix(): React.ReactElement {
   const { theme, tasks, selectTask, selectedTaskId, toggleTask } = useStore()
   const isDark = theme === 'dark'
 
-  const quadrants = useMemo(() => {
+  const { quadrants, todayStr } = useMemo(() => {
     const now = new Date()
-    const _todayStr = toDateString(now)
+    // tasks가 바뀔 때마다 다시 계산한다. 빈 deps로 고정하면 자정을 넘겨도
+    // '지남' 색이 어제 기준으로 남는다.
+    const todayStr = toDateString(now)
 
     // "곧" = 3일 이내
     const soonDate = new Date(now)
     soonDate.setDate(soonDate.getDate() + 3)
     const soonStr = toDateString(soonDate)
 
-    const activeTasks = tasks.filter((t) => !t.completed && !t.deletedAt)
+    const activeTasks = tasks.filter(isActiveTopLevel)
 
     const doNow: Task[] = [] // 긴급 + 중요
     const schedule: Task[] = [] // 중요 + 긴급하지 않음
@@ -55,7 +58,7 @@ export function EisenhowerMatrix(): React.ReactElement {
 
     // 우선순위 + 마감일 순 정렬
     const sortFn = (a: Task, b: Task) => {
-      const pDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
+      const pDiff = byPriority(a, b)
       if (pDiff !== 0) return pDiff
       if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate)
       if (a.dueDate) return -1
@@ -107,7 +110,7 @@ export function EisenhowerMatrix(): React.ReactElement {
       }
     ]
 
-    return result
+    return { quadrants: result, todayStr }
   }, [tasks, isDark])
 
   // 태스크 항목: 중첩된 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
@@ -156,11 +159,7 @@ export function EisenhowerMatrix(): React.ReactElement {
       {task.dueDate && (
         <span
           className={`text-[10px] flex-shrink-0 ${
-            task.dueDate < new Date().toISOString().split('T')[0]
-              ? 'text-red-500'
-              : isDark
-                ? 'text-gray-500'
-                : 'text-gray-400'
+            task.dueDate < todayStr ? 'text-red-500' : isDark ? 'text-gray-500' : 'text-gray-400'
           }`}
         >
           {task.dueDate.slice(5)}
@@ -174,9 +173,7 @@ export function EisenhowerMatrix(): React.ReactElement {
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
         <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('eisenhower.title')}</h2>
-        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          {t('eisenhower.subtitle')}
-        </p>
+        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('eisenhower.subtitle')}</p>
       </div>
 
       {/* 축 라벨 */}
@@ -224,7 +221,9 @@ export function EisenhowerMatrix(): React.ReactElement {
                 <div className={`px-3 py-2 ${q.headerBg} flex items-center gap-2`}>
                   <span className={isDark ? 'text-gray-300' : 'text-gray-600'}>{q.icon}</span>
                   <div>
-                    <h3 className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{t(q.titleKey)}</h3>
+                    <h3 className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                      {t(q.titleKey)}
+                    </h3>
                     <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{t(q.subtitleKey)}</p>
                   </div>
                   <span
@@ -239,7 +238,9 @@ export function EisenhowerMatrix(): React.ReactElement {
                 {/* 태스크 목록 */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                   {q.tasks.length === 0 ? (
-                    <div className={`text-center py-4 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>{t('common.none')}</div>
+                    <div className={`text-center py-4 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                      {t('common.none')}
+                    </div>
                   ) : (
                     q.tasks.map(renderTaskItem)
                   )}

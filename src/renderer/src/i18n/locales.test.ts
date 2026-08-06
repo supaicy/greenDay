@@ -113,9 +113,7 @@ describe('조합된 문구', () => {
     const tKo = i18n.getFixedT('ko')
     const months = tList('date.months', 'ko')
     expect(tKo('calendar.weekRangeSameMonth', { year: 2026, month: months[6] })).toBe('2026년 7월')
-    expect(tKo('calendar.weekRangeSameYear', { year: 2026, from: months[6], to: months[7] })).toBe(
-      '2026년 7월 - 8월'
-    )
+    expect(tKo('calendar.weekRangeSameYear', { year: 2026, from: months[6], to: months[7] })).toBe('2026년 7월 - 8월')
     expect(
       tKo('calendar.weekRangeCrossYear', {
         fromYear: 2026,
@@ -130,9 +128,7 @@ describe('조합된 문구', () => {
     const tEn = i18n.getFixedT('en')
     const months = tList('date.months', 'en')
     expect(tEn('calendar.weekRangeSameMonth', { year: 2026, month: months[7] })).toBe('Aug 2026')
-    expect(tEn('calendar.weekRangeSameYear', { year: 2026, from: months[6], to: months[7] })).toBe(
-      'Jul – Aug 2026'
-    )
+    expect(tEn('calendar.weekRangeSameYear', { year: 2026, from: months[6], to: months[7] })).toBe('Jul – Aug 2026')
   })
 
   it('시각 표기는 언어별 어순을 따른다', () => {

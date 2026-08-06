@@ -2,6 +2,7 @@
 import * as db from './database'
 import { type AiConfig, isLocalAiConfig } from '../shared/ai-config'
 import { type ChatHistoryMessage, normalizeChatHistory } from '../shared/ai-history'
+import { toLocalDateString } from '../shared/date'
 
 const ALLOWED_ACTIONS = ['create_task', 'chat_response', 'task_action'] as const
 const ACTION_OPS = ['complete', 'reschedule', 'delete', 'none'] as const
@@ -324,8 +325,9 @@ export function buildChatSystemPrompt(taskSummary: string): string {
 Return your response as JSON: {"action":"chat_response","message":"your response here"}`
 }
 
+// 모델에게 알려 주는 '오늘'. 로컬 날짜여야 "내일"이 하루 밀리지 않는다.
 function getToday(): string {
-  return new Date().toISOString().split('T')[0]
+  return toLocalDateString(new Date())
 }
 
 async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: boolean): Promise<AiResult> {
@@ -504,16 +506,6 @@ export async function interpretTaskAction(message: string, existingTasks: TaskCo
   return sanitizeActionResult(result)
 }
 
-export async function chat(userMessage: string, existingTasks: TaskContext[]): Promise<string> {
-  const summary = summarizeTasks(existingTasks)
-  const prompt = buildChatSystemPrompt(summary)
-  const result = await callLlm(prompt, userMessage, true)
-  if (result.action !== 'chat_response') {
-    throw new Error('Unexpected action from chat')
-  }
-  return (result as ChatResult).message
-}
-
 // 스트리밍 채팅 — MessagePort 대신 간단한 콜백 기반으로 구현
 // (Electron IPC에서 스트리밍 이벤트로 전달)
 export async function streamChat(
@@ -540,11 +532,7 @@ export async function streamChat(
 
   const body = {
     model: config.model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...priorTurns,
-      { role: 'user', content: userMessage }
-    ],
+    messages: [{ role: 'system', content: systemPrompt }, ...priorTurns, { role: 'user', content: userMessage }],
     temperature: 0.3,
     max_tokens: MAX_RESPONSE_TOKENS,
     stream: true

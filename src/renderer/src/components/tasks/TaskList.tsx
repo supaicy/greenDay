@@ -8,8 +8,9 @@ import { SortMenu } from './SortMenu'
 import { BatchBar } from './BatchBar'
 import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue } from '../../utils/date'
 import { useTranslation } from 'react-i18next'
-import { SMART_LIST_PREDICATES, tagFromListId } from '../../utils/smartLists'
+import { SMART_LIST_PREDICATES, isTopLevel, tagFromListId } from '../../utils/smartLists'
 import { DND_MIME } from '../../utils/dnd'
+import { matchesSearch } from '../../utils/search'
 import type { Task, SortBy, SortDir } from '../../types'
 
 const SMART_LIST_IDS = ['all', 'today', 'tomorrow', 'next7days', 'inbox', 'summary', 'completed', 'trash']
@@ -21,15 +22,6 @@ const SUMMARY_GROUPS: { key: string; labelKey: string; match: (dueDate: string |
   { key: 'tomorrow', labelKey: 'task.groupTomorrow', match: isDueTomorrow },
   { key: 'upcoming', labelKey: 'task.groupUpcoming', match: isDueInNext7Days }
 ]
-
-function matchesSearch(t: Task, query: string): boolean {
-  const q = query.toLowerCase()
-  return (
-    t.title.toLowerCase().includes(q) ||
-    t.description.toLowerCase().includes(q) ||
-    t.tags.some((tag) => tag.toLowerCase().includes(q))
-  )
-}
 
 function sortTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
   if (sortBy === 'default') return tasks
@@ -117,7 +109,7 @@ export function TaskListView() {
           break
       }
     }
-    result = result.filter((t) => !t.parentId)
+    result = result.filter(isTopLevel)
     if (searchQuery) result = result.filter((t) => matchesSearch(t, searchQuery))
     return sortTasks(result, sortBy, sortDir)
   }, [tasks, selectedListId, searchQuery, sortBy, sortDir])
@@ -137,11 +129,12 @@ export function TaskListView() {
       if (arr) arr.push(t)
       else buckets.set(g.key, [t])
     }
-    return SUMMARY_GROUPS.map((g) => ({ ...g, tasks: buckets.get(g.key) ?? [] })).filter(
-      (g) => g.tasks.length > 0
-    )
+    return SUMMARY_GROUPS.map((g) => ({ ...g, tasks: buckets.get(g.key) ?? [] })).filter((g) => g.tasks.length > 0)
   }, [selectedListId, filteredTasks])
 
+  // 정렬이 걸려 있으면 화면 순서는 sortBy가 정한다. 그 상태에서 드래그를 허용하면
+  // 정렬 결과가 sortOrder에 그대로 구워져 사용자의 수동 순서가 말없이 사라진다.
+  const canReorder = sortBy === 'default'
   const handleDrop = useCallback(
     (targetId: string) => {
       if (!dragTaskId || dragTaskId === targetId) return
@@ -186,6 +179,8 @@ export function TaskListView() {
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
+              // Cmd+F 핸들러가 이 속성으로 찾아 포커스한다. 지우면 단축키가 조용히 죽는다.
+              data-search-input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('task.search')}
@@ -200,7 +195,14 @@ export function TaskListView() {
             <button
               type="button"
               onClick={() => setShowSort(!showSort)}
-              className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-200 text-gray-500'}`}
+              // 정렬이 걸려 있으면 아이콘으로 알린다 — 메뉴를 열지 않아도 보이게.
+              className={`p-1.5 rounded-lg transition-colors ${
+                sortBy !== 'default'
+                  ? 'text-primary-400 bg-primary-900/30'
+                  : isDark
+                    ? 'hover:bg-gray-800 text-gray-400'
+                    : 'hover:bg-gray-200 text-gray-500'
+              }`}
               title={t('task.sort')}
             >
               <ArrowUpDown size={16} />
@@ -242,16 +244,18 @@ export function TaskListView() {
                 {t(g.labelKey)} ({g.tasks.length})
               </div>
               {g.tasks.map((task) => (
-                <TaskItem key={task.id} task={task} onDrop={handleDrop} />
+                <TaskItem key={task.id} task={task} onDrop={canReorder ? handleDrop : undefined} />
               ))}
             </div>
           ))
         ) : selectedListId === 'completed' ? (
-          filteredTasks.map((task) => <TaskItem key={task.id} task={task} onDrop={handleDrop} />)
+          filteredTasks.map((task) => (
+            <TaskItem key={task.id} task={task} onDrop={canReorder ? handleDrop : undefined} />
+          ))
         ) : (
           <>
             {incompleteTasks.map((task) => (
-              <TaskItem key={task.id} task={task} onDrop={handleDrop} />
+              <TaskItem key={task.id} task={task} onDrop={canReorder ? handleDrop : undefined} />
             ))}
             {completedTasks.length > 0 && (
               <div className="mt-4">
@@ -261,7 +265,7 @@ export function TaskListView() {
                   {t('task.completedCount', { n: completedTasks.length })}
                 </div>
                 {completedTasks.map((task) => (
-                  <TaskItem key={task.id} task={task} onDrop={handleDrop} />
+                  <TaskItem key={task.id} task={task} onDrop={canReorder ? handleDrop : undefined} />
                 ))}
               </div>
             )}

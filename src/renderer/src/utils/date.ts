@@ -15,6 +15,7 @@ import {
   endOfWeek
 } from 'date-fns'
 import { ko, enUS } from 'date-fns/locale'
+import { toLocalDateString } from '../../../shared/date'
 import i18n from '../i18n'
 
 // date-fns 로케일은 요일·월 이름을 담당하고, 포맷 문자열('M월 d일' vs 'MMM d')은
@@ -82,6 +83,7 @@ export function formatDate(date: Date, fmt: string): string {
   return format(date, fmt, { locale: dfLocale() })
 }
 
+// 메인 프로세스와 같은 구현을 쓴다(shared/date.ts). 두 벌이면 시간대 규칙이 갈린다.
 export function toDateString(date: Date): string {
-  return format(date, 'yyyy-MM-dd')
+  return toLocalDateString(date)
 }

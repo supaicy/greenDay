@@ -3,6 +3,8 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { tList } from '../../i18n'
+import { toDateString } from '../../utils/date'
+import { levelFromScore, levelProgress, pointsToNextLevel, POINTS_PER_LEVEL } from '../../utils/score'
 import { Trophy, CheckCircle2, Flame, Timer, Target, TrendingUp, Star, Calendar } from 'lucide-react'
 
 export function StatsView(): React.ReactElement {
@@ -14,7 +16,8 @@ export function StatsView(): React.ReactElement {
 
   const stats = useMemo(() => {
     const now = new Date()
-    const todayStr = now.toISOString().split('T')[0]
+    // 로컬 날짜로 계산한다. toISOString()은 UTC라 KST 00:00~09:00에 하루 밀렸다.
+    const todayStr = toDateString(now)
 
     // 이번 주 시작 (월요일)
     const weekStart = new Date(now)
@@ -22,28 +25,30 @@ export function StatsView(): React.ReactElement {
     const diff = day === 0 ? 6 : day - 1
     weekStart.setDate(weekStart.getDate() - diff)
     weekStart.setHours(0, 0, 0, 0)
-    const weekStartStr = weekStart.toISOString().split('T')[0]
+    const weekStartStr = toDateString(weekStart)
 
-    // 완료된 태스크
+    // 완료된 태스크. completedAt은 UTC ISO 문자열이므로 로컬 날짜로 변환해 비교한다 —
+    // 문자열 앞자리를 그대로 맞대면 KST 00:00~09:00 완료분이 전날로 세어진다.
     const completedTasks = tasks.filter((t) => t.completed && t.completedAt)
     const totalCompleted = completedTasks.length
+    const completedLocalDays = completedTasks.map((t) => toDateString(new Date(t.completedAt as string)))
 
-    const completedToday = completedTasks.filter((t) => t.completedAt?.startsWith(todayStr)).length
+    const completedToday = completedLocalDays.filter((d) => d === todayStr).length
 
-    const completedThisWeek = completedTasks.filter((t) => t.completedAt && t.completedAt >= weekStartStr).length
+    const completedThisWeek = completedLocalDays.filter((d) => d >= weekStartStr).length
 
-    // 점수 & 레벨
+    // 점수 & 레벨 (utils/score.ts 단일 출처 — 사이드바와 같은 값)
     const totalScore = score.total
-    const level = Math.floor(totalScore / 100) + 1
-    const levelProgress = totalScore % 100
+    const level = levelFromScore(totalScore)
+    const progressInLevel = levelProgress(totalScore)
 
     // 최근 14일 일별 완료 수
     const last14Days: { date: string; label: string; count: number }[] = []
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now)
       d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
-      const count = completedTasks.filter((t) => t.completedAt?.startsWith(dateStr)).length
+      const dateStr = toDateString(d)
+      const count = completedLocalDays.filter((x) => x === dateStr).length
       last14Days.push({
         date: dateStr,
         label: `${d.getMonth() + 1}/${d.getDate()}`,
@@ -85,7 +90,8 @@ export function StatsView(): React.ReactElement {
       completedThisWeek,
       totalScore,
       level,
-      levelProgress,
+      progressInLevel,
+      todayStr,
       last14Days,
       maxDailyCount,
       pomodoroCount,
@@ -133,13 +139,15 @@ export function StatsView(): React.ReactElement {
             <div className={`h-2 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
               <div
                 className="h-full rounded-full bg-amber-500 transition-all"
-                style={{ width: `${stats.levelProgress}%` }}
+                style={{ width: `${stats.progressInLevel}%` }}
               />
             </div>
             <div className="flex justify-between mt-1">
-              <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{stats.levelProgress}/100</span>
               <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                {t('stats.toNextLevel', { points: 100 - stats.levelProgress })}
+                {stats.progressInLevel}/{POINTS_PER_LEVEL}
+              </span>
+              <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                {t('stats.toNextLevel', { points: pointsToNextLevel(stats.totalScore) })}
               </span>
             </div>
           </div>
@@ -184,11 +192,7 @@ export function StatsView(): React.ReactElement {
                 {/* 바 */}
                 <div
                   className={`w-full rounded-t transition-all ${
-                    day.date === new Date().toISOString().split('T')[0]
-                      ? 'bg-blue-500'
-                      : isDark
-                        ? 'bg-gray-600'
-                        : 'bg-gray-300'
+                    day.date === stats.todayStr ? 'bg-blue-500' : isDark ? 'bg-gray-600' : 'bg-gray-300'
                   }`}
                   style={{
                     height: day.count > 0 ? `${Math.max((day.count / stats.maxDailyCount) * 100, 8)}%` : '2px',
@@ -213,7 +217,9 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-3">
               <Timer size={16} className="text-red-500" />
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{t('stats.pomodoro')}</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                {t('stats.pomodoro')}
+              </span>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between">
@@ -235,7 +241,9 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-3">
               <Flame size={16} className="text-orange-500" />
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{t('stats.habitsAndProductivity')}</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                {t('stats.habitsAndProductivity')}
+              </span>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between">

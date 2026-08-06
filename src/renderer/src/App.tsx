@@ -16,11 +16,10 @@ import { QuickAdd } from './components/common/QuickAdd'
 import { UndoToast } from './components/common/UndoToast'
 import { AiChatPanel } from './components/ai/AiChatPanel'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { usePomodoroTicker } from './hooks/usePomodoroTicker'
 
 // CodeMirror 6 라이브프리뷰 에디터(@atomic-editor/editor) 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
-const TaskDetail = lazy(() =>
-  import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail }))
-)
+const TaskDetail = lazy(() => import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail })))
 
 function MainContent() {
   const viewType = useStore((s) => s.viewType)
@@ -56,10 +55,14 @@ export default function App() {
   const showQuickAdd = useStore((s) => s.showQuickAdd)
 
   useKeyboardShortcuts()
+  usePomodoroTicker()
 
   useEffect(() => {
     loadData()
     void useStore.getState().aiLoadHistory()
+    // AI 연결 상태를 시작 시 한 번 확인한다. 예전에는 설정이나 AI 패널을 열어야만
+    // 확인돼서, 첫 실행에는 할일 추가 폼의 AI 버튼이 아예 보이지 않았다.
+    void useStore.getState().aiCheckConnection()
     // 자동 업데이트 이벤트 수신 (electron-updater에서 push)
     const cleanupUpdate = window.api.onUpdateAvailable?.((info) => {
       useStore.setState({ updateAvailable: info, updateChecked: true })

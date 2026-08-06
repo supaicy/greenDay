@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Task } from '../../types'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { snapTo15Min } from '../../utils/scheduledTime'
+import { snapTo15Min, toLocalIsoMinute } from '../../utils/scheduledTime'
 import { DND_MIME } from '../../utils/dnd'
 
 interface Props {
@@ -40,13 +40,6 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   const leftPct = column * widthPct
 
   // Serialize Date → local ISO "YYYY-MM-DDTHH:mm:00"
-  const toIso = (d: Date): string => {
-    const pad = (n: number): string => String(n).padStart(2, '0')
-    return (
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-      `T${pad(d.getHours())}:${pad(d.getMinutes())}:00`
-    )
-  }
 
   const onDragStart = (e: React.DragEvent): void => {
     e.dataTransfer.setData(DND_MIME.TASK_BLOCK, task.id)
@@ -88,7 +81,7 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
       const dayEnd = new Date(start)
       dayEnd.setHours(23, 59, 0, 0)
       const clampedEnd = new Date(Math.max(minEnd.getTime(), Math.min(newEnd.getTime(), dayEnd.getTime())))
-      const snapped = snapTo15Min(toIso(clampedEnd))
+      const snapped = snapTo15Min(toLocalIsoMinute(clampedEnd))
       void updateTask({ id: task.id, scheduledEnd: snapped })
     }
 

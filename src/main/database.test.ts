@@ -70,7 +70,7 @@ describe('capEvents', () => {
     const arr = Array.from({ length: 201 }, (_, i) => i)
     const result = capEvents(arr)
     expect(result).toHaveLength(200)
-    expect(result[0]).toBe(1)   // 가장 오래된 이벤트 제거
+    expect(result[0]).toBe(1) // 가장 오래된 이벤트 제거
     expect(result[199]).toBe(200) // 최신 이벤트 보존
   })
 

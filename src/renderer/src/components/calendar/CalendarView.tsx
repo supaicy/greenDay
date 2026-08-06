@@ -101,11 +101,12 @@ export function CalendarView() {
             // 드롭 대상 강조. onDragLeave 는 자식(날짜숫자/태스크 버튼) 진입 시에도 발생해
             // 깜빡이므로 쓰지 않는다 — 다른 셀의 onDragOver 가 덮어쓰고, 드래그 종료 시
             // 소스 버튼의 onDragEnd 가 정리한다.
-            const dropRing = dragOverDate !== dateStr
-              ? ''
-              : isDark
-                ? 'ring-2 ring-inset ring-primary-500 bg-primary-900/20'
-                : 'ring-2 ring-inset ring-primary-500 bg-primary-50'
+            const dropRing =
+              dragOverDate !== dateStr
+                ? ''
+                : isDark
+                  ? 'ring-2 ring-inset ring-primary-500 bg-primary-900/20'
+                  : 'ring-2 ring-inset ring-primary-500 bg-primary-50'
 
             return (
               // biome-ignore lint/a11y/noStaticElementInteractions: 날짜 셀은 태스크 드래그의 드롭 영역

@@ -5,10 +5,12 @@ import { toDateString } from '../../utils/date'
 import type { Task, Priority } from '../../types'
 import { ChevronLeft, ChevronRight, Flag, CheckCircle2, Circle } from 'lucide-react'
 import { TimeBlock } from './TimeBlock'
+import { UnscheduledRail } from './UnscheduledRail'
 import { layoutOverlappingBlocks } from '../../utils/timeBlockLayout'
-import { getScheduledForOccurrence, snapTo15Min } from '../../utils/scheduledTime'
+import { getScheduledForOccurrence, snapTo15Min, toLocalIsoMinute, MIN_BLOCK_MS } from '../../utils/scheduledTime'
 import { useTranslation } from 'react-i18next'
 import { DND_MIME } from '../../utils/dnd'
+import { PRIORITY_COLOR } from '../../utils/priority'
 import i18n, { tList } from '../../i18n'
 
 // 시간 슬롯 (6:00 ~ 23:00, 30분 단위)
@@ -207,174 +209,36 @@ export function DailyCalendar(): React.ReactElement {
         </div>
       </div>
 
-      {/* 캘린더 본문 */}
-      <div className="flex-1 overflow-y-auto">
-        {/* 종일 태스크 */}
-        {allDayTasks.length > 0 && (
-          <div className={`px-6 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('date.allDay')}</div>
-            <div className="space-y-1.5">
-              {allDayTasks.map((task) => {
-                // 종일 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
-                return (
-                  // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
-                  <div
-                    key={task.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => selectTask(task.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        selectTask(task.id)
-                      }
-                    }}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 ${
-                      isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
-                    } ${selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''}`}
-                  >
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleTask(task.id)
-                    }}
-                    className="flex-shrink-0"
-                  >
-                    {task.completed ? (
-                      <CheckCircle2 size={14} className="text-green-500" />
-                    ) : (
-                      <Circle size={14} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
-                    )}
-                  </button>
-                  <span
-                    className={`text-sm flex-1 truncate ${
-                      task.completed ? 'line-through text-gray-500' : isDark ? 'text-gray-200' : 'text-gray-800'
-                    }`}
-                  >
-                    {task.title}
-                  </span>
-                  {task.priority !== 'none' && (
-                    <Flag
-                      size={12}
-                      className={
-                        task.priority === 'high'
-                          ? 'text-red-500'
-                          : task.priority === 'medium'
-                            ? 'text-amber-500'
-                            : 'text-blue-500'
-                      }
-                    />
-                  )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 시간 슬롯 (드래그 드롭 대상: <section>으로 의미론적 표현) */}
-        <section
-          aria-label={t('calendar.timeSlot')}
-          className="px-2 relative"
-          style={{
-            minHeight: `${(DAY_END_HOUR_EXCLUSIVE - DAY_START_HOUR) * 60 * PX_PER_MIN}px`
-          }}
-          onDragOver={(e) => {
-            if (
-              e.dataTransfer.types.includes(DND_MIME.TASK_ID) ||
-              e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK)
-            ) {
-              e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-            }
-          }}
-          onDrop={(e) => {
-            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
-            const yPx = e.clientY - rect.top
-            const minutesFromTop = yPx / PX_PER_MIN
-            const totalMin = DAY_START_HOUR * 60 + minutesFromTop
-            const hour = Math.floor(totalMin / 60)
-            const minute = Math.floor(totalMin % 60)
-            const pad = (n: number): string => String(n).padStart(2, '0')
-            const rawStart = `${dateStr}T${pad(hour)}:${pad(minute)}:00`
-            const snappedStart = snapTo15Min(rawStart)
-            const startMs = new Date(snappedStart).getTime()
-            const dayEnd = new Date(`${dateStr}T23:59:00`).getTime()
-            const toIso = (ms: number): string => {
-              const d = new Date(ms)
-              return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`
-            }
-
-            const taskId =
-              e.dataTransfer.getData(DND_MIME.TASK_ID) ||
-              e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
-            if (!taskId) return
-            const existing = tasks.find((t) => t.id === taskId)
-            if (!existing) return
-
-            // Move of an existing block: preserve duration
-            let endMs = startMs + 30 * 60000
-            if (
-              e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK) &&
-              existing.scheduledStart &&
-              existing.scheduledEnd
-            ) {
-              const origDur = new Date(existing.scheduledEnd).getTime() - new Date(existing.scheduledStart).getTime()
-              endMs = startMs + origDur
-            }
-            const endMsClamped = Math.min(endMs, dayEnd)
-
-            void updateTask({
-              id: taskId,
-              scheduledStart: snappedStart,
-              scheduledEnd: toIso(endMsClamped)
-            })
-          }}
-        >
-          {timeSlots.map((slot) => {
-            const slotTasks = getTasksAtSlot(slot.hour, slot.minute)
-            const isHourMark = slot.minute === 0
-            return (
-              <div
-                key={`${slot.hour}-${slot.minute}`}
-                className={`flex ${
-                  isHourMark
-                    ? `border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`
-                    : `border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`
-                }`}
-                style={{ minHeight: '40px' }}
-              >
-                {/* 시간 라벨 */}
-                <div className="w-20 flex-shrink-0 text-right pr-3 pt-0.5">
-                  {isHourMark && (
-                    <span className={`text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{slot.label}</span>
-                  )}
-                </div>
-
-                {/* 태스크 영역 */}
-                <div className="flex-1 py-0.5 pr-4 space-y-1">
-                  {slotTasks.map((task) => {
-                    // 시간 슬롯 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
-                    return (
-                      // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
-                      <div
-                        key={task.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => selectTask(task.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            selectTask(task.id)
-                          }
-                        }}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 transition-colors ${
-                          isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
-                        } ${
-                          selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''
-                        }`}
-                      >
+      {/* 캘린더 본문 — 왼쪽 레일이 시간블록을 만드는 드래그 소스다 */}
+      <div className="flex-1 flex min-h-0">
+        <UnscheduledRail isDark={isDark} />
+        <div className="flex-1 overflow-y-auto">
+          {/* 종일 태스크 */}
+          {allDayTasks.length > 0 && (
+            <div className={`px-6 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+              <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                {t('date.allDay')}
+              </div>
+              <div className="space-y-1.5">
+                {allDayTasks.map((task) => {
+                  // 종일 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
+                  return (
+                    // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                    <div
+                      key={task.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => selectTask(task.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          selectTask(task.id)
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 ${
+                        isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
+                      } ${selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''}`}
+                    >
                       <button
                         type="button"
                         onClick={(e) => {
@@ -389,73 +253,199 @@ export function DailyCalendar(): React.ReactElement {
                           <Circle size={14} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
                         )}
                       </button>
+                      <span
+                        className={`text-sm flex-1 truncate ${
+                          task.completed ? 'line-through text-gray-500' : isDark ? 'text-gray-200' : 'text-gray-800'
+                        }`}
+                      >
+                        {task.title}
+                      </span>
+                      {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className={`text-sm truncate ${
-                            task.completed ? 'line-through text-gray-500' : isDark ? 'text-gray-200' : 'text-gray-800'
+          {/* 시간 슬롯 (드래그 드롭 대상: <section>으로 의미론적 표현) */}
+          <section
+            aria-label={t('calendar.timeSlot')}
+            className="px-2 relative"
+            style={{
+              minHeight: `${(DAY_END_HOUR_EXCLUSIVE - DAY_START_HOUR) * 60 * PX_PER_MIN}px`
+            }}
+            onDragOver={(e) => {
+              if (
+                e.dataTransfer.types.includes(DND_MIME.TASK_ID) ||
+                e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK)
+              ) {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }
+            }}
+            onDrop={(e) => {
+              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+              const yPx = e.clientY - rect.top
+              const minutesFromTop = yPx / PX_PER_MIN
+              const totalMin = DAY_START_HOUR * 60 + minutesFromTop
+              const hour = Math.floor(totalMin / 60)
+              const minute = Math.floor(totalMin % 60)
+              const pad = (n: number): string => String(n).padStart(2, '0')
+              const rawStart = `${dateStr}T${pad(hour)}:${pad(minute)}:00`
+              const dayEnd = new Date(`${dateStr}T23:59:00`).getTime()
+              // 하루 끝에서 최소 블록(15분)을 확보하지 못하면 updateTask가 조용히 거부한다.
+              // 시작을 끌어올려, 시간표 맨 아래에 놓아도 블록이 만들어지게 한다.
+              const latestStart = dayEnd - MIN_BLOCK_MS
+              const startMs = Math.min(new Date(snapTo15Min(rawStart)).getTime(), latestStart)
+              const snappedStart = toLocalIsoMinute(new Date(startMs))
+
+              const taskId = e.dataTransfer.getData(DND_MIME.TASK_ID) || e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
+              if (!taskId) return
+              const existing = tasks.find((t) => t.id === taskId)
+              if (!existing) return
+
+              // Move of an existing block: preserve duration
+              let endMs = startMs + 30 * 60000
+              if (
+                e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK) &&
+                existing.scheduledStart &&
+                existing.scheduledEnd
+              ) {
+                const origDur = new Date(existing.scheduledEnd).getTime() - new Date(existing.scheduledStart).getTime()
+                endMs = startMs + origDur
+              }
+              const endMsClamped = Math.min(endMs, dayEnd)
+
+              void updateTask({
+                id: taskId,
+                scheduledStart: snappedStart,
+                scheduledEnd: toLocalIsoMinute(new Date(endMsClamped))
+              })
+            }}
+          >
+            {timeSlots.map((slot) => {
+              const slotTasks = getTasksAtSlot(slot.hour, slot.minute)
+              const isHourMark = slot.minute === 0
+              return (
+                <div
+                  key={`${slot.hour}-${slot.minute}`}
+                  className={`flex ${
+                    isHourMark
+                      ? `border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`
+                      : `border-t ${isDark ? 'border-gray-800' : 'border-gray-100'}`
+                  }`}
+                  style={{ minHeight: '40px' }}
+                >
+                  {/* 시간 라벨 */}
+                  <div className="w-20 flex-shrink-0 text-right pr-3 pt-0.5">
+                    {isHourMark && (
+                      <span className={`text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{slot.label}</span>
+                    )}
+                  </div>
+
+                  {/* 태스크 영역 */}
+                  <div className="flex-1 py-0.5 pr-4 space-y-1">
+                    {slotTasks.map((task) => {
+                      // 시간 슬롯 태스크: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
+                      return (
+                        // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                        <div
+                          key={task.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => selectTask(task.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              selectTask(task.id)
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer border-l-2 transition-colors ${
+                            isDark ? priorityBg[task.priority].dark : priorityBg[task.priority].light
+                          } ${
+                            selectedTaskId === task.id ? (isDark ? 'ring-1 ring-blue-500' : 'ring-1 ring-blue-400') : ''
                           }`}
                         >
-                          {task.title}
-                        </p>
-                        {task.dueTime && (
-                          <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{task.dueTime}</p>
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleTask(task.id)
+                            }}
+                            className="flex-shrink-0"
+                          >
+                            {task.completed ? (
+                              <CheckCircle2 size={14} className="text-green-500" />
+                            ) : (
+                              <Circle size={14} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
+                            )}
+                          </button>
 
-                      {task.priority !== 'none' && (
-                        <Flag
-                          size={12}
-                          className={`flex-shrink-0 ${
-                            task.priority === 'high'
-                              ? 'text-red-500'
-                              : task.priority === 'medium'
-                                ? 'text-amber-500'
-                                : 'text-blue-500'
-                          }`}
-                        />
-                      )}
-                      </div>
-                    )
-                  })}
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className={`text-sm truncate ${
+                                task.completed
+                                  ? 'line-through text-gray-500'
+                                  : isDark
+                                    ? 'text-gray-200'
+                                    : 'text-gray-800'
+                              }`}
+                            >
+                              {task.title}
+                            </p>
+                            {task.dueTime && (
+                              <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                {task.dueTime}
+                              </p>
+                            )}
+                          </div>
+
+                          {task.priority !== 'none' && (
+                            <Flag size={12} className={`flex-shrink-0 ${PRIORITY_COLOR[task.priority]}`} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })}
 
-          {/* Render scheduled time blocks absolutely on top of slot rows.
+            {/* Render scheduled time blocks absolutely on top of slot rows.
               TimeBlock computes top from start.getHours() * 60 * pxPerMin (i.e. from 0:00),
               so this layer is offset by -DAY_START_HOUR hours to align with the
               6:00-based time-slot column. Left offset matches the w-20 label column. */}
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              top: `${-DAY_START_HOUR * 60 * PX_PER_MIN}px`,
-              left: 'calc(0.5rem + 5rem)', // px-2 (8px) + w-20 label (80px)
-              right: 'calc(0.5rem + 1rem)', // px-2 (8px) + pr-4 (16px)
-              height: `${24 * 60 * PX_PER_MIN}px`
-            }}
-          >
-            <div className="relative w-full h-full pointer-events-auto">
-              {blocks.map((b) => {
-                const entry = layout.find((l) => l.id === b.task.id)
-                if (!entry) return null
-                return (
-                  <TimeBlock
-                    key={b.task.id}
-                    task={b.task}
-                    start={b.start}
-                    end={b.end}
-                    pxPerMin={PX_PER_MIN}
-                    column={entry.column}
-                    columns={entry.columns}
-                    isDark={isDark}
-                  />
-                )
-              })}
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                top: `${-DAY_START_HOUR * 60 * PX_PER_MIN}px`,
+                left: 'calc(0.5rem + 5rem)', // px-2 (8px) + w-20 label (80px)
+                right: 'calc(0.5rem + 1rem)', // px-2 (8px) + pr-4 (16px)
+                height: `${24 * 60 * PX_PER_MIN}px`
+              }}
+            >
+              <div className="relative w-full h-full pointer-events-auto">
+                {blocks.map((b) => {
+                  const entry = layout.find((l) => l.id === b.task.id)
+                  if (!entry) return null
+                  return (
+                    <TimeBlock
+                      key={b.task.id}
+                      task={b.task}
+                      start={b.start}
+                      end={b.end}
+                      pxPerMin={PX_PER_MIN}
+                      column={entry.column}
+                      columns={entry.columns}
+                      isDark={isDark}
+                    />
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </div>
   )

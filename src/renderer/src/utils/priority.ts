@@ -17,10 +17,15 @@ export const PRIORITY_COLOR: Record<Priority, string> = {
   none: 'text-gray-400'
 }
 
-/** 정렬 순서 맵 (높은 우선순위 = 낮은 숫자) */
-export const PRIORITY_ORDER: Record<Priority, number> = {
+/** 정렬 순서 맵 (높은 우선순위 = 낮은 숫자). 바깥에서는 byPriority만 쓴다. */
+const PRIORITY_ORDER: Record<Priority, number> = {
   high: 0,
   medium: 1,
   low: 2,
   none: 3
+}
+
+/** 우선순위 내림차순 비교자. 네 화면이 같은 화살표 함수를 각자 적어 두고 있었다. */
+export function byPriority(a: { priority: Priority }, b: { priority: Priority }): number {
+  return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
 }

@@ -17,11 +17,7 @@ function task(over: Partial<Task>): Task {
 
 describe('getFilteredTaskIds — 하위작업 제외 일원화', () => {
   it("'all'에서 하위작업을 제외한다 (뷰와 일치)", () => {
-    const tasks = [
-      task({ id: 'a' }),
-      task({ id: 'b-sub', parentId: 'a' }),
-      task({ id: 'c' })
-    ]
+    const tasks = [task({ id: 'a' }), task({ id: 'b-sub', parentId: 'a' }), task({ id: 'c' })]
     expect(getFilteredTaskIds(tasks, 'all')).toEqual(['a', 'c'])
   })
 

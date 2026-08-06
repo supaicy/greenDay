@@ -80,9 +80,7 @@ describe('ai-service', () => {
       // 먼저 로컬에서 잠금 켜기 (허용)
       ai.setAiConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
       // 외부로 전환 시도 → 거부
-      expect(() => ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com' })).toThrow(
-        '로컬 전용'
-      )
+      expect(() => ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com' })).toThrow('로컬 전용')
     })
 
     it('잠금이 꺼져 있으면 외부 제공자 저장 허용', async () => {
@@ -234,30 +232,6 @@ describe('ai-service', () => {
       const config = ai.getAiConfig()
       expect(config.provider).toBe('openai')
       expect(config.apiKey).toBe('••••••test')
-    })
-  })
-
-  describe('chat', () => {
-    it('정상 응답 시 메시지 반환', async () => {
-      const ai = await loadAiService()
-      const chatJson = { action: 'chat_response', message: '오늘 할 일이 3개 있습니다.' }
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: JSON.stringify(chatJson) } }] })
-      })
-      const result = await ai.chat('오늘 뭐 해야 해?', [
-        { title: '장보기', dueDate: '2026-03-25', priority: 'none', completed: false }
-      ])
-      expect(result).toBe('오늘 할 일이 3개 있습니다.')
-    })
-
-    it('빈 응답 시 에러', async () => {
-      const ai = await loadAiService()
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: '' } }] })
-      })
-      await expect(ai.chat('test', [])).rejects.toThrow('Empty response')
     })
   })
 
@@ -578,7 +552,9 @@ describe('ai-service', () => {
         ok: true,
         json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
       })
-      const res = await ai.interpretTaskAction('x 미뤄', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
+      const res = await ai.interpretTaskAction('x 미뤄', [
+        { title: 'x', dueDate: null, priority: 'none', completed: false }
+      ])
       expect(res.dueDate).toBeNull()
     })
 
@@ -591,7 +567,9 @@ describe('ai-service', () => {
         ok: true,
         json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
       })
-      const res = await ai.interpretTaskAction('x 오늘로', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
+      const res = await ai.interpretTaskAction('x 오늘로', [
+        { title: 'x', dueDate: null, priority: 'none', completed: false }
+      ])
       expect(res.dueDate).toBe(today)
     })
 
@@ -616,7 +594,9 @@ describe('ai-service', () => {
         ok: true,
         json: async () => ({ choices: [{ message: { content: JSON.stringify(json) } }] })
       })
-      const res = await ai.interpretTaskAction('x 미뤄', [{ title: 'x', dueDate: null, priority: 'none', completed: false }])
+      const res = await ai.interpretTaskAction('x 미뤄', [
+        { title: 'x', dueDate: null, priority: 'none', completed: false }
+      ])
       expect(res.dueDate).toBeNull()
     })
   })

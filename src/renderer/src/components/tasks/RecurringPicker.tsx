@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react'
-import { Repeat, X } from 'lucide-react'
+import { useState } from 'react'
+import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { formatRecurringPattern } from '../../utils/recurrence'
 import { tList } from '../../i18n'
 
 type RecurringType = 'daily' | 'weekly' | 'monthly' | 'yearly'
-
 
 function parsePattern(pattern: string | null): {
   type: RecurringType
@@ -68,38 +66,25 @@ export function RecurringPicker({
   const WEEKDAYS = tList('date.weekdaysShort')
   const MONTHS = tList('date.months')
   const isDark = theme === 'dark'
-  const [open, setOpen] = useState(false)
 
-  const parsed = parsePattern(value)
-  const [type, setType] = useState<RecurringType>(parsed.type)
-  const [weekDays, setWeekDays] = useState<number[]>(parsed.weekDays)
-  const [monthDay, setMonthDay] = useState(parsed.monthDay)
-  const [yearMonth, setYearMonth] = useState(parsed.yearMonth)
-  const [yearDay, setYearDay] = useState(parsed.yearDay)
-
-  // 값이 외부에서 바뀌면 동기화
-  useEffect(() => {
-    const p = parsePattern(value)
-    setType(p.type)
-    setWeekDays(p.weekDays)
-    setMonthDay(p.monthDay)
-    setYearMonth(p.yearMonth)
-    setYearDay(p.yearDay)
-  }, [value])
+  // 호출부(PickerRow)가 열릴 때만 마운트하고 선택 즉시 닫으므로, 마운트 시점에 한 번만
+  // 파싱하면 된다. value를 다시 미러링하는 effect는 매 렌더 재파싱 + 재설정만 만든다.
+  const [type, setType] = useState<RecurringType>(() => parsePattern(value).type)
+  const [weekDays, setWeekDays] = useState<number[]>(() => parsePattern(value).weekDays)
+  const [monthDay, setMonthDay] = useState(() => parsePattern(value).monthDay)
+  const [yearMonth, setYearMonth] = useState(() => parsePattern(value).yearMonth)
+  const [yearDay, setYearDay] = useState(() => parsePattern(value).yearDay)
 
   const toggleWeekDay = (day: number) => {
     setWeekDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
   }
 
   const handleApply = () => {
-    const pattern = buildPattern(type, weekDays, monthDay, yearMonth, yearDay)
-    onChange(pattern)
-    setOpen(false)
+    onChange(buildPattern(type, weekDays, monthDay, yearMonth, yearDay))
   }
 
   const handleClear = () => {
     onChange(null)
-    setOpen(false)
   }
 
   const typeLabels: Record<RecurringType, string> = {
@@ -109,151 +94,136 @@ export function RecurringPicker({
     yearly: t('recurring.yearly')
   }
 
-  const displayLabel = formatRecurringPattern(value)
-
+  // 트리거 버튼은 호출부(TaskDetail의 PickerRow)가 갖는다. 여기에 또 두면
+  // 같은 라벨의 버튼이 두 개 겹쳐 두 번 눌러야 열렸다(2026-08-05 검증).
   return (
-    <div className="relative">
-      {/* 트리거 버튼 */}
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-          value
-            ? 'text-primary-400 bg-primary-900/30'
-            : isDark
-              ? 'text-gray-500 hover:bg-gray-700'
-              : 'text-gray-400 hover:bg-gray-200'
-        }`}
-      >
-        <Repeat size={14} />
-        {displayLabel || t('recurring.label')}
-      </button>
+    <div
+      className={`absolute left-0 top-full mt-1 z-50 rounded-lg shadow-2xl border p-3 min-w-[260px] ${
+        isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'
+      }`}
+    >
+      {/* 반복 유형 선택 */}
+      <div className="flex gap-1 mb-3">
+        {(Object.keys(typeLabels) as RecurringType[]).map((t) => (
+          <button
+            type="button"
+            key={t}
+            onClick={() => setType(t)}
+            className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+              type === t
+                ? 'bg-primary-500 text-white'
+                : isDark
+                  ? 'text-gray-400 hover:bg-gray-700'
+                  : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            {typeLabels[t]}
+          </button>
+        ))}
+      </div>
 
-      {/* 드롭다운 */}
-      {open && (
-        <div
-          className={`absolute left-0 top-full mt-1 z-50 rounded-lg shadow-2xl border p-3 min-w-[260px] ${
-            isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'
-          }`}
-        >
-          {/* 반복 유형 선택 */}
-          <div className="flex gap-1 mb-3">
-            {(Object.keys(typeLabels) as RecurringType[]).map((t) => (
+      {/* 요일 선택 (매주) */}
+      {type === 'weekly' && (
+        <div className="mb-3">
+          <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {t('recurring.pickWeekdays')}
+          </div>
+          <div className="flex gap-1">
+            {WEEKDAYS.map((label, idx) => (
               <button
                 type="button"
-                key={t}
-                onClick={() => setType(t)}
-                className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
-                  type === t
+                key={label}
+                onClick={() => toggleWeekDay(idx)}
+                className={`w-8 h-8 text-xs rounded-full transition-colors ${
+                  weekDays.includes(idx)
                     ? 'bg-primary-500 text-white'
                     : isDark
-                      ? 'text-gray-400 hover:bg-gray-700'
-                      : 'text-gray-500 hover:bg-gray-100'
+                      ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
+                      : 'text-gray-500 bg-gray-100 hover:bg-gray-200'
                 }`}
               >
-                {typeLabels[t]}
+                {label}
               </button>
             ))}
           </div>
+        </div>
+      )}
 
-          {/* 요일 선택 (매주) */}
-          {type === 'weekly' && (
-            <div className="mb-3">
-              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.pickWeekdays')}</div>
-              <div className="flex gap-1">
-                {WEEKDAYS.map((label, idx) => (
-                  <button
-                    type="button"
-                    key={label}
-                    onClick={() => toggleWeekDay(idx)}
-                    className={`w-8 h-8 text-xs rounded-full transition-colors ${
-                      weekDays.includes(idx)
-                        ? 'bg-primary-500 text-white'
-                        : isDark
-                          ? 'text-gray-400 bg-gray-700 hover:bg-gray-600'
-                          : 'text-gray-500 bg-gray-100 hover:bg-gray-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* 날짜 선택 (매월) */}
+      {type === 'monthly' && (
+        <div className="mb-3">
+          <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {t('recurring.pickMonthDay')}
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={monthDay}
+            onChange={(e) => setMonthDay(Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)))}
+            className={`w-20 text-sm px-2 py-1 rounded border outline-none ${
+              isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
+            }`}
+          />
+          <span className={`ml-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.dayUnit')}</span>
+        </div>
+      )}
 
-          {/* 날짜 선택 (매월) */}
-          {type === 'monthly' && (
-            <div className="mb-3">
-              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.pickMonthDay')}</div>
-              <input
-                type="number"
-                min={1}
-                max={31}
-                value={monthDay}
-                onChange={(e) => setMonthDay(Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)))}
-                className={`w-20 text-sm px-2 py-1 rounded border outline-none ${
-                  isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
-                }`}
-              />
-              <span className={`ml-1 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.dayUnit')}</span>
-            </div>
-          )}
-
-          {/* 월+일 선택 (매년) */}
-          {type === 'yearly' && (
-            <div className="mb-3">
-              <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.pickYearDate')}</div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={yearMonth}
-                  onChange={(e) => setYearMonth(parseInt(e.target.value, 10))}
-                  className={`text-sm px-2 py-1 rounded border outline-none ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
-                  }`}
-                >
-                  {MONTHS.map((label, idx) => (
-                    <option key={label} value={idx + 1}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={yearDay}
-                  onChange={(e) => setYearDay(Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)))}
-                  className={`w-16 text-sm px-2 py-1 rounded border outline-none ${
-                    isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
-                  }`}
-                />
-                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.dayUnit')}</span>
-              </div>
-            </div>
-          )}
-
-          {/* 하단 버튼 */}
-          <div className={`flex justify-between pt-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-            <button
-              type="button"
-              onClick={handleClear}
-              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-                isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'
+      {/* 월+일 선택 (매년) */}
+      {type === 'yearly' && (
+        <div className="mb-3">
+          <div className={`text-xs mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            {t('recurring.pickYearDate')}
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={yearMonth}
+              onChange={(e) => setYearMonth(parseInt(e.target.value, 10))}
+              className={`text-sm px-2 py-1 rounded border outline-none ${
+                isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
               }`}
             >
-              <X size={12} />
-              {t('common.clear')}
-            </button>
-            <button
-              type="button"
-              onClick={handleApply}
-              className="text-xs px-3 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 transition-colors"
-            >
-              {t('common.apply')}
-            </button>
+              {MONTHS.map((label, idx) => (
+                <option key={label} value={idx + 1}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              value={yearDay}
+              onChange={(e) => setYearDay(Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)))}
+              className={`w-16 text-sm px-2 py-1 rounded border outline-none ${
+                isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
+              }`}
+            />
+            <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('recurring.dayUnit')}</span>
           </div>
         </div>
       )}
+
+      {/* 하단 버튼 */}
+      <div className={`flex justify-between pt-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+        <button
+          type="button"
+          onClick={handleClear}
+          className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+            isDark ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-500 hover:bg-gray-100'
+          }`}
+        >
+          <X size={12} />
+          {t('common.clear')}
+        </button>
+        <button
+          type="button"
+          onClick={handleApply}
+          className="text-xs px-3 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+        >
+          {t('common.apply')}
+        </button>
+      </div>
     </div>
   )
 }

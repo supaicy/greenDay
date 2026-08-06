@@ -191,7 +191,11 @@
     "isEmpty": "휴지통이 비어있습니다",
     "deletedAt": "삭제: {{date}}",
     "restore": "복구",
-    "deleteForever": "영구삭제"
+    "deleteForever": "영구삭제",
+    "confirmEmptyTitle": "휴지통을 비울까요?",
+    "confirmEmptyBody": "{{count}}개 항목이 영구히 삭제됩니다. 되돌릴 수 없습니다.",
+    "confirmDeleteTitle": "영구히 삭제할까요?",
+    "confirmDeleteBody": "\"{{title}}\"이(가) 영구히 삭제됩니다. 되돌릴 수 없습니다."
   },
   "calendar": {
     "dragHint": "드래그해서 다른 날로 이동",
@@ -200,7 +204,10 @@
     "unschedule": "일정 해제",
     "weekRangeSameMonth": "{{year}}년 {{month}}",
     "weekRangeSameYear": "{{year}}년 {{from}} - {{to}}",
-    "weekRangeCrossYear": "{{fromYear}}년 {{from}} - {{toYear}}년 {{to}}"
+    "weekRangeCrossYear": "{{fromYear}}년 {{from}} - {{toYear}}년 {{to}}",
+    "unscheduledTitle": "배정 안 됨",
+    "unscheduledEmpty": "배정할 할 일이 없습니다",
+    "unscheduledHint": "시간표로 끌어다 놓으면 시간이 배정됩니다"
   },
   "kanban": {
     "title": "칸반 보드",
@@ -255,23 +262,11 @@
     "progress": "포모도로 타이머 진행률",
     "sessions": "#{{n}} 세션",
     "workDone": "집중 시간이 끝났습니다! 휴식하세요.",
-    "breakDone": "휴식이 끝났습니다! 집중하세요."
-  },
-  "score": {
-    "level": "레벨 {{level}}",
-    "toNextLevel": "다음 레벨까지",
-    "taskComplete": "태스크 완료",
-    "habitComplete": "습관 달성",
-    "pomodoroComplete": "포모도로 완료",
-    "levels": [
-      "초보자",
-      "도전자",
-      "실천가",
-      "달인",
-      "마스터",
-      "그랜드마스터",
-      "전설"
-    ]
+    "breakDone": "휴식이 끝났습니다! 집중하세요.",
+    "reset": "초기화",
+    "start": "시작",
+    "pause": "일시정지",
+    "skip": "다음으로"
   },
   "stats": {
     "title": "통계",
@@ -292,16 +287,6 @@
     "habitRate": "습관 완료율",
     "mostProductiveDay": "최고 생산 요일",
     "weekdayDistribution": "요일별 완료 분포"
-  },
-  "export": {
-    "title": "데이터 내보내기",
-    "description": "모든 태스크, 리스트, 습관 데이터를 파일로 내보냅니다.",
-    "json": "JSON 내보내기",
-    "jsonDesc": "전체 데이터를 JSON 형식으로 저장",
-    "csv": "CSV 내보내기",
-    "csvDesc": "태스크 목록을 스프레드시트 형식으로 저장",
-    "done": "내보내기가 완료되었습니다.",
-    "failed": "내보내기에 실패했습니다. 다시 시도해주세요."
   },
   "undo": {
     "label": "되돌리기",
@@ -406,7 +391,17 @@
     "modelInstall": "한국어 모델 설치 (exaone3.5)",
     "modelInstalling": "설치 중",
     "modelInstallFailed": "설치 실패",
-    "modelInstallDone": "{{model}} 설치 완료 — 모델로 선택됨"
+    "modelInstallDone": "{{model}} 설치 완료 — 모델로 선택됨",
+    "notifications": "알림",
+    "notifPermDefault": "아직 알림 권한을 허용하지 않았습니다. 허용하지 않으면 리마인더가 조용히 사라집니다.",
+    "notifPermRequest": "알림 허용하기",
+    "notifPermOpenSettings": "시스템 설정 열기",
+    "updateDownloading": "다운로드 중… {{percent}}%",
+    "updateInstall": "재시작하여 설치",
+    "updateDownloadNow": "지금 다운로드",
+    "updateViewRelease": "릴리스 노트 보기",
+    "notifPermProbeSent": "테스트 알림을 보냈습니다. 배너가 보이지 않았다면 시스템 설정 → 알림에서 Greenday를 허용하세요.",
+    "notifPermUnsupported": "이 시스템에서는 알림을 띄울 수 없어 리마인더가 도착하지 않습니다."
   },
   "shortcuts": {
     "addTask": "할 일 추가 열기/닫기",

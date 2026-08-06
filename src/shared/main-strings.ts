@@ -8,15 +8,30 @@
 export const MAIN_LANGUAGES = ['ko', 'en'] as const
 export type MainLanguage = (typeof MAIN_LANGUAGES)[number]
 
-const STRINGS: Record<MainLanguage, { reminder: string }> = {
-  ko: { reminder: '리마인더' },
-  en: { reminder: 'Reminder' }
+interface MainStrings {
+  reminder: string
+  /** 권한 프롬프트를 유도하려고 띄우는 확인용 알림. */
+  permProbeTitle: string
+  permProbeBody: string
+}
+
+const STRINGS: Record<MainLanguage, MainStrings> = {
+  ko: {
+    reminder: '리마인더',
+    permProbeTitle: 'Greenday 알림 확인',
+    permProbeBody: '이 배너가 보이면 리마인더도 이렇게 도착합니다.'
+  },
+  en: {
+    reminder: 'Reminder',
+    permProbeTitle: 'Greenday notification check',
+    permProbeBody: 'If you can see this banner, reminders will arrive the same way.'
+  }
 }
 
 export function isMainLanguage(value: unknown): value is MainLanguage {
   return typeof value === 'string' && (MAIN_LANGUAGES as readonly string[]).includes(value)
 }
 
-export function mainStrings(language: MainLanguage): { reminder: string } {
+export function mainStrings(language: MainLanguage): MainStrings {
   return STRINGS[language]
 }

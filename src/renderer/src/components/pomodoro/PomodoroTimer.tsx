@@ -1,101 +1,44 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
 import { Play, Pause, RotateCcw, SkipForward } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import i18n from '../../i18n'
+import {
+  usePomodoroStore,
+  POMODORO_DURATIONS,
+  POMODORO_LONG_BREAK_EVERY,
+  type PomodoroMode
+} from '../../store/usePomodoroStore'
 
-type TimerMode = 'work' | 'shortBreak' | 'longBreak'
-
-const MODES: { key: TimerMode; labelKey: string; duration: number; color: string }[] = [
-  { key: 'work', labelKey: 'pomodoro.work', duration: 25 * 60, color: '#E74C3C' },
-  { key: 'shortBreak', labelKey: 'pomodoro.shortBreak', duration: 5 * 60, color: '#2ECC71' },
-  { key: 'longBreak', labelKey: 'pomodoro.longBreak', duration: 15 * 60, color: '#4A90D9' }
+const MODES: { key: PomodoroMode; labelKey: string; color: string }[] = [
+  { key: 'work', labelKey: 'pomodoro.work', color: '#E74C3C' },
+  { key: 'shortBreak', labelKey: 'pomodoro.shortBreak', color: '#2ECC71' },
+  { key: 'longBreak', labelKey: 'pomodoro.longBreak', color: '#4A90D9' }
 ]
 
-const SESSION_DOTS = ['dot-a', 'dot-b', 'dot-c', 'dot-d'] as const
+// 점 개수는 긴 휴식 주기에서 파생한다. 상수를 바꿨는데 점이 그대로면 둘이 어긋난다.
+const SESSION_DOTS = Array.from({ length: POMODORO_LONG_BREAK_EVERY }, (_, i) => i)
+const RADIUS = 140
 
+// 타이머 상태와 1초 틱은 스토어와 usePomodoroTicker가 갖는다. 이 컴포넌트는
+// 순수 표시 + 조작만 한다 — 언마운트돼도 카운트다운이 이어지도록.
 export function PomodoroTimer() {
   const { t } = useTranslation()
-  const { theme, savePomodoroSession } = useStore()
-  const isDark = theme === 'dark'
-  const [mode, setMode] = useState<TimerMode>('work')
-  const sessionStartRef = useRef<string | null>(null)
-  const [timeLeft, setTimeLeft] = useState(25 * 60)
-  const [isRunning, setIsRunning] = useState(false)
-  const [sessions, setSessions] = useState(0)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isDark = useStore((s) => s.theme) === 'dark'
+  const mode = usePomodoroStore((s) => s.mode)
+  const timeLeft = usePomodoroStore((s) => s.timeLeft)
+  const running = usePomodoroStore((s) => s.running)
+  const sessions = usePomodoroStore((s) => s.sessions)
+  const switchMode = usePomodoroStore((s) => s.switchMode)
+  const toggleRun = usePomodoroStore((s) => s.toggleRun)
+  const reset = usePomodoroStore((s) => s.reset)
+  const skip = usePomodoroStore((s) => s.skip)
 
   const currentMode = MODES.find((m) => m.key === mode) ?? MODES[0]
-
-  const reset = useCallback(() => {
-    setIsRunning(false)
-    setTimeLeft(currentMode.duration)
-    if (intervalRef.current) clearInterval(intervalRef.current)
-  }, [currentMode])
-
-  const switchMode = useCallback((newMode: TimerMode) => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    setIsRunning(false)
-    const m = MODES.find((m) => m.key === newMode) ?? MODES[0]
-    setMode(newMode)
-    setTimeLeft(m.duration)
-  }, [])
-
-  const skipToNext = useCallback(() => {
-    // 세션 완료 시 저장
-    if (sessionStartRef.current) {
-      const m = MODES.find((m) => m.key === mode) ?? MODES[0]
-      savePomodoroSession({
-        taskId: null,
-        duration: m.duration,
-        type: mode === 'work' ? 'work' : 'break',
-        startedAt: sessionStartRef.current,
-        completedAt: new Date().toISOString()
-      })
-      sessionStartRef.current = null
-    }
-    if (mode === 'work') {
-      const newSessions = sessions + 1
-      setSessions(newSessions)
-      switchMode(newSessions % 4 === 0 ? 'longBreak' : 'shortBreak')
-    } else {
-      switchMode('work')
-    }
-  }, [mode, sessions, switchMode, savePomodoroSession])
-
-  useEffect(() => {
-    if (isRunning) {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            // 타이머 완료 - interval을 즉시 정리하여 이중 실행 방지
-            if (intervalRef.current) {
-              clearInterval(intervalRef.current)
-              intervalRef.current = null
-            }
-            new Notification(i18n.t('pomodoro.title'), {
-              body: i18n.t(mode === 'work' ? 'pomodoro.workDone' : 'pomodoro.breakDone')
-            })
-            setTimeout(() => skipToNext(), 0)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [isRunning, mode, skipToNext])
+  const duration = POMODORO_DURATIONS[mode]
 
   const minutes = Math.floor(timeLeft / 60)
   const seconds = timeLeft % 60
-  const progress = 1 - timeLeft / currentMode.duration
-  const circumference = 2 * Math.PI * 140
-  const strokeDashoffset = circumference * (1 - progress)
+  const circumference = 2 * Math.PI * RADIUS
+  const strokeDashoffset = circumference * (timeLeft / duration)
 
   return (
     <div className={`flex-1 flex flex-col items-center justify-center min-h-0 ${isDark ? 'bg-[#1C1C1E]' : 'bg-white'}`}>
@@ -124,13 +67,11 @@ export function PomodoroTimer() {
       <div className="relative w-80 h-80 mb-10">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 300 300">
           <title>{t('pomodoro.progress')}</title>
-          {/* 배경 원 */}
-          <circle cx="150" cy="150" r="140" fill="none" stroke={isDark ? '#333' : '#E5E5E5'} strokeWidth="6" />
-          {/* 진행 원 */}
+          <circle cx="150" cy="150" r={RADIUS} fill="none" stroke={isDark ? '#333' : '#E5E5E5'} strokeWidth="6" />
           <circle
             cx="150"
             cy="150"
-            r="140"
+            r={RADIUS}
             fill="none"
             stroke={currentMode.color}
             strokeWidth="6"
@@ -153,24 +94,24 @@ export function PomodoroTimer() {
         <button
           type="button"
           onClick={reset}
+          aria-label={t('pomodoro.reset')}
           className={`p-3 rounded-full transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
         >
           <RotateCcw size={22} />
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (!isRunning && !sessionStartRef.current) sessionStartRef.current = new Date().toISOString()
-            setIsRunning(!isRunning)
-          }}
+          onClick={toggleRun}
+          aria-label={t(running ? 'pomodoro.pause' : 'pomodoro.start')}
           className="p-5 rounded-full text-white transition-colors"
           style={{ backgroundColor: currentMode.color }}
         >
-          {isRunning ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
+          {running ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
         </button>
         <button
           type="button"
-          onClick={skipToNext}
+          onClick={() => void skip()}
+          aria-label={t('pomodoro.skip')}
           className={`p-3 rounded-full transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-800' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
         >
           <SkipForward size={22} />
@@ -179,15 +120,16 @@ export function PomodoroTimer() {
 
       {/* 세션 카운트 */}
       <div className="flex items-center gap-2 mt-8">
-        {SESSION_DOTS.map((dot, i) => (
-          <div
-            key={dot}
-            className={`w-3 h-3 rounded-full transition-colors ${
-              i < sessions % 4 ? '' : isDark ? 'bg-gray-700' : 'bg-gray-300'
-            }`}
-            style={i < sessions % 4 ? { backgroundColor: currentMode.color } : {}}
-          />
-        ))}
+        {SESSION_DOTS.map((i) => {
+          const filled = i < sessions % POMODORO_LONG_BREAK_EVERY
+          return (
+            <div
+              key={i}
+              className={`w-3 h-3 rounded-full transition-colors ${filled ? '' : isDark ? 'bg-gray-700' : 'bg-gray-300'}`}
+              style={filled ? { backgroundColor: currentMode.color } : {}}
+            />
+          )
+        })}
         <span className="text-xs text-gray-500 ml-2">{t('pomodoro.sessions', { n: sessions })}</span>
       </div>
     </div>

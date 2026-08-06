@@ -55,7 +55,8 @@ export function getScheduledForOccurrence(
   }
 }
 
-const MIN_BLOCK_MS = 15 * 60 * 1000
+/** 시간블록 최소 길이(ms). 이보다 짧으면 updateTask가 거부한다. */
+export const MIN_BLOCK_MS = 15 * 60 * 1000
 
 export function isValidSchedulePair(start: string | null, end: string | null): boolean {
   if (start === null && end === null) return true
@@ -64,4 +65,13 @@ export function isValidSchedulePair(start: string | null, end: string | null): b
   const e = new Date(end).getTime()
   if (!Number.isFinite(s) || !Number.isFinite(e)) return false
   return e - s >= MIN_BLOCK_MS
+}
+
+/**
+ * Date → 로컬 기준 "YYYY-MM-DDTHH:mm:00".
+ * 캘린더·타임블록이 같은 직렬화를 각자 손으로 쓰고 있어 규칙이 갈릴 여지가 있었다.
+ */
+export function toLocalIsoMinute(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`
 }
