@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { Capabilities } from '../shared/capabilities'
 
 const api = {
   // Folders
@@ -14,7 +15,6 @@ const api = {
     ipcRenderer.invoke('create-list', id, name, color, icon, folderId || null),
   updateList: (id: string, updates: Record<string, unknown>) => ipcRenderer.invoke('update-list', id, updates),
   deleteList: (id: string) => ipcRenderer.invoke('delete-list', id),
-  reorderLists: (ids: string[]) => ipcRenderer.invoke('reorder-lists', ids),
 
   // Tasks
   getTasks: () => ipcRenderer.invoke('get-tasks'),
@@ -45,20 +45,23 @@ const api = {
   // Score
   getScore: () => ipcRenderer.invoke('get-score'),
   addScoreEvent: (event: unknown) => ipcRenderer.invoke('add-score-event', event),
+  addScoreEvents: (events: unknown[]) => ipcRenderer.invoke('add-score-events', events),
 
   // Attachments
   pickAttachment: () => ipcRenderer.invoke('pick-attachment'),
-  getAttachmentsDir: () => ipcRenderer.invoke('get-attachments-dir'),
   openAttachment: (path: string) => ipcRenderer.invoke('open-attachment', path),
 
   // Export
   exportData: () => ipcRenderer.invoke('export-data'),
 
-  // Notifications
-  showNotification: (title: string, body: string) => ipcRenderer.invoke('show-notification', title, body),
+  // Notifications — 권한이 없으면 리마인더가 조용히 사라지므로 설정에서 상태를 안내한다.
+  notificationPermission: () =>
+    ipcRenderer.invoke('app:notification-permission') as Promise<'supported' | 'unsupported'>,
+  requestNotificationPermission: () => ipcRenderer.invoke('app:request-notification-permission') as Promise<boolean>,
+  openNotificationSettings: () => ipcRenderer.invoke('app:open-notification-settings'),
 
-  // App meta
-  isMas: () => ipcRenderer.invoke('app:is-mas') as Promise<boolean>,
+  // App meta — 이 빌드가 무엇을 할 수 있는가 (shared/capabilities.ts)
+  capabilities: () => ipcRenderer.invoke('app:capabilities') as Promise<Capabilities>,
 
   // 외부 링크 열기
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
@@ -93,7 +96,6 @@ const api = {
   aiWarmup: () => ipcRenderer.invoke('ai:warmup'),
   aiCreateTask: (input: string, tasks: unknown[]) => ipcRenderer.invoke('ai:create-task', input, tasks),
   aiInterpretAction: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:interpret-action', message, tasks),
-  aiChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:chat', message, tasks),
   aiStreamChat: (message: string, tasks: unknown[], history: unknown[]) =>
     ipcRenderer.invoke('ai:stream-chat', message, tasks, history),
   aiGetHistory: () => ipcRenderer.invoke('ai:get-history'),
@@ -147,7 +149,6 @@ const api = {
     ipcRenderer.invoke('calendar:save-credentials', input),
   calendarTestConnection: () => ipcRenderer.invoke('calendar:test-connection'),
   calendarSelect: (url: string, name: string) => ipcRenderer.invoke('calendar:select', url, name),
-  calendarSetEnabled: (enabled: boolean) => ipcRenderer.invoke('calendar:set-enabled', enabled),
   calendarSyncNow: () => ipcRenderer.invoke('calendar:sync-now'),
   calendarDisconnect: () => ipcRenderer.invoke('calendar:disconnect'),
 

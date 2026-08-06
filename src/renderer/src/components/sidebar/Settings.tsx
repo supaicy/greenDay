@@ -1,11 +1,23 @@
 import { useState, useEffect } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
-import { X, ArrowUpCircle, CheckCircle2, Wifi, WifiOff, Download, Loader2, RefreshCw, Lock, AlertTriangle } from 'lucide-react'
+import {
+  X,
+  ArrowUpCircle,
+  CheckCircle2,
+  Wifi,
+  WifiOff,
+  Download,
+  Loader2,
+  RefreshCw,
+  Lock,
+  AlertTriangle
+} from 'lucide-react'
 import { useStore, type Theme } from '../../store/useStore'
 import { LANGUAGES, type Language } from '../../i18n'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 import { CalendarSyncSection } from './CalendarSyncSection'
 import { GoogleSyncSection } from './GoogleSyncSection'
+import type { Capabilities } from '../../../../shared/capabilities'
 
 // 설명은 실제 동작과 1:1로 맞춘다. Cmd+N/Cmd+Shift+A는 토글이고,
 // Cmd+D·Delete·1-4는 할 일이 선택돼 있어야만 동작한다(선택이 없으면 아무 일도
@@ -63,21 +75,11 @@ const PEER_FOCUS_LIGHT =
 const focusRing = (isDark: boolean) => (isDark ? FOCUS_RING_DARK : FOCUS_RING_LIGHT)
 const peerFocusRing = (isDark: boolean) => (isDark ? PEER_FOCUS_DARK : PEER_FOCUS_LIGHT)
 const fieldSurface = (isDark: boolean) =>
-  isDark
-    ? `bg-gray-700 text-gray-100 ${FIELD_FOCUS_DARK}`
-    : `bg-gray-100 text-gray-800 ${FIELD_FOCUS_LIGHT}`
+  isDark ? `bg-gray-700 text-gray-100 ${FIELD_FOCUS_DARK}` : `bg-gray-100 text-gray-800 ${FIELD_FOCUS_LIGHT}`
 
 // 섹션 제목. 다섯 개가 아이콘 유무로 제각각이었는데, 장식을 더하는 대신 걷어내는 쪽으로
 // 통일했다. children은 연결 상태처럼 '정보'인 것만 받는다.
-function SectionHeading({
-  isDark,
-  label,
-  children
-}: {
-  isDark: boolean
-  label: string
-  children?: React.ReactNode
-}) {
+function SectionHeading({ isDark, label, children }: { isDark: boolean; label: string; children?: React.ReactNode }) {
   return (
     <h3 className={`flex items-center gap-2 text-sm font-medium mb-3 ${headingText(isDark)}`}>
       {label}
@@ -148,14 +150,69 @@ function OllamaModelHint({
 
       {manualOnly && (
         <p>
-          {t('settings.modelHintManual')}{' '}
-          <code className={labelText(isDark)}>ollama pull exaone3.5</code>
+          {t('settings.modelHintManual')} <code className={labelText(isDark)}>ollama pull exaone3.5</code>
         </p>
       )}
 
       {hasRecommended && aiPull && !aiPull.active && !aiPull.error && (
         <p className={successText(isDark)}>✓ {t('settings.modelInstallDone', { model: aiPull.model })}</p>
       )}
+    </div>
+  )
+}
+
+/**
+ * 알림 권한 안내. macOS는 앱이 처음 알림을 띄울 때 권한을 묻고 그 첫 알림은 사라지므로,
+ * 사용자는 "리마인더가 안 온다"로만 겪는다(2026-08-05 검증). 여기서 미리 요청하게 한다.
+ */
+function NotificationSection({ isDark }: { isDark: boolean }) {
+  const { t } = useTranslation()
+  const [supported, setSupported] = useState<boolean | null>(null)
+  const [asked, setAsked] = useState(false)
+
+  useEffect(() => {
+    // 실패해도 섹션을 감추지 않는다 — 감추면 "리마인더가 안 온다"의 원인을
+    // 알려 주려고 만든 안내가 조용히 사라진다.
+    window.api
+      .notificationPermission?.()
+      .then((v) => setSupported(v === 'supported'))
+      .catch(() => setSupported(true))
+  }, [])
+
+  // 플랫폼이 알림 자체를 못 띄우면 요청 버튼은 확실한 no-op이라 감춘다.
+  // 다만 isSupported()는 '플랫폼 지원'만 답한다 — 사용자가 허용했는지는 알 수 없으므로,
+  // 지원되는 경우에는 상태를 아는 척하지 않고 무엇이 필요한지만 말한다.
+  const canRequest = supported !== false
+
+  return (
+    <div className="space-y-2">
+      <p className={`text-xs ${hintText(isDark)}`}>
+        {t(canRequest ? 'settings.notifPermDefault' : 'settings.notifPermUnsupported')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {canRequest && !asked && (
+          <button
+            type="button"
+            onClick={() => {
+              void window.api.requestNotificationPermission?.().catch(() => {})
+              setAsked(true)
+            }}
+            className={`px-3 py-1.5 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
+          >
+            {t('settings.notifPermRequest')}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void window.api.openNotificationSettings?.().catch(() => {})}
+          className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${focusRing(isDark)} ${
+            isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+          }`}
+        >
+          {t('settings.notifPermOpenSettings')}
+        </button>
+      </div>
+      {asked && <p className={`text-xs ${hintText(isDark)}`}>{t('settings.notifPermProbeSent')}</p>}
     </div>
   )
 }
@@ -172,6 +229,8 @@ export function Settings() {
     exportData,
     updateAvailable,
     updateChecked,
+    updateDownloadProgress,
+    updateReady,
     aiConfig,
     aiConnected,
     aiModels,
@@ -190,11 +249,14 @@ export function Settings() {
   const [aiProvider, setAiProvider] = useState<'ollama' | 'openai' | 'custom'>('ollama')
   const [aiMaxHistory, setAiMaxHistory] = useState(200)
   const [aiLocalOnly, setAiLocalOnly] = useState(false)
-  // Mac App Store(샌드박스) 빌드면 앱 내 업데이트가 아니라 App Store가 업데이트를 담당한다.
-  const [isMas, setIsMas] = useState(false)
+  // 이 빌드가 무엇을 할 수 있는가 (shared/capabilities.ts).
+  // 스토어 빌드면 업데이트를 스토어가 담당하므로 앱 내 업데이트 UI를 숨긴다.
+  const [caps, setCaps] = useState<Capabilities | null>(null)
+  const updatesViaStore = caps?.updatesViaStore ?? false
+  const canSelfUpdate = caps?.canSelfUpdate ?? false
 
   useEffect(() => {
-    window.api.isMas?.().then(setIsMas)
+    window.api.capabilities?.().then(setCaps)
   }, [])
 
   useEffect(() => {
@@ -297,9 +359,7 @@ export function Settings() {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <div
-          className={`flex shrink-0 items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}
-        >
+        <div className={`flex shrink-0 items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}>
           <h2 className="text-base font-semibold">{t('settings.title')}</h2>
           <button
             type="button"
@@ -414,10 +474,7 @@ export function Settings() {
             </SectionHeading>
             <div className="space-y-3">
               <div>
-                <label
-                  htmlFor="ai-provider"
-                  className={`text-xs ${labelText(isDark)}`}
-                >
+                <label htmlFor="ai-provider" className={`text-xs ${labelText(isDark)}`}>
                   {t('settings.aiProvider')}
                 </label>
                 <select
@@ -478,16 +535,11 @@ export function Settings() {
                   <span className={`flex items-center gap-1.5 text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                     <Lock size={13} /> {t('settings.localOnly')}
                   </span>
-                  <span className={`block text-xs mt-0.5 ${hintText(isDark)}`}>
-                    {t('settings.localOnlyDesc')}
-                  </span>
+                  <span className={`block text-xs mt-0.5 ${hintText(isDark)}`}>{t('settings.localOnlyDesc')}</span>
                 </span>
               </label>
               <div>
-                <label
-                  htmlFor="ai-base-url"
-                  className={`text-xs ${labelText(isDark)}`}
-                >
+                <label htmlFor="ai-base-url" className={`text-xs ${labelText(isDark)}`}>
                   {t('settings.apiUrl')}
                 </label>
                 <input
@@ -554,10 +606,7 @@ export function Settings() {
               </div>
               {aiProvider !== 'ollama' && (
                 <div>
-                  <label
-                    htmlFor="ai-api-key"
-                    className={`text-xs ${labelText(isDark)}`}
-                  >
+                  <label htmlFor="ai-api-key" className={`text-xs ${labelText(isDark)}`}>
                     {t('settings.apiKey')}
                   </label>
                   <input
@@ -571,10 +620,7 @@ export function Settings() {
                 </div>
               )}
               <div>
-                <label
-                  htmlFor="ai-max-history"
-                  className={`text-xs ${labelText(isDark)}`}
-                >
+                <label htmlFor="ai-max-history" className={`text-xs ${labelText(isDark)}`}>
                   {t('settings.chatHistoryLimit')}
                 </label>
                 <input
@@ -604,6 +650,12 @@ export function Settings() {
             </div>
           </div>
 
+          {/* 알림 권한 — 없으면 리마인더가 조용히 사라지므로 상태를 드러낸다 */}
+          <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
+            <SectionHeading isDark={isDark} label={t('settings.notifications')} />
+            <NotificationSection isDark={isDark} />
+          </div>
+
           {/* 키보드 단축키 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
             <SectionHeading isDark={isDark} label={t('settings.shortcuts')} />
@@ -630,8 +682,8 @@ export function Settings() {
               <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                 Greenday v{__APP_VERSION__}
               </div>
-              {isMas ? (
-                // App Store 빌드: 앱 내 업데이트 확인/다운로드는 비활성(App Store가 담당)
+              {updatesViaStore ? (
+                // 스토어 빌드: 앱 내 업데이트 확인/다운로드는 비활성(스토어가 담당)
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className={successText(isDark)} />
                   <span className={`text-xs ${labelText(isDark)}`}>{t('settings.updateViaAppStore')}</span>
@@ -647,24 +699,56 @@ export function Settings() {
                 </div>
               ) : null}
             </div>
-            {!isMas && updateAvailable && (
-              <button
-                type="button"
-                onClick={() => window.api.openExternal(updateAvailable.downloadUrl)}
-                className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${focusRing(isDark)} ${
-                  isDark
-                    ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-200'
-                    : 'bg-primary-50 hover:bg-primary-100 text-primary-800'
-                }`}
-              >
-                <ArrowUpCircle size={18} />
-                <div className="text-left flex-1">
-                  <div className="text-sm font-medium">{t('settings.updateAvailable')}</div>
-                  <div className={`text-xs ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>
-                    {t('settings.updateDownload', { version: updateAvailable.version })}
+            {canSelfUpdate && updateAvailable && (
+              <div className="space-y-2">
+                <div
+                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg ${
+                    isDark ? 'bg-primary-500/20 text-primary-200' : 'bg-primary-50 text-primary-800'
+                  }`}
+                >
+                  <ArrowUpCircle size={18} />
+                  <div className="text-left flex-1">
+                    <div className="text-sm font-medium">{t('settings.updateAvailable')}</div>
+                    <div className={`text-xs ${isDark ? 'text-primary-300' : 'text-primary-700'}`}>
+                      {t('settings.updateDownload', { version: updateAvailable.version })}
+                    </div>
                   </div>
                 </div>
-              </button>
+
+                {/* 앱 안에서 받아 설치한다. 예전에는 이 IPC를 아무도 부르지 않아
+                    새 버전이 떠도 GitHub 페이지를 여는 것 말고는 할 수 있는 게 없었다. */}
+                {updateDownloadProgress != null && !updateReady ? (
+                  <div>
+                    <div className={`h-1.5 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
+                      <div
+                        className="h-1.5 rounded-full bg-primary-500 transition-all"
+                        style={{ width: `${updateDownloadProgress}%` }}
+                      />
+                    </div>
+                    <p className={`mt-1 text-xs ${hintText(isDark)}`}>
+                      {t('settings.updateDownloading', { percent: updateDownloadProgress })}
+                    </p>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => (updateReady ? window.api.installUpdate?.() : window.api.downloadUpdate?.())}
+                    className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
+                  >
+                    {t(updateReady ? 'settings.updateInstall' : 'settings.updateDownloadNow')}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => window.api.openExternal(updateAvailable.downloadUrl)}
+                  className={`text-xs rounded ${focusRing(isDark)} ${
+                    isDark ? 'text-primary-300 hover:text-primary-200' : 'text-primary-700 hover:text-primary-800'
+                  }`}
+                >
+                  {t('settings.updateViewRelease')}
+                </button>
+              </div>
             )}
           </div>
         </div>

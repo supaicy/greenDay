@@ -1,0 +1,86 @@
+import { describe, it, expect } from 'vitest'
+import { capabilitiesFor, type PlatformFacts } from './capabilities'
+
+/**
+ * 2026-08-06 plan-eng-review에서 만든 테스트.
+ *
+ * 이 규칙들은 전에 네 파일에 흩어진 `if (process.mas)` 로만 존재했고 어디에도
+ * 테스트가 없었다. Windows와 라이선스 게이트를 얹기 전에 여기서 고정한다.
+ */
+
+const facts = (over: Partial<PlatformFacts> = {}): PlatformFacts => ({
+  isDev: false,
+  isMas: false,
+  isWindowsStore: false,
+  platform: 'darwin',
+  ...over
+})
+
+describe('canSelfUpdate', () => {
+  it('is on for a plain packaged build', () => {
+    expect(capabilitiesFor(facts()).canSelfUpdate).toBe(true)
+    expect(capabilitiesFor(facts({ platform: 'win32' })).canSelfUpdate).toBe(true)
+  })
+
+  // 스토어가 업데이트를 담당한다. 자체 업데이터를 켜면 정책 위반이고
+  // 샌드박스에서는 어차피 실패한다.
+  it('is off for store builds', () => {
+    expect(capabilitiesFor(facts({ isMas: true })).canSelfUpdate).toBe(false)
+    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).canSelfUpdate).toBe(false)
+  })
+
+  // 개발 빌드가 릴리스를 받아 자기를 덮어쓰면 곤란하다.
+  it('is off in dev', () => {
+    expect(capabilitiesFor(facts({ isDev: true })).canSelfUpdate).toBe(false)
+  })
+})
+
+describe('hasGlobalShortcuts', () => {
+  it('is off only under the MAS sandbox', () => {
+    expect(capabilitiesFor(facts({ isMas: true })).hasGlobalShortcuts).toBe(false)
+    expect(capabilitiesFor(facts()).hasGlobalShortcuts).toBe(true)
+    // Microsoft Store는 이 제약이 없다 — MAS 샌드박스만의 문제다.
+    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).hasGlobalShortcuts).toBe(true)
+  })
+
+  // 개발 중에는 켜져 있어야 QA로 확인할 수 있다.
+  it('stays on in dev', () => {
+    expect(capabilitiesFor(facts({ isDev: true })).hasGlobalShortcuts).toBe(true)
+  })
+})
+
+describe('needsLicenseKey', () => {
+  // 웹사이트 직접 판매 채널(Windows 비스토어)만 키를 받는다.
+  it('is on only for the direct-sale Windows build', () => {
+    expect(capabilitiesFor(facts({ platform: 'win32' })).needsLicenseKey).toBe(true)
+  })
+
+  // 여기가 핵심이다. 스토어 빌드에 키 입력 칸이 남으면
+  // Apple 가이드라인 3.1.1(외부 결제 유도) 위반으로 심사에서 거절된다.
+  it('is off for every store build — a key field there is a review rejection', () => {
+    expect(capabilitiesFor(facts({ isMas: true })).needsLicenseKey).toBe(false)
+    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).needsLicenseKey).toBe(false)
+  })
+
+  // 맥은 App Store로만 판다 — 직접판매 채널이 아니다.
+  it('is off on macOS even outside the store', () => {
+    expect(capabilitiesFor(facts({ platform: 'darwin' })).needsLicenseKey).toBe(false)
+  })
+})
+
+describe('updatesViaStore', () => {
+  it('mirrors store builds', () => {
+    expect(capabilitiesFor(facts({ isMas: true })).updatesViaStore).toBe(true)
+    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).updatesViaStore).toBe(true)
+    expect(capabilitiesFor(facts()).updatesViaStore).toBe(false)
+  })
+
+  // 스토어 빌드는 "스토어를 통해 업데이트" 안내를 보이고 자체 업데이트는 꺼야 한다.
+  // 이 둘이 동시에 켜지면 사용자가 두 경로를 다 보게 된다.
+  it('never coexists with canSelfUpdate', () => {
+    for (const f of [facts(), facts({ isMas: true }), facts({ isDev: true }), facts({ platform: 'win32', isWindowsStore: true })]) {
+      const c = capabilitiesFor(f)
+      expect(c.updatesViaStore && c.canSelfUpdate).toBe(false)
+    }
+  })
+})

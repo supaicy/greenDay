@@ -5,13 +5,7 @@ import { v4 as uuid } from 'uuid'
 import * as db from './database'
 import * as ai from './ai-service'
 import { validateTaskInput, validateTaskUpdate } from './validate'
-import {
-  readConfigFile,
-  writeConfigFile,
-  toPublicConfig,
-  DEFAULT_CONFIG,
-  type CalendarConfig
-} from './calendar-config'
+import { readConfigFile, writeConfigFile, toPublicConfig, DEFAULT_CONFIG, type CalendarConfig } from './calendar-config'
 import { CalDavClient, CalDavError } from './caldav/client'
 import { runSync } from './calendar-sync'
 import type { TaskRow } from './caldav/sync'
@@ -26,12 +20,14 @@ import { GoogleCalendarClient, GoogleApiError } from './google/calendar'
 import { needsRefresh, refreshTokens, revokeToken, OAuthError } from './google/oauth'
 import { startGoogleAuth } from './google-auth-flow'
 import { runGoogleSync } from './google-sync'
+import { uiStrings } from './ui-language'
+import { currentCapabilities } from './capabilities'
+import { toLocalDateString } from '../shared/date'
 
 // 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로
 // 이 값은 비밀이 아니다 — 인가 코드 가로채기는 PKCE가 막는다.
 declare const __GOOGLE_CLIENT_ID__: string
-const BUILTIN_GOOGLE_CLIENT_ID =
-  typeof __GOOGLE_CLIENT_ID__ === 'string' ? __GOOGLE_CLIENT_ID__ : ''
+const BUILTIN_GOOGLE_CLIENT_ID = typeof __GOOGLE_CLIENT_ID__ === 'string' ? __GOOGLE_CLIENT_ID__ : ''
 
 function csvCell(value: unknown): string {
   const s = String(value ?? '')
@@ -51,8 +47,9 @@ async function safeOpenExternal(url: string): Promise<void> {
 }
 
 export function setupIpcHandlers(): void {
-  // App meta — 렌더러가 Mac App Store(샌드박스) 빌드 여부를 알아 업데이트 UI 등을 분기.
-  ipcMain.handle('app:is-mas', () => Boolean(process.mas))
+  // App meta — 이 빌드가 무엇을 할 수 있는지. 렌더러는 process.mas 같은 사실이 아니라
+  // "자체 업데이트를 하는가" 같은 결론만 받는다 (shared/capabilities.ts).
+  ipcMain.handle('app:capabilities', () => currentCapabilities())
 
   // Folders
   ipcMain.handle('get-folders', () => db.getFolders())
@@ -65,7 +62,6 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('create-list', (_, id, name, color, icon, folderId) => db.createList(id, name, color, icon, folderId))
   ipcMain.handle('update-list', (_, id, updates) => db.updateList(id, updates))
   ipcMain.handle('delete-list', (_, id) => db.deleteList(id))
-  ipcMain.handle('reorder-lists', (_, ids) => db.reorderLists(ids))
 
   // Tasks
   ipcMain.handle('get-tasks', () => db.getTasks())
@@ -95,6 +91,7 @@ export function setupIpcHandlers(): void {
   // Score
   ipcMain.handle('get-score', () => db.getScore())
   ipcMain.handle('add-score-event', (_, event) => db.addScoreEvent(event))
+  ipcMain.handle('add-score-events', (_, events) => db.addScoreEvents(events))
 
   // Attachments
   ipcMain.handle('pick-attachment', async () => {
@@ -115,16 +112,13 @@ export function setupIpcHandlers(): void {
     }
     return attachments
   })
-  ipcMain.handle('get-attachments-dir', () => db.getAttachmentsDir())
   // 첨부파일 열기: 시스템 기본 앱으로 파일 경로를 엶
   ipcMain.handle('open-attachment', (_, filePath: string) => shell.openPath(String(filePath)))
 
   // Export
   ipcMain.handle('export-data', async () => {
-    // Local date (not toISOString/UTC) so the filename matches the user's day —
-    // toISOString lags a day for positive-UTC users in early-morning hours.
-    const now = new Date()
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    // 파일명은 로컬 날짜 — UTC면 새벽에 하루 전 날짜가 박힌다.
+    const today = toLocalDateString(new Date())
     const result = await dialog.showSaveDialog({
       defaultPath: `ticktick-backup-${today}.json`,
       filters: [
@@ -137,7 +131,10 @@ export function setupIpcHandlers(): void {
     const exportedData = db.exportData()
     if (ext === 'csv') {
       const parsed = JSON.parse(exportedData)
-      const tasks = parsed.tasks || []
+      // JSON 백업은 휴지통까지 전부 담지만(복원 목적), CSV는 스프레드시트로 바로 열어
+      // 읽는 목록이다. 삭제 여부 열이 없는데 휴지통 항목을 섞으면 살아있는 할일과
+      // 구분할 수 없어 잘못된 목록이 된다 — CSV에서는 제외한다.
+      const tasks = ((parsed.tasks || []) as Record<string, unknown>[]).filter((t) => !t.deleted_at)
       const header = 'Title,Description,Priority,DueDate,List,Completed,CreatedAt\n'
       const rows = tasks
         .map((t: Record<string, unknown>) =>
@@ -153,10 +150,23 @@ export function setupIpcHandlers(): void {
     return true
   })
 
-  // Notifications
-  ipcMain.handle('show-notification', (_, title, body) => {
-    new Notification({ title, body }).show()
+  // Notifications — 리마인더가 조용히 사라지지 않도록 렌더러가 권한 상태를 물어볼 수 있게 한다.
+  // macOS는 앱이 처음 알림을 띄울 때 권한을 묻고, 그 첫 알림은 보통 사라진다(2026-08-05 검증).
+  // 'unsupported'면 시스템이 알림 자체를 못 띄우는 상태다.
+  ipcMain.handle('app:notification-permission', () => (Notification.isSupported() ? 'supported' : 'unsupported'))
+
+  // 권한 프롬프트를 사용자가 원하는 시점에 띄우기 위한 조용한 알림.
+  ipcMain.handle('app:request-notification-permission', () => {
+    if (!Notification.isSupported()) return false
+    const strings = uiStrings()
+    new Notification({ title: strings.permProbeTitle, body: strings.permProbeBody }).show()
+    return true
   })
+
+  // macOS 알림 설정 화면 열기 — 차단 상태를 사용자가 직접 풀 수 있는 유일한 경로다.
+  ipcMain.handle('app:open-notification-settings', () =>
+    shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension')
+  )
 
   // 외부 링크 열기
   ipcMain.handle('open-external', (_, url: string) => {
@@ -170,7 +180,6 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('ai:set-config', (_, updates) => ai.setAiConfig(updates))
   ipcMain.handle('ai:create-task', (_, input, tasks) => ai.createTaskFromNL(input, tasks))
   ipcMain.handle('ai:interpret-action', (_, message, tasks) => ai.interpretTaskAction(message, tasks))
-  ipcMain.handle('ai:chat', (_, message, tasks) => ai.chat(message, tasks))
   ipcMain.handle('ai:stream-chat', (event, message, tasks, history) => {
     const sender = event.sender
     ai.streamChat(
@@ -208,8 +217,7 @@ export function setupIpcHandlers(): void {
 
   // === 캘린더 연동 (CalDAV) ===
   // 설정은 파일에 두고, 비밀번호만 safeStorage로 암호화한다. 렌더러에는 절대 넘기지 않는다.
-  const loadCalendarConfig = (): CalendarConfig =>
-    readConfigFile(db.getCalendarConfigPath(), db.realCrypto)
+  const loadCalendarConfig = (): CalendarConfig => readConfigFile(db.getCalendarConfigPath(), db.realCrypto)
   const storeCalendarConfig = (config: CalendarConfig): void =>
     writeConfigFile(db.getCalendarConfigPath(), config, db.realCrypto)
 
@@ -276,12 +284,6 @@ export function setupIpcHandlers(): void {
     return toPublicConfig(next)
   })
 
-  ipcMain.handle('calendar:set-enabled', (_, enabled: boolean) => {
-    const next = { ...loadCalendarConfig(), enabled: Boolean(enabled) }
-    storeCalendarConfig(next)
-    return toPublicConfig(next)
-  })
-
   ipcMain.handle('calendar:sync-now', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password || !config.calendarUrl) {
@@ -322,18 +324,15 @@ export function setupIpcHandlers(): void {
   })
 
   // === 구글 캘린더 연동 ===
-  const googleConfigPath = (): string => db.getCalendarConfigPath().replace(/calendar-config\.json$/, 'google-config.json')
+  const googleConfigPath = (): string =>
+    db.getCalendarConfigPath().replace(/calendar-config\.json$/, 'google-config.json')
   const loadGoogle = (): GoogleConfig => readGoogleConfig(googleConfigPath(), db.realCrypto)
-  const storeGoogle = (config: GoogleConfig): void =>
-    writeGoogleConfig(googleConfigPath(), config, db.realCrypto)
+  const storeGoogle = (config: GoogleConfig): void => writeGoogleConfig(googleConfigPath(), config, db.realCrypto)
 
   const describeGoogleError = (error: unknown): string =>
-    error instanceof GoogleApiError || error instanceof OAuthError
-      ? error.message
-      : '알 수 없는 오류가 발생했습니다.'
+    error instanceof GoogleApiError || error instanceof OAuthError ? error.message : '알 수 없는 오류가 발생했습니다.'
 
-  const resolveClientId = (): string =>
-    BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
+  const resolveClientId = (): string => BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
 
   /**
    * 유효한 액세스 토큰을 확보한다. 만료가 가까우면 미리 갱신하고 갱신 결과를 저장한다.
@@ -457,7 +456,7 @@ export function setupIpcHandlers(): void {
   // Quick add (global shortcut)
   ipcMain.handle('register-global-shortcut', () => {
     // MAS 샌드박스에서는 시스템 전역 단축키를 등록할 수 없어 조용히 실패 → no-op
-    if (process.mas) return false
+    if (!currentCapabilities().hasGlobalShortcuts) return false
     try {
       globalShortcut.register('CommandOrControl+Shift+A', () => {
         const wins = BrowserWindow.getAllWindows()
