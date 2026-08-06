@@ -83,7 +83,7 @@ footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);font-si
 <table>
 <thead><tr><th>#</th><th>정할 것</th><th>지금 막고 있는 것</th><th>제 추천</th></tr></thead>
 <tbody>
-<tr><td>①</td><td>이번 수정본을 다시 올릴까</td><td><span class="pill block">심사 제출</span></td><td>올린다 (2.0.2)</td></tr>
+<tr><td>①</td><td>이번 수정본을 다시 올릴까</td><td><span class="pill ok">완료 08-06</span></td><td><strong>2.0.2 업로드 완료</strong></td></tr>
 <tr><td>②</td><td>가격 — 유료 / 무료</td><td><span class="pill ok">결정됨 08-06</span></td><td><strong>₩19,000 일회성 · 플랫폼별</strong></td></tr>
 <tr><td>③</td><td>Google 캘린더를 이번 출시에 넣을까</td><td><span class="pill block">심사 리젝 위험</span></td><td>등록 시도 → 등급 보고 결정</td></tr>
 <tr><td>④</td><td>iCloud 동기화를 실제로 검증할까</td><td><span class="pill wait">미검증 1건</span></td><td>지금 앱 암호 하나</td></tr>
@@ -100,7 +100,21 @@ footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);font-si
 <h2><span class="tag">A · 지금 정해야 심사가 굴러갑니다</span>①②③</h2>
 
 <div class="dec">
-<h3><span class="num">①</span> 8월 2일에 올린 빌드에는 이번 수정이 하나도 없습니다</h3>
+<h3><span class="num">①</span> <span style="color:var(--ok)">2026-08-06 완료</span> — 2.0.2 업로드됨</h3>
+
+<div class="callout" style="margin-top:0">
+<p><strong>완료.</strong> 2.0.2를 빌드해 App Store Connect에 올렸습니다.
+Delivery UUID <code>fbee3f89-9cfa-4f6d-adef-50f13288a029</code> · 검증·업로드 무오류 ·
+유니버설(x86_64 + arm64) · 설치 인증서 서명 확인.</p>
+<p>여기에는 8/2 빌드에 없던 것들이 들어갔습니다 — 전수 검증에서 고친 데이터 손상 버그들,
+그리고 오늘 엔지니어링 리뷰에서 결정한 T1~T5(단일 인스턴스 락, Windows 딥링크 수신,
+capabilities 추출, 구글 인증 취소 버그 수정).</p>
+<p style="margin-bottom:0"><strong>다음:</strong> 처리에 5~30분. 끝나면 App Store Connect의
+'빌드' 탭에 2.0.2가 나타납니다. 그다음 스토어 화면을 채우고 심사에 제출합니다.
+유료로 정하셨으므로 <strong>유료 앱 계약(세금 서류 + 은행)</strong>이 병행되어야 합니다.</p>
+</div>
+
+<p class="situation" style="margin-top:18px"><em>아래는 결정 전 검토 내용입니다.</em></p>
 
 <p class="situation">
 8월 2일 16:54에 App Store Connect로 올린 2.0.1은 <strong>어제 찾은 버그들이 들어가기 전</strong>의 빌드입니다.
