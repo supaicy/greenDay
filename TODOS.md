@@ -136,3 +136,166 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **Context:** 같은 혼용이 15개 컴포넌트에 남아 있다 — calendar/{CalendarView,TimeBlock,WeeklyCalendar}, eisenhower, habits, kanban, pomodoro, stats, timeline, tasks/{AddTask,SubtaskList,TaskItem,TaskList,TrashView}. 상세 패널(TaskDetail)만 `surface-*` 토큰으로 이미 전환됨(커밋 `4329ece`). 대비 측정 방법은 `docs/reports/2026-07-29-settings-design-review.html`의 "검증 방법" 참조.
 - **Depends on / blocked by:** 없음. 동기화 계획과 독립. 다만 **동기화 재작성과 같은 브랜치에서 돌리지 말 것** — 뭔가 깨졌을 때 원인 분리가 어려워진다.
 - **Added:** 2026-07-29, /plan-eng-review (동기화 설계 리뷰 중 발견)
+
+## 미검증 항목 (2026-08-05 전수 검증)
+
+> **대장:** `docs/reports/2026-08-05-unverified-items.html` — 준비물·검증 절차 포함.
+> **전체 결과:** `docs/reports/2026-08-05-feature-inventory.html`
+
+전수 검증에서 끝까지 확인하지 못한 5가지. 코드 의심이 아니라 **외부 자격증명·다른 빌드 구성이 없어서** 막힌 것들이다.
+
+### [U-1] Google 캘린더 동기화 왕복 — 차단
+- **막힌 이유:** 빌드에 OAuth 클라이언트 ID 없음(`__GOOGLE_CLIENT_ID__` / `GOOGLE_OAUTH_CLIENT_ID` 둘 다 빈 값) → 화면에 "이 빌드에는 Google 연동이 설정되어 있지 않습니다"
+- **준비물:** Google Cloud Console 데스크톱 앱 OAuth 클라이언트 ID. 리디렉션에 **번들 ID `com.supaicy.haru`** 등록(앱 이름 Greenday와 다름 — 실수 지점)
+- **이미 확인됨:** PKCE·토큰 갱신/폐기·캘린더 필터·동기화 계획 로직 유닛테스트 통과
+
+### [U-2] 커스텀 스킴 딥링크 복귀 — 차단 (U-1 종속)
+- **막힌 이유:** Google OAuth 콜백 전용 경로
+- **확인할 것:** 브라우저 동의 후 앱 창이 앞으로 나오고 최소화 시 복원되는지. `is.dev` 분기 때문에 **개발/패키징 양쪽** 확인 필요
+
+### [U-3] CalDAV(iCloud) 동기화 왕복 — 보류
+- **막힌 이유:** Apple ID + 앱 전용 암호 필요
+- **이미 확인됨:** 프로토콜 4개 모듈 유닛테스트 통과, 비밀번호 safeStorage 암호화 + 렌더러 미노출 코드 확인
+- **확인할 것:** 생성/수정(중복 아님)/삭제 반영, 캘린더 변경 시 동기화 상태 초기화, 연동 해제 시 서버 일정 보존
+
+### [U-4] 자동 업데이트 "새 버전 있음" 경로 — 보류
+- **막힌 이유:** GitHub 최신 릴리스 v1.4.1 < 로컬 v2.0.1 → 업데이트 감지 자체가 불가
+- **확인할 것:** 2.0.1보다 높은 릴리스 발행 후 감지 → 진행률 → 재시작 설치
+
+### [U-5] MAS(App Store) 빌드 분기 — 보류
+- **막힌 이유:** dev·패키징 모두 `process.mas === false`
+- **확인할 것:** ① 설정에 "App Store를 통해 업데이트" ② 전역 단축키 no-op(앱 외부 Cmd+Shift+A가 **안 먹는 게 정상**) ③ 업데이트 IPC no-op
+
+### 별건 — 미검증이 아니라 기능 부재
+- **라이선스 검증:** `src/shared/license/`에 서명 검증 코어 + 테스트가 있으나 **어디에서도 import되지 않음.** 현재 빌드에 라이선스 게이트가 없다. 유료화 구조 확정 후 배선 → 그때 검증 대상.
+
+## 가격 정책 — 확정 (2026-08-06)
+
+> **근거 문서:** `docs/reports/2026-08-06-pricing-structure.html`
+> **설계 문서:** `~/.gstack/projects/supaicy-haru/supermicrosoft-supaicy-coordinate-design-20260806-pricing.md`
+
+**확정: 플랫폼별 일회성. 기능 차등 없음.**
+
+```
+Mac      ₩19,000  일회성   ┐  기능 전부 동일
+Windows  ₩19,000  일회성   ├─ iCloud + Google 동기화 모두 포함
+iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
+```
+
+- **Google 동기화를 유료 애드온으로 자르지 않는다.** 원가가 0원이고(자체 서버 없음 —
+  `calendar-config.ts:31`, `google/oauth.ts:16`, `google/calendar.ts:11` 전부 제공자 직결),
+  App Store에서 잠금 해제를 팔려면 IAP·영수증 검증·잠금 UI가 강제되며,
+  사용자 요청 2위가 정확히 "다양한 캘린더 연동"이다.
+- **판매 문구로 쓴다:** "iCloud와 Google 캘린더 모두 지원, 추가 결제 없음" —
+  TickTick(연 7~8만원 구독) 대비 현재 가진 유일한 가격 무기.
+- **순서:** 지금은 App Store에 집중. Windows는 맥 출시 이후 판단.
+
+### 실측 정정 — 다운로드 118건 (5,742 아님)
+
+2026-08-03 가격 제안서의 "5,742명"은 릴리스 **전체 에셋** 합계였고 대부분이
+`latest-mac.yml`(자동 업데이터 폴링 파일)이었다. 실제 설치파일(.dmg+.zip)은 **118건**(5개월).
+`homebrew-haru` cask가 같은 GitHub 릴리스 asset을 가리키므로 `brew install`도 이미 포함.
+스타 2 · 포크 2 · 이슈 0 · 최근 14일 방문 고유 21명 · 유입은 clien.net 100%.
+
+**목표(월 300~1,000만원)까지 140~460배.** 요금제로는 닿지 않는다 — 유입 문제다.
+
+### 이 결정으로 필요 없어진 작업
+- IAP 영수증 검증 / 기능 잠금 게이트 / 업그레이드 유도 화면
+- 라이선스 등급 구분(평생 vs 평생+Google)
+- 직접판매 활성화 서버 — Windows를 Microsoft Store로 내면 당분간 불필요
+  (개인정보처리방침의 "개발자가 운영하는 서버가 없습니다"를 지킬 수 있음)
+
+### 배포 채널 — 확정 (2026-08-06 /plan-eng-review)
+
+- **Windows는 웹사이트 직접 판매.** Microsoft Store 안 함 → `process.windowsStore` 분기 불필요.
+- **라이선스는 오프라인 서명 키만.** 활성화 서버 없음. `src/shared/license/`의 검증 코어(테스트 29개)를
+  앱에 배선하기만 한다. 공유 억제는 **구매자 이름 각인**(Sublime Text 방식).
+  서버는 복제가 실제로 보일 때 얹는다 — 오프라인 키가 온라인 활성화의 **토대**라 버리는 작업이 0이다.
+  덕분에 개인정보처리방침의 "개발자가 운영하는 서버가 없습니다"를 그대로 유지한다.
+- **빌드는 자체 정적 호스팅.** `electron-builder.yml`의 `publish: provider: github`를 그대로 두면
+  유료 Windows 빌드가 공개 저장소 릴리스에 올라가 결정 ⑨와 충돌한다.
+  → Cloudflare R2/Pages + electron-updater `generic` provider. 정적 파일이라 서버 로직 0.
+
+### [P1] Windows 이식 — 코드는 싸지만 "8줄"은 오도였다
+
+> **정정:** 2026-08-06 오전에 기록한 "main의 macOS 전용 코드 8줄"은 줄 수는 맞지만 오도다.
+> 그중 `index.ts:150`의 `app.on('open-url')` 한 줄은 **Windows에서 메커니즘 전체가 없다**는 뜻이다.
+
+- **좋은 소식:** 네이티브 모듈이 0개다. deps에 sqlite/keytar 계열이 없고 저장은 순수 JSON
+  `writeFileSync`(`database.ts:77`). `fsevents`는 vite의 optional dev 의존성뿐.
+  **Electron Windows 이식에서 보통 제일 비싼 node-gyp 리빌드가 이 프로젝트엔 아예 없다.**
+  `safeStorage`(DPAPI)·`globalShortcut`·`Notification` 전부 Windows 지원.
+  `setAppUserModelId`(`index.ts:56`)도 이미 호출돼 있다.
+- **나쁜 소식:** Windows는 `open-url`을 영원히 발화하지 않는다. 프로토콜 콜백은 **두 번째 인스턴스의
+  argv**로 온다. `requestSingleInstanceLock`·`second-instance`·`process.argv` 전부 grep 0건.
+  고치지 않으면 Windows에서 Google 로그인이 5분 뒤 "로그인 시간이 초과되었습니다"로 끝난다
+  (`google-auth-flow.ts:21` 타임아웃). 판매 문구 "iCloud와 Google 모두 지원"이 거짓이 된다.
+
+### [P1] Windows 착수 시 준비물 — 체크리스트
+
+착수 기준: **맥 판매 첫 10건, 또는 Windows 선구매 의사 5명** 중 하나.
+아래는 리드타임이 있어 결심 시점에 알면 이미 늦는 것들이다.
+
+- [ ] **MoR 결제 처리자** — Paddle 또는 Lemon Squeezy. 대리 판매자가 되어 EU VAT·세금을 대신
+      처리하고 구매자 정보도 그쪽이 보관한다(→ 개인정보 보관 주체가 되지 않는다). 심사 리드타임 있음.
+- [ ] **Windows 코드 서명 인증서** — 없으면 SmartScreen이 막아 배포 자체가 무의미하다.
+      작년 Gatekeeper와 같은 상황(학습 `haru-release-needs-tag-and-certs`).
+      EV(연 30~50만원) vs Azure Trusted Signing(월 1만원대) — 후자의 자격 요건 확인 필요.
+- [ ] **정적 호스팅** — Cloudflare R2/Pages 무료 티어. `generic` provider용 업데이트 피드.
+- [ ] **`electron-builder.yml`에 `win:` + `nsis:` 블록** — 지금 아예 없다.
+- [ ] **Windows CI 러너** — `release.yml:10`이 `runs-on: macos-latest`이고 `:72`가 `--mac`만 돈다.
+      NSIS는 Windows 러너가 필요하다(맥 크로스빌드는 wine 의존이라 불안정).
+- [ ] **`mas-preflight.sh` → `build-preflight.sh` 일반화** — 지금은 `appId` ↔ `mac.protocols[].schemes`
+      ↔ `app-id.ts`만 대조한다(`:146-155`). Windows는 **네 번째 자리**(`win.protocols` / NSIS 레지스트리)를
+      더하는데 검사가 없다. 어긋나면 `app-id.ts` 주석이 경고하는 그대로 조용히 깨진다.
+- [ ] **라이선스 키 입력 UI 배선** — Windows 빌드에만. macOS/MAS에 노출되면 Apple 3.1.1 리젝.
+
+### [P1] Windows 실기 확인 — 자동 테스트로 못 덮는 것
+
+> 전체 목록: `~/.gstack/projects/supaicy-haru/supermicrosoft-supaicy-coordinate-eng-review-test-plan-20260806.md`
+
+- [ ] **리마인더 토스트가 실제로 뜨는가** — `setAppUserModelId`(`index.ts:56`)의 값과 NSIS 바로가기의
+      AUMID가 일치해야 뜬다. **어긋나면 에러 없이 조용히 안 뜬다.**
+      이 리뷰에서 유일하게 남은 **critical gap**이고, 리마인더는 이 앱의 핵심 기능이다.
+- [ ] **타이틀바 이중 드래그** — `titleBarStyle: 'hiddenInset'` + `trafficLightPosition`(`index.ts:22-23`)은
+      Windows에서 무시돼 표준 프레임이 생기는데, `Sidebar.tsx:263`에 커스텀 `WebkitAppRegion: 'drag'`가
+      있어 드래그 영역이 이중이 되고 사이드바 상단 여백이 뜬다. → 디자인 결정 필요.
+- [ ] **SmartScreen** — 서명 없이 배포하면 실행 자체가 막힌다.
+- [ ] **`safeStorage`(DPAPI)** — `available()` 가드(`database.ts:445-450`)가 false면 평문 폴백이므로 확인.
+- [ ] **스킴 대소문자** — `isAppScheme`는 `startsWith`라 대소문자를 구분하는데
+      Windows 레지스트리는 스킴을 소문자로 정규화한다.
+
+### 후속 판단이 필요한 것
+- **Windows 이식 실비용은 코드가 아니라 인증서·QA·지원이다.** 위 체크리스트 참조.
+
+## /review 후속 (2026-08-05) — 의도적으로 미룬 항목
+
+전수 검증 → 수정 → /simplify → /review 사이클에서 **확인했지만 이번 범위 밖으로 둔 것들.**
+전부 리뷰 근거가 남아 있고, 다음에 손댈 때 바로 착수할 수 있다.
+
+### [P2] 반복 할일과 시간블록의 의미가 정의돼 있지 않음
+- **증상:** '배정 안 됨' 레일에서 **반복** 할일을 특정 날짜에 끌어다 놓으면, `getScheduledForOccurrence`가 날짜 부분을 버리고 시각만 템플릿으로 쓰기 때문에 **매일(그리고 앞으로 영원히) 같은 시간에 블록이 뜬다.** 주간 뷰면 7일 전부.
+- **왜 지금 드러났나:** 레일이 생기기 전에는 시간블록을 만들 진입점 자체가 없어 잠복 상태였다.
+- **필요한 것:** 제품 결정. "반복 할일의 시간블록"이 (a) 모든 반복 occurrence에 적용인지 (b) 그날 하나만인지 정해야 코드를 고칠 수 있다.
+- **위치:** `utils/scheduledTime.ts:42-55`, `WeeklyCalendar.tsx:123`, `DailyCalendar.tsx:90`
+
+### [P2] batchComplete가 반복 시리즈를 조용히 끝낸다
+- **증상:** `toggleTask`는 완료 시 다음 인스턴스를 만들지만 `batchComplete`는 만들지 않는다. 일괄 완료로 반복 할일을 끝내면 시리즈가 거기서 멈춘다.
+- **이번에 안 고친 이유:** 완료 전이(점수 + 반복 생성)를 한 헬퍼로 묶는 리팩터가 필요하고, 점수 부분만 이번에 정렬했다.
+- **위치:** `useStore.ts` `toggleTask` vs `batchComplete`
+
+### [P3] 모달 프리미티브가 없다
+- ConfirmDialog / Settings / QuickAdd가 배경·Esc·aria를 각자 구현한다. 포커스 트랩·복원·스크롤 잠금을 추가하면 세 곳을 따로 고쳐야 한다.
+- **다음 단계:** `useEscapeKey` + `ModalShell` 추출 후 셋 다 이관.
+
+### [P3] 주/일 캘린더의 드롭 핸들러 중복
+- ~40줄 `onDrop`이 두 파일에 사실상 같은 코드로 존재(시작 시각 상수와 날짜 변수만 다름). `toLocalIsoMinute` 공유는 이번에 했지만 핸들러 본문은 남았다.
+- **다음 단계:** `resolveTimeBlockDrop(e, { dayStr, startHour, pxPerMin, tasks })`로 추출 → `scheduledTime.test.ts`에서 스냅/클램프 검증 가능해짐.
+
+### [P3] '오늘'이 자정을 넘겨도 갱신되지 않는다
+- 여러 화면이 `useMemo(() => toDateString(new Date()), [])`로 오늘 날짜를 마운트 시점에 고정한다. 아이젠하워는 이번에 tasks 의존으로 바꿔 완화했지만, **KanbanView는 그 값을 쓰기까지 한다**(`dueDate: todayStr`) — 자정을 넘긴 창에서 카드를 '진행 중'으로 옮기면 어제 날짜가 박힌다.
+- **다음 단계:** 다음 로컬 자정에 타임아웃을 걸어 리렌더하는 `useToday()` 훅 하나로 통일.
+
+### [P3] 메인 스토어를 셀렉터 없이 구독하는 컴포넌트가 다수
+- `const {...} = useStore()` 형태가 10곳 이상. AI 채팅은 토큰마다 스토어를 쓰므로(초당 30~100회) 스트리밍 중에는 사이드바·현재 뷰가 통째로 재조정된다. 포모도로 1Hz 경로는 이번에 분리했지만 이쪽은 남았다.
+- **다음 단계:** Sidebar·WeeklyCalendar·DailyCalendar·Kanban·Timeline·Eisenhower·StatsView·TaskList을 개별 셀렉터로.

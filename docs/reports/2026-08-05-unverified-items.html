@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday — 미검증 항목 대장</title>
+<style>
+  :root{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;--dim:#57606a;
+    --faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace}
+  @media (prefers-color-scheme:dark){:root{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+    --text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+    --ok:#4ade80;--warn:#fbbf24;--stop:#f87171}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:900px;margin:0 auto;padding:52px 24px 96px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+  h1{font-size:26px;margin:0 0 8px} .sub{color:var(--faint);font-size:14px;margin:0}
+  h2{font-size:19px;margin:44px 0 12px;padding-top:22px;border-top:1px solid var(--line)}
+  p{margin:0 0 14px} a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);padding:.12em .4em;border-radius:4px}
+  .lede{font-size:16px;color:var(--dim);margin:22px 0 0}
+  .item{border:1px solid var(--line);border-left:4px solid var(--faint);border-radius:10px;
+    padding:18px 22px;margin:16px 0;background:var(--surface)}
+  .item.blocked{border-left-color:var(--stop)}
+  .item.pending{border-left-color:var(--warn)}
+  .item h3{margin:0 0 10px;font-size:16px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .item dl{margin:0;font-size:14px}
+  .item dt{font-weight:600;color:var(--faint);font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.04em;margin-top:12px}
+  .item dd{margin:2px 0 0}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:.16em .55em;border-radius:20px;line-height:1.5}
+  .p-blocked{background:rgba(185,28,28,.13);color:var(--stop)}
+  .p-pending{background:rgba(180,83,9,.14);color:var(--warn)}
+  .p-na{background:var(--surface-2);color:var(--faint)}
+  ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:7px}
+  .callout{background:var(--surface-2);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:14px 18px;margin:18px 0;font-size:14px}
+  footer{margin-top:52px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+  .steps{font-size:14px;background:var(--surface-2);border-radius:8px;padding:12px 16px 12px 34px;margin:8px 0 0}
+  .steps li{margin-bottom:5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>미검증 항목 대장</h1>
+  <p class="sub">Greenday v2.0.1 · 2026-08-05 · 전체 검증 결과는 <a href="2026-08-05-feature-inventory.html">기능 인벤토리</a> 참조</p>
+</header>
+
+<p class="lede">
+  2026-08-05 전수 검증에서 <strong>끝까지 확인하지 못한 5가지</strong>입니다.
+  전부 "코드가 의심스러워서"가 아니라 <strong>외부 자격증명이나 다른 빌드 구성이 없어서</strong> 막힌 것들입니다.
+  조건이 갖춰지는 시점에 이 문서만 보고 바로 검증할 수 있게 필요한 준비물과 절차를 적어 뒀습니다.
+</p>
+
+<div class="callout">
+  이 5가지는 <strong>결함이 아닙니다.</strong> 확인된 결함 13건은 인벤토리 문서 2절에 따로 있습니다.
+  여기 있는 항목은 "동작할 것으로 보이지만 눈으로 확인하지 못한 상태"입니다.
+</div>
+
+<h2>1. 소유자 준비가 필요한 것</h2>
+
+<div class="item blocked">
+  <h3><span class="pill p-blocked">차단</span> U-1. Google 캘린더 동기화</h3>
+  <dl>
+    <dt>현재 상태</dt>
+    <dd>설정 화면에 <strong>"이 빌드에는 Google 연동이 설정되어 있지 않습니다"</strong>만 표시됩니다.
+        빌드 타임 상수 <code>__GOOGLE_CLIENT_ID__</code>와 환경변수 <code>GOOGLE_OAUTH_CLIENT_ID</code> 모두 비어 있어
+        <code>clientIdConfigured</code>가 false입니다.</dd>
+    <dt>이미 확인된 부분</dt>
+    <dd>OAuth PKCE 흐름 · 토큰 갱신/폐기 · 캘린더 목록 필터(쓰기 가능만) · 동기화 계획 로직 — 전부 유닛테스트 통과.
+        UI 렌더링과 버튼 배선도 코드 확인 완료. <strong>남은 건 실제 왕복뿐입니다.</strong></dd>
+    <dt>필요한 준비물</dt>
+    <dd>Google Cloud Console에서 <strong>데스크톱 앱(공개 클라이언트) OAuth 클라이언트 ID</strong> 발급.
+        리디렉션은 커스텀 스킴이므로 <strong>번들 ID <code>com.supaicy.haru</code></strong>를 등록해야 합니다
+        (앱 이름 Greenday와 번들 ID가 다릅니다 — 실수하기 쉬운 지점).</dd>
+    <dt>검증 절차</dt>
+    <dd><ol class="steps">
+      <li><code>GOOGLE_OAUTH_CLIENT_ID=&lt;발급값&gt;</code> 주입 후 재빌드</li>
+      <li>설정 → Google 캘린더 → 연결 → 브라우저 동의 → 앱으로 복귀되는지 (U-2 동시 검증)</li>
+      <li>캘린더 목록 불러오기 → 쓰기 가능한 것만 나오는지</li>
+      <li>캘린더 선택 → 지금 동기화 → 생성/수정/삭제 요약 숫자와 실제 Google 캘린더 대조</li>
+      <li>연동 해제 → 토큰이 서버에서도 회수되는지(재연결 시 다시 동의 요구)</li>
+    </ol></dd>
+  </dl>
+</div>
+
+<div class="item blocked">
+  <h3><span class="pill p-blocked">차단</span> U-2. 커스텀 스킴 딥링크 복귀</h3>
+  <dl>
+    <dt>현재 상태</dt>
+    <dd>Google OAuth 콜백 전용 경로라 U-1에 종속됩니다. 루프백 서버를 열지 않고
+        <code>app.setAsDefaultProtocolClient</code> + <code>open-url</code>로 받도록 되어 있습니다
+        (MAS 샌드박스에서 <code>network.server</code> 권한을 피하려는 설계).</dd>
+    <dt>검증 절차</dt>
+    <dd>U-1의 2단계에서 브라우저 동의 후 <strong>앱 창이 자동으로 앞으로 나오고 최소화 상태면 복원되는지</strong>까지 확인.
+        개발 모드와 패키징 모드의 등록 경로가 다르므로(<code>is.dev</code> 분기) <strong>양쪽 다</strong> 확인해야 합니다.</dd>
+  </dl>
+</div>
+
+<div class="item pending">
+  <h3><span class="pill p-pending">보류</span> U-3. CalDAV(iCloud) 캘린더 동기화</h3>
+  <dl>
+    <dt>현재 상태</dt>
+    <dd>UI는 완성돼 있습니다(Apple ID · 앱 암호 입력, 연결, 캘린더 선택, 지금 동기화, 연동 해제).
+        <strong>실제 iCloud 계정이 없어 서버 왕복만 미확인입니다.</strong></dd>
+    <dt>이미 확인된 부분</dt>
+    <dd>CalDAV 프로토콜 4개 모듈(client · dav-xml · ical · sync) 유닛테스트 전부 통과.
+        비밀번호가 safeStorage로 암호화 보관되고 <code>toPublicConfig</code>가 렌더러로 절대 넘기지 않는 것도 코드 확인.</dd>
+    <dt>필요한 준비물</dt>
+    <dd>Apple ID + <strong>앱 전용 암호</strong>(일반 비밀번호 아님). 설정 화면의 "앱 암호 만들기" 링크에서 발급 가능.</dd>
+    <dt>검증 절차</dt>
+    <dd><ol class="steps">
+      <li>Apple ID + 앱 암호 입력 → 연결 → 캘린더 목록이 나오는지 (일정 담기 불가한 컬렉션은 걸러져야 함)</li>
+      <li>캘린더 선택 → 지금 동기화 → iCloud 캘린더 앱에서 일정 확인</li>
+      <li>할일 제목·마감일 수정 → 재동기화 → 기존 일정이 <strong>수정</strong>되는지 (중복 생성 아님)</li>
+      <li>할일 삭제 → 재동기화 → 일정도 사라지는지</li>
+      <li>다른 캘린더로 변경 → 동기화 상태가 초기화되는지 (기존 리소스 갱신 실패가 반복되지 않아야 함)</li>
+      <li>연동 해제 → 자격증명이 지워지되 <strong>서버의 일정은 그대로 남는지</strong></li>
+    </ol></dd>
+  </dl>
+</div>
+
+<h2>2. 다른 빌드/릴리스가 필요한 것</h2>
+
+<div class="item pending">
+  <h3><span class="pill p-pending">보류</span> U-4. 자동 업데이트 "새 버전 있음" 경로</h3>
+  <dl>
+    <dt>왜 못 하나</dt>
+    <dd>GitHub 최신 릴리스가 <strong>v1.4.1</strong>인데 로컬 빌드는 <strong>v2.0.1</strong>입니다.
+        electron-updater가 비교할 상위 버전이 없어 <em>업데이트 감지 자체가 발생할 수 없습니다.</em>
+        (dev 빌드는 <code>!is.dev</code> 가드로 아예 비활성 — 설정에서 "업데이트 확인 중"에 머무는 건 정상입니다.)</dd>
+    <dt>선행 조건</dt>
+    <dd>이 경로는 <strong>앱 내 다운로드/설치 배선이 먼저</strong>입니다. 2026-08-05 수정 전까지
+        <code>downloadUpdate</code>/<code>installUpdate</code> IPC가 렌더러에서 호출되지 않아,
+        새 버전이 감지돼도 GitHub 릴리스 페이지를 여는 것 외에는 아무 일도 일어나지 않았습니다.</dd>
+    <dt>검증 절차</dt>
+    <dd><ol class="steps">
+      <li>2.0.1보다 높은 버전을 GitHub 릴리스로 발행</li>
+      <li>패키징 빌드 실행 → 설정에 "새 버전" 안내가 뜨는지</li>
+      <li>다운로드 진행률이 표시되는지 → 완료 후 "재시작하여 설치"가 동작하는지</li>
+      <li>재시작 후 버전이 올라갔는지</li>
+    </ol></dd>
+  </dl>
+</div>
+
+<div class="item pending">
+  <h3><span class="pill p-pending">보류</span> U-5. MAS(App Store) 빌드 분기</h3>
+  <dl>
+    <dt>왜 못 하나</dt>
+    <dd>dev·패키징 빌드 모두 <code>process.mas === false</code>입니다. MAS 전용 코드 경로가 실행되지 않습니다.</dd>
+    <dt>분기되는 동작 3가지</dt>
+    <dd>① 설정의 버전 섹션이 "App Store를 통해 업데이트됩니다"로 바뀜<br>
+        ② <code>register-global-shortcut</code>이 no-op으로 빠짐 (샌드박스에서 전역 단축키 등록 불가)<br>
+        ③ <code>download-update</code>/<code>install-update</code> IPC가 no-op</dd>
+    <dt>검증 절차</dt>
+    <dd><code>npm run mas:build</code>로 만든 빌드에서 위 3가지를 각각 확인.
+        특히 ②는 <strong>Cmd+Shift+A가 앱 외부에서 안 먹는 게 정상</strong>이라는 걸 알고 봐야 합니다.</dd>
+  </dl>
+</div>
+
+<h2>3. 미검증이 아닌 것 — 구분해 둡니다</h2>
+<p>
+  아래 항목은 "검증 못 함"이 아니라 <strong>기능이 앱에 없는 상태</strong>였습니다. 혼동하지 않도록 분리합니다.
+</p>
+<div class="item">
+  <h3><span class="pill p-na">별건</span> 라이선스 검증</h3>
+  <dl>
+    <dt>상태</dt>
+    <dd><code>src/shared/license/</code>(crypto · format · public-key)에 서명 검증 코어와 유닛테스트가 있지만
+        <strong>main/renderer 어디에서도 import되지 않습니다.</strong> 현재 빌드에 라이선스 게이트가 없습니다.</dd>
+    <dt>다음 단계</dt>
+    <dd>유료화 구조가 확정되면 배선 → 그때 검증 대상이 됩니다. 지금은 검증할 기능이 존재하지 않습니다.</dd>
+  </dl>
+</div>
+
+<footer>
+  Greenday v2.0.1 · 브랜치 <code>supaicy/coordinate</code> · 2026-08-05<br>
+  조건이 갖춰지면 이 문서의 절차를 그대로 따라 확인하고, 결과를 기능 인벤토리에 반영하세요.
+</footer>
+
+</div>
+</body>
+</html>
