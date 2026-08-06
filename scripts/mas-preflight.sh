@@ -125,17 +125,43 @@ fi
 
 echo "── 4/5  MAS 빌드에서 꺼져야 하는 기능"
 
-# 샌드박스에서 동작하지 않거나 App Store 정책에 어긋나는 것들은 process.mas로 막아 둔다.
-if grep -rq "process.mas" src/main/index.ts; then
-  ok "자동 업데이트가 process.mas로 분기됨"
+# 샌드박스에서 동작하지 않거나 App Store 정책에 어긋나는 것들은 꺼져 있어야 한다.
+# 판정 규칙은 src/shared/capabilities.ts 한 곳에 있고 단위 테스트로 고정돼 있다.
+# 여기서는 "호출부가 그 규칙을 실제로 쓰는가"만 확인한다.
+#
+# 예전에는 각 파일에서 `process.mas` 문자열을 찾았는데, 그러면 주석에 든 글자에도
+# 통과한다(실제로 ipc-handlers.ts가 주석 때문에 통과하고 있었다). 코드만 보도록
+# 주석 줄(`*`, `//` 로 시작)을 걸러낸다.
+code_grep() { grep -n "$1" "$2" 2>/dev/null | grep -vE ':[[:space:]]*(\*|//|/\*)'; }
+
+if [ -f src/shared/capabilities.ts ] && [ -f src/main/capabilities.ts ]; then
+  ok "능력 판정이 capabilities.ts 한 곳에 모여 있음"
 else
-  bad "src/main/index.ts에 process.mas 가드가 없습니다 (App Store가 업데이트를 담당해야 함)"
+  bad "src/shared/capabilities.ts 또는 src/main/capabilities.ts 가 없습니다"
 fi
 
-if grep -q "process.mas" src/main/ipc-handlers.ts; then
-  ok "전역 단축키가 process.mas로 분기됨"
+# process.mas 원본 읽기는 main/capabilities.ts 한 곳이어야 한다. 다른 데서 직접 읽기
+# 시작하면 규칙이 다시 흩어지고, 한 곳을 빼먹으면 조용히 깨진다.
+stray_mas=$(grep -rln "process\.mas" src --include='*.ts' --include='*.tsx' 2>/dev/null \
+  | grep -v 'src/main/capabilities.ts' \
+  | while read -r f; do [ -n "$(code_grep 'process\.mas' "$f")" ] && echo "$f"; done)
+if [ -z "$stray_mas" ]; then
+  ok "process.mas를 직접 읽는 곳은 main/capabilities.ts 하나뿐"
 else
-  bad "전역 단축키에 process.mas 가드가 없습니다 (샌드박스에서 등록 불가)"
+  bad "process.mas를 직접 읽는 파일이 더 있습니다: $stray_mas"
+  note "판정은 shared/capabilities.ts 로 모으고 currentCapabilities()를 쓰세요"
+fi
+
+if [ -n "$(code_grep 'canSelfUpdate' src/main/index.ts)" ]; then
+  ok "자동 업데이트가 canSelfUpdate로 분기됨"
+else
+  bad "src/main/index.ts에 canSelfUpdate 가드가 없습니다 (App Store가 업데이트를 담당해야 함)"
+fi
+
+if [ -n "$(code_grep 'hasGlobalShortcuts' src/main/ipc-handlers.ts)" ]; then
+  ok "전역 단축키가 hasGlobalShortcuts로 분기됨"
+else
+  bad "전역 단축키에 hasGlobalShortcuts 가드가 없습니다 (샌드박스에서 등록 불가)"
 fi
 
 echo "── 5/5  번들 ID 일관성"
