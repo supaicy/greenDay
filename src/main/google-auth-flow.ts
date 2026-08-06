@@ -31,6 +31,14 @@ interface PendingFlow {
 
 let pending: PendingFlow | null = null
 
+/**
+ * 흐름 하나를 끝낸다 — 타이머를 지우고, 그게 현재 대기 중인 것이면 자리를 비운 뒤 결말을 낸다.
+ *
+ * `action`은 모듈 변수 `pending`이 아니라 **인자로 받은 flow**를 붙잡아야 한다.
+ * 여기서 `pending = null`이 먼저 일어나기 때문에, `() => pending?.reject(...)` 처럼 쓰면
+ * 옵셔널 체이닝이 조용히 삼켜서 그 Promise가 영원히 안 끝난다(타이머도 이미 지워진 뒤라
+ * 5분 타임아웃으로도 구제되지 않는다). 2026-08-06에 실제로 그 상태였다.
+ */
 function settle(flow: PendingFlow, action: () => void): void {
   clearTimeout(flow.timer)
   if (pending === flow) pending = null
@@ -42,7 +50,8 @@ function settle(flow: PendingFlow, action: () => void): void {
  * 시작한다 — 사용자가 버튼을 두 번 누르면 콜백이 어느 쪽 것인지 알 수 없다.
  */
 export function startGoogleAuth(clientId: string): Promise<TokenSet> {
-  if (pending) settle(pending, () => pending?.reject(new OAuthError('cancelled', '이전 인증 요청이 취소되었습니다.')))
+  const previous = pending
+  if (previous) settle(previous, () => previous.reject(new OAuthError('cancelled', '이전 인증 요청이 취소되었습니다.')))
 
   const { verifier, challenge } = createPkcePair()
   const state = createState()
@@ -101,5 +110,6 @@ export async function handleGoogleCallback(url: string): Promise<boolean> {
 
 /** 테스트·연결 해제 시 대기 중인 흐름을 정리한다. */
 export function cancelGoogleAuth(): void {
-  if (pending) settle(pending, () => pending?.reject(new OAuthError('cancelled', '인증이 취소되었습니다.')))
+  const flow = pending
+  if (flow) settle(flow, () => flow.reject(new OAuthError('cancelled', '인증이 취소되었습니다.')))
 }
