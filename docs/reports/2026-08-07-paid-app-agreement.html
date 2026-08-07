@@ -1,0 +1,308 @@
+<title>Greenday — 유료 앱 계약 하는 법</title>
+<style>
+:root{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;--dim:#57606a;
+--faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c;
+--mono:"SF Mono","Fira Code",Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+--text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+--ok:#4ade80;--warn:#fbbf24;--stop:#f87171}}
+:root[data-theme="dark"]{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;--text:#e6e8eb;
+--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;--ok:#4ade80;--warn:#fbbf24;--stop:#f87171}
+:root[data-theme="light"]{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;
+--dim:#57606a;--faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);line-height:1.75;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 96px}
+header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+h1{font-size:27px;margin:0 0 8px;letter-spacing:-.01em} .sub{color:var(--faint);font-size:14px;margin:0}
+h2{font-size:19.5px;margin:50px 0 6px;padding-top:26px;border-top:1px solid var(--line)}
+h2 .tag{font-size:12px;font-weight:600;color:var(--faint);letter-spacing:.05em;display:block;margin-bottom:4px}
+h3{font-size:15.5px;margin:26px 0 8px}
+p{margin:0 0 14px} a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:.12em .4em;border-radius:4px;word-break:break-word}
+.scroll-x{overflow-x:auto;max-width:100%}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;min-width:520px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:9px}
+.lede{font-size:16.5px;color:var(--dim);margin:22px 0 0}
+.callout{background:var(--surface);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:15px 20px;margin:20px 0}
+.callout.warn{border-left-color:var(--warn)}
+.callout.stop{border-left-color:var(--stop)}
+.callout.note{border-left-color:var(--accent)}
+.callout p:last-child{margin-bottom:0}
+.step{border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:20px 0;background:var(--surface)}
+.step > h3{margin-top:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.num{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;
+padding:0 8px;border-radius:13px;background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;flex:none}
+.path{font-family:var(--mono);font-size:13px;background:var(--surface-2);border-radius:7px;
+padding:10px 13px;margin:10px 0;display:block;overflow-x:auto;white-space:nowrap}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:11px;
+background:var(--surface-2);color:var(--dim);white-space:nowrap}
+.pill.ok{background:rgba(21,128,61,.12);color:var(--ok)}
+.pill.wait{background:rgba(180,83,9,.14);color:var(--warn)}
+.pill.block{background:rgba(185,28,28,.12);color:var(--stop)}
+.chk{list-style:none;padding-left:0}
+.chk li{padding-left:28px;position:relative}
+.chk li::before{content:"☐";position:absolute;left:4px;top:0;color:var(--faint);font-size:15px}
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <h1>유료 앱 계약 하는 법</h1>
+  <p class="sub">Greenday · 2026-08-07 · App Store Connect 안에서만 하는 일입니다</p>
+</header>
+
+<p class="lede">
+계약이 <strong>활성(Active)</strong>이 되기 전에는 가격 칸에서 무료 말고 다른 값을 고를 수 없습니다.
+₩19,000을 넣는 칸 자체가 안 열립니다.
+</p>
+
+<div class="callout stop">
+<p><strong>⚠ 2026-08-07 정정 — 사업자등록이 먼저 필요합니다.</strong></p>
+<p>이 문서의 첫 판에서 저는 "Apple은 개인도 받는다"고 썼습니다. <strong>틀렸습니다.</strong>
+실제 화면과 Apple 공식 문서를 확인한 결과, <strong>대한민국 거주자가 App Store에서 유료로 팔려면
+사업자등록번호가 필요합니다.</strong> 순수 개인 신분으로는 세금 양식을 채울 방법이 없습니다.</p>
+<p style="margin-bottom:0">법인일 필요는 없습니다 — <strong>개인사업자</strong> 등록이면 됩니다.
+다만 이건 계약 신청 <em>전에</em> 끝나 있어야 하는 선행 단계라, 아래에 0단계로 넣었습니다.</p>
+</div>
+
+<div class="callout stop">
+<p><strong>계정 소유자(Account Holder)만 할 수 있습니다.</strong>
+법적 계약이라 관리자(Admin) 권한으로는 동의 버튼이 안 눌립니다.
+혼자 쓰시는 계정이면 그냥 사장님이 소유자이니 해당 없습니다.</p>
+</div>
+
+<h2><span class="tag">먼저</span>손에 쥐고 시작할 것</h2>
+
+<p>중간에 찾으러 나가면 세션이 끊깁니다. 넷을 미리 준비하세요.</p>
+
+<ul class="chk">
+<li><strong>사업자등록번호</strong> — 0단계 참조. 없으면 여기서 더 못 갑니다.</li>
+<li><strong>영문 사업자등록증명 파일</strong> — <strong>발급일 90일 이내.</strong>
+홈택스에서 영문 증명을 바로 뽑을 수 있습니다.</li>
+<li><strong>은행 계좌 정보</strong> — 은행명, 계좌번호, <strong>SWIFT/BIC 코드</strong>, 은행 지점 주소.
+SWIFT 코드는 거래 은행 홈페이지나 앱의 "외화송금 안내"에 있습니다. 콜센터에 물어도 즉시 알려줍니다.</li>
+<li><strong>계좌 명의 영문 표기</strong> — 여권이나 은행에 등록된 영문 이름 그대로.
+<strong>Apple 계정 명의와 반드시 같아야 합니다</strong>(사장님 계정은 <code>MINSEOK SHIN</code>).</li>
+<li><strong>영문 주소</strong> — 도로명 주소의 영문 표기. <code>juso.go.kr</code>에서 영문 주소를 뽑을 수 있습니다.</li>
+</ul>
+
+<h2><span class="tag">순서대로</span>0단계부터</h2>
+
+<div class="step">
+<h3><span class="num">0</span> 사업자등록 <span class="pill block">선행 · 이게 없으면 세금 양식을 못 채웁니다</span></h3>
+
+<p>App Store Connect의 <strong>대한민국 세금 양식</strong>은 세금 ID를 둘 중 하나로 요구합니다.
+Apple 문서 기준으로 용도가 갈립니다.</p>
+
+<div class="scroll-x">
+<table>
+<thead><tr><th>옵션</th><th>누구 것인가</th><th>필요한 것</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>사업자등록번호(BRN)</strong></td>
+  <td>일반 사업자 — <strong>사장님은 여기</strong></td>
+  <td>사업자등록번호 + <strong>90일 이내 발급된 영문 사업자등록증명</strong></td>
+</tr>
+<tr>
+  <td>국세청 고유번호(NTS)</td>
+  <td><strong>비영리 조직</strong></td>
+  <td>고유번호 + 90일 이내 발급된 고유번호증</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout warn">
+<p><strong>화면에 기본 선택돼 있는 쪽이 함정입니다.</strong>
+<code>국세청 등록 번호</code>가 먼저 켜져 있는데 그건 비영리 조직용입니다.
+유료 앱을 파는 이상 <strong><code>사업자등록번호</code></strong>를 골라야 합니다.</p>
+</div>
+
+<p><strong>할 일 순서:</strong></p>
+<ol>
+<li><strong>개인사업자 등록</strong> — 홈택스(<code>hometax.go.kr</code>)에서 온라인으로 가능하고,
+세무서 방문도 됩니다. 업종은 소프트웨어 개발·공급 또는 통신판매 계열로 잡힙니다.
+어느 코드가 맞는지는 세무서·세무사에게 확인하세요.</li>
+<li><strong>영문 사업자등록증명 발급</strong> — 홈택스에서 영문 증명을 바로 뽑을 수 있습니다.
+<strong>발급일이 90일 이내여야 합니다</strong> — 미리 뽑아두고 묵히지 마세요.
+Apple 문서는 영문본을 요구합니다.</li>
+<li>그다음 아래 1단계로.</li>
+</ol>
+
+<p><strong>이름이 어긋나면 막힙니다.</strong> 세금 양식의 <strong>상호</strong>와 <strong>대표자</strong> 칸은
+Apple 개발자 계정에서 자동으로 채워지고 회색으로 잠겨 있습니다(사장님 화면엔 <code>MINSEOK SHIN</code>).
+사업자등록을 다른 상호로 하시면 증명서와 이 칸이 달라져 검토에서 걸릴 수 있습니다.
+상호를 따로 두실 거면 그 점을 감안하세요.</p>
+
+<p><strong>통신판매업 신고번호</strong>는 이 양식에서 <strong>선택 사항</strong>입니다(Apple 문서에도 언급이 없습니다).
+다만 통신판매업 신고는 한국 전자상거래법상 별개 사안이라, 필요 여부는 제 판단 범위 밖입니다.</p>
+</div>
+
+<div class="step">
+<h3><span class="num">1</span> 유료 앱 계약 요청</h3>
+
+<span class="path">appstoreconnect.apple.com → 비즈니스(Business)</span>
+
+<p>계약 목록이 나옵니다. 지금은 <strong>무료 앱(Free Apps)</strong>만 활성 상태일 겁니다 —
+그래서 2.0.2 빌드를 올릴 수 있었습니다.</p>
+
+<p><strong>유료 앱(Paid Apps)</strong> 줄의 <strong>[요청]</strong> 버튼을 누르고 약관에 동의합니다.
+상태가 <span class="pill wait">대기 중</span>으로 바뀌면서, 아래에 채워야 할 항목 세 개가 나타납니다.</p>
+
+<div class="callout note">
+<p>이 화면은 예전에 <strong>"계약, 세금 및 금융 거래"</strong>라는 이름이었습니다.
+Apple이 이름을 바꿔서 지금은 <strong>비즈니스</strong>입니다. 검색해서 옛 이름이 나오면 같은 곳입니다.</p>
+</div>
+</div>
+
+<div class="step">
+<h3><span class="num">2</span> 세 칸 채우기 <span class="pill">여기가 본론</span></h3>
+
+<h3>연락처 정보 (Contact Info)</h3>
+<p>네 가지 역할을 요구합니다 — <strong>선임·법무·재무·기술</strong>.
+혼자 하시면 <strong>네 칸에 전부 본인 정보를 넣으면 됩니다.</strong> 실제로 그렇게들 합니다.</p>
+
+<h3>은행 계좌 (Bank Account)</h3>
+<p><strong>[은행 계좌 추가]</strong> → 국가는 <strong>대한민국</strong> → SWIFT 코드를 넣으면
+은행 이름이 자동으로 채워집니다. 그다음 계좌번호와 영문 명의를 입력합니다.</p>
+<div class="callout warn">
+<p><strong>여기서 가장 많이 막힙니다.</strong> 계좌 명의가 Apple 계정 명의와 한 글자라도 다르면
+검토에서 반려됩니다. 띄어쓰기, 성과 이름 순서까지 봅니다.
+은행에 등록된 영문 이름을 그대로 쓰세요.</p>
+</div>
+
+<h3>세금 정보 (Tax Forms)</h3>
+
+<p>서식이 여러 장입니다. <strong>순서는 화면마다 다를 수 있으니</strong> 목록을 끝까지 내려서
+남은 게 없는지 확인하세요 — "며칠째 대기 중"의 가장 흔한 원인이 이겁니다.</p>
+
+<p><strong>대한민국 세금 양식</strong> — 0단계에서 준비한 것을 넣습니다.</p>
+<ul>
+<li><strong>세금 ID 유형</strong> → <code>사업자등록번호</code>를 고릅니다
+(기본 선택된 <code>국세청 등록 번호</code>가 아닙니다)</li>
+<li>증명서 업로드 — 90일 이내 발급된 <strong>영문 사업자등록증명</strong></li>
+<li>상호·대표자는 계정에서 자동으로 채워져 잠겨 있습니다</li>
+<li>전화번호·이메일·통신판매업 신고번호는 <strong>선택 사항</strong></li>
+<li>필수 칸이 다 차기 전에는 오른쪽 위 <strong>제출</strong> 버튼이 회색입니다</li>
+</ul>
+
+<p><strong>미국 서식</strong> — 개인사업자면 보통 <strong>W-8BEN</strong>,
+법인이면 <strong>W-8BEN-E</strong>입니다. 화면 안내를 따르세요.</p>
+<ul>
+<li><strong>외국 납세자 번호(Foreign TIN)</strong> — 사업자등록번호</li>
+<li><strong>조세조약 혜택</strong> — 한국은 미국과 조세조약이 있어서, 이 칸을 제대로 채우면
+원천징수 세율이 내려갑니다. <strong>비워두면 더 많이 떼입니다.</strong>
+거주 국가에 <code>Korea, Republic of</code>를 고르고 안내대로 진행하세요.</li>
+</ul>
+
+<p><strong>그 밖의 나라</strong> — 판매 지역에 따라 호주·캐나다·일본·인도 등이 이어서 뜹니다.
+해당 없으면 건너뛰기가 됩니다.</p>
+
+<div class="callout warn">
+<p><strong>세금 정보가 최신이 아니면</strong> 수익 지급이 지연되고, 전자세금계산서를 못 받을 수 있습니다.
+검토에서 문제가 생기면 <strong>계약 페이지에 배너</strong>로 뜹니다 — 거기를 보세요.</p>
+</div>
+</div>
+
+<div class="step">
+<h3><span class="num">3</span> 활성 확인 → 가격 설정</h3>
+
+<p>세 칸이 다 채워지면 Apple이 검토합니다. <strong>보통 며칠</strong>입니다.
+끝나면 유료 앱 줄이 <span class="pill ok">활성</span>으로 바뀝니다.</p>
+
+<p>그때 비로소 가격을 정할 수 있습니다.</p>
+
+<span class="path">앱 → Greenday → 가격 및 사용 가능 여부(Pricing and Availability)</span>
+
+<ul>
+<li>기준 지역을 <strong>대한민국</strong>으로 두고 <strong>₩19,000</strong>을 고릅니다.</li>
+<li>나머지 나라 가격은 Apple이 환율로 자동 계산해 줍니다. 표를 한 번 훑어보시고
+이상한 값이 있으면 그 나라만 손으로 고치면 됩니다.</li>
+<li>₩19,000이 목록에 정확히 없으면 가장 가까운 값을 고르세요.
+Apple 가격표는 정해진 지점만 있고 임의 금액은 안 됩니다.</li>
+</ul>
+</div>
+
+<h2><span class="tag">중요</span>기다리는 동안 할 수 있는 것</h2>
+
+<p>계약 검토는 <strong>스토어 화면 채우기와 아무 상관이 없습니다.</strong>
+설명·스크린샷·키워드·심사 메모는 지금 다 채워둘 수 있고,
+계약이 활성되는 즉시 가격만 넣고 제출하면 됩니다.</p>
+
+<p>붙여넣기용 문안은 <a href="2026-08-02-appstore-metadata.html">앱스토어 메타데이터</a>에 준비돼 있습니다.
+심사 제출 전체 흐름은 <a href="2026-08-02-submission-flow.html">지금 어디까지 왔나</a>를 보세요.</p>
+
+<h2><span class="tag">막히기 쉬운 곳</span>미리 알아두면 덜 헤맵니다</h2>
+
+<div class="scroll-x">
+<table>
+<thead><tr><th>증상</th><th>원인</th><th>할 것</th></tr></thead>
+<tbody>
+<tr>
+  <td>동의 버튼이 회색</td>
+  <td>계정 소유자가 아님</td>
+  <td>소유자 계정으로 로그인. 팀에 다른 사람이 소유자면 그분이 눌러야 합니다</td>
+</tr>
+<tr>
+  <td>은행 계좌 반려</td>
+  <td>명의 불일치</td>
+  <td>은행 등록 영문명과 Apple 계정 명의를 한 글자씩 대조</td>
+</tr>
+<tr>
+  <td>세금 서식이 계속 미완료</td>
+  <td>미국 것만 끝내고 나머지를 안 봄</td>
+  <td>목록을 끝까지 내려서 나라별 서식이 남았는지 확인</td>
+</tr>
+<tr>
+  <td>가격 칸이 무료만 보임</td>
+  <td>계약이 아직 활성이 아님</td>
+  <td>정상입니다. 활성 후 다시 들어가면 열립니다</td>
+</tr>
+<tr>
+  <td>며칠이 지나도 대기 중</td>
+  <td>세 칸 중 하나가 미완료</td>
+  <td>비즈니스 화면에서 <strong>빨간 표시</strong>가 남은 항목을 찾으세요</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h2><span class="tag">정직하게</span>제가 확답 못 드리는 것</h2>
+
+<ul>
+<li><strong>업종 코드를 뭘로 잡을지.</strong> 소프트웨어 개발·공급이냐 통신판매냐에 따라
+세무 처리가 갈립니다. 세무서나 세무사에게 물어보세요.</li>
+<li><strong>통신판매업 신고가 필요한지.</strong> 이 양식에서는 선택 사항이지만,
+전자상거래법상 별개 사안입니다. Apple이 판매자로 서는 구조라 면제되는지 아닌지는 법률 영역입니다.</li>
+<li><strong>한국에서의 소득 신고.</strong> Apple이 원천징수한 뒤 입금되는 돈을 어떻게 신고하는지는
+세무 영역이라 제 조언 범위 밖입니다. 금액이 커지기 전에 세무사에게 한 번 물어보시는 게 낫습니다.</li>
+<li><strong>메뉴 이름.</strong> Apple이 이 화면 이름을 여러 번 바꿨습니다.
+위 경로와 다르게 보이면 스크린샷 주세요 — 지금 화면 기준으로 다시 짚어드리겠습니다.</li>
+</ul>
+
+<div class="callout note">
+<p><strong>이 문서의 대한민국 세금 부분은 실제 화면과 Apple 공식 문서로 확인했습니다.</strong>
+근거: <a href="https://developer.apple.com/kr/help/app-store-connect/manage-tax-information/provide-tax-information/">세금 정보 제공 — App Store Connect 도움말</a>,
+그리고 2026-08-07 사장님이 보내주신 대한민국 세금 양식 화면.</p>
+</div>
+
+<div class="callout">
+<p><strong>막히면 화면을 그대로 보여주세요.</strong> 오류 문구든 반려 사유든,
+캡처 한 장이면 어디서 걸렸는지 바로 짚을 수 있습니다.</p>
+</div>
+
+<footer>
+Greenday · 2026-08-07 · 관련 문서:
+<a href="2026-08-06-decisions.html">같이 정할 것 10가지</a> ·
+<a href="2026-08-06-pricing-structure.html">요금제 구조</a> ·
+<a href="2026-08-02-appstore-metadata.html">앱스토어 메타데이터</a> ·
+<a href="2026-08-02-submission-flow.html">지금 어디까지 왔나</a>
+</footer>
+
+</div>
