@@ -35,10 +35,10 @@
 <body>
 <main>
 <h1>트렁크 확정 사이클</h1>
-<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 13개 · 54파일 +3,593/−742 · push 안 함(정책 유지)</div>
+<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 17개 · push 안 함(정책 유지)</div>
 
 <div class="tldr">
-<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 헬스: typecheck 0 · lint 0 errors · <strong>505 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
+<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 이어 4개 렌즈 리뷰(재사용·단순화·효율·층위)를 돌려 지적을 반영했다. 헬스: typecheck 0 · lint 0 errors · <strong>507 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
 </div>
 
 <h2>1 · 확정된 결정</h2>
@@ -74,27 +74,39 @@
 <li><code>2ebc3ab</code>·<code>b33db7d</code> TODOS 장부 정리 — 이미 해결돼 있던 a11y ~50건·LLM 다국어 완료 표시, 이번 사이클 7건 완료 기록</li>
 </ul>
 
-<h2>5 · 헬스 전/후</h2>
+<h2>5 · 리뷰 반영 (4개 렌즈 병렬 리뷰)</h2>
+<p class="note">재사용·단순화·효율·층위 네 렌즈로 이번 diff를 리뷰하고, 순수 품질 수정만 반영했다(<code>51438dc</code>). 세 렌즈가 겹쳐 지적한 항목을 우선했다.</p>
+<ul>
+<li><strong>타입 두 벌 선언</strong> — <code>addTask</code> 옵션을 <code>types/AddTaskOptions</code>로 꺼내고 <code>RecurrenceSpawn</code>을 파생. 시간블록 필드를 양쪽에 각각 더해야 했던 것이 실제로 치른 비용이었고, 한쪽만 늘어도 컴파일러가 잡지 못했다</li>
+<li><strong>스폰이 배치 규칙 밖</strong> — <code>addTasks(drafts[])</code> 벌크 생성자 신설, <code>addTask</code>는 위임. 일괄 완료의 반복 스폰이 건당 <code>set()</code>+IPC를 만들던 것을 쓰기 1회로(스폰 3건 기준 5회→3회, 회귀 테스트 포함). 바로 위 <code>addScores</code> 주석이 지적한 문제를 새 코드만 반복하고 있었다</li>
+<li><strong>훅이 6곳 중 3곳만 흡수</strong> — <code>useToday()</code>를 Eisenhower·Timeline·Stats로 확산. Eisenhower의 '곧(3일)'도 <code>todayStr</code>에서 파생해 자정에 함께 움직인다(기존에는 tasks 변경에 얹은 우회였고, 밤새 할일을 안 건드리면 어제 기준으로 남았다)</li>
+<li>작은 것들 — 테스트의 동적 import 제거, <code>useToday</code>가 기존 <code>todayString()</code> 재사용, <code>reminderAt</code> const 삼항</li>
+</ul>
+<p class="note"><strong>미룬 것(TODOS 등록):</strong> 완료 전이 두 벌을 <code>completeTasks</code> 코어로 통합 · 칸반이 완료를 우회해 점수가 회수되지 않는 문제 · 반복 시리즈 정체성이 title 문자열인 것 · '오늘' 틱을 앱 루트 한 곳으로. 전부 동작을 바꾸므로 별도 판단이 필요하다.</p>
+<p class="note">덤으로 <code>7be7052</code>: AI 리스케줄 경계 테스트가 UTC로 오늘을 계산해 <strong>한국 시간 자정~오전 9시에만</strong> 깨지고 있었다(프로덕션은 로컬 기준). 이 저장소가 여러 곳에 주석으로 남겨둔 그 함정이 테스트에 남아 있던 것.</p>
+
+<h2>6 · 헬스 전/후</h2>
 <table>
 <tr><th></th><th>시작 (08-15 아침)</th><th>종료</th></tr>
 <tr><td>typecheck</td><td>0 errors</td><td>0 errors</td></tr>
 <tr><td>biome lint</td><td>0 errors / 7 warnings</td><td>0 errors / 7 warnings (기존분)</td></tr>
-<tr><td>vitest</td><td>478 passed</td><td><strong>505 passed</strong> (+27, 컴포넌트 테스트 첫 도입)</td></tr>
+<tr><td>vitest</td><td>478 passed</td><td><strong>507 passed</strong> (+29, 컴포넌트 테스트 첫 도입)</td></tr>
 <tr><td>렌더러 번들</td><td>1,131kB (미압축)</td><td>604kB (minify)</td></tr>
 </table>
 
-<h2>6 · 다음 남은 것</h2>
+<h2>7 · 다음 남은 것</h2>
 <ul>
 <li><strong>출시 서류(사용자만 가능):</strong> 개인사업자 등록 → 영문 사업자등록증명(90일) → 유료 앱 계약 → ₩19,000 입력. 상세: <code>docs/reports/2026-08-07-paid-app-agreement.html</code></li>
 <li><strong>미검증 U-1~5:</strong> Google OAuth 클라이언트 ID·CalDAV 앱 암호·상위 릴리스·MAS 빌드 필요 — 자격증명이 생기면 착수</li>
 <li><strong>결정 대기:</strong> 내장 런타임 제안서, RAG v1(보류 해제 시 착수)</li>
 <li><strong>라이브 QA:</strong> 이번 오버레이 전환 + AI 온보딩/미리보기 — CDP 하네스(<code>--remote-debugging-port=9222</code>)로 별도 세션 권장</li>
 <li><strong>[P4]</strong> 우클릭 컨텍스트 메뉴 2곳 Radix ContextMenu 이관</li>
+<li><strong>리뷰가 남긴 구조 항목 4건</strong> — 위 5절의 '미룬 것' 참조 (TODOS "## /simplify 후속")</li>
 <li><strong>대기 트리거 유지:</strong> Windows 이식(맥 판매 10건/선구매 5명), push 금지, freemium 보류</li>
 </ul>
 
 <footer class="note" style="margin-top:40px; padding-top:14px; border-top:1px solid var(--line)">
-결정 근거: <code>docs/reports/2026-08-07-todos-validity-audit.html</code>(main 워킹트리) · 남은 작업 전체: <code>docs/reports/2026-08-15-remaining-work.html</code>(main 워킹트리) · 커밋 범위 <code>2ebc3ab..2b49e47</code>
+결정 근거: <code>docs/reports/2026-08-07-todos-validity-audit.html</code>(main 워킹트리) · 남은 작업 전체: <code>docs/reports/2026-08-15-remaining-work.html</code>(main 워킹트리) · 커밋 범위 <code>2ebc3ab..54b7801</code>
 </footer>
 </main>
 </body>
