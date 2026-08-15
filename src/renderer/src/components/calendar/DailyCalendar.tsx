@@ -71,7 +71,12 @@ const priorityBg: Record<Priority, { dark: string; light: string }> = {
 export function DailyCalendar(): React.ReactElement {
   const { t, i18n: i18nInstance } = useTranslation()
   const timeSlots = useMemo(() => buildTimeSlots(i18nInstance.language), [i18nInstance.language])
-  const { theme, tasks, selectTask, selectedTaskId, toggleTask, updateTask } = useStore()
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const selectTask = useStore((s) => s.selectTask)
+  const selectedTaskId = useStore((s) => s.selectedTaskId)
+  const toggleTask = useStore((s) => s.toggleTask)
+  const updateTask = useStore((s) => s.updateTask)
   const isDark = theme === 'dark'
 
   const [currentDate, setCurrentDate] = useState(() => new Date())

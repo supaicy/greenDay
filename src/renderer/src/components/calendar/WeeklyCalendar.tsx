@@ -69,7 +69,11 @@ function parseTime(timeStr: string): { hour: number; minute: number } | null {
 
 export function WeeklyCalendar(): React.ReactElement {
   const { t } = useTranslation()
-  const { theme, tasks, selectTask, selectedTaskId, updateTask } = useStore()
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const selectTask = useStore((s) => s.selectTask)
+  const selectedTaskId = useStore((s) => s.selectedTaskId)
+  const updateTask = useStore((s) => s.updateTask)
   const isDark = theme === 'dark'
 
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))

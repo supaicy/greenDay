@@ -11,7 +11,12 @@ export function StatsView(): React.ReactElement {
   const { t, i18n } = useTranslation()
   // tList는 매번 새 배열을 돌려주므로 메모해야 아래 useMemo가 매 렌더 재계산되지 않는다.
   const dayNames = useMemo(() => tList('date.weekdaysShort', i18n.language), [i18n.language])
-  const { theme, tasks, pomodoroSessions, habitLogs, habits, score } = useStore()
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const pomodoroSessions = useStore((s) => s.pomodoroSessions)
+  const habitLogs = useStore((s) => s.habitLogs)
+  const habits = useStore((s) => s.habits)
+  const score = useStore((s) => s.score)
   const isDark = theme === 'dark'
 
   const stats = useMemo(() => {

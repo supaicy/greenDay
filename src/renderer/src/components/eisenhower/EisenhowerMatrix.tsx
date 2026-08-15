@@ -20,7 +20,11 @@ interface Quadrant {
 
 export function EisenhowerMatrix(): React.ReactElement {
   const { t } = useTranslation()
-  const { theme, tasks, selectTask, selectedTaskId, toggleTask } = useStore()
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const selectTask = useStore((s) => s.selectTask)
+  const selectedTaskId = useStore((s) => s.selectedTaskId)
+  const toggleTask = useStore((s) => s.toggleTask)
   const isDark = theme === 'dark'
 
   const { quadrants, todayStr } = useMemo(() => {

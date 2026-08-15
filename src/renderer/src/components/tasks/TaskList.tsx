@@ -50,23 +50,21 @@ function sortTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
 
 export function TaskListView() {
   const { t } = useTranslation()
-  const {
-    tasks,
-    lists,
-    selectedListId,
-    searchQuery,
-    setSearchQuery,
-    showAddTask,
-    setShowAddTask,
-    theme,
-    sortBy,
-    sortDir,
-    batchMode,
-    toggleBatchMode,
-    dragTaskId,
-    setDragTaskId,
-    reorderTasks
-  } = useStore()
+  const tasks = useStore((s) => s.tasks)
+  const lists = useStore((s) => s.lists)
+  const selectedListId = useStore((s) => s.selectedListId)
+  const searchQuery = useStore((s) => s.searchQuery)
+  const setSearchQuery = useStore((s) => s.setSearchQuery)
+  const showAddTask = useStore((s) => s.showAddTask)
+  const setShowAddTask = useStore((s) => s.setShowAddTask)
+  const theme = useStore((s) => s.theme)
+  const sortBy = useStore((s) => s.sortBy)
+  const sortDir = useStore((s) => s.sortDir)
+  const batchMode = useStore((s) => s.batchMode)
+  const toggleBatchMode = useStore((s) => s.toggleBatchMode)
+  const dragTaskId = useStore((s) => s.dragTaskId)
+  const setDragTaskId = useStore((s) => s.setDragTaskId)
+  const reorderTasks = useStore((s) => s.reorderTasks)
   const isDark = theme === 'dark'
 
   const listName = useMemo(() => {

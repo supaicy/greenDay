@@ -70,18 +70,16 @@ export function Sidebar() {
   const score = useStore((s) => s.score)
   const updateAvailable = useStore((s) => s.updateAvailable)
   const editingListId = useStore((s) => s.editingListId)
-  const {
-    setSelectedList,
-    setViewType,
-    addList,
-    removeList,
-    updateList,
-    setEditingList,
-    toggleSettings,
-    addFolder,
-    updateFolder,
-    removeFolder
-  } = useStore()
+  const setSelectedList = useStore((s) => s.setSelectedList)
+  const setViewType = useStore((s) => s.setViewType)
+  const addList = useStore((s) => s.addList)
+  const removeList = useStore((s) => s.removeList)
+  const updateList = useStore((s) => s.updateList)
+  const setEditingList = useStore((s) => s.setEditingList)
+  const toggleSettings = useStore((s) => s.toggleSettings)
+  const addFolder = useStore((s) => s.addFolder)
+  const updateFolder = useStore((s) => s.updateFolder)
+  const removeFolder = useStore((s) => s.removeFolder)
 
   const [showNewList, setShowNewList] = useState(false)
   const [newListName, setNewListName] = useState('')
