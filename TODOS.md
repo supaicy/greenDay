@@ -1,5 +1,16 @@
 # TODOS
 
+## 트렁크 결정 (2026-08-15, 확정)
+
+- **`supaicy/coordinate`가 트렁크다.** main은 4월에 갈라진 실험 가지로 동결.
+  근거: `docs/reports/2026-08-07-todos-validity-audit.html`(main 워킹트리) — 공통 조상
+  2026-04-20, coordinate 150 커밋 vs main 15 커밋, 병합 시 14파일 충돌 실측.
+- **main의 shadcn/Radix 오버레이 전환 15커밋(`95a26d7`..`669de9f`)은 여기서 재작업한다.**
+  병합보다 싸다. main의 커밋·CLAUDE.md 오버레이 규칙(트리거 prop, z 110/111,
+  Escape `defaultPrevented` 가드)을 설계 지도로 쓴다. 아래 [P3] 모달 프리미티브와 같은 작업.
+- main 한정 TODO 중 이쪽에서 유효한 것은 수제 드롭다운 2개(Sidebar/AddTask)뿐.
+  main의 "렌더러 전용 패키지 4.2MB"는 대상 패키지가 CM6 전환으로 바뀌어 재측정 대상.
+
 ## Pre-implementation (Must do before coding)
 
 ### [P0] ~~Korean LLM Accuracy Benchmark~~ ✅ DONE (2026-03-25)
@@ -23,7 +34,7 @@
 
 ## Code Quality / Lint Cleanup
 
-Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 수정 완료. 초기 178 errors 중 128건 해소(PR #15/#16/#17), 현재 50 errors 잔존(모두 div 접근성).
+Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 수정 완료. 초기 178 errors 중 128건 해소(PR #15/#16/#17), 나머지 50건도 `06c9945`로 해소 — **현재 0 errors.**
 
 ### ~~[P1] `useHookAtTopLevel` 위반 2건~~ ✅ DONE (2026-04-20, PR #15)
 - **Result:** `TaskDetail.tsx`의 `useCallback` / `useRef`가 `if (!task) return null` 이른 종료 아래에서 호출되던 **진짜 버그** 확인. 두 훅을 early return 위로 이동, 콜백 바디에 `if (!task) return` 가드 추가, deps를 `task`로 업데이트.
@@ -34,20 +45,16 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 ### ~~[P3] 나머지 정밀 정리 (~11 errors + 10 warnings)~~ ✅ DONE (2026-04-20, PR #16)
 - **Result:** 10 파일에서 `noNonNullAssertion` 6, `noLabelWithoutControl` 4, `noSvgWithoutTitle` 1, `noArrayIndexKey` 6, `noUnusedVariables` 4 해소. 린트 에러 11 제거 + 워닝 10→0.
 
-### [P2] 클릭 가능 div 접근성 수정 (~50 errors)
-- **What:** `<div onClick>` 요소에 키보드 핸들러 + 적절한 ARIA 역할 추가
-- **Why:** Biome의 `lint/a11y/useKeyWithClickEvents` (22) + `lint/a11y/noStaticElementInteractions` (28) — 키보드 사용자가 해당 UI를 조작할 수 없음
-- **How:** 각 케이스별로 (a) `<button>`으로 변경 가능한지 판단, (b) 불가하면 `role="button"` + `tabIndex={0}` + `onKeyDown` Enter/Space 핸들러 추가. 최대 사용처: Sidebar.tsx(24), Settings.tsx(14), HabitTracker.tsx(12) — 자동화 위험, 파일별 수동 판단 필요
-- **Added:** 2026-04-20 by /health follow-up
+### ~~[P2] 클릭 가능 div 접근성 수정 (~50 errors)~~ ✅ DONE (2026-07-21, `06c9945`)
+- **Result:** `fix(a11y): keyboard support for clickable elements (biome green)` — 전 사용처에 `role`/`tabIndex`/`onKeyDown` 적용. 2026-08-15 실측 biome lint 0 errors(126 파일). 고쳐놓고 장부 표시를 안 해 방치돼 있던 것을 08-15 정리.
 
 ### Follow-up
 
-- **LLM 다국어 출력 품질** — 2026-04-20 수동 테스트에서 llama3.2:latest 3B가 한국어 질문에 한국어/베트남어/중국어 섞어 응답하는 케이스 관찰. 기존 벤치마크에서 알려진 3B 모델 한계. 해결 옵션: (a) 더 큰 모델(llama3.1:8b) 전환, (b) OpenAI provider 사용, (c) 시스템 프롬프트에 "한국어로만 답하라" 강제 추가
+- ~~**LLM 다국어 출력 품질**~~ ✅ 해소 (2026-07-27, `fa3f7f4`) — 해결 옵션 (c) 적용: `ai-service.ts`에 한국어 전용 강제절("respond ONLY in Korean… never mix in English words, Chinese, Japanese, Thai") 추가.
 
 ### Baseline
 
-- 린트 에러 178 → 50 (div 접근성만 남음)
-- 위 [P2] 완료 시 대략 클린 상태 도달 예상
+- 린트 에러 178 → 0 (2026-08-15 실측, typecheck 0 · vitest 478 green)
 
 ## AI 어시스턴트
 
@@ -276,7 +283,7 @@ iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
 ### [P2] 반복 할일과 시간블록의 의미가 정의돼 있지 않음
 - **증상:** '배정 안 됨' 레일에서 **반복** 할일을 특정 날짜에 끌어다 놓으면, `getScheduledForOccurrence`가 날짜 부분을 버리고 시각만 템플릿으로 쓰기 때문에 **매일(그리고 앞으로 영원히) 같은 시간에 블록이 뜬다.** 주간 뷰면 7일 전부.
 - **왜 지금 드러났나:** 레일이 생기기 전에는 시간블록을 만들 진입점 자체가 없어 잠복 상태였다.
-- **필요한 것:** 제품 결정. "반복 할일의 시간블록"이 (a) 모든 반복 occurrence에 적용인지 (b) 그날 하나만인지 정해야 코드를 고칠 수 있다.
+- **제품 결정 (2026-08-15, 확정):** **둘 다.** 기본은 (a) — 드롭한 시각이 시리즈의 템플릿이 되되 블록은 **실제 반복 발생일에만** 표시한다(지금처럼 비발생일에도 매일 뜨는 건 버그로 수정). 추가로 (b) — 특정 회차만 시각을 다르게 잡는 **회차별 오버라이드**를 지원한다(오버라이드가 있으면 그날은 템플릿 대신 오버라이드).
 - **위치:** `utils/scheduledTime.ts:42-55`, `WeeklyCalendar.tsx:123`, `DailyCalendar.tsx:90`
 
 ### [P2] batchComplete가 반복 시리즈를 조용히 끝낸다
