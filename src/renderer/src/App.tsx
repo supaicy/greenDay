@@ -52,7 +52,6 @@ export default function App() {
   const selectedTaskId = useStore((s) => s.selectedTaskId)
   const theme = useStore((s) => s.theme)
   const language = useStore((s) => s.language)
-  const showQuickAdd = useStore((s) => s.showQuickAdd)
 
   useKeyboardShortcuts()
   usePomodoroTicker()
@@ -119,7 +118,7 @@ export default function App() {
       )}
       <AiChatPanel />
       <Settings />
-      {showQuickAdd && <QuickAdd />}
+      <QuickAdd />
       <UndoToast />
     </div>
   )

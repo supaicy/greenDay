@@ -3,6 +3,7 @@ import { Command, CornerDownLeft, Calendar } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 
 export function QuickAdd() {
   const { t } = useTranslation()
@@ -58,31 +59,17 @@ export function QuickAdd() {
     setShowQuickAdd(false)
   }
 
-  if (!showQuickAdd) return null
-
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: 모달 배경 — 클릭/키보드 모두 지원
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[20vh] bg-black/60 backdrop-blur-sm"
-      onClick={() => setShowQuickAdd(false)}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          setShowQuickAdd(false)
-        }
-      }}
-    >
-      {/* 모달 콘텐츠: 클릭/키보드 전파 차단 (role=dialog) */}
-      <div
-        className={`w-[540px] rounded-2xl shadow-2xl overflow-hidden transition-all animate-in fade-in slide-in-from-top-4 duration-200 ${
-          isDark ? 'bg-[#2C2C2E] border border-gray-700' : 'bg-white border border-gray-200'
-        }`}
-        role="dialog"
-        aria-modal="true"
+    // 배경 클릭·Escape·포커스 트랩은 Radix Dialog가 담당. show 플래그로 mount를
+    // 감싸지 않는다 — open은 Dialog가 갖는다(CLAUDE.md 오버레이 규칙).
+    <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
+      <DialogContent
+        showCloseButton={false}
         aria-label={t('task.quickAdd')}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
+        className="top-[20vh] w-[540px] max-w-none translate-y-0 gap-0 overflow-hidden rounded-2xl p-0"
       >
+        <DialogTitle className="sr-only">{t('task.quickAdd')}</DialogTitle>
+        <DialogDescription className="sr-only">{t('task.quickAddPlaceholder')}</DialogDescription>
         {/* 입력 영역 */}
         <div className="p-5">
           <input
@@ -92,8 +79,8 @@ export function QuickAdd() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return
+              // Escape는 Dialog가 처리한다 — 여기서 중복으로 닫지 않는다.
               if (e.key === 'Enter') handleSubmit()
-              if (e.key === 'Escape') setShowQuickAdd(false)
             }}
             placeholder={t('task.quickAddPlaceholder')}
             className={`w-full text-lg bg-transparent outline-none ${
@@ -133,7 +120,7 @@ export function QuickAdd() {
             <span>Shift + A</span>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

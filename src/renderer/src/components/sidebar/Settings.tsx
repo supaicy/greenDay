@@ -13,6 +13,7 @@ import {
   AlertTriangle
 } from 'lucide-react'
 import { useStore, type Theme } from '../../store/useStore'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { LANGUAGES, type Language } from '../../i18n'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 import { CalendarSyncSection } from './CalendarSyncSection'
@@ -277,26 +278,6 @@ export function Settings() {
     }
   }, [aiConfig])
 
-  // Close on Escape. Uses a capture-phase document listener because the modal
-  // content stops keydown propagation, so the backdrop's onKeyDown never fires
-  // when focus is inside the modal (which is almost always).
-  useEffect(() => {
-    if (!showSettings) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        // 상세 패널이 함께 열려 있을 때 window 단축키(useKeyboardShortcuts)까지
-        // 전파돼 태스크 선택이 같이 해제되는 이중발화를 막는다.
-        e.stopPropagation()
-        toggleSettings()
-      }
-    }
-    document.addEventListener('keydown', onKey, true)
-    return () => document.removeEventListener('keydown', onKey, true)
-  }, [showSettings, toggleSettings])
-
-  if (!showSettings) return null
-
   const handleAiSave = () => {
     aiSaveConfig({
       provider: aiProvider,
@@ -335,30 +316,18 @@ export function Settings() {
   }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: 모달 배경 — 클릭/키보드 모두 지원
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={toggleSettings}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          toggleSettings()
-        }
-      }}
-    >
-      {/* 모달 콘텐츠: 클릭/키보드 전파 차단 (role=dialog).
-          헤더는 고정하고 본문만 스크롤한다. 이전에는 카드 전체가 스크롤 컨테이너라
+    // 배경·Escape·포커스 트랩은 Radix Dialog가 담당. toggleSettings는 인자를
+    // 무시하는 토글이라 닫힘 신호만 받는다(open(true)에 뒤집히지 않게).
+    <Dialog open={showSettings} onOpenChange={(open) => !open && toggleSettings()}>
+      {/* 헤더는 고정하고 본문만 스크롤한다. 이전에는 카드 전체가 스크롤 컨테이너라
           내용이 뷰포트의 ~2.8배인 이 패널에서 아래로 내려가면 닫기 버튼이 사라졌다. */}
-      <div
-        className={`flex w-[480px] max-h-[80vh] flex-col overflow-hidden rounded-xl shadow-2xl ${isDark ? 'bg-[#2C2C2E] text-gray-100' : 'bg-white text-gray-800'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('settings.title')}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
+      <DialogContent
+        showCloseButton={false}
+        className="flex w-[480px] max-w-none max-h-[80vh] flex-col overflow-hidden rounded-xl p-0 gap-0"
       >
         <div className={`flex shrink-0 items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}>
-          <h2 className="text-base font-semibold">{t('settings.title')}</h2>
+          <DialogTitle className="text-base font-semibold">{t('settings.title')}</DialogTitle>
+          <DialogDescription className="sr-only">{t('settings.title')}</DialogDescription>
           <button
             type="button"
             onClick={toggleSettings}
@@ -750,7 +719,7 @@ export function Settings() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
