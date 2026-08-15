@@ -28,6 +28,9 @@ const DialogOverlay = React.forwardRef<
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
+// 기본 클래스에 `sm:rounded-lg`(shadcn 원본)를 두지 말 것 — tailwind-merge는
+// 수식어가 붙은 클래스를 다른 그룹으로 보아 지우지 못하고, 640px 이상에서
+// 그쪽이 이겨 호출처의 rounded-xl/2xl이 조용히 죽는다(CLAUDE.md 오버레이 규칙).
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -40,7 +43,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-[111] grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 border border-border bg-card text-card-foreground p-6 max-w-lg rounded-lg shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-[111] grid w-full translate-x-[-50%] translate-y-[-50%] gap-4 border border-border bg-card text-card-foreground p-6 max-w-lg rounded-lg shadow-2xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
         className
       )}
       {...props}

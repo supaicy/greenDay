@@ -20,6 +20,7 @@ import { useStore } from '../../store/useStore'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
+import { QuickAdd } from '../common/QuickAdd'
 
 beforeAll(async () => {
   // jsdom의 navigator.language는 en-US라 초기 언어가 흔들린다 — 한국어로 고정.
@@ -158,5 +159,47 @@ describe('Escape', () => {
     // 갱신돼 있어서 체인이 한 칸 더 내려가 선택까지 해제했었다.
     expect(useStore.getState().showQuickAdd).toBe(false)
     expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+})
+
+/**
+ * 벤더링한 ui 프리미티브가 프로젝트 규칙(CLAUDE.md '오버레이 규칙')을 지키는지.
+ * shadcn 기본값을 그대로 두면 조용히 어긋나는 자리들이라 여기서 못박는다.
+ */
+describe('ui 프리미티브 — 프로젝트 규칙', () => {
+  it('드롭다운 메뉴가 토스트(z-90)·컨텍스트 메뉴(z-100) 위에 뜬다', async () => {
+    const user = userEvent.setup()
+    render(<SortMenu trigger={<button type="button">정렬</button>} />)
+    await user.click(screen.getByRole('button', { name: '정렬' }))
+
+    const menu = await screen.findByRole('menu')
+    // shadcn 기본 z-50이면 UndoToast(90)·TaskItem 컨텍스트 메뉴(100) 아래에 깔린다.
+    // 포털이 #root 밖(body 직속)이라 stacking context가 없어 한 줄로 비교된다.
+    expect(menu.className).toContain('z-[111]')
+    expect(menu.className).not.toContain('z-50')
+  })
+
+  it('다이얼로그의 모서리 지정을 호출처가 이길 수 있다', async () => {
+    render(
+      <Dialog open>
+        <DialogContent className="rounded-2xl">
+          <DialogTitle>빠른 추가</DialogTitle>
+        </DialogContent>
+      </Dialog>
+    )
+    const dialog = await screen.findByRole('dialog')
+    // 기본 클래스에 sm:rounded-lg가 남아 있으면 tailwind-merge가 지우지 못하고
+    // (그룹이 다르다) 640px 이상에서 그쪽이 이겨, 호출처 지정이 죽는다.
+    expect(dialog.className).toContain('rounded-2xl')
+    expect(dialog.className).not.toContain('sm:rounded-lg')
+  })
+})
+
+describe('QuickAdd', () => {
+  it('열리면 입력칸에 포커스가 간다 (타이머 없이 Radix 포커스 훅으로)', async () => {
+    useStore.setState({ showQuickAdd: true })
+    render(<QuickAdd />)
+    const input = await screen.findByRole('textbox')
+    await waitFor(() => expect(input).toHaveFocus())
   })
 })

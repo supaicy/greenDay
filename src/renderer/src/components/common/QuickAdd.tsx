@@ -24,8 +24,6 @@ export function QuickAdd() {
       setParsedDate(null)
       setParsedTime(null)
       setParsedTitle('')
-      // auto-focus 지연 (모달 렌더링 후)
-      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [showQuickAdd])
 
@@ -67,6 +65,12 @@ export function QuickAdd() {
         showCloseButton={false}
         aria-label={t('task.quickAdd')}
         className="top-[20vh] w-[540px] max-w-none translate-y-0 gap-0 overflow-hidden rounded-2xl p-0"
+        // 포커스는 Radix가 연다/닫는다. 예전에는 50ms setTimeout으로 넣었는데,
+        // 정리되지 않아 그 안에 닫으면 Radix가 트리거로 돌려준 포커스를 도로 뺏었다.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          inputRef.current?.focus()
+        }}
       >
         <DialogTitle className="sr-only">{t('task.quickAdd')}</DialogTitle>
         <DialogDescription className="sr-only">{t('task.quickAddPlaceholder')}</DialogDescription>
