@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
+import { useToday } from '../../hooks/useToday'
 import { toDateString } from '../../utils/date'
 import type { Task, Priority } from '../../types'
 import { ChevronLeft, ChevronRight, Flag, CheckCircle2, Circle } from 'lucide-react'
@@ -76,7 +77,7 @@ export function DailyCalendar(): React.ReactElement {
   const [currentDate, setCurrentDate] = useState(() => new Date())
 
   const dateStr = useMemo(() => dateToStr(currentDate), [currentDate])
-  const todayStr = useMemo(() => dateToStr(new Date()), [])
+  const todayStr = useToday()
   const isToday = dateStr === todayStr
 
   // Scheduled time blocks that fall on the visible day.

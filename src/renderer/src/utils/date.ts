@@ -87,3 +87,9 @@ export function formatDate(date: Date, fmt: string): string {
 export function toDateString(date: Date): string {
   return toLocalDateString(date)
 }
+
+/** now부터 다음 로컬 자정까지 남은 ms. useToday()의 리렌더 타이머용. DST는 로컬 Date 생성이 처리한다. */
+export function msUntilNextLocalMidnight(now: Date): number {
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  return nextMidnight.getTime() - now.getTime()
+}

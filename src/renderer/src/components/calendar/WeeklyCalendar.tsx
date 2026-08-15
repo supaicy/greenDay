@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useState, useMemo, useCallback } from 'react'
 import { useStore } from '../../store/useStore'
+import { useToday } from '../../hooks/useToday'
 import { toDateString } from '../../utils/date'
 import type { Task, Priority } from '../../types'
 import { ChevronLeft, ChevronRight, Flag } from 'lucide-react'
@@ -84,7 +85,7 @@ export function WeeklyCalendar(): React.ReactElement {
     return days
   }, [weekStart])
 
-  const todayStr = useMemo(() => dateToStr(new Date()), [])
+  const todayStr = useToday()
 
   // 날짜별 태스크 맵
   const tasksByDate = useMemo(() => {

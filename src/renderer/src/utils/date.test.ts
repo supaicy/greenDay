@@ -48,3 +48,18 @@ describe('smart-list date predicates', () => {
     expect(isDueToday(overdue) || isOverdue(overdue)).toBe(true)
   })
 })
+
+// useToday() 훅의 타이머 계산. 자정을 넘겨도 '오늘'이 마운트 시점에 고정돼
+// KanbanView가 어제 날짜를 데이터에 박던 버그의 회귀 방지 (TODOS 2026-08-05).
+describe('msUntilNextLocalMidnight', () => {
+  it('counts down to the next local midnight', async () => {
+    const { msUntilNextLocalMidnight } = await import('./date')
+    expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 23, 59, 30))).toBe(30_000)
+    expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 0, 0, 0))).toBe(86_400_000)
+  })
+
+  it('lands strictly in the next day at millisecond edges', async () => {
+    const { msUntilNextLocalMidnight } = await import('./date')
+    expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 23, 59, 59, 999))).toBe(1)
+  })
+})

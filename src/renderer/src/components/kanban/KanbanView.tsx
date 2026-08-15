@@ -2,7 +2,7 @@ import type React from 'react'
 import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { toDateString } from '../../utils/date'
+import { useToday } from '../../hooks/useToday'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, GripVertical, Calendar } from 'lucide-react'
 import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
@@ -28,7 +28,7 @@ export function KanbanView(): React.ReactElement {
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
 
-  const todayStr = useMemo(() => toDateString(new Date()), [])
+  const todayStr = useToday()
 
   // 칸반 칼럼별 태스크 분류
   const columnTasks = useMemo(() => {
