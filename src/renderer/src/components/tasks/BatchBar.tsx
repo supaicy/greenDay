@@ -6,18 +6,16 @@ import { PRIORITY_OPTIONS } from '../../utils/priority'
 
 export function BatchBar() {
   const { t } = useTranslation()
-  const {
-    batchMode,
-    batchSelectedIds,
-    selectAllBatch,
-    batchComplete,
-    batchDelete,
-    batchMove,
-    batchSetPriority,
-    toggleBatchMode,
-    lists,
-    theme
-  } = useStore()
+  const batchMode = useStore((s) => s.batchMode)
+  const batchSelectedIds = useStore((s) => s.batchSelectedIds)
+  const selectAllBatch = useStore((s) => s.selectAllBatch)
+  const batchComplete = useStore((s) => s.batchComplete)
+  const batchDelete = useStore((s) => s.batchDelete)
+  const batchMove = useStore((s) => s.batchMove)
+  const batchSetPriority = useStore((s) => s.batchSetPriority)
+  const toggleBatchMode = useStore((s) => s.toggleBatchMode)
+  const lists = useStore((s) => s.lists)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [showMoveMenu, setShowMoveMenu] = useState(false)
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)

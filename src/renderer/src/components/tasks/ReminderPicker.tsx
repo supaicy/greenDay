@@ -57,7 +57,7 @@ export function ReminderPicker({
   onChange: (reminderAt: string | null) => void
 }) {
   const { t } = useTranslation()
-  const { theme } = useStore()
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [customDate, setCustomDate] = useState('')
   const [customTime, setCustomTime] = useState('09:00')

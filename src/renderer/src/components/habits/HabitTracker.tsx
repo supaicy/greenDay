@@ -10,7 +10,12 @@ const COLORS = ['#4A90D9', '#E74C3C', '#F39C12', '#2ECC71', '#9B59B6', '#1ABC9C'
 
 export function HabitTracker() {
   const { t } = useTranslation()
-  const { habits, habitLogs, addHabit, removeHabit, toggleHabitLog, theme } = useStore()
+  const habits = useStore((s) => s.habits)
+  const habitLogs = useStore((s) => s.habitLogs)
+  const addHabit = useStore((s) => s.addHabit)
+  const removeHabit = useStore((s) => s.removeHabit)
+  const toggleHabitLog = useStore((s) => s.toggleHabitLog)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [showAdd, setShowAdd] = useState(false)
   const [name, setName] = useState('')

@@ -12,7 +12,10 @@ import { isToday, isSameMonth } from 'date-fns'
 
 export function CalendarView() {
   const { t } = useTranslation()
-  const { tasks, selectTask, updateTask, theme } = useStore()
+  const tasks = useStore((s) => s.tasks)
+  const selectTask = useStore((s) => s.selectTask)
+  const updateTask = useStore((s) => s.updateTask)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [currentDate, setCurrentDate] = useState(new Date())
   const [dragOverDate, setDragOverDate] = useState<string | null>(null)

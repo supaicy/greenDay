@@ -23,7 +23,11 @@ interface SortMenuProps {
 
 export function SortMenu({ onClose }: SortMenuProps) {
   const { t } = useTranslation()
-  const { sortBy, sortDir, setSortBy, setSortDir, theme } = useStore()
+  const sortBy = useStore((s) => s.sortBy)
+  const sortDir = useStore((s) => s.sortDir)
+  const setSortBy = useStore((s) => s.setSortBy)
+  const setSortDir = useStore((s) => s.setSortDir)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
 
   const handleSelect = (value: SortBy) => {

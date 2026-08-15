@@ -10,7 +10,11 @@ type PendingAction = { kind: 'empty' } | { kind: 'delete'; id: string; title: st
 export function TrashView() {
   const { t, i18n } = useTranslation()
   const dateLocale = i18n.language?.startsWith('en') ? 'en-US' : 'ko-KR'
-  const { trashTasks, restoreTask, permanentDeleteTask, emptyTrash, theme } = useStore()
+  const trashTasks = useStore((s) => s.trashTasks)
+  const restoreTask = useStore((s) => s.restoreTask)
+  const permanentDeleteTask = useStore((s) => s.permanentDeleteTask)
+  const emptyTrash = useStore((s) => s.emptyTrash)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [pending, setPending] = useState<PendingAction>(null)
 

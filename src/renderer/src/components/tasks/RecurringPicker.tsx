@@ -62,7 +62,7 @@ export function RecurringPicker({
   onChange: (pattern: string | null) => void
 }) {
   const { t } = useTranslation()
-  const { theme } = useStore()
+  const theme = useStore((s) => s.theme)
   const WEEKDAYS = tList('date.weekdaysShort')
   const MONTHS = tList('date.months')
   const isDark = theme === 'dark'

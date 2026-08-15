@@ -10,7 +10,11 @@ import { isVirtualSmartList } from '../../utils/smartLists'
 
 export function AddTask({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
-  const { addTask, selectedListId, theme, aiCreateTaskFromNL, aiConnected } = useStore()
+  const addTask = useStore((s) => s.addTask)
+  const selectedListId = useStore((s) => s.selectedListId)
+  const theme = useStore((s) => s.theme)
+  const aiCreateTaskFromNL = useStore((s) => s.aiCreateTaskFromNL)
+  const aiConnected = useStore((s) => s.aiConnected)
   const isDark = theme === 'dark'
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')

@@ -5,7 +5,9 @@ import { useStore } from '../../store/useStore'
 
 export function UndoToast() {
   const { t } = useTranslation()
-  const { undoStack, popUndo, theme } = useStore()
+  const undoStack = useStore((s) => s.undoStack)
+  const popUndo = useStore((s) => s.popUndo)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [visible, setVisible] = useState(false)
   const [leaving, setLeaving] = useState(false)

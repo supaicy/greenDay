@@ -6,7 +6,10 @@ import { parseNaturalDateTime } from '../../utils/naturalDate'
 
 export function QuickAdd() {
   const { t } = useTranslation()
-  const { showQuickAdd, setShowQuickAdd, addTask, theme } = useStore()
+  const showQuickAdd = useStore((s) => s.showQuickAdd)
+  const setShowQuickAdd = useStore((s) => s.setShowQuickAdd)
+  const addTask = useStore((s) => s.addTask)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [input, setInput] = useState('')
   const [parsedDate, setParsedDate] = useState<string | null>(null)

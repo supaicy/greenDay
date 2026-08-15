@@ -219,27 +219,25 @@ function NotificationSection({ isDark }: { isDark: boolean }) {
 
 export function Settings() {
   const { t } = useTranslation()
-  const {
-    theme,
-    setTheme,
-    language,
-    setLanguage,
-    showSettings,
-    toggleSettings,
-    exportData,
-    updateAvailable,
-    updateChecked,
-    updateDownloadProgress,
-    updateReady,
-    aiConfig,
-    aiConnected,
-    aiModels,
-    aiPull,
-    aiPullModel,
-    aiLoadConfig,
-    aiCheckConnection,
-    aiSaveConfig
-  } = useStore()
+  const theme = useStore((s) => s.theme)
+  const setTheme = useStore((s) => s.setTheme)
+  const language = useStore((s) => s.language)
+  const setLanguage = useStore((s) => s.setLanguage)
+  const showSettings = useStore((s) => s.showSettings)
+  const toggleSettings = useStore((s) => s.toggleSettings)
+  const exportData = useStore((s) => s.exportData)
+  const updateAvailable = useStore((s) => s.updateAvailable)
+  const updateChecked = useStore((s) => s.updateChecked)
+  const updateDownloadProgress = useStore((s) => s.updateDownloadProgress)
+  const updateReady = useStore((s) => s.updateReady)
+  const aiConfig = useStore((s) => s.aiConfig)
+  const aiConnected = useStore((s) => s.aiConnected)
+  const aiModels = useStore((s) => s.aiModels)
+  const aiPull = useStore((s) => s.aiPull)
+  const aiPullModel = useStore((s) => s.aiPullModel)
+  const aiLoadConfig = useStore((s) => s.aiLoadConfig)
+  const aiCheckConnection = useStore((s) => s.aiCheckConnection)
+  const aiSaveConfig = useStore((s) => s.aiSaveConfig)
 
   const isDark = theme === 'dark'
 

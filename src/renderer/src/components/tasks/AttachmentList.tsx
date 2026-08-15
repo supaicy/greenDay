@@ -25,7 +25,8 @@ export function AttachmentList({
   onUpdate: (attachments: string[]) => void
 }) {
   const { t } = useTranslation()
-  const { pickAttachment, theme } = useStore()
+  const pickAttachment = useStore((s) => s.pickAttachment)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
 
   const handleAdd = async () => {

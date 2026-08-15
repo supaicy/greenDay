@@ -24,7 +24,7 @@ const MIN_BLOCK_MIN = 15
 
 export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark }: Props): React.ReactElement {
   const { t } = useTranslation()
-  const { updateTask } = useStore()
+  const updateTask = useStore((s) => s.updateTask)
   const elRef = useRef<HTMLDivElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
