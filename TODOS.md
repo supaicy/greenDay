@@ -5,9 +5,10 @@
 - **`supaicy/coordinate`가 트렁크다.** main은 4월에 갈라진 실험 가지로 동결.
   근거: `docs/reports/2026-08-07-todos-validity-audit.html`(main 워킹트리) — 공통 조상
   2026-04-20, coordinate 150 커밋 vs main 15 커밋, 병합 시 14파일 충돌 실측.
-- **main의 shadcn/Radix 오버레이 전환 15커밋(`95a26d7`..`669de9f`)은 여기서 재작업한다.**
-  병합보다 싸다. main의 커밋·CLAUDE.md 오버레이 규칙(트리거 prop, z 110/111,
-  Escape `defaultPrevented` 가드)을 설계 지도로 쓴다. 아래 [P3] 모달 프리미티브와 같은 작업.
+- ~~**main의 shadcn/Radix 오버레이 전환 15커밋(`95a26d7`..`669de9f`)은 여기서 재작업한다.**~~
+  ✅ DONE (2026-08-15) — 인프라(components/ui, CSS 변수, z 110/111, Escape 가드) +
+  SortMenu·알림/반복 픽커·QuickAdd·Settings·ConfirmDialog·BatchBar·Sidebar·AddTask 전환,
+  overlays.test.tsx 이식, 렌더러 minify. 남은 수제는 우클릭 컨텍스트 메뉴 2곳(아래 [P4]).
 - main 한정 TODO 중 이쪽에서 유효한 것은 수제 드롭다운 2개(Sidebar/AddTask)뿐.
   main의 "렌더러 전용 패키지 4.2MB"는 대상 패키지가 CM6 전환으로 바뀌어 재측정 대상.
 
@@ -135,7 +136,8 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 - **Design:** `docs/design/2026-07-24-bottom-task-detail-design.md` (Deferred follow-ups)
 - **Added:** 2026-07-24, bottom-detail 디자인 세션
 
-### [P2] Tailwind gray 팔레트를 중립 계열로 전면 교체
+### ~~[P2] Tailwind gray 팔레트를 중립 계열로 전면 교체~~ ✅ DONE (2026-08-15, `58e8a57`)
+- **Result:** colors.gray 재정의 — 700~950은 Apple 시스템 그레이(surface 토큰과 동일값), 400~600은 대비 사다리 보존 중립값. 실측: 500 on white 4.83→4.70(AA), 400 on #1C1C1E 6.70 동일, 400 on #2C2C2E 5.49(기존 실측치 일치). 빌드 CSS에서 구 gray(#111827 등) 0건 확인.
 - **What:** 프로젝트 전역 `gray-*` 토큰을 Apple 시스템 그레이(중립) 계열로 교체.
 - **Why:** 앱 표면은 채도 1~3%의 중립 그레이(`#1C1C1E` 캔버스 / `#2C2C2E` 사이드바·모달)인데, Tailwind 기본 `gray`는 채도 28~39%의 한랭 계열이다. 큰 면에서 맞붙으면 한쪽만 붕 뜬다. 2026-07-29 상세 패널이 정확히 그 사례였다 — `bg-gray-900`(#111827, 채도 39%, 파랑 편향 +22)이 옆 리스트(#1C1C1E, 채도 3%, 편향 +2)와 색 계열이 달라 이질적으로 보였다.
 - **Pros:** `tailwind.config.js`에서 `colors.gray`만 재정의하면 한 곳에서 전부 바뀐다. 나중에 테마 CSS 변수를 추출할 때 방향이 같다.
@@ -280,29 +282,41 @@ iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
 전수 검증 → 수정 → /simplify → /review 사이클에서 **확인했지만 이번 범위 밖으로 둔 것들.**
 전부 리뷰 근거가 남아 있고, 다음에 손댈 때 바로 착수할 수 있다.
 
-### [P2] 반복 할일과 시간블록의 의미가 정의돼 있지 않음
+### ~~[P2] 반복 할일과 시간블록의 의미가 정의돼 있지 않음~~ ✅ DONE (2026-08-15, `2cbe9af`)
+- **Result:** 결정한 '둘 다'를 구현 — 템플릿은 occursOn 발생일에만 렌더(비발생일 매일 뜨던 버그 수정), scheduledOverrides로 회차별 이동/리사이즈/억제. 완료 스폰이 템플릿을 잇는다. resolveTimeBlockDrop으로 드롭 판정 일원화(테스트 6건).
 - **증상:** '배정 안 됨' 레일에서 **반복** 할일을 특정 날짜에 끌어다 놓으면, `getScheduledForOccurrence`가 날짜 부분을 버리고 시각만 템플릿으로 쓰기 때문에 **매일(그리고 앞으로 영원히) 같은 시간에 블록이 뜬다.** 주간 뷰면 7일 전부.
 - **왜 지금 드러났나:** 레일이 생기기 전에는 시간블록을 만들 진입점 자체가 없어 잠복 상태였다.
 - **제품 결정 (2026-08-15, 확정):** **둘 다.** 기본은 (a) — 드롭한 시각이 시리즈의 템플릿이 되되 블록은 **실제 반복 발생일에만** 표시한다(지금처럼 비발생일에도 매일 뜨는 건 버그로 수정). 추가로 (b) — 특정 회차만 시각을 다르게 잡는 **회차별 오버라이드**를 지원한다(오버라이드가 있으면 그날은 템플릿 대신 오버라이드).
 - **위치:** `utils/scheduledTime.ts:42-55`, `WeeklyCalendar.tsx:123`, `DailyCalendar.tsx:90`
 
-### [P2] batchComplete가 반복 시리즈를 조용히 끝낸다
+### ~~[P2] batchComplete가 반복 시리즈를 조용히 끝낸다~~ ✅ DONE (2026-08-15, `2a27479`)
+- **Result:** 스폰 로직을 recurrence.ts 헬퍼로 추출해 toggleTask와 공유. 완료 반영 전 스냅샷·기한 오름차순 계산으로 순차 완료와 동일 결과 보장(테스트 3건).
 - **증상:** `toggleTask`는 완료 시 다음 인스턴스를 만들지만 `batchComplete`는 만들지 않는다. 일괄 완료로 반복 할일을 끝내면 시리즈가 거기서 멈춘다.
 - **이번에 안 고친 이유:** 완료 전이(점수 + 반복 생성)를 한 헬퍼로 묶는 리팩터가 필요하고, 점수 부분만 이번에 정렬했다.
 - **위치:** `useStore.ts` `toggleTask` vs `batchComplete`
 
-### [P3] 모달 프리미티브가 없다
+### [P4] 우클릭 컨텍스트 메뉴 2곳이 아직 수제다
+- **What:** `TaskItem.tsx`(fixed z-[100]) · `TimeBlock.tsx`(우클릭 메뉴)
+- **Why:** shadcn 전환은 클릭 트리거(DropdownMenu/Popover/Dialog)만 커버 — 우클릭은 Radix ContextMenu 벤더링이 필요
+- **How:** `@radix-ui/react-context-menu` 벤더링 후 두 곳 이관. z 순서는 110/111 규칙 준수
+- **Added:** 2026-08-15 shadcn 재작업 마무리에서
+
+### ~~[P3] 모달 프리미티브가 없다~~ ✅ DONE (2026-08-15, `99d5031`)
+- **Result:** ConfirmDialog/Settings/QuickAdd 셋 다 Radix Dialog(components/ui/dialog)로 이관 — 배경·Esc·aria·포커스 트랩이 한곳.
 - ConfirmDialog / Settings / QuickAdd가 배경·Esc·aria를 각자 구현한다. 포커스 트랩·복원·스크롤 잠금을 추가하면 세 곳을 따로 고쳐야 한다.
 - **다음 단계:** `useEscapeKey` + `ModalShell` 추출 후 셋 다 이관.
 
-### [P3] 주/일 캘린더의 드롭 핸들러 중복
+### ~~[P3] 주/일 캘린더의 드롭 핸들러 중복~~ ✅ DONE (2026-08-15, `2cbe9af`)
+- **Result:** resolveTimeBlockDrop(scheduledTime.ts)으로 추출, 스냅/클램프/길이 보존을 scheduledTime.test.ts에서 검증.
 - ~40줄 `onDrop`이 두 파일에 사실상 같은 코드로 존재(시작 시각 상수와 날짜 변수만 다름). `toLocalIsoMinute` 공유는 이번에 했지만 핸들러 본문은 남았다.
 - **다음 단계:** `resolveTimeBlockDrop(e, { dayStr, startHour, pxPerMin, tasks })`로 추출 → `scheduledTime.test.ts`에서 스냅/클램프 검증 가능해짐.
 
-### [P3] '오늘'이 자정을 넘겨도 갱신되지 않는다
+### ~~[P3] '오늘'이 자정을 넘겨도 갱신되지 않는다~~ ✅ DONE (2026-08-15, `5d6141e`)
+- **Result:** useToday() 훅(다음 로컬 자정 타임아웃 리렌더) 신설, Weekly/DailyCalendar·KanbanView 이관. msUntilNextLocalMidnight 테스트 2건.
 - 여러 화면이 `useMemo(() => toDateString(new Date()), [])`로 오늘 날짜를 마운트 시점에 고정한다. 아이젠하워는 이번에 tasks 의존으로 바꿔 완화했지만, **KanbanView는 그 값을 쓰기까지 한다**(`dueDate: todayStr`) — 자정을 넘긴 창에서 카드를 '진행 중'으로 옮기면 어제 날짜가 박힌다.
 - **다음 단계:** 다음 로컬 자정에 타임아웃을 걸어 리렌더하는 `useToday()` 훅 하나로 통일.
 
-### [P3] 메인 스토어를 셀렉터 없이 구독하는 컴포넌트가 다수
+### ~~[P3] 메인 스토어를 셀렉터 없이 구독하는 컴포넌트가 다수~~ ✅ DONE (2026-08-15, `92bd98b`+`bc097f6`)
+- **Result:** 21개 컴포넌트 전부 개별 셀렉터로 전환 — 무선택자 useStore()가 컴포넌트 코드에 남지 않는다.
 - `const {...} = useStore()` 형태가 10곳 이상. AI 채팅은 토큰마다 스토어를 쓰므로(초당 30~100회) 스트리밍 중에는 사이드바·현재 뷰가 통째로 재조정된다. 포모도로 1Hz 경로는 이번에 분리했지만 이쪽은 남았다.
 - **다음 단계:** Sidebar·WeeklyCalendar·DailyCalendar·Kanban·Timeline·Eisenhower·StatsView·TaskList을 개별 셀렉터로.
