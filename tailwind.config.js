@@ -1,9 +1,28 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: ['class'],
   content: ['./src/renderer/src/**/*.{js,ts,jsx,tsx}', './src/renderer/index.html'],
   theme: {
     extend: {
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)'
+        // sm은 재정의하지 않는다 — ui 컴포넌트가 쓰지 않는데
+        // 앱 곳곳의 rounded-sm만 2px→4px로 바뀐다.
+      },
       colors: {
+        // ── shadcn 의미 토큰 → index.css의 CSS 변수. 기존 색 정의는 아래 그대로 남는다.
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
+        popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
+        secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
+        muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
+        accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
+        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
         // 기본 gray(채도 28~39%, 한랭)를 중립 계열로 전면 교체 (TODOS [P2], 2026-08-15).
         // 700~950은 Apple 시스템 그레이 = 아래 surface 토큰과 같은 값이라, 큰 면이
         // 맞붙어도 색 계열이 갈라지지 않는다. 400~600은 기존 대비 사다리를 유지하도록
@@ -23,12 +42,16 @@ module.exports = {
           950: '#1C1C1E'
         },
         primary: {
+          // shadcn이 쓰는 bg-primary / text-primary-foreground
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+          // 기존 스케일 — bg-primary-500 등 현재 코드가 그대로 동작한다
           50: '#eff6ff',
           100: '#dbeafe',
           200: '#bfdbfe',
           300: '#93c5fd',
           400: '#60a5fa',
-          500: '#4A90D9',
+          500: 'hsl(var(--primary))', // 브랜드 색의 유일한 출처는 index.css의 --primary
           600: '#3B7DD8',
           700: '#2563eb',
           800: '#1e40af',
@@ -55,5 +78,5 @@ module.exports = {
       }
     }
   },
-  plugins: []
+  plugins: [require('tailwindcss-animate')]
 }

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday 남은 작업 — IAP freemium 기준 (2026-08-08)</title>
+<style>
+  :root {
+    --bg:#fff; --fg:#1a1a1c; --muted:#6b6b70; --line:#e3e3e6; --card:#fafafa;
+    --accent:#2f7d4f; --warn:#a8620f; --stop:#a13b3b; --code:#f2f2f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#1c1c1e; --fg:#e8e8ea; --muted:#9a9aa0; --line:#333338; --card:#242427;
+      --accent:#6cc48d; --warn:#e0a458; --stop:#e08585; --code:#2a2a2e;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:3rem 1.25rem 6rem;background:var(--bg);color:var(--fg);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",Pretendard,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  main{max-width:880px;margin:0 auto}
+  h1{font-size:1.75rem;line-height:1.3;margin:0 0 .4rem;letter-spacing:-.02em}
+  h2{font-size:1.2rem;margin:3rem 0 1rem;padding-top:1.25rem;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h3{font-size:1rem;margin:2rem 0 .5rem}
+  .sub{color:var(--muted);font-size:.875rem;margin:0 0 2.5rem}
+  code{background:var(--code);padding:.12em .38em;border-radius:4px;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:1.1rem 1.25rem;margin:1rem 0}
+  .box.lede{border-left:3px solid var(--accent)}
+  .box.alert{border-left:3px solid var(--warn)}
+  .box p{margin:0}
+  .box p + p{margin-top:.7rem}
+  .scroll{overflow-x:auto;margin:1rem 0}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:600px}
+  th,td{text-align:left;padding:.6rem .75rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-weight:600;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+  tbody tr:last-child td{border-bottom:none}
+  .id{font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--muted);white-space:nowrap}
+  .tag{display:inline-block;font-size:.72rem;font-weight:600;padding:.15em .5em;border-radius:4px;white-space:nowrap}
+  .t-new{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+  .t-old{color:var(--muted);background:color-mix(in srgb,var(--muted) 14%,transparent)}
+  .t-block{color:var(--stop);background:color-mix(in srgb,var(--stop) 12%,transparent)}
+  ul{padding-left:1.15rem}
+  li{margin:.35rem 0}
+  ol{padding-left:1.3rem}
+  .num{font-variant-numeric:tabular-nums}
+  footer{margin-top:4rem;padding-top:1.25rem;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem}
+  .steps{counter-reset:s;list-style:none;padding:0}
+  .steps li{counter-increment:s;position:relative;padding-left:2.2rem;margin:.9rem 0}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:.1rem;width:1.5rem;height:1.5rem;
+    border-radius:50%;background:var(--card);border:1px solid var(--line);color:var(--muted);
+    font-size:.78rem;font-weight:600;display:grid;place-items:center}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Greenday 남은 작업</h1>
+<p class="sub">2026-08-08 · 기준: <code>supaicy/coordinate</code> (v2.0.2) · 유무료 구조: <strong>한 앱 + IAP freemium</strong></p>
+
+<div class="box alert">
+  <p><strong>⚠ 이 문서의 A장(freemium 작업)은 보류됐습니다 — 2026-08-08 /office-hours 결정.</strong></p>
+  <p>같은 날 오후 세션에서 <strong>freemium은 데이터를 보고 판단</strong>하기로 정했습니다. 2.0.2는 08-06 결정대로 ₩19,000 평생·기능 차등 없음·IAP 0개로 출시합니다. 따라서 <strong>아래 A-1~A-7은 지금 착수하지 않습니다.</strong> 재검토 트리거와 근거는 <code>~/.gstack/projects/supaicy-haru/supermicrosoft-supaicy-coordinate-design-20260808-012009.md</code>에 있습니다.</p>
+  <p>여전히 유효한 부분: <strong>0장(분할선 후보)</strong>은 freemium을 다시 열 때 쓸 입력이고, <strong>B장·C장</strong>은 가격 결정과 무관한 실제 남은 작업입니다.</p>
+</div>
+
+<div class="box lede">
+  <p><strong>브랜치 전제 (유효):</strong> 제품 라인은 <code>supaicy/coordinate</code>(Greenday)입니다. <code>main</code>의 haru v1.4.1은 이전 버전이고, 거기 있는 shadcn 15커밋은 4월 코드 위에 올라가 있어 그대로는 쓸 수 없습니다.</p>
+</div>
+
+<h2>0. 먼저 정해야 할 것 — 분할선</h2>
+
+<p>아래 A 작업 대부분이 이 결정에서 갈라져 나옵니다. 무엇을 무료로 열고 무엇을 잠글지 정하지 않으면 게이트를 어디 둘지도, IAP 상품을 몇 개 만들지도 정할 수 없습니다.</p>
+
+<p>참고로 git 히스토리에 이미 자연스러운 선이 하나 있습니다. 공개 MIT 저장소에 올라간 것(~2026-07-31)과 로컬에만 둔 35커밋(2026-08-02~)이 이렇게 갈립니다:</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>공개돼 있는 것 (haru 2.0.1)</th><th>아직 로컬에만 있는 것</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>할일·캘린더·칸반·타임라인·아이젠하워·습관·포모도로, AI 어시스턴트(로컬 Ollama), 우측 상세 패널, CM6 노트 에디터, 리마인더, 시간블록</td>
+      <td><strong>CalDAV(iCloud) 동기화</strong>, <strong>Google 캘린더 동기화</strong>, i18n(ko/en), 라이선스 서명 코어, Greenday 리네임, MAS 업로드 파이프라인, Windows 딥링크</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="box alert">
+  <p><strong>주의 — 이 선을 그대로 쓰면 2026-08-06 문서의 반대 논거를 정면으로 받습니다.</strong> 그 문서는 Google 동기화를 유료로 자르지 말라고 했고, 근거는 셋이었습니다: 원가가 0원이고(자체 서버 없음), App Store에서 잠금 해제를 팔면 IAP·영수증 검증·잠금 UI가 강제되며, <strong>사용자 요청 2위가 정확히 "다양한 캘린더 연동"</strong>이라는 것. 세 번째가 특히 무겁습니다 — 가장 원하는 기능을 잠그면 무료 설치는 늘어도 평판이 나빠질 수 있습니다.</p>
+  <p>다른 분할선 후보: AI 어시스턴트(로컬이라 원가 0), 무제한 리스트/태그 수, 고급 뷰(칸반·타임라인·아이젠하워), 데이터 내보내기. <strong>어느 쪽이든 "무료판만으로도 매일 쓸 만한가"가 기준이어야 합니다</strong> — 유입이 목적이므로.</p>
+</div>
+
+<h2>A. freemium이 새로 만드는 작업</h2>
+
+<p>2026-08-06에 "필요 없어진 작업"으로 지웠던 목록이 그대로 돌아옵니다.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th class="id">ID</th><th>작업</th><th>메모</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="id">A-1</td>
+      <td><strong>MAS IAP 배선</strong> <span class="tag t-new">신규</span></td>
+      <td>Electron <code>inAppPurchase</code> 모듈(macOS 전용) + App Store Connect 상품. <strong>스파이크 먼저</strong> — 샌드박스 계정 구매 흐름, 복원(Restore Purchases, 심사 필수 항목), 구매 중 앱 종료 복구까지 확인해야 합니다. 실측 없이 설계하면 위험합니다.</td>
+    </tr>
+    <tr>
+      <td class="id">A-2</td>
+      <td><strong>영수증 검증</strong> <span class="tag t-new">신규</span></td>
+      <td><strong>온디바이스 검증으로 해야 개인정보처리방침의 "개발자가 운영하는 서버가 없습니다"를 지킵니다.</strong> 서버 검증을 택하면 방침 문구와 App Store 제출 답변을 함께 고쳐야 합니다.</td>
+    </tr>
+    <tr>
+      <td class="id">A-3</td>
+      <td><strong>자격(entitlement) 단일화</strong> <span class="tag t-new">신규</span></td>
+      <td>구매 증명이 두 갈래가 됩니다 — MAS는 IAP 영수증, Windows 직접판매는 오프라인 라이선스 키. <code>src/shared/capabilities.ts</code>가 이미 이런 축을 모으는 자리이고 <code>needsLicenseKey</code>가 들어 있으니 여기에 <code>entitlementSource</code>를 더하는 게 맞습니다. 기능 게이트는 이 한 곳만 보도록.</td>
+    </tr>
+    <tr>
+      <td class="id">A-4</td>
+      <td><strong>기능 잠금 게이트 + 업그레이드 화면</strong> <span class="tag t-new">신규</span></td>
+      <td>0에서 정한 분할선대로. 잠긴 기능을 <em>숨길지 보여주고 잠글지</em>가 전환율을 좌우합니다. Apple 3.1.1 때문에 외부 결제 링크는 금지 — 앱 안 IAP로만 유도.</td>
+    </tr>
+    <tr>
+      <td class="id">A-5</td>
+      <td><strong>라이선스 등급 필드</strong> <span class="tag t-new">신규</span></td>
+      <td>현재 <code>LicensePayload</code>는 <code>id/name/email/seats/issuedAt/expiresAt/maxVersion</code>뿐 — <strong>등급 개념이 없습니다.</strong> Windows 쪽에 무료/유료를 표현하려면 필드 추가 + 발급 도구 + 검증 테스트 갱신.</td>
+    </tr>
+    <tr>
+      <td class="id">A-6</td>
+      <td><strong>App Store Connect 전환</strong> <span class="tag t-block">차단됨</span></td>
+      <td>앱 가격을 유료(₩19,000) → 무료로 변경하고 IAP 상품 등록. <strong>IAP도 유료 앱 계약이 필요하므로 사업자등록이 여전히 선행 조건입니다</strong>(2026-08-07 문서). 이미 업로드한 v2.0.2(Delivery UUID <code>fbee3f89</code>)의 처리 방침도 정해야 합니다.</td>
+    </tr>
+    <tr>
+      <td class="id">A-7</td>
+      <td><strong>문서 갱신</strong> <span class="tag t-new">신규</span></td>
+      <td>2026-08-06 「가격 정책 — 확정」을 폐기 표시하고 근거를 남기기. 스토어 메타데이터의 가격·기능 문구, 개인정보처리방침(A-2 결과에 따라), 랜딩 페이지.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>B. 원래 있던 미해결 작업</h2>
+
+<p>freemium 결정과 무관하게 남아 있는 것들. <code>coordinate</code>의 TODOS.md 기준입니다.</p>
+
+<h3>차단된 검증 5건 (2026-08-05 전수 검증)</h3>
+<p>코드 의심이 아니라 <strong>외부 자격증명이 없어 못 돌린 것</strong>들입니다. 유닛테스트는 통과 상태.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th class="id">ID</th><th>항목</th><th>막힌 이유 / 준비물</th></tr></thead>
+  <tbody>
+    <tr><td class="id">U-1</td><td>Google 캘린더 동기화 왕복</td><td>빌드에 OAuth 클라이언트 ID 없음. Google Cloud Console에서 데스크톱 앱 클라이언트 발급 — <strong>리디렉션에 번들 ID <code>com.supaicy.haru</code></strong>(앱 이름 Greenday와 다름, 실수 지점)</td></tr>
+    <tr><td class="id">U-2</td><td>커스텀 스킴 딥링크 복귀</td><td>U-1 종속. 개발·패키징 <em>양쪽</em> 확인 필요(<code>is.dev</code> 분기)</td></tr>
+    <tr><td class="id">U-3</td><td>CalDAV(iCloud) 동기화 왕복</td><td>Apple ID + 앱 전용 암호. 생성/수정/삭제 반영, 연동 해제 시 서버 일정 보존 확인</td></tr>
+    <tr><td class="id">U-4</td><td>자동 업데이트 감지</td><td>GitHub 최신 릴리스(v1.4.1)가 로컬(v2.0.2)보다 낮아 감지 자체가 불가</td></tr>
+    <tr><td class="id">U-5</td><td>MAS 빌드 분기</td><td>dev·패키징 모두 <code>process.mas === false</code>. 전역 단축키 no-op·업데이트 IPC no-op 확인</td></tr>
+  </tbody>
+</table>
+</div>
+<p style="color:var(--muted);font-size:.875rem">U-1·U-3은 분할선에서 동기화를 유료로 잡을 경우 <strong>유료 기능의 핵심 검증</strong>이 되므로 우선순위가 올라갑니다.</p>
+
+<h3>Windows 이식 <span class="tag t-old">[P1]</span></h3>
+<p>착수 기준은 이미 정해두셨습니다 — <em>맥 판매 첫 10건 또는 Windows 선구매 의사 5명</em>. 코드는 싼 편입니다(네이티브 모듈 0개, node-gyp 리빌드 없음). 비용은 코드가 아니라 준비물에 있습니다:</p>
+<ul>
+  <li><strong>리마인더 토스트</strong> — <code>setAppUserModelId</code>와 NSIS 바로가기 AUMID가 어긋나면 <strong>에러 없이 조용히 안 뜹니다.</strong> 리뷰가 남긴 유일한 critical gap이고, 리마인더는 이 앱의 핵심 기능입니다.</li>
+  <li><strong>딥링크</strong> — Windows는 <code>open-url</code>을 발화하지 않습니다. <code>second-instance</code> + <code>process.argv</code>로 받아야 하고, 안 고치면 Google 로그인이 5분 뒤 타임아웃으로 끝납니다. (2026-08-06 커밋에서 단일 인스턴스 락은 들어갔습니다 — 실기 확인 남음)</li>
+  <li>Windows 코드 서명 인증서(없으면 SmartScreen이 막음), MoR 결제 처리자(Paddle/Lemon Squeezy, 심사 리드타임), 정적 호스팅, <code>electron-builder.yml</code>의 <code>win:</code>/<code>nsis:</code> 블록, Windows CI 러너, <code>mas-preflight.sh</code> 일반화</li>
+</ul>
+
+<h3>품질·설계 후속</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>항목</th><th>메모</th></tr></thead>
+  <tbody>
+    <tr><td><strong>[P2] Tailwind gray 팔레트 중립 교체</strong></td><td>15개 컴포넌트에 한랭 계열 <code>gray-*</code>가 남아 앱 표면(채도 1~3%)과 붕 뜹니다. <code>tailwind.config.js</code> 한 곳에서 바뀌지만 실측 대비율 재검증 필요. <strong>동기화 작업과 같은 브랜치에서 돌리지 말 것</strong>(원인 분리 불가).</td></tr>
+    <tr><td><strong>[P2] 반복 할일 + 시간블록 의미 미정의</strong></td><td>반복 할일을 날짜에 끌어놓으면 <strong>매일 영원히</strong> 같은 시간에 블록이 뜹니다. 제품 결정이 먼저 필요 — 모든 occurrence인가, 그날 하나인가.</td></tr>
+    <tr><td><strong>[P2] batchComplete가 반복 시리즈를 끊는다</strong></td><td><code>toggleTask</code>는 다음 인스턴스를 만들지만 <code>batchComplete</code>는 안 만듭니다. 완료 전이를 한 헬퍼로 묶는 리팩터 필요.</td></tr>
+    <tr><td><strong>[P3] '오늘'이 자정을 안 넘는다</strong></td><td>KanbanView는 그 고정값을 <em>쓰기까지</em> 합니다 — 자정 넘긴 창에서 카드를 옮기면 어제 날짜가 박힙니다. <code>useToday()</code> 훅으로 통일.</td></tr>
+    <tr><td><strong>[P3] 셀렉터 없는 스토어 구독 10곳+</strong></td><td>AI 채팅이 토큰마다 스토어를 쓰므로(초당 30~100회) 스트리밍 중 사이드바·현재 뷰가 통째로 재조정됩니다.</td></tr>
+    <tr><td><strong>[P3] 모달 프리미티브가 없다</strong></td><td>ConfirmDialog/Settings/QuickAdd가 배경·Esc·aria를 각자 구현. <strong>→ 아래 C가 이 항목의 답입니다.</strong></td></tr>
+    <tr><td><strong>[P3] 주/일 캘린더 드롭 핸들러 중복</strong></td><td>~40줄이 두 파일에 사실상 같은 코드로. 추출하면 스냅/클램프를 테스트로 덮을 수 있습니다.</td></tr>
+    <tr><td><strong>AI 로드맵 [장기]</strong></td><td>내장 런타임(<code>node-llama-cpp</code>), 로컬 RAG — 둘 다 제안서만 쓰고 <strong>결정 대기</strong>. RAG는 v1 키워드 관련도부터 권고돼 있습니다.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>C. <code>main</code>의 shadcn 15커밋</h2>
+
+<p>2026-08-06~07에 오버레이 7개를 Radix로 옮기고 실제 버그를 여럿 고친 작업입니다 — 두 번 눌러야 열리던 트리거, Escape 한 번이 오버레이와 선택을 함께 지우던 것, 모달이 앱 요소 아래 깔리던 z 순서, 설정 화면의 셀렉터 없는 구독. <strong>Greenday의 <em>[P3] 모달 프리미티브가 없다</em>에 대한 답이 이미 만들어져 있는 셈입니다.</strong></p>
+
+<p>다만 그대로 병합할 수 없습니다. 두 갈래는 2026-04-20에 갈라졌고, main이 건드린 28개 파일 중 21개를 coordinate도 고쳤습니다. 테스트 병합 결과 <strong>14개 충돌</strong>이고 변경량이 한쪽으로 크게 기울어 있습니다:</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>파일</th><th>main</th><th>coordinate</th></tr></thead>
+  <tbody>
+    <tr><td><code>Settings.tsx</code></td><td class="num">+27 / −35</td><td class="num">+578 / −173</td></tr>
+    <tr><td><code>TaskDetail.tsx</code></td><td class="num">+38 / −47</td><td class="num">+332 / −324</td></tr>
+    <tr><td><code>SortMenu.tsx</code></td><td class="num">+38 / −75</td><td class="num">+51 / −77</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>권고: 병합이 아니라 재적용.</strong> coordinate 위에서 shadcn을 다시 도입하되, main의 커밋 메시지에 남은 근거(트리거를 prop으로 받는 이유, z 110/111, Escape <code>defaultPrevented</code> 가드, tailwind-merge가 그룹이 달라 못 지우는 클래스)를 설계 입력으로 씁니다. 이미 <code>main</code>의 CLAUDE.md에 규칙으로 정리돼 있고, 회귀 테스트 4개도 있습니다 — 옮길 수 있습니다.</p>
+
+<h2>순서 제안</h2>
+
+<ol class="steps">
+  <li><strong>분할선 결정</strong> (0장) — A 전체가 여기서 갈라집니다. 코드 작업 아님.</li>
+  <li><strong>사업자등록 → 유료 앱 계약</strong> (A-6) — 리드타임이 있고 IAP든 유료 앱이든 필요합니다. 지금 병렬로 시작해 두는 게 이득.</li>
+  <li><strong>MAS IAP 스파이크</strong> (A-1) — 샌드박스 구매·복원까지 실제로 돌려봅니다. 여기서 나온 실측으로 A-2·A-3 설계.</li>
+  <li><strong>U-1 / U-3 동기화 검증</strong> — 분할선에서 동기화가 유료라면 이게 유료 기능의 품질 보증입니다. 자격증명만 있으면 됩니다.</li>
+  <li><strong>자격 단일화 + 게이트</strong> (A-3, A-4) — 스파이크 결과 위에.</li>
+  <li><strong>shadcn 재적용</strong> (C) — 게이트 UI를 새로 그리기 <em>전에</em> 하면 그 UI를 두 번 안 만듭니다.</li>
+</ol>
+
+<div class="box">
+  <p><strong>지표에 대해 한 가지.</strong> 2026-08-06 문서의 실측은 5개월 설치 118건이고 목표까지 140~460배였습니다. 그 진단("요금제로는 닿지 않는다 — 유입 문제다")은 freemium으로 바꿔도 그대로 유효합니다. 오히려 freemium은 그 진단에 대한 대응이므로, <strong>성공 지표를 매출이 아니라 무료 설치 수 → 유료 전환율로 잡아야</strong> 이 구조가 효과가 있었는지 판단할 수 있습니다.</p>
+</div>
+
+<footer>
+근거: <code>supaicy/coordinate</code>의 TODOS.md, <code>src/shared/capabilities.ts</code>, <code>src/shared/license/format.ts</code>, 2026-08-06 「가격 정책 — 확정」, 2026-08-07 유료 앱 계약 문서. 브랜치 분기·충돌은 <code>git merge-base</code>/<code>git merge-tree</code> 실측.<br>
+선행 검증 결과는 <code>2026-08-07-todos-validity-audit</code> 참조.
+</footer>
+
+</main>
+</body>
+</html>

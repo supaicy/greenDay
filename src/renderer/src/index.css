@@ -2,6 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── shadcn 의미 토큰 ─────────────────────────────────────────────────────
+   값은 전부 GreenDay가 원래 쓰던 색이다. 새로 들어오는 shadcn 컴포넌트가
+   기존 화면과 같은 톤을 갖도록, shadcn의 이름에 우리 색을 연결한 것뿐이다.
+   숫자는 HSL(색상 채도% 명도%) — Tailwind v3의 CSS 변수 규약. */
+@layer base {
+  :root {
+    --background: 0 0% 100%;            /* #FFFFFF — App.tsx의 라이트 배경 */
+    --foreground: 240 3.4% 11.4%;       /* #1C1C1E — App.tsx의 라이트 글자 */
+    --card: 0 0% 100%;
+    --card-foreground: 240 3.4% 11.4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 3.4% 11.4%;
+    --primary: 210.6 65.3% 57.1%;       /* #4A90D9 — tailwind.config의 primary.500 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%;            /* gray-100 */
+    --secondary-foreground: 240 6% 25%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;     /* gray-500 — 앱에서 가장 많이 쓰는 보조색 */
+    --accent: 240 5% 96%;
+    --accent-foreground: 240 6% 25%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 90%;               /* gray-200 */
+    --input: 240 6% 90%;
+    --ring: 210.6 65.3% 57.1%;          /* 포커스 링도 primary 파랑 */
+    /* Tailwind 기본 rounded-lg와 같은 값. 이 변수는 앱 전체의 rounded-lg/md를
+       다시 정의하므로 임의로 올리면 전부 따라 바뀐다.
+       더 둥근 모서리가 필요한 다이얼로그는 rounded-xl을 직접 붙인다. */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 240 3.4% 11.4%;       /* #1C1C1E — App.tsx의 다크 배경 */
+    --foreground: 240 10.6% 90.8%;      /* #E5E5EA — sidebar.text */
+    --card: 240 2.2% 17.6%;             /* #2C2C2E — sidebar.bg, 기존 다이얼로그 표면색 */
+    --card-foreground: 240 10.6% 90.8%;
+    --popover: 240 2.2% 17.6%;
+    --popover-foreground: 240 10.6% 90.8%;
+    --primary: 210.6 65.3% 57.1%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 1.7% 23.1%;        /* #3A3A3C — sidebar.hover */
+    --secondary-foreground: 240 10.6% 90.8%;
+    --muted: 240 1.7% 23.1%;
+    --muted-foreground: 240 2.3% 56.7%; /* #8E8E93 — sidebar.muted */
+    --accent: 240 1.4% 28.6%;           /* #48484A — sidebar.active */
+    --accent-foreground: 240 10.6% 90.8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 4% 26%;               /* gray-700 근사 */
+    --input: 240 4% 26%;
+    --ring: 210.6 65.3% 57.1%;
+  }
+}
+
 * {
   margin: 0;
   padding: 0;

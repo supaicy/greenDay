@@ -31,6 +31,11 @@ export function useKeyboardShortcuts() {
 
       // Escape: 패널 닫기 / 선택 해제
       if (key === 'Escape') {
+        // Radix는 document 캡처 단계에서 먼저 닫고 preventDefault만 건다 —
+        // 전파는 막지 않으므로 이 window 핸들러까지 온다. 그때 스토어는 이미
+        // 갱신돼 있어서 아래 체인이 한 칸 더 내려가고, 결국 오버레이를 닫은
+        // Escape 한 번이 선택된 태스크까지 해제해버린다.
+        if (e.defaultPrevented) return
         if (showQuickAdd) {
           useStore.getState().setShowQuickAdd(false)
           return
