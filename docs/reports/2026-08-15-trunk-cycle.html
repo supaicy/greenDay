@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026-08-15 트렁크 확정 사이클</title>
+<style>
+  :root {
+    --bg: #fafaf9; --surface: #fff; --ink: #1c1917; --muted: #78716c;
+    --line: #e7e5e4; --accent: #16a34a; --accent-soft: #f0fdf4;
+    --warn: #b45309; --warn-soft: #fffbeb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e;
+      --line:#44403c; --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font: 15px/1.65 -apple-system, "Apple SD Gothic Neo", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 25px; margin: 0 0 4px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+  h2 { font-size: 18px; margin: 36px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .tldr { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 14px 18px; }
+  table { width:100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+  th, td { text-align:left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap; }
+  code { font: 13px ui-monospace, Menlo, monospace; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  ul { padding-left: 22px; margin: 8px 0; } li { margin: 4px 0; }
+  .note { color: var(--muted); font-size: 13.5px; }
+  .k { white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+<h1>트렁크 확정 사이클</h1>
+<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 13개 · 54파일 +3,593/−742 · push 안 함(정책 유지)</div>
+
+<div class="tldr">
+<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 헬스: typecheck 0 · lint 0 errors · <strong>505 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
+</div>
+
+<h2>1 · 확정된 결정</h2>
+<table>
+<tr><th>결정</th><th>내용</th></tr>
+<tr><td class="k">트렁크</td><td><code>supaicy/coordinate</code>. main은 동결된 실험 가지 — shadcn 15커밋은 병합 대신 트렁크 위 재작업(감사 예측대로 병합보다 쌌음). <code>TODOS.md</code> 맨 위에 기록</td></tr>
+<tr><td class="k">반복×블록</td><td><strong>둘 다</strong>: 드롭 시각은 시리즈 템플릿(실제 발생일에만 표시) + 회차별 오버라이드(특정 날만 이동/리사이즈/억제)</td></tr>
+<tr><td class="k">RAG v1</td><td>보류 — 다음 사이클</td></tr>
+</table>
+
+<h2>2 · 버그 수정 (TDD, 테스트 먼저 실패 확인)</h2>
+<table>
+<tr><th>커밋</th><th>내용</th></tr>
+<tr><td><code>2a27479</code></td><td><strong>batchComplete가 반복 시리즈를 조용히 끝냄</strong> — 스폰 로직을 <code>recurrence.ts</code> 헬퍼로 추출해 toggleTask와 공유. 완료 반영 전 스냅샷·기한 오름차순으로 순차 완료와 동일 결과 보장</td></tr>
+<tr><td><code>2b49e47</code></td><td>위 헬퍼의 엣지 — 같은 기한 중복 회차 일괄 완료 시 스폰 유령이 완료 표시에 휩쓸려 다음 회차가 두 번 생기던 것(자체 리뷰에서 발견, 재현 테스트 후 수정)</td></tr>
+<tr><td><code>5d6141e</code></td><td><strong>'오늘'이 자정을 안 넘김</strong> — <code>useToday()</code> 훅(다음 로컬 자정 리렌더) 신설, Weekly/Daily/Kanban 이관. Kanban은 어제 날짜가 데이터에 박히던 실버그</td></tr>
+<tr><td><code>2cbe9af</code></td><td><strong>반복 시간블록 매일 뜸</strong> — <code>occursOn</code> 발생일 게이트 + <code>scheduledOverrides</code>(회차 이동·리사이즈·억제, JSON 영속화·검증 포함). 완료 스폰이 템플릿을 잇는다. 주/일 캘린더 중복 onDrop(~40줄×2)은 <code>resolveTimeBlockDrop</code>으로 추출(테스트 6건)</td></tr>
+</table>
+
+<h2>3 · shadcn/Radix 오버레이 재작업 (main → 트렁크)</h2>
+<ul>
+<li><code>699bd55</code> 인프라 — <code>components/ui/</code>(dialog·dropdown-menu·popover, z 110/111), GreenDay 색 CSS 변수 매핑, <code>@</code> 경로 별칭, <code>useKeyboardShortcuts</code>의 Escape <code>defaultPrevented</code> 가드, jsdom+testing-library 설치</li>
+<li><code>b925f54</code> SortMenu·알림/반복 픽커 → 트리거는 호출처가 prop으로. PickerRow(수동 mount 래퍼) 제거 — 두 번 눌러야 열리던 구조가 사라지고 화살표 키·포커스 복귀·바깥 클릭이 생김</li>
+<li><code>99d5031</code> QuickAdd·Settings·ConfirmDialog → Radix Dialog ([P3] 모달 프리미티브 부재 해소). ConfirmDialog의 파괴적 동작 보호(전키 삼킴·취소 포커스)는 유지</li>
+<li><code>dc443e4</code> Sidebar 리스트 메뉴·AddTask 우선순위(main TODOS의 "남은 수제 2개")·BatchBar 이동/우선순위 전환 + <strong>overlays.test.tsx 이식</strong>(한 번 클릭에 열림 / 팝오버-모달 겹침 판정 / Escape 이중발화 가드) + 렌더러 minify(1,470→604kB)</li>
+</ul>
+<p class="note">남은 수제는 우클릭 컨텍스트 메뉴 2곳(TaskItem·TimeBlock)뿐 — Radix ContextMenu 벤더링이 필요해 TODOS [P4]로 등록. 오버레이 규칙은 CLAUDE.md에 기록.</p>
+
+<h2>4 · 품질·디자인</h2>
+<ul>
+<li><code>92bd98b</code>+<code>bc097f6</code> <strong>무선택자 <code>useStore()</code> 21곳 전부 개별 셀렉터로</strong> — AI 스트리밍(초당 30~100 쓰기) 중 전면 재렌더 해소</li>
+<li><code>58e8a57</code> <strong>Tailwind gray → 중립 계열</strong> — 700~950은 Apple 시스템 그레이(surface 토큰과 동일값), 400~600은 대비 사다리 보존 명도. 실측: 500 on white 4.83→4.70(AA 유지) · 400 on #1C1C1E 6.70(동일) · 400 on #2C2C2E 5.49(07-29 실측치 일치). 빌드 CSS에서 구 gray 0건</li>
+<li><code>2ebc3ab</code>·<code>b33db7d</code> TODOS 장부 정리 — 이미 해결돼 있던 a11y ~50건·LLM 다국어 완료 표시, 이번 사이클 7건 완료 기록</li>
+</ul>
+
+<h2>5 · 헬스 전/후</h2>
+<table>
+<tr><th></th><th>시작 (08-15 아침)</th><th>종료</th></tr>
+<tr><td>typecheck</td><td>0 errors</td><td>0 errors</td></tr>
+<tr><td>biome lint</td><td>0 errors / 7 warnings</td><td>0 errors / 7 warnings (기존분)</td></tr>
+<tr><td>vitest</td><td>478 passed</td><td><strong>505 passed</strong> (+27, 컴포넌트 테스트 첫 도입)</td></tr>
+<tr><td>렌더러 번들</td><td>1,131kB (미압축)</td><td>604kB (minify)</td></tr>
+</table>
+
+<h2>6 · 다음 남은 것</h2>
+<ul>
+<li><strong>출시 서류(사용자만 가능):</strong> 개인사업자 등록 → 영문 사업자등록증명(90일) → 유료 앱 계약 → ₩19,000 입력. 상세: <code>docs/reports/2026-08-07-paid-app-agreement.html</code></li>
+<li><strong>미검증 U-1~5:</strong> Google OAuth 클라이언트 ID·CalDAV 앱 암호·상위 릴리스·MAS 빌드 필요 — 자격증명이 생기면 착수</li>
+<li><strong>결정 대기:</strong> 내장 런타임 제안서, RAG v1(보류 해제 시 착수)</li>
+<li><strong>라이브 QA:</strong> 이번 오버레이 전환 + AI 온보딩/미리보기 — CDP 하네스(<code>--remote-debugging-port=9222</code>)로 별도 세션 권장</li>
+<li><strong>[P4]</strong> 우클릭 컨텍스트 메뉴 2곳 Radix ContextMenu 이관</li>
+<li><strong>대기 트리거 유지:</strong> Windows 이식(맥 판매 10건/선구매 5명), push 금지, freemium 보류</li>
+</ul>
+
+<footer class="note" style="margin-top:40px; padding-top:14px; border-top:1px solid var(--line)">
+결정 근거: <code>docs/reports/2026-08-07-todos-validity-audit.html</code>(main 워킹트리) · 남은 작업 전체: <code>docs/reports/2026-08-15-remaining-work.html</code>(main 워킹트리) · 커밋 범위 <code>2ebc3ab..2b49e47</code>
+</footer>
+</main>
+</body>
+</html>
