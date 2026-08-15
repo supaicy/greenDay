@@ -10,6 +10,7 @@
  * TZ 드리프트 방지를 위해 Date(y, m, d) 로컬 생성, Date.now()/new Date() 비인수 호출 금지.
  */
 import i18n, { tList } from '../i18n'
+import type { Task } from '../types'
 
 /** 'YYYY-MM-DD' → [year, month(0-based), day] */
 function parseDate(iso: string): [number, number, number] {
@@ -148,4 +149,71 @@ export function formatRecurringPattern(pattern: string | null): string | null {
   }
 
   return i18n.t('recurring.label')
+}
+
+/** 완료된 반복 task가 스폰할 다음 인스턴스의 addTask 인자. */
+export interface RecurrenceSpawn {
+  title: string
+  listId: string
+  dueDate: string
+  dueTime?: string
+  priority: Task['priority']
+  isRecurring: true
+  recurringPattern: string
+  tags: string[]
+  reminderAt: string | null
+}
+
+/**
+ * task 완료 시 만들어야 할 다음 반복 인스턴스를 계산한다. 만들 것이 없으면 null.
+ * 같은 패턴·제목·기한의 미완료 인스턴스가 existing에 이미 있으면 중복 스폰하지 않는다.
+ */
+export function nextRecurrenceSpawn(task: Task, existing: Task[], today: string): RecurrenceSpawn | null {
+  if (!task.isRecurring || !task.recurringPattern) return null
+  const next = nextRecurringDate(task.recurringPattern, task.dueDate ?? today)
+  if (!next) return null
+  const exists = existing.some(
+    (t) =>
+      !t.completed &&
+      t.isRecurring &&
+      t.recurringPattern === task.recurringPattern &&
+      t.title === task.title &&
+      t.dueDate === next
+  )
+  if (exists) return null
+  let reminderAt: string | null = null
+  if (task.reminderAt && task.dueDate) {
+    reminderAt = shiftIsoByDays(task.reminderAt, daysBetween(task.dueDate, next))
+  }
+  return {
+    title: task.title,
+    listId: task.listId,
+    dueDate: next,
+    dueTime: task.dueTime ?? undefined,
+    priority: task.priority,
+    isRecurring: true,
+    recurringPattern: task.recurringPattern,
+    tags: task.tags,
+    reminderAt
+  }
+}
+
+/**
+ * 일괄 완료가 만들 스폰 목록. 기한 오름차순으로 하나씩 완료 처리한 것과 같은 결과를
+ * 보장해야 한다 — 같은 시리즈의 8/15·8/16 회차를 함께 완료할 때 8/16이 아직 미완료인
+ * 시점 기준으로 중복 판정하지 않으면 8/16 인스턴스가 한 번 더 생긴다.
+ */
+export function collectRecurrenceSpawns(completing: Task[], existing: Task[], today: string): RecurrenceSpawn[] {
+  const ordered = [...completing].sort((a, b) => (a.dueDate ?? today).localeCompare(b.dueDate ?? today))
+  let working = existing
+  const spawns: RecurrenceSpawn[] = []
+  for (const task of ordered) {
+    const spawn = nextRecurrenceSpawn(task, working, today)
+    if (spawn) {
+      spawns.push(spawn)
+      working = [...working, { ...task, completed: false, dueDate: spawn.dueDate }]
+    }
+    working = working.map((t) => (t.id === task.id ? { ...t, completed: true } : t))
+  }
+  return spawns
 }

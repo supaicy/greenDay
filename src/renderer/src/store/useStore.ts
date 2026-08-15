@@ -22,7 +22,7 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
-import { nextRecurringDate, shiftIsoByDays, daysBetween } from '../utils/recurrence'
+import { nextRecurrenceSpawn, collectRecurrenceSpawns } from '../utils/recurrence'
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
@@ -528,40 +528,9 @@ export const useStore = create<Store>((set, get) => ({
     }
 
     if (newCompleted) {
-      // 반복 task: 완료 시 다음 인스턴스 생성
-      if (task.isRecurring && task.recurringPattern) {
-        const base = task.dueDate ?? todayString()
-        const next = nextRecurringDate(task.recurringPattern, base)
-        if (next) {
-          // 중복 인스턴스 방지: 같은 패턴·제목·기한의 미완료 task가 이미 있으면 생성 건너뜀
-          const exists = get().tasks.some(
-            (t) =>
-              !t.completed &&
-              t.isRecurring &&
-              t.recurringPattern === task.recurringPattern &&
-              t.title === task.title &&
-              t.dueDate === next
-          )
-          if (!exists) {
-            // 알림 오프셋 계산
-            let nextReminderAt: string | null = null
-            if (task.reminderAt && task.dueDate && next) {
-              const delta = daysBetween(task.dueDate, next)
-              nextReminderAt = shiftIsoByDays(task.reminderAt, delta)
-            }
-            get().addTask(task.title, {
-              listId: task.listId,
-              dueDate: next,
-              dueTime: task.dueTime ?? undefined,
-              priority: task.priority,
-              isRecurring: true,
-              recurringPattern: task.recurringPattern,
-              tags: task.tags,
-              reminderAt: nextReminderAt
-            })
-          }
-        }
-      }
+      // 반복 task: 완료 시 다음 인스턴스 생성 (중복 방지·알림 오프셋은 헬퍼가 처리)
+      const spawn = nextRecurrenceSpawn(task, get().tasks, todayString())
+      if (spawn) get().addTask(spawn.title, spawn)
     }
   },
   removeTask: async (id) => {
@@ -645,6 +614,9 @@ export const useStore = create<Store>((set, get) => ({
     // 합계를 한 번에 반영한다 — 건당 addScore는 선택 수만큼 스토어 쓰기와 IPC를 만든다.
     const newlyCompleted = get().tasks.filter((t) => idSet.has(t.id) && !t.completed)
     const newlyCompletedIds = newlyCompleted.map((t) => t.id)
+    // 반복 task의 다음 인스턴스 — 완료 반영 전 스냅샷으로 계산해야 하나씩 완료한
+    // 것과 같은 결과가 된다(안 그러면 일괄 완료가 반복 시리즈를 조용히 끝냈다).
+    const spawns = collectRecurrenceSpawns(newlyCompleted, get().tasks, todayString())
     set((s) => ({
       // 이미 완료였던 항목의 completedAt은 건드리지 않는다 — 덮어쓰면 완료 이력이
       // 오늘로 밀려 통계의 '오늘 완료'와 14일 추이가 조용히 바뀐다.
@@ -653,6 +625,7 @@ export const useStore = create<Store>((set, get) => ({
       batchMode: false
     }))
     window.api.batchUpdateTasks(newlyCompletedIds, { completed: true })
+    for (const spawn of spawns) await get().addTask(spawn.title, spawn)
     await get().addScores(
       newlyCompleted.map((t) => ({ type: 'taskComplete', points: pointsForTask(t.priority), taskId: t.id }))
     )

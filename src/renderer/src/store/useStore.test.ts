@@ -41,6 +41,7 @@ beforeEach(() => {
       addScoreEvent: vi.fn(),
       addScoreEvents: vi.fn(),
       batchUpdateTasks: vi.fn(),
+      createTask: vi.fn(),
       reorderTasks: vi.fn(),
       toggleHabitLog: vi.fn(),
       deleteTask: vi.fn()
@@ -102,6 +103,38 @@ describe('batchComplete scoring', () => {
     // 태스크별로 남기되(회수 계산에 필요) 스토어 쓰기는 한 번이다.
     expect(useStore.getState().score.events).toHaveLength(2)
     expect(useStore.getState().score.events.map((e) => e.taskId)).toEqual(['a', 'b'])
+  })
+})
+
+describe('batchComplete recurrence', () => {
+  // toggleTask는 완료 시 다음 인스턴스를 만들지만 batchComplete는 안 만들어
+  // 일괄 완료가 반복 시리즈를 조용히 끝냈다 (TODOS 2026-08-05 /review).
+  it('spawns the next instance of a recurring task, like toggleTask does', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'r', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' })],
+      batchSelectedIds: ['r']
+    })
+    await useStore.getState().batchComplete()
+    const next = useStore.getState().tasks.find((t) => !t.completed)
+    expect(next?.title).toBe('운동')
+    expect(next?.dueDate).toBe('2026-08-16')
+    expect(next?.isRecurring).toBe(true)
+    expect(next?.recurringPattern).toBe('daily')
+  })
+
+  // 같은 시리즈의 두 회차(8/15, 8/16)를 함께 완료하면, 하나씩 완료했을 때와
+  // 같아야 한다: 8/16 중복 스폰 없이 8/17 하나만 생긴다.
+  it('matches sequential-toggle semantics for two occurrences of one series', async () => {
+    useStore.setState({
+      tasks: [
+        task({ id: 'r1', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' }),
+        task({ id: 'r2', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-16' })
+      ],
+      batchSelectedIds: ['r1', 'r2']
+    })
+    await useStore.getState().batchComplete()
+    const spawned = useStore.getState().tasks.filter((t) => !t.completed)
+    expect(spawned.map((t) => t.dueDate)).toEqual(['2026-08-17'])
   })
 })
 
