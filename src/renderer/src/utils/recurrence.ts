@@ -217,7 +217,9 @@ export function collectRecurrenceSpawns(completing: Task[], existing: Task[], to
     const spawn = nextRecurrenceSpawn(task, working, today)
     if (spawn) {
       spawns.push(spawn)
-      working = [...working, { ...task, completed: false, dueDate: spawn.dueDate }]
+      // 유령의 id는 원본과 달라야 한다 — 같으면 바로 아래 완료 표시에 휩쓸려,
+      // 같은 기한의 중복 인스턴스가 이 유령을 미완료 dup으로 못 보고 또 스폰한다.
+      working = [...working, { ...task, id: `${task.id}:spawn`, completed: false, dueDate: spawn.dueDate }]
     }
     working = working.map((t) => (t.id === task.id ? { ...t, completed: true } : t))
   }

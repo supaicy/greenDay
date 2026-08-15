@@ -162,6 +162,23 @@ describe('batchComplete recurrence', () => {
   })
 })
 
+describe('batchComplete recurrence — duplicate instances', () => {
+  // 같은 시리즈의 같은 기한 인스턴스 2개(중복 데이터)를 함께 완료해도,
+  // 하나씩 완료했을 때처럼 다음 회차는 하나만 생겨야 한다.
+  it('spawns only one next instance for duplicate same-day occurrences', async () => {
+    useStore.setState({
+      tasks: [
+        task({ id: 'd1', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' }),
+        task({ id: 'd2', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' })
+      ],
+      batchSelectedIds: ['d1', 'd2']
+    })
+    await useStore.getState().batchComplete()
+    const spawned = useStore.getState().tasks.filter((t) => !t.completed)
+    expect(spawned.map((t) => t.dueDate)).toEqual(['2026-08-16'])
+  })
+})
+
 describe('reorderTasks', () => {
   it('reflects the new order in the array itself, not only in sortOrder', async () => {
     useStore.setState({
