@@ -252,7 +252,8 @@ export function createTask(task: Record<string, unknown>): void {
     is_recurring: task.isRecurring ? 1 : 0,
     recurring_pattern: task.recurringPattern || null,
     scheduled_start: task.scheduledStart || null,
-    scheduled_end: task.scheduledEnd || null
+    scheduled_end: task.scheduledEnd || null,
+    scheduled_overrides: null
   })
   save()
 }
@@ -279,6 +280,9 @@ export function updateTask(task: Record<string, unknown>): void {
     }
   }
   if (task.tags !== undefined) existing.tags = JSON.stringify(task.tags)
+  if (task.scheduledOverrides !== undefined) {
+    existing.scheduled_overrides = task.scheduledOverrides === null ? null : JSON.stringify(task.scheduledOverrides)
+  }
   if (task.attachments !== undefined) existing.attachments = JSON.stringify(task.attachments)
   if (task.completed !== undefined) {
     existing.completed = task.completed ? 1 : 0

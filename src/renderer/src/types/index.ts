@@ -21,6 +21,11 @@ export interface Task {
   attachments: string[]
   scheduledStart: string | null
   scheduledEnd: string | null
+  /**
+   * 반복 할일의 회차별 시간블록 오버라이드. 키는 발생일(YYYY-MM-DD).
+   * 값이 있으면 그날은 템플릿 대신 이 시각, null이면 그날 블록 없음(옮겨간 회차).
+   */
+  scheduledOverrides?: Record<string, { start: string; end: string } | null> | null
 }
 
 export interface TaskList {

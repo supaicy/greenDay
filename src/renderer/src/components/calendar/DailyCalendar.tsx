@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, Flag, CheckCircle2, Circle } from 'lucide-re
 import { TimeBlock } from './TimeBlock'
 import { UnscheduledRail } from './UnscheduledRail'
 import { layoutOverlappingBlocks } from '../../utils/timeBlockLayout'
-import { getScheduledForOccurrence, snapTo15Min, toLocalIsoMinute, MIN_BLOCK_MS } from '../../utils/scheduledTime'
+import { getScheduledForOccurrence, resolveTimeBlockDrop } from '../../utils/scheduledTime'
 import { useTranslation } from 'react-i18next'
 import { DND_MIME } from '../../utils/dnd'
 import { PRIORITY_COLOR } from '../../utils/priority'
@@ -286,43 +286,21 @@ export function DailyCalendar(): React.ReactElement {
               }
             }}
             onDrop={(e) => {
-              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
-              const yPx = e.clientY - rect.top
-              const minutesFromTop = yPx / PX_PER_MIN
-              const totalMin = DAY_START_HOUR * 60 + minutesFromTop
-              const hour = Math.floor(totalMin / 60)
-              const minute = Math.floor(totalMin % 60)
-              const pad = (n: number): string => String(n).padStart(2, '0')
-              const rawStart = `${dateStr}T${pad(hour)}:${pad(minute)}:00`
-              const dayEnd = new Date(`${dateStr}T23:59:00`).getTime()
-              // 하루 끝에서 최소 블록(15분)을 확보하지 못하면 updateTask가 조용히 거부한다.
-              // 시작을 끌어올려, 시간표 맨 아래에 놓아도 블록이 만들어지게 한다.
-              const latestStart = dayEnd - MIN_BLOCK_MS
-              const startMs = Math.min(new Date(snapTo15Min(rawStart)).getTime(), latestStart)
-              const snappedStart = toLocalIsoMinute(new Date(startMs))
-
               const taskId = e.dataTransfer.getData(DND_MIME.TASK_ID) || e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
               if (!taskId) return
               const existing = tasks.find((t) => t.id === taskId)
               if (!existing) return
-
-              // Move of an existing block: preserve duration
-              let endMs = startMs + 30 * 60000
-              if (
-                e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK) &&
-                existing.scheduledStart &&
-                existing.scheduledEnd
-              ) {
-                const origDur = new Date(existing.scheduledEnd).getTime() - new Date(existing.scheduledStart).getTime()
-                endMs = startMs + origDur
-              }
-              const endMsClamped = Math.min(endMs, dayEnd)
-
-              void updateTask({
-                id: taskId,
-                scheduledStart: snappedStart,
-                scheduledEnd: toLocalIsoMinute(new Date(endMsClamped))
+              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect()
+              const patch = resolveTimeBlockDrop({
+                yPx: e.clientY - rect.top,
+                dayStr: dateStr,
+                startHour: DAY_START_HOUR,
+                pxPerMin: PX_PER_MIN,
+                task: existing,
+                isBlockMove: e.dataTransfer.types.includes(DND_MIME.TASK_BLOCK),
+                sourceDate: e.dataTransfer.getData(DND_MIME.BLOCK_DATE) || null
               })
+              if (patch) void updateTask(patch)
             }}
           >
             {timeSlots.map((slot) => {

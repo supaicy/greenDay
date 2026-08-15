@@ -162,6 +162,10 @@ export interface RecurrenceSpawn {
   recurringPattern: string
   tags: string[]
   reminderAt: string | null
+  // 시간블록 템플릿은 시리즈 소유라 다음 인스턴스로 잇는다(시각만 의미, 날짜 무시).
+  // 회차별 scheduledOverrides는 지난 날짜 것이라 잇지 않는다.
+  scheduledStart: string | null
+  scheduledEnd: string | null
 }
 
 /**
@@ -194,7 +198,9 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[], today: string)
     isRecurring: true,
     recurringPattern: task.recurringPattern,
     tags: task.tags,
-    reminderAt
+    reminderAt,
+    scheduledStart: task.scheduledStart,
+    scheduledEnd: task.scheduledEnd
   }
 }
 
@@ -216,4 +222,39 @@ export function collectRecurrenceSpawns(completing: Task[], existing: Task[], to
     working = working.map((t) => (t.id === task.id ? { ...t, completed: true } : t))
   }
   return spawns
+}
+
+/**
+ * dateStr이 이 반복 인스턴스의 발생일인지. 캘린더가 시간블록 템플릿을 어느 날에
+ * 그릴지 정한다 — 전에는 이 게이트가 없어 비발생일에도 매일 블록이 떴다.
+ * 인스턴스 자신의 dueDate는 패턴과 어긋나도 발생일로 친다(뒤로 미룬 회차).
+ * 미해석 패턴은 관용적으로 true — 레거시 데이터의 블록을 숨기지 않는다.
+ */
+export function occursOn(pattern: string | null, anchorDueDate: string | null, dateStr: string): boolean {
+  if (!pattern) return true
+  if (anchorDueDate) {
+    if (dateStr < anchorDueDate) return false
+    if (dateStr === anchorDueDate) return true
+  }
+  if (pattern === 'daily') return true
+  const [y, m, d] = parseDate(dateStr)
+  if (pattern.startsWith('weekly:')) {
+    const targetDays = pattern
+      .slice('weekly:'.length)
+      .split(',')
+      .map(Number)
+      .filter((n) => !Number.isNaN(n))
+    if (targetDays.length === 0) return true
+    return targetDays.includes(new Date(y, m, d).getDay())
+  }
+  if (pattern.startsWith('monthly:')) {
+    const day = Number(pattern.slice('monthly:'.length))
+    return Number.isNaN(day) ? true : d === day
+  }
+  if (pattern.startsWith('yearly:')) {
+    const mmdd = pattern.slice('yearly:'.length)
+    const pad = (n: number): string => String(n).padStart(2, '0')
+    return `${pad(m + 1)}-${pad(d)}` === mmdd
+  }
+  return true
 }

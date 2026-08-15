@@ -41,8 +41,12 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
 
   // Serialize Date → local ISO "YYYY-MM-DDTHH:mm:00"
 
+  // 이 블록이 그려진 발생일. 반복 할일은 드롭/리사이즈가 이 날짜의 회차만 건드린다.
+  const occurrenceDate = toLocalIsoMinute(start).slice(0, 10)
+
   const onDragStart = (e: React.DragEvent): void => {
     e.dataTransfer.setData(DND_MIME.TASK_BLOCK, task.id)
+    e.dataTransfer.setData(DND_MIME.BLOCK_DATE, occurrenceDate)
     e.dataTransfer.effectAllowed = 'move'
   }
 
@@ -82,7 +86,18 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
       dayEnd.setHours(23, 59, 0, 0)
       const clampedEnd = new Date(Math.max(minEnd.getTime(), Math.min(newEnd.getTime(), dayEnd.getTime())))
       const snapped = snapTo15Min(toLocalIsoMinute(clampedEnd))
-      void updateTask({ id: task.id, scheduledEnd: snapped })
+      if (task.isRecurring) {
+        // 반복 할일의 리사이즈는 시리즈 템플릿이 아니라 이 회차만 바꾼다.
+        void updateTask({
+          id: task.id,
+          scheduledOverrides: {
+            ...(task.scheduledOverrides ?? {}),
+            [occurrenceDate]: { start: toLocalIsoMinute(start), end: snapped }
+          }
+        })
+      } else {
+        void updateTask({ id: task.id, scheduledEnd: snapped })
+      }
     }
 
     document.addEventListener('mousemove', onMove, { signal: ac.signal })
@@ -96,7 +111,8 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   }
 
   const unschedule = (): void => {
-    void updateTask({ id: task.id, scheduledStart: null, scheduledEnd: null })
+    // 시리즈 배정 해제 — 회차 오버라이드도 함께 지워 유령 블록을 남기지 않는다.
+    void updateTask({ id: task.id, scheduledStart: null, scheduledEnd: null, scheduledOverrides: null })
     setMenuOpen(false)
   }
 

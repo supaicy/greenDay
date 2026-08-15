@@ -122,6 +122,30 @@ describe('batchComplete recurrence', () => {
     expect(next?.recurringPattern).toBe('daily')
   })
 
+  // 템플릿은 시리즈 소유(2026-08-15 제품 결정) — 완료로 다음 인스턴스가 생겨도
+  // 시간블록 템플릿이 이어져야 한다. 회차별 오버라이드는 지난 날짜 것이라 잇지 않는다.
+  it('carries the schedule template (not overrides) to the spawned instance', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'r',
+          title: '운동',
+          isRecurring: true,
+          recurringPattern: 'daily',
+          dueDate: '2026-08-15',
+          scheduledStart: '2026-08-15T07:00:00',
+          scheduledEnd: '2026-08-15T08:00:00',
+          scheduledOverrides: { '2026-08-15': null }
+        })
+      ]
+    })
+    await useStore.getState().toggleTask('r')
+    const next = useStore.getState().tasks.find((t) => !t.completed)
+    expect(next?.scheduledStart).toBe('2026-08-15T07:00:00')
+    expect(next?.scheduledEnd).toBe('2026-08-15T08:00:00')
+    expect(next?.scheduledOverrides ?? null).toBeNull()
+  })
+
   // 같은 시리즈의 두 회차(8/15, 8/16)를 함께 완료하면, 하나씩 완료했을 때와
   // 같아야 한다: 8/16 중복 스폰 없이 8/17 하나만 생긴다.
   it('matches sequential-toggle semantics for two occurrences of one series', async () => {

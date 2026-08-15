@@ -107,6 +107,8 @@ interface Store {
       isRecurring?: boolean
       recurringPattern?: string | null
       tags?: string[]
+      scheduledStart?: string | null
+      scheduledEnd?: string | null
     }
   ) => Promise<void>
   updateTask: (task: Partial<Task> & { id: string }) => Promise<void>
@@ -228,7 +230,17 @@ function mapTask(row: Record<string, unknown>): Task {
     isRecurring: Boolean(row.is_recurring),
     recurringPattern: (row.recurring_pattern as string) || null,
     scheduledStart: (row.scheduled_start as string) || null,
-    scheduledEnd: (row.scheduled_end as string) || null
+    scheduledEnd: (row.scheduled_end as string) || null,
+    scheduledOverrides: safeParseRecord(row.scheduled_overrides as string)
+  }
+}
+function safeParseRecord<T>(s: string | undefined | null): Record<string, T> | null {
+  if (!s) return null
+  try {
+    const parsed = JSON.parse(s)
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
   }
 }
 function mapList(row: Record<string, unknown>): TaskList {
@@ -467,8 +479,8 @@ export const useStore = create<Store>((set, get) => ({
       sortOrder: maxOrder + 1,
       isRecurring: opts.isRecurring || false,
       recurringPattern: opts.recurringPattern || null,
-      scheduledStart: null,
-      scheduledEnd: null
+      scheduledStart: opts.scheduledStart || null,
+      scheduledEnd: opts.scheduledEnd || null
     }
     set((s) => ({ tasks: [...s.tasks, newTask] }))
 
@@ -485,7 +497,9 @@ export const useStore = create<Store>((set, get) => ({
       tags: finalTags,
       attachments: [],
       isRecurring: opts.isRecurring || false,
-      recurringPattern: opts.recurringPattern || null
+      recurringPattern: opts.recurringPattern || null,
+      scheduledStart: opts.scheduledStart || null,
+      scheduledEnd: opts.scheduledEnd || null
     })
   },
   updateTask: async (task) => {
@@ -498,6 +512,15 @@ export const useStore = create<Store>((set, get) => ({
       if (!isValidSchedulePair(nextStart, nextEnd)) {
         console.warn('[updateTask] rejected invalid schedule pair', { nextStart, nextEnd })
         return
+      }
+    }
+    // 회차 오버라이드도 같은 불변식을 지킨다(null 항목은 '그날 블록 없음'이라 허용).
+    if (task.scheduledOverrides) {
+      for (const pair of Object.values(task.scheduledOverrides)) {
+        if (pair && !isValidSchedulePair(pair.start, pair.end)) {
+          console.warn('[updateTask] rejected invalid override pair', pair)
+          return
+        }
       }
     }
     set((s) => ({

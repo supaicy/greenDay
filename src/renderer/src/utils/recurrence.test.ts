@@ -120,3 +120,38 @@ describe('daysBetween', () => {
     expect(daysBetween('2026-12-31', '2027-01-01')).toBe(1)
   })
 })
+
+// 반복 발생일 판정 — 캘린더가 시간블록 템플릿을 어느 날에 그릴지 결정한다.
+describe('occursOn', () => {
+  it('daily: every day from the anchor onward', async () => {
+    const { occursOn } = await import('./recurrence')
+    expect(occursOn('daily', '2026-08-10', '2026-08-10')).toBe(true)
+    expect(occursOn('daily', '2026-08-10', '2026-08-20')).toBe(true)
+    expect(occursOn('daily', '2026-08-10', '2026-08-09')).toBe(false)
+  })
+
+  it('weekly: only listed weekdays', async () => {
+    const { occursOn } = await import('./recurrence')
+    expect(occursOn('weekly:1,3', '2026-08-10', '2026-08-17')).toBe(true) // 월
+    expect(occursOn('weekly:1,3', '2026-08-10', '2026-08-12')).toBe(true) // 수
+    expect(occursOn('weekly:1,3', '2026-08-10', '2026-08-18')).toBe(false) // 화
+  })
+
+  it('monthly and yearly: matching day only', async () => {
+    const { occursOn } = await import('./recurrence')
+    expect(occursOn('monthly:15', '2026-08-15', '2026-09-15')).toBe(true)
+    expect(occursOn('monthly:15', '2026-08-15', '2026-09-16')).toBe(false)
+    expect(occursOn('yearly:08-15', '2026-08-15', '2027-08-15')).toBe(true)
+    expect(occursOn('yearly:08-15', '2026-08-15', '2027-08-16')).toBe(false)
+  })
+
+  it('the instance own dueDate always counts, even off-pattern', async () => {
+    const { occursOn } = await import('./recurrence')
+    expect(occursOn('weekly:1', '2026-08-12', '2026-08-12')).toBe(true) // 수 anchor, 월 패턴
+  })
+
+  it('is permissive for unparseable patterns (legacy data)', async () => {
+    const { occursOn } = await import('./recurrence')
+    expect(occursOn('weekly', null, '2026-08-18')).toBe(true)
+  })
+})
