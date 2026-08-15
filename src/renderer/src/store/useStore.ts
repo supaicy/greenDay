@@ -17,6 +17,7 @@ import type {
   Priority,
   SortBy,
   SortDir,
+  AddTaskOptions,
   UndoAction,
   AiMessage,
   AiConfig
@@ -95,22 +96,9 @@ interface Store {
   setEditingList: (id: string | null) => void
 
   // 태스크
-  addTask: (
-    title: string,
-    opts?: {
-      listId?: string
-      dueDate?: string | null
-      priority?: Priority
-      parentId?: string | null
-      dueTime?: string | null
-      reminderAt?: string | null
-      isRecurring?: boolean
-      recurringPattern?: string | null
-      tags?: string[]
-      scheduledStart?: string | null
-      scheduledEnd?: string | null
-    }
-  ) => Promise<void>
+  addTask: (title: string, opts?: AddTaskOptions) => Promise<void>
+  /** 여러 건을 한 번의 스토어 쓰기로 추가한다(일괄 완료의 반복 스폰 등). */
+  addTasks: (drafts: Array<{ title: string; opts?: AddTaskOptions }>) => Promise<void>
   updateTask: (task: Partial<Task> & { id: string }) => Promise<void>
   toggleTask: (id: string) => Promise<void>
   removeTask: (id: string) => Promise<void>
@@ -440,67 +428,81 @@ export const useStore = create<Store>((set, get) => ({
   setEditingList: (id) => set({ editingListId: id }),
 
   // === 태스크 ===
-  addTask: async (title, opts = {}) => {
+  addTask: async (title, opts = {}) => get().addTasks([{ title, opts }]),
+  addTasks: async (drafts) => {
+    if (drafts.length === 0) return
     const currentList = get().selectedListId
-    const targetList =
-      opts.listId || (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
-    // 오늘/내일 뷰에서 날짜 없이 추가하면, 방금 추가한 그 리스트에 보이도록 마감일을 채운다.
-    let finalDueDate = opts.dueDate || null
-    if (!finalDueDate && currentList === 'today') finalDueDate = todayString()
-    else if (!finalDueDate && currentList === 'tomorrow') finalDueDate = tomorrowString()
-
-    // 태그 뷰에서 (최상위 태스크를) 추가하면 그 태그가 자동으로 붙어 방금 추가한 뷰에 보인다.
-    // 하위작업(parentId)은 뷰의 태그를 상속하지 않는다.
     const currentTag = typeof currentList === 'string' ? tagFromListId(currentList) : null
-    const finalTags = opts.tags ?? (currentTag && !opts.parentId ? [currentTag] : [])
-
-    const id = uuid()
     const now = new Date().toISOString()
-    const maxOrder = get()
-      .tasks.filter((t) => t.listId === targetList)
-      .reduce((m, t) => Math.max(m, t.sortOrder || 0), 0)
 
-    const newTask: Task = {
-      id,
-      title,
-      description: '',
-      completed: false,
-      priority: opts.priority || 'none',
-      dueDate: finalDueDate,
-      dueTime: opts.dueTime || null,
-      reminderAt: opts.reminderAt || null,
-      listId: targetList,
-      parentId: opts.parentId || null,
-      tags: finalTags,
-      attachments: [],
-      createdAt: now,
-      completedAt: null,
-      deletedAt: null,
-      sortOrder: maxOrder + 1,
-      isRecurring: opts.isRecurring || false,
-      recurringPattern: opts.recurringPattern || null,
-      scheduledStart: opts.scheduledStart || null,
-      scheduledEnd: opts.scheduledEnd || null
+    // 리스트별 최대 sortOrder를 한 번만 훑고, 같은 리스트에 여러 건이 들어오면
+    // 그 안에서 이어 붙인다. 건당 다시 스캔하면 같은 값이 중복 발급된다.
+    const maxOrderByList = new Map<string, number>()
+    for (const t of get().tasks) {
+      maxOrderByList.set(t.listId, Math.max(maxOrderByList.get(t.listId) ?? 0, t.sortOrder || 0))
     }
-    set((s) => ({ tasks: [...s.tasks, newTask] }))
 
-    window.api.createTask({
-      id,
-      title,
-      description: '',
-      priority: opts.priority || 'none',
-      dueDate: finalDueDate,
-      dueTime: opts.dueTime || null,
-      reminderAt: opts.reminderAt || null,
-      listId: targetList,
-      parentId: opts.parentId || null,
-      tags: finalTags,
-      attachments: [],
-      isRecurring: opts.isRecurring || false,
-      recurringPattern: opts.recurringPattern || null,
-      scheduledStart: opts.scheduledStart || null,
-      scheduledEnd: opts.scheduledEnd || null
+    const newTasks: Task[] = drafts.map(({ title, opts = {} }) => {
+      const targetList =
+        opts.listId || (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
+      // 오늘/내일 뷰에서 날짜 없이 추가하면, 방금 추가한 그 리스트에 보이도록 마감일을 채운다.
+      let finalDueDate = opts.dueDate || null
+      if (!finalDueDate && currentList === 'today') finalDueDate = todayString()
+      else if (!finalDueDate && currentList === 'tomorrow') finalDueDate = tomorrowString()
+
+      // 태그 뷰에서 (최상위 태스크를) 추가하면 그 태그가 자동으로 붙어 방금 추가한 뷰에 보인다.
+      // 하위작업(parentId)은 뷰의 태그를 상속하지 않는다.
+      const finalTags = opts.tags ?? (currentTag && !opts.parentId ? [currentTag] : [])
+
+      const sortOrder = (maxOrderByList.get(targetList) ?? 0) + 1
+      maxOrderByList.set(targetList, sortOrder)
+
+      return {
+        id: uuid(),
+        title,
+        description: '',
+        completed: false,
+        priority: opts.priority || 'none',
+        dueDate: finalDueDate,
+        dueTime: opts.dueTime || null,
+        reminderAt: opts.reminderAt || null,
+        listId: targetList,
+        parentId: opts.parentId || null,
+        tags: finalTags,
+        attachments: [],
+        createdAt: now,
+        completedAt: null,
+        deletedAt: null,
+        sortOrder,
+        isRecurring: opts.isRecurring || false,
+        recurringPattern: opts.recurringPattern || null,
+        scheduledStart: opts.scheduledStart || null,
+        scheduledEnd: opts.scheduledEnd || null
+      }
     })
+
+    // 스토어 쓰기는 한 번. 건당 set()은 선택 수만큼 전체 재렌더를 만든다.
+    set((s) => ({ tasks: [...s.tasks, ...newTasks] }))
+
+    for (const t of newTasks) {
+      window.api.createTask({
+        id: t.id,
+        title: t.title,
+        description: '',
+        priority: t.priority,
+        dueDate: t.dueDate,
+        dueTime: t.dueTime,
+        reminderAt: t.reminderAt,
+        listId: t.listId,
+        parentId: t.parentId,
+        tags: t.tags,
+        attachments: [],
+        isRecurring: t.isRecurring,
+        recurringPattern: t.recurringPattern,
+        scheduledStart: t.scheduledStart,
+        scheduledEnd: t.scheduledEnd
+      })
+    }
   },
   updateTask: async (task) => {
     // Invariant guard: if the caller is changing scheduledStart/End, ensure the pair is valid
@@ -648,7 +650,7 @@ export const useStore = create<Store>((set, get) => ({
       batchMode: false
     }))
     window.api.batchUpdateTasks(newlyCompletedIds, { completed: true })
-    for (const spawn of spawns) await get().addTask(spawn.title, spawn)
+    await get().addTasks(spawns.map((spawn) => ({ title: spawn.title, opts: spawn })))
     await get().addScores(
       newlyCompleted.map((t) => ({ type: 'taskComplete', points: pointsForTask(t.priority), taskId: t.id }))
     )

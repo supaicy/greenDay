@@ -2,6 +2,7 @@ import type React from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { useToday } from '../../hooks/useToday'
 import { toDateString } from '../../utils/date'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Clock, AlertTriangle } from 'lucide-react'
@@ -25,9 +26,11 @@ export function TimelineView(): React.ReactElement {
   const toggleTask = useStore((s) => s.toggleTask)
   const isDark = theme === 'dark'
 
+  // 자정에 갱신되는 '오늘' — 마운트 시점에 고정하면 밤을 넘긴 창에서 그룹이 어제 기준으로 남는다.
+  const todayStr = useToday()
+
   const groups = useMemo(() => {
     const now = new Date()
-    const todayStr = toDateString(now)
 
     const tomorrow = new Date(now)
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -125,7 +128,7 @@ export function TimelineView(): React.ReactElement {
     }
 
     return result
-  }, [tasks, isDark])
+  }, [tasks, isDark, todayStr])
 
   const totalTasks = groups.reduce((sum, g) => sum + g.tasks.length, 0)
 

@@ -162,6 +162,48 @@ describe('batchComplete recurrence', () => {
   })
 })
 
+describe('batchComplete recurrence — 스토어 쓰기 횟수', () => {
+  // 바로 위 addScores 주석이 지적한 것과 같은 이유: 건당 addTask는 선택 수만큼
+  // 스토어 쓰기(=전체 재렌더)와 IPC를 만든다. 스폰도 한 번에 반영해야 한다.
+  it('writes the store once for the whole batch, however many spawns', async () => {
+    useStore.setState({
+      tasks: [
+        task({ id: 'a', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' }),
+        task({ id: 'b', title: '독서', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' }),
+        task({ id: 'c', title: '명상', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' })
+      ],
+      batchSelectedIds: ['a', 'b', 'c']
+    })
+    let writes = 0
+    const unsub = useStore.subscribe(() => {
+      writes++
+    })
+    await useStore.getState().batchComplete()
+    unsub()
+
+    const spawned = useStore.getState().tasks.filter((t) => !t.completed)
+    expect(spawned.map((t) => t.title).sort()).toEqual(['독서', '명상', '운동'])
+    // 완료 반영 1 + 스폰 추가 1 + 점수 1 = 3. 스폰 3건이 각자 쓰면 5가 된다.
+    expect(writes).toBeLessThanOrEqual(3)
+  })
+
+  it('gives spawns distinct sortOrder within a list', async () => {
+    useStore.setState({
+      tasks: [
+        task({ id: 'a', title: '운동', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' }),
+        task({ id: 'b', title: '독서', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-15' })
+      ],
+      batchSelectedIds: ['a', 'b']
+    })
+    await useStore.getState().batchComplete()
+    const orders = useStore
+      .getState()
+      .tasks.filter((t) => !t.completed)
+      .map((t) => t.sortOrder)
+    expect(new Set(orders).size).toBe(orders.length)
+  })
+})
+
 describe('batchComplete recurrence — duplicate instances', () => {
   // 같은 시리즈의 같은 기한 인스턴스 2개(중복 데이터)를 함께 완료해도,
   // 하나씩 완료했을 때처럼 다음 회차는 하나만 생겨야 한다.

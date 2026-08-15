@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { format, addDays } from 'date-fns'
-import { isOverdue, isDueToday, isDueInNext7Days } from './date'
+import { isOverdue, isDueToday, isDueInNext7Days, msUntilNextLocalMidnight } from './date'
 
 // Regression: ISSUE-001 — "다음 7일" sidebar badge counted overdue tasks that
 // the list view (which uses isDueInNext7Days) correctly hid, so the badge showed
@@ -52,14 +52,12 @@ describe('smart-list date predicates', () => {
 // useToday() 훅의 타이머 계산. 자정을 넘겨도 '오늘'이 마운트 시점에 고정돼
 // KanbanView가 어제 날짜를 데이터에 박던 버그의 회귀 방지 (TODOS 2026-08-05).
 describe('msUntilNextLocalMidnight', () => {
-  it('counts down to the next local midnight', async () => {
-    const { msUntilNextLocalMidnight } = await import('./date')
+  it('counts down to the next local midnight', () => {
     expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 23, 59, 30))).toBe(30_000)
     expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 0, 0, 0))).toBe(86_400_000)
   })
 
-  it('lands strictly in the next day at millisecond edges', async () => {
-    const { msUntilNextLocalMidnight } = await import('./date')
+  it('lands strictly in the next day at millisecond edges', () => {
     expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 23, 59, 59, 999))).toBe(1)
   })
 })

@@ -2,6 +2,7 @@ import type React from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { useToday } from '../../hooks/useToday'
 import { tList } from '../../i18n'
 import { toDateString } from '../../utils/date'
 import { levelFromScore, levelProgress, pointsToNextLevel, POINTS_PER_LEVEL } from '../../utils/score'
@@ -19,10 +20,11 @@ export function StatsView(): React.ReactElement {
   const score = useStore((s) => s.score)
   const isDark = theme === 'dark'
 
+  // 자정에 갱신되는 '오늘'(로컬 기준 — toISOString()은 UTC라 KST 00:00~09:00에 하루 밀렸다).
+  const todayStr = useToday()
+
   const stats = useMemo(() => {
     const now = new Date()
-    // 로컬 날짜로 계산한다. toISOString()은 UTC라 KST 00:00~09:00에 하루 밀렸다.
-    const todayStr = toDateString(now)
 
     // 이번 주 시작 (월요일)
     const weekStart = new Date(now)
@@ -107,7 +109,7 @@ export function StatsView(): React.ReactElement {
       dayCount,
       maxDayCount
     }
-  }, [tasks, pomodoroSessions, habitLogs, habits, score, dayNames])
+  }, [tasks, pomodoroSessions, habitLogs, habits, score, dayNames, todayStr])
 
   // 카드 스타일
   const cardClass = `rounded-xl border p-4 ${isDark ? 'bg-gray-800/60 border-gray-700' : 'bg-white border-gray-200'}`

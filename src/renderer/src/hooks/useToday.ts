@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { msUntilNextLocalMidnight, toDateString } from '../utils/date'
+import { msUntilNextLocalMidnight, todayString } from '../utils/date'
 
 /**
  * 오늘 날짜(YYYY-MM-DD). 마운트 시점 고정이 아니라 로컬 자정마다 갱신된다 —
@@ -8,12 +8,12 @@ import { msUntilNextLocalMidnight, toDateString } from '../utils/date'
  * 실제 시각으로 다시 무장한다(+50ms는 이른 발화가 자정 직전에 떨어지는 것 방지).
  */
 export function useToday(): string {
-  const [today, setToday] = useState(() => toDateString(new Date()))
+  const [today, setToday] = useState(todayString)
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
     const arm = (): void => {
       timer = setTimeout(() => {
-        setToday(toDateString(new Date()))
+        setToday(todayString())
         arm()
       }, msUntilNextLocalMidnight(new Date()) + 50)
     }

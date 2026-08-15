@@ -120,3 +120,22 @@ export interface AiMessage {
 
 // AiConfig — shared 모듈에서 재내보내기 (단일 정의 유지)
 export type { AiConfig } from '../../../shared/ai-config'
+
+/**
+ * `addTask(title, opts)`의 옵션. 스토어와 반복 스폰(RecurrenceSpawn)이 같은
+ * 정의를 쓴다 — 각자 선언하던 시절엔 필드를 늘릴 때 한쪽만 늘어도 컴파일러가
+ * 잡지 못해, 새 필드가 다음 회차에서 조용히 사라졌다.
+ */
+export interface AddTaskOptions {
+  listId?: string
+  dueDate?: string | null
+  priority?: Priority
+  parentId?: string | null
+  dueTime?: string | null
+  reminderAt?: string | null
+  isRecurring?: boolean
+  recurringPattern?: string | null
+  tags?: string[]
+  scheduledStart?: string | null
+  scheduledEnd?: string | null
+}

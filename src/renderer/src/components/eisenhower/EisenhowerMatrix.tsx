@@ -2,7 +2,8 @@ import type React from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { toDateString } from '../../utils/date'
+import { useToday } from '../../hooks/useToday'
+import { shiftIsoByDays } from '../../utils/recurrence'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Zap, Target, Clock, Coffee } from 'lucide-react'
 import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
@@ -27,16 +28,14 @@ export function EisenhowerMatrix(): React.ReactElement {
   const toggleTask = useStore((s) => s.toggleTask)
   const isDark = theme === 'dark'
 
-  const { quadrants, todayStr } = useMemo(() => {
-    const now = new Date()
-    // tasks가 바뀔 때마다 다시 계산한다. 빈 deps로 고정하면 자정을 넘겨도
-    // '지남' 색이 어제 기준으로 남는다.
-    const todayStr = toDateString(now)
+  // 자정에 갱신되는 '오늘'. 예전에는 tasks 변경에 얹어 다시 계산했는데,
+  // 밤새 할일을 건드리지 않으면 '지남' 색이 어제 기준으로 남았다.
+  const todayStr = useToday()
 
-    // "곧" = 3일 이내
-    const soonDate = new Date(now)
-    soonDate.setDate(soonDate.getDate() + 3)
-    const soonStr = toDateString(soonDate)
+  const quadrants = useMemo(() => {
+    // "곧" = 3일 이내. 오늘에서 파생해야 자정을 넘길 때 함께 움직인다 —
+    // 렌더 시각의 new Date()로 잡으면 밤새 열어둔 창에서 어제 기준으로 남는다.
+    const soonStr = shiftIsoByDays(todayStr, 3)
 
     const activeTasks = tasks.filter(isActiveTopLevel)
 
@@ -114,8 +113,8 @@ export function EisenhowerMatrix(): React.ReactElement {
       }
     ]
 
-    return { quadrants: result, todayStr }
-  }, [tasks, isDark])
+    return result
+  }, [tasks, isDark, todayStr])
 
   // 태스크 항목: 중첩된 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
   const renderTaskItem = (task: Task) => (

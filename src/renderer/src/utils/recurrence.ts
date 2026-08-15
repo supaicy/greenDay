@@ -10,7 +10,7 @@
  * TZ 드리프트 방지를 위해 Date(y, m, d) 로컬 생성, Date.now()/new Date() 비인수 호출 금지.
  */
 import i18n, { tList } from '../i18n'
-import type { Task } from '../types'
+import type { AddTaskOptions, Task } from '../types'
 
 /** 'YYYY-MM-DD' → [year, month(0-based), day] */
 function parseDate(iso: string): [number, number, number] {
@@ -151,21 +151,19 @@ export function formatRecurringPattern(pattern: string | null): string | null {
   return i18n.t('recurring.label')
 }
 
-/** 완료된 반복 task가 스폰할 다음 인스턴스의 addTask 인자. */
-export interface RecurrenceSpawn {
+/**
+ * 완료된 반복 task가 스폰할 다음 인스턴스. 스토어의 `addTask(title, opts)` 옵션
+ * 타입을 그대로 파생한다 — 손으로 두 번 선언하던 시절엔 시간블록 템플릿을 잇느라
+ * 양쪽에 각각 필드를 더해야 했고, 한쪽만 늘어도 컴파일러가 잡지 못했다.
+ *
+ * 시간블록 템플릿은 시리즈 소유라 다음 인스턴스로 잇는다(시각만 의미, 날짜 무시).
+ * 회차별 scheduledOverrides는 지난 날짜 것이라 잇지 않는다.
+ */
+export type RecurrenceSpawn = AddTaskOptions & {
   title: string
-  listId: string
   dueDate: string
-  dueTime?: string
-  priority: Task['priority']
   isRecurring: true
   recurringPattern: string
-  tags: string[]
-  reminderAt: string | null
-  // 시간블록 템플릿은 시리즈 소유라 다음 인스턴스로 잇는다(시각만 의미, 날짜 무시).
-  // 회차별 scheduledOverrides는 지난 날짜 것이라 잇지 않는다.
-  scheduledStart: string | null
-  scheduledEnd: string | null
 }
 
 /**
@@ -185,10 +183,8 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[], today: string)
       t.dueDate === next
   )
   if (exists) return null
-  let reminderAt: string | null = null
-  if (task.reminderAt && task.dueDate) {
-    reminderAt = shiftIsoByDays(task.reminderAt, daysBetween(task.dueDate, next))
-  }
+  const reminderAt =
+    task.reminderAt && task.dueDate ? shiftIsoByDays(task.reminderAt, daysBetween(task.dueDate, next)) : null
   return {
     title: task.title,
     listId: task.listId,
