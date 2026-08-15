@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { tList } from '../../i18n'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 type RecurringType = 'daily' | 'weekly' | 'monthly' | 'yearly'
 
@@ -56,10 +57,12 @@ function buildPattern(
 
 export function RecurringPicker({
   value,
-  onChange
+  onChange,
+  trigger
 }: {
   value: string | null
   onChange: (pattern: string | null) => void
+  trigger: ReactNode
 }) {
   const { t } = useTranslation()
   const theme = useStore((s) => s.theme)
@@ -67,13 +70,23 @@ export function RecurringPicker({
   const MONTHS = tList('date.months')
   const isDark = theme === 'dark'
 
-  // 호출부(PickerRow)가 열릴 때만 마운트하고 선택 즉시 닫으므로, 마운트 시점에 한 번만
-  // 파싱하면 된다. value를 다시 미러링하는 effect는 매 렌더 재파싱 + 재설정만 만든다.
+  const [open, setOpen] = useState(false)
   const [type, setType] = useState<RecurringType>(() => parsePattern(value).type)
   const [weekDays, setWeekDays] = useState<number[]>(() => parsePattern(value).weekDays)
   const [monthDay, setMonthDay] = useState(() => parsePattern(value).monthDay)
   const [yearMonth, setYearMonth] = useState(() => parsePattern(value).yearMonth)
   const [yearDay, setYearDay] = useState(() => parsePattern(value).yearDay)
+
+  // 예전에는 열릴 때만 마운트돼 초기값 파싱으로 충분했지만, Popover는 계속
+  // 마운트돼 있으므로 외부에서 value가 바뀌면 동기화해야 재오픈 시 최신이다.
+  useEffect(() => {
+    const p = parsePattern(value)
+    setType(p.type)
+    setWeekDays(p.weekDays)
+    setMonthDay(p.monthDay)
+    setYearMonth(p.yearMonth)
+    setYearDay(p.yearDay)
+  }, [value])
 
   const toggleWeekDay = (day: number) => {
     setWeekDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
@@ -81,10 +94,12 @@ export function RecurringPicker({
 
   const handleApply = () => {
     onChange(buildPattern(type, weekDays, monthDay, yearMonth, yearDay))
+    setOpen(false)
   }
 
   const handleClear = () => {
     onChange(null)
+    setOpen(false)
   }
 
   const typeLabels: Record<RecurringType, string> = {
@@ -94,14 +109,12 @@ export function RecurringPicker({
     yearly: t('recurring.yearly')
   }
 
-  // 트리거 버튼은 호출부(TaskDetail의 PickerRow)가 갖는다. 여기에 또 두면
-  // 같은 라벨의 버튼이 두 개 겹쳐 두 번 눌러야 열렸다(2026-08-05 검증).
   return (
-    <div
-      className={`absolute left-0 top-full mt-1 z-50 rounded-lg shadow-2xl border p-3 min-w-[260px] ${
-        isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'
-      }`}
-    >
+    // 트리거는 호출처가 준다. 예전에는 호출처 버튼이 이 픽커를 mount하고
+    // 픽커가 자기 버튼을 또 그려서, 열려면 두 번 눌러야 했다(2026-08-05 검증).
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverContent align="start" className="min-w-[260px] p-3">
       {/* 반복 유형 선택 */}
       <div className="flex gap-1 mb-3">
         {(Object.keys(typeLabels) as RecurringType[]).map((t) => (
@@ -224,6 +237,7 @@ export function RecurringPicker({
           {t('common.apply')}
         </button>
       </div>
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }

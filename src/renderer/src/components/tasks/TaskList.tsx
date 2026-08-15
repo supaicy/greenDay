@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useMemo, useCallback } from 'react'
 import { Plus, Search, ArrowUpDown, CheckSquare } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { TaskItem } from './TaskItem'
@@ -148,7 +148,6 @@ export function TaskListView() {
     [dragTaskId, filteredTasks, reorderTasks, setDragTaskId]
   )
 
-  const [showSort, setShowSort] = useState(false)
 
   if (selectedListId === 'trash') return <TrashView />
 
@@ -165,7 +164,8 @@ export function TaskListView() {
       onDrop={(e) => {
         const id = e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
         if (!id) return
-        void useStore.getState().updateTask({ id, scheduledStart: null, scheduledEnd: null })
+        // 배정 해제 — 반복 회차 오버라이드도 함께 지워 유령 블록을 남기지 않는다.
+        void useStore.getState().updateTask({ id, scheduledStart: null, scheduledEnd: null, scheduledOverrides: null })
       }}
     >
       <div
@@ -189,24 +189,24 @@ export function TaskListView() {
               }`}
             />
           </div>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowSort(!showSort)}
-              // 정렬이 걸려 있으면 아이콘으로 알린다 — 메뉴를 열지 않아도 보이게.
-              className={`p-1.5 rounded-lg transition-colors ${
-                sortBy !== 'default'
-                  ? 'text-primary-400 bg-primary-900/30'
-                  : isDark
-                    ? 'hover:bg-gray-800 text-gray-400'
-                    : 'hover:bg-gray-200 text-gray-500'
-              }`}
-              title={t('task.sort')}
-            >
-              <ArrowUpDown size={16} />
-            </button>
-            {showSort && <SortMenu onClose={() => setShowSort(false)} />}
-          </div>
+          <SortMenu
+            trigger={
+              <button
+                type="button"
+                // 정렬이 걸려 있으면 아이콘으로 알린다 — 메뉴를 열지 않아도 보이게.
+                className={`p-1.5 rounded-lg transition-colors ${
+                  sortBy !== 'default'
+                    ? 'text-primary-400 bg-primary-900/30'
+                    : isDark
+                      ? 'hover:bg-gray-800 text-gray-400'
+                      : 'hover:bg-gray-200 text-gray-500'
+                }`}
+                title={t('task.sort')}
+              >
+                <ArrowUpDown size={16} />
+              </button>
+            }
+          />
           <button
             type="button"
             onClick={toggleBatchMode}

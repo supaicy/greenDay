@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { X, Trash2, Tag, List, Clock, Bell, Repeat, Calendar, Circle, CheckCircle2 } from 'lucide-react'
 import { EditorView } from '@codemirror/view'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
@@ -51,40 +51,6 @@ const LIGHT_EDITOR_THEME = EditorView.theme(
 const DEFAULT_DETAIL_WIDTH = 400
 
 // 메타 스트립의 알림/반복 토글은 트리거 버튼 + 조건부 드롭다운 구조가 동일하다.
-// 트리거/래퍼를 PickerRow로 dedup하고, 실제 피커는 children으로 받는다.
-function PickerRow({
-  open,
-  onToggle,
-  active,
-  activeCls,
-  inactiveCls,
-  icon,
-  label,
-  children
-}: {
-  open: boolean
-  onToggle: () => void
-  active: boolean
-  activeCls: string
-  inactiveCls: string
-  icon: ReactNode
-  label: string
-  children: ReactNode
-}) {
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`flex items-center gap-1 text-xs px-2 py-1 rounded border ${active ? activeCls : inactiveCls}`}
-      >
-        {icon} {label}
-      </button>
-      {open && children}
-    </div>
-  )
-}
-
 export function TaskDetail() {
   const { t, i18n } = useTranslation()
   // 날짜·시간 표시는 브라우저 로케일이 아니라 앱에서 고른 언어를 따른다.
@@ -111,8 +77,6 @@ export function TaskDetail() {
   const [priority, setPriority] = useState<Priority>('none')
   const [listId, setListId] = useState('inbox')
   const [tagInput, setTagInput] = useState('')
-  const [showRecurring, setShowRecurring] = useState(false)
-  const [showReminder, setShowReminder] = useState(false)
   // 드래그 중 라이브 폭(px). null이면 저장값 사용. mouseup에서만 persist.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   // 창 너비 추적 — 변할 때 clamp가 재계산되도록. persist는 하지 않는다.
@@ -196,6 +160,11 @@ export function TaskDetail() {
     ? 'bg-surface-sunken text-gray-100 border-surface-line'
     : 'bg-gray-100 text-gray-700 border-gray-300'
   const labelCls = isDark ? 'text-gray-400' : 'text-gray-500'
+  // 알림/반복 픽커 트리거 버튼 공통 클래스 (구 PickerRow의 트리거 부분)
+  const pickerBtnCls = (active: boolean, activeCls: string): string =>
+    `flex items-center gap-1 text-xs px-2 py-1 rounded border ${
+      active ? activeCls : `${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`
+    }`
 
   // 우측 패널 폭: 드래그 중이면 라이브값, 아니면 저장값(없으면 기본 400).
   // read 시점에도 clamp해서 큰 저장값이 좁은 창에서 목록을 0으로 짓누르지 않게 한다.
@@ -357,43 +326,29 @@ export function TaskDetail() {
             ))}
           </select>
         </div>
-        {/* 알림 */}
-        <PickerRow
-          open={showReminder}
-          onToggle={() => setShowReminder(!showReminder)}
-          active={!!task.reminderAt}
-          activeCls="text-primary-400 border-primary-500/30"
-          inactiveCls={`${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`}
-          icon={<Bell size={13} />}
-          label={task.reminderAt ? new Date(task.reminderAt).toLocaleString(i18nLocale) : t('reminder.label')}
-        >
-          <ReminderPicker
-            dueDate={task.dueDate}
-            value={task.reminderAt}
-            onChange={(v) => {
-              save({ reminderAt: v })
-              setShowReminder(false)
-            }}
-          />
-        </PickerRow>
+        {/* 알림 — 트리거는 여기서 주고, 열림/닫힘·포커스는 Radix Popover가 관리 */}
+        <ReminderPicker
+          dueDate={task.dueDate}
+          value={task.reminderAt}
+          onChange={(v) => save({ reminderAt: v })}
+          trigger={
+            <button type="button" className={pickerBtnCls(!!task.reminderAt, 'text-primary-400 border-primary-500/30')}>
+              <Bell size={13} />{' '}
+              {task.reminderAt ? new Date(task.reminderAt).toLocaleString(i18nLocale) : t('reminder.label')}
+            </button>
+          }
+        />
         {/* 반복 */}
-        <PickerRow
-          open={showRecurring}
-          onToggle={() => setShowRecurring(!showRecurring)}
-          active={task.isRecurring}
-          activeCls="text-purple-400 border-purple-500/30"
-          inactiveCls={`${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`}
-          icon={<Repeat size={13} />}
-          label={(task.isRecurring && formatRecurringPattern(task.recurringPattern)) || t('recurring.label')}
-        >
-          <RecurringPicker
-            value={task.recurringPattern}
-            onChange={(v) => {
-              save({ isRecurring: !!v, recurringPattern: v })
-              setShowRecurring(false)
-            }}
-          />
-        </PickerRow>
+        <RecurringPicker
+          value={task.recurringPattern}
+          onChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
+          trigger={
+            <button type="button" className={pickerBtnCls(task.isRecurring, 'text-purple-400 border-purple-500/30')}>
+              <Repeat size={13} />{' '}
+              {(task.isRecurring && formatRecurringPattern(task.recurringPattern)) || t('recurring.label')}
+            </button>
+          }
+        />
         {/* 태그 */}
         <div className="flex items-center gap-1 flex-1 min-w-[160px]">
           <Tag size={14} className={labelCls} />
