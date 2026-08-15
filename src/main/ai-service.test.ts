@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { toLocalDateString } from '../shared/date'
 
 // Electron의 fetch를 mock
 const mockFetch = vi.fn()
@@ -560,8 +561,10 @@ describe('ai-service', () => {
 
     it('오늘 날짜 reschedule은 유지 (>= today 경계)', async () => {
       const ai = await loadAiService()
-      // 런타임 today를 써서 실행 날짜와 무관하게 경계를 검증
-      const today = new Date().toISOString().split('T')[0]
+      // 런타임 today를 써서 실행 날짜와 무관하게 경계를 검증.
+      // 프로덕션(getToday)과 같은 로컬 기준이어야 한다 — toISOString()은 UTC라
+      // KST 00:00~09:00에 하루 밀려, 그 시간대에만 이 테스트가 깨졌다.
+      const today = toLocalDateString(new Date())
       const json = { action: 'task_action', op: 'reschedule', taskTitle: 'x', dueDate: today }
       mockFetch.mockResolvedValueOnce({
         ok: true,
