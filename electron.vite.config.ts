@@ -19,6 +19,10 @@ export default defineConfig({
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version)
     },
+    build: {
+      // 없으면 렌더러가 미압축으로 나간다(1.47MB → 절반 이하).
+      minify: 'esbuild'
+    },
     resolve: {
       alias: {
         '@': resolve('src/renderer/src')

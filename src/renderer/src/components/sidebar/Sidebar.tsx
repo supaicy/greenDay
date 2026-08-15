@@ -31,6 +31,12 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { SMART_LIST_PREDICATES, tagListId } from '../../utils/smartLists'
 import { levelFromScore, levelProgress } from '../../utils/score'
 import type { SmartList, ViewType } from '../../types'
@@ -85,7 +91,6 @@ export function Sidebar() {
   const [newListName, setNewListName] = useState('')
   const [newListColor, setNewListColor] = useState('#4A90D9')
   const [newListFolderId, setNewListFolderId] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
@@ -144,7 +149,6 @@ export function Sidebar() {
     setEditingList(id)
     setEditName(name)
     setEditColor(color)
-    setContextMenu(null)
   }
 
   const saveEdit = async () => {
@@ -217,39 +221,27 @@ export function Sidebar() {
           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: list.color }} />
           <span className="flex-1 text-left truncate">{list.name}</span>
           <span className={`text-xs ${mutedClass}`}>{taskCounts[list.id] || ''}</span>
-          <button
-            type="button"
-            className="opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation()
-              setContextMenu(contextMenu === list.id ? null : list.id)
-            }}
-          >
-            <MoreHorizontal size={14} className={`${mutedClass} hover:text-white`} />
-          </button>
-        </div>
-      )}
-      {contextMenu === list.id && (
-        <div
-          className={`absolute right-2 top-full z-50 rounded-lg shadow-xl py-1 min-w-[120px] ${isDark ? 'bg-[#3A3A3C]' : 'bg-white border border-gray-200'}`}
-        >
-          <button
-            type="button"
-            onClick={() => startEdit(list.id, list.name, list.color)}
-            className={`w-full flex items-center gap-2 px-3 py-2 text-sm ${isDark ? 'text-sidebar-text hover:bg-sidebar-hover' : 'text-gray-700 hover:bg-gray-100'}`}
-          >
-            <Edit3 size={14} /> {t('common.edit')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              removeList(list.id)
-              setContextMenu(null)
-            }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
-          >
-            <Trash2 size={14} /> {t('common.delete')}
-          </button>
+          {/* 열림 상태·바깥 클릭·포커스 복귀는 Radix가 관리. data-[state=open]으로
+              메뉴가 열려 있는 동안 트리거가 hover 밖에서도 보이게 한다. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal size={14} className={`${mutedClass} hover:text-white`} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[120px]">
+              <DropdownMenuItem onSelect={() => startEdit(list.id, list.name, list.color)} className="gap-2 text-sm">
+                <Edit3 size={14} /> {t('common.edit')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => removeList(list.id)} className="gap-2 text-sm text-red-400">
+                <Trash2 size={14} /> {t('common.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </div>

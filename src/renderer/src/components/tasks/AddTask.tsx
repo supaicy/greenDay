@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar, Flag, X, Sparkles, Loader2 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
 import { formatDueDate } from '../../utils/date'
 import type { Priority } from '../../types'
@@ -19,7 +25,6 @@ export function AddTask({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [priority, setPriority] = useState<Priority>('none')
-  const [showPriority, setShowPriority] = useState(false)
   const [naturalDateHint, setNaturalDateHint] = useState<string | null>(null)
   const [naturalTimeHint, setNaturalTimeHint] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -178,41 +183,31 @@ export function AddTask({ onClose }: { onClose: () => void }) {
           </span>
         </div>
 
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowPriority(!showPriority)}
-            className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-              priority !== 'none'
-                ? PRIORITY_OPTIONS.find((p) => p.value === priority)?.color + (isDark ? ' bg-gray-700' : ' bg-gray-200')
-                : isDark
-                  ? 'text-gray-500 hover:bg-gray-700'
-                  : 'text-gray-400 hover:bg-gray-200'
-            }`}
-          >
-            <Flag size={14} />
-            {t(PRIORITY_OPTIONS.find((p) => p.value === priority)?.labelKey ?? 'priority.none')}
-          </button>
-          {showPriority && (
-            <div
-              className={`absolute left-0 top-full mt-1 rounded-lg shadow-xl py-1 z-50 min-w-[100px] ${isDark ? 'bg-gray-700' : 'bg-white border border-gray-200'}`}
+        {/* 우선순위 — 열림 상태·바깥 클릭·포커스 복귀는 Radix가 관리 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+                priority !== 'none'
+                  ? PRIORITY_OPTIONS.find((p) => p.value === priority)?.color + (isDark ? ' bg-gray-700' : ' bg-gray-200')
+                  : isDark
+                    ? 'text-gray-500 hover:bg-gray-700'
+                    : 'text-gray-400 hover:bg-gray-200'
+              }`}
             >
-              {PRIORITY_OPTIONS.map((opt) => (
-                <button
-                  type="button"
-                  key={opt.value}
-                  onClick={() => {
-                    setPriority(opt.value)
-                    setShowPriority(false)
-                  }}
-                  className={`w-full text-left px-3 py-1.5 text-xs ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'} ${opt.color}`}
-                >
-                  {t(opt.labelKey)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+              <Flag size={14} />
+              {t(PRIORITY_OPTIONS.find((p) => p.value === priority)?.labelKey ?? 'priority.none')}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[100px]">
+            {PRIORITY_OPTIONS.map((opt) => (
+              <DropdownMenuItem key={opt.value} onSelect={() => setPriority(opt.value)} className={`text-xs ${opt.color}`}>
+                {t(opt.labelKey)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <div className="flex-1" />
         {aiConnected && (
