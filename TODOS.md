@@ -277,6 +277,31 @@ iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
 ### 후속 판단이 필요한 것
 - **Windows 이식 실비용은 코드가 아니라 인증서·QA·지원이다.** 위 체크리스트 참조.
 
+## /simplify 후속 (2026-08-15) — 동작 변경이라 미룬 항목
+
+리뷰 4개 렌즈가 지적한 것 중 **구조·동작을 바꾸는** 것들. 이번 사이클에서는 순수
+품질 수정만 반영했다(`51438dc`). 아래는 착수 시 별도 판단이 필요하다.
+
+### [P2] 완료 전이가 두 벌이다 — completeTasks 코어로 통합
+- **What:** `toggleTask`와 `batchComplete`가 completedAt·점수·IPC·반복 스폰을 각자 갖고 있다. 스토어 주석 3개(점수/completedAt/반복)가 전부 "일괄이 단일과 조용히 어긋났다"를 하나씩 발견해 땜질한 기록이고, 이번 반복 스폰 수정이 네 번째다.
+- **How:** 스토어 내부에 `completeTasks(tasks: Task[])` 코어를 두고 toggleTask는 1건, batchComplete는 N건으로 호출. 그러면 스폰 헬퍼도 단수형 하나면 충분하고 `collectRecurrenceSpawns`의 시뮬레이션(가짜 인스턴스로 완료 순서를 흉내 내는 부분)이 사라진다.
+- **Added:** 2026-08-15 /simplify (altitude)
+
+### [P2] 칸반이 완료 전이를 우회한다 — 점수가 회수되지 않는다
+- **What:** `KanbanView.tsx`에서 카드를 done → inProgress/todo로 끌면 `updateTask({ completed: false, completedAt: null })`로 직접 뒤집는다. `toggleTask`를 안 거치므로 `_netScoreFor` 회수가 실행되지 않아, done으로 끌었다 빼는 것만 반복하면 점수가 계속 오른다(2026-08-05에 고친 토글 무한 점수와 같은 계열의 남은 구멍).
+- **How:** 완료 전이를 `setCompleted(id, boolean)` 한 곳으로만 도달 가능하게 하고, `updateTask`는 completed 변경을 거부·위임. 이미 scheduledStart/End 쌍 불변식을 같은 방식으로 지키는 선례가 있다.
+- **Added:** 2026-08-15 /simplify (altitude)
+
+### [P3] 반복 시리즈 정체성이 title 문자열이다
+- **What:** `nextRecurrenceSpawn`의 중복 판정이 `pattern+title+dueDate`를 쓴다. 한 회차 이름만 바꿔도 시리즈가 갈라지고, 제목이 같은 별개 task 둘이 한 시리즈로 뭉친다.
+- **How:** Task에 시리즈 id(또는 템플릿 id)를 두고 판정을 그것으로. `scheduledOverrides`가 이미 회차 개념을 들여왔으므로 자연스러운 다음 단계다.
+- **Added:** 2026-08-15 /simplify (altitude)
+
+### [P4] '오늘'을 앱 루트 한 곳에서 틱하기
+- **What:** `useToday()`는 부르는 컴포넌트만 고친다. 지금 6곳이 쓰지만 필터/그룹 층(`smartLists.ts`, `TaskList.tsx`, `TaskItem.tsx`의 isDueToday/isOverdue)은 자정에 재렌더될 계기가 없고, 소비자마다 타이머가 하나씩 생긴다.
+- **How:** 자정 틱을 앱 루트(usePomodoroTicker 옆)에서 하나만 돌려 스토어 `today`를 갱신하고 `useToday()`는 `useStore((s) => s.today)`로. 비반응형 호출자(`todayString()`)는 그대로 둘 수 있다.
+- **Added:** 2026-08-15 /simplify (reuse·altitude)
+
 ## /review 후속 (2026-08-05) — 의도적으로 미룬 항목
 
 전수 검증 → 수정 → /simplify → /review 사이클에서 **확인했지만 이번 범위 밖으로 둔 것들.**
