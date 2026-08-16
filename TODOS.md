@@ -282,6 +282,23 @@ iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
 리뷰 4개 렌즈가 지적한 것 중 **구조·동작을 바꾸는** 것들. 이번 사이클에서는 순수
 품질 수정만 반영했다(`51438dc`). 아래는 착수 시 별도 판단이 필요하다.
 
+### [P3] 회차 스케줄 변경이 세 곳에 각자 구현돼 있다
+- **What:** 드롭은 `resolveTimeBlockDrop`(회차 오버라이드), 리사이즈는 `TimeBlock.tsx`의 인라인 `if (task.isRecurring)` 분기, 배정 해제는 시리즈 전체를 지운다. 셋 다 "이번 회차냐 시리즈냐"를 각자 판정한다.
+- **Why:** 지금은 셋 다 맞지만, 다음 규칙 변경("이번 회차만/이후 전부" 선택, 시리즈 id 도입)이 오면 세 곳을 찾아야 한다. 게다가 **한 회차만 배정 해제하는 방법이 없다** — `overrides[date] = null`이 정확히 그것인데 UI 진입점이 없다(제품 결정 필요).
+- **How:** `applyOccurrenceSchedule(task, occurrenceDate, next | null)` 패치 빌더를 `scheduledTime.ts`에 두고 드롭·리사이즈·해제가 모두 호출.
+- **Added:** 2026-08-16 /simplify (altitude)
+
+### [P3] 반복 시간블록 모델이 렌더러에만 있어 CalDAV가 못 본다
+- **What:** `src/main/caldav/sync.ts`의 `taskToEvent`가 `scheduled_start/end`를 그대로 읽고 `rrule: null`을 낸다. 이제 그 값은 반복 task의 **시각 템플릿**이라, 발생일이 아닌 앵커 날짜에 이벤트 하나가 박히고 회차 이동은 캘린더에 영영 반영되지 않는다.
+- **How:** `getScheduledForOccurrence`·`occursOn`을 `src/shared/`로 옮기고(이미 `date.ts`·`ai-config.ts`가 같은 이유로 거기 있다) 내보내기가 발생일을 계산하게. 또는 rrule 생성까지.
+- **Added:** 2026-08-16 /simplify (altitude)
+
+### [P4] 하드코딩된 isDark 클래스와 새 의미 토큰이 나란히 산다
+- **What:** shadcn 전환으로 `--border`/`--muted-foreground`/`--accent` 토큰이 생겼는데, 전환한 컴포넌트들은 여전히 `isDark ? 'border-gray-700' : 'border-gray-200'` 식 수동 분기를 쓴다(ReminderPicker 8곳, RecurringPicker ~12곳, ConfirmDialog·SortMenu 등).
+- **Why:** 두 체계가 따로 논다. SortMenu는 화살표 색 하나 때문에 theme을 구독한다.
+- **주의:** 값이 완전히 같지는 않다(다크 `--border` ≈ #3F3F45 vs gray-700 #48484A). 기계적 치환이 아니라 **의도된 미세 변경**이므로 별도 판단.
+- **Added:** 2026-08-16 /simplify (reuse)
+
 ### [P2] 완료 전이가 두 벌이다 — completeTasks 코어로 통합
 - **What:** `toggleTask`와 `batchComplete`가 completedAt·점수·IPC·반복 스폰을 각자 갖고 있다. 스토어 주석 3개(점수/completedAt/반복)가 전부 "일괄이 단일과 조용히 어긋났다"를 하나씩 발견해 땜질한 기록이고, 이번 반복 스폰 수정이 네 번째다.
 - **How:** 스토어 내부에 `completeTasks(tasks: Task[])` 코어를 두고 toggleTask는 1건, batchComplete는 N건으로 호출. 그러면 스폰 헬퍼도 단수형 하나면 충분하고 `collectRecurrenceSpawns`의 시뮬레이션(가짜 인스턴스로 완료 순서를 흉내 내는 부분)이 사라진다.
