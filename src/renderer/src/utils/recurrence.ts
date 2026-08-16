@@ -226,7 +226,7 @@ function seriesKey(pattern: string, title: string, dueDate: string): string {
  * 미완료 반복 인스턴스 색인. 같은 키가 여럿일 수 있어(중복 데이터) 개수를 센다.
  * 일괄 완료가 태스크마다 전체 배열을 훑지 않도록 한 번만 만들어 재사용한다.
  */
-export function buildRecurrenceIndex(tasks: Task[]): Map<string, number> {
+function buildRecurrenceIndex(tasks: Task[]): Map<string, number> {
   const index = new Map<string, number>()
   for (const t of tasks) {
     if (t.completed || !t.isRecurring || !t.recurringPattern || !t.dueDate) continue

@@ -50,7 +50,6 @@ const LIGHT_EDITOR_THEME = EditorView.theme(
 
 const DEFAULT_DETAIL_WIDTH = 400
 
-// 메타 스트립의 알림/반복 토글은 트리거 버튼 + 조건부 드롭다운 구조가 동일하다.
 export function TaskDetail() {
   const { t, i18n } = useTranslation()
   // 날짜·시간 표시는 브라우저 로케일이 아니라 앱에서 고른 언어를 따른다.

@@ -12,7 +12,7 @@ import '@testing-library/jest-dom/vitest'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect, useState } from 'react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import i18n from '../../i18n'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
@@ -37,7 +37,32 @@ beforeAll(async () => {
   Element.prototype.releasePointerCapture = () => {}
 })
 
-afterEach(cleanup)
+// 이 파일은 실제 스토어에 연결된 컴포넌트를 그린다. window.api가 없으면 스토어
+// 쓰기가 unhandled rejection으로 죽어, 가드가 회귀했을 때 깔끔한 실패 대신
+// 에러로 터진다. 또 setState로 심은 값이 모듈 싱글턴에 남아 뒤 테스트로 샌다.
+const STORE_KEYS = ['selectedTaskId', 'showQuickAdd', 'showAddTask', 'tasks'] as const
+let storeSnapshot: Record<string, unknown>
+
+beforeEach(() => {
+  // jsdom의 window를 통째로 갈아끼우면 프로토타입과 getter가 날아간다 —
+  // 필요한 것(api)만 얹는다.
+  ;(window as unknown as Record<string, unknown>).api = {
+    updateTask: vi.fn(),
+    createTask: vi.fn(),
+    deleteTask: vi.fn(),
+    batchUpdateTasks: vi.fn(),
+    addScoreEvent: vi.fn(),
+    addScoreEvents: vi.fn(),
+    reorderTasks: vi.fn()
+  }
+  const s = useStore.getState() as unknown as Record<string, unknown>
+  storeSnapshot = Object.fromEntries(STORE_KEYS.map((k) => [k, s[k]]))
+})
+
+afterEach(() => {
+  cleanup()
+  useStore.setState(storeSnapshot as never)
+})
 
 describe('SortMenu', () => {
   it('트리거를 한 번 누르면 열린다', async () => {
@@ -180,7 +205,7 @@ describe('ui 프리미티브 — 프로젝트 규칙', () => {
     const menu = await screen.findByRole('menu')
     // shadcn 기본 z-50이면 UndoToast(90)·TaskItem 컨텍스트 메뉴(100) 아래에 깔린다.
     // 포털이 #root 밖(body 직속)이라 stacking context가 없어 한 줄로 비교된다.
-    expect(menu.className).toContain('z-[111]')
+    expect(menu.className).toContain('z-overlayContent')
     expect(menu.className).not.toContain('z-50')
   })
 

@@ -202,7 +202,7 @@ describe('batchComplete recurrence — 스토어 쓰기 횟수', () => {
     const spawned = useStore.getState().tasks.filter((t) => !t.completed)
     expect(spawned.map((t) => t.title).sort()).toEqual(['독서', '명상', '운동'])
     // 완료 반영 1 + 스폰 추가 1 + 점수 1 = 3. 스폰 3건이 각자 쓰면 5가 된다.
-    expect(writes).toBeLessThanOrEqual(3)
+    expect(writes).toBe(3)
   })
 
   it('gives spawns distinct sortOrder within a list', async () => {
@@ -354,5 +354,50 @@ describe('updateTask — 오버라이드 보존 기간', () => {
     })
     const keys = Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})
     expect(keys).toEqual([recentKey])
+  })
+})
+
+describe('updateTask — 잘못된 오버라이드 쌍은 거부한다', () => {
+  it('최소 블록보다 짧은 회차는 저장하지 않고 기존 값을 그대로 둔다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'r',
+          isRecurring: true,
+          recurringPattern: 'weekly:1',
+          dueDate: '2026-08-10',
+          scheduledStart: '2026-08-10T14:00:00',
+          scheduledEnd: '2026-08-10T15:00:00',
+          scheduledOverrides: { '2126-08-17': { start: '2126-08-17T08:00:00', end: '2126-08-17T09:00:00' } }
+        })
+      ]
+    })
+    await useStore.getState().updateTask({
+      id: 'r',
+      scheduledOverrides: { '2126-08-24': { start: '2126-08-24T08:00:00', end: '2126-08-24T08:10:00' } }
+    })
+    // 절반만 적용되거나 조용히 덮어써지면 안 된다.
+    expect(Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})).toEqual(['2126-08-17'])
+    expect(window.api.updateTask).not.toHaveBeenCalled()
+  })
+})
+
+describe('batchComplete recurrence — 기한 없는 반복', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('기한이 없으면 오늘을 기준으로 다음 회차를 만든다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'n', title: '스트레칭', isRecurring: true, recurringPattern: 'daily', dueDate: null })],
+      batchSelectedIds: ['n']
+    })
+    await useStore.getState().batchComplete()
+    const spawned = useStore.getState().tasks.filter((t) => !t.completed)
+    expect(spawned.map((t) => t.dueDate)).toEqual(['2026-08-16'])
   })
 })

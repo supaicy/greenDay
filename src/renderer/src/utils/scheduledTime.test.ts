@@ -252,3 +252,20 @@ describe('resolveTimeBlockDrop — 서머타임', () => {
     expect(patch?.scheduledStart).toBe('2026-03-08T09:00:00')
   })
 })
+
+// 반복을 끈 뒤 남은 오버라이드는 무시해야 한다. 이 게이트가 없으면 유령 블록이
+// 뜬다 — 그런데 기존 케이스가 전부 반복 task라 게이트를 지워도 초록이었다.
+describe('getScheduledForOccurrence — 반복이 아닌 task', () => {
+  it('반복을 끈 뒤 남은 오버라이드 대신 템플릿을 쓴다', () => {
+    const t: Task = {
+      ...baseTask,
+      isRecurring: false,
+      recurringPattern: null,
+      scheduledOverrides: { '2026-08-17': null }
+    }
+    expect(getScheduledForOccurrence(t, '2026-08-17')).toEqual({
+      start: baseTask.scheduledStart,
+      end: baseTask.scheduledEnd
+    })
+  })
+})

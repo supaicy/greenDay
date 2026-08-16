@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Task } from '../../types'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { snapTo15Min, toLocalIsoMinute } from '../../utils/scheduledTime'
+import { snapTo15Min, toLocalIsoMinute, MIN_BLOCK_MS } from '../../utils/scheduledTime'
 import { toDateString } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
 
@@ -21,7 +21,9 @@ interface Props {
   isDark: boolean
 }
 
-const MIN_BLOCK_MIN = 15
+// updateTask가 거부하는 하한과 같은 값이어야 한다 — 따로 들고 있으면 한쪽만
+// 바뀌었을 때 리사이즈 결과가 조용히 저장되지 않는다.
+const MIN_BLOCK_MIN = MIN_BLOCK_MS / 60000
 
 export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark }: Props): React.ReactElement {
   const { t } = useTranslation()

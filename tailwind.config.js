@@ -4,6 +4,15 @@ module.exports = {
   content: ['./src/renderer/src/**/*.{js,ts,jsx,tsx}', './src/renderer/index.html'],
   theme: {
     extend: {
+      // 오버레이 z 순서에 이름을 준다. 앱 요소가 #root 안에서 90(토스트)·
+      // 100(우클릭 메뉴)을 쓰는데 루트가 stacking context를 만들지 않아, 포털된
+      // 오버레이가 기본값 z-50이면 그 아래로 깔린다(CLAUDE.md 오버레이 규칙).
+      zIndex: {
+        toast: '90',
+        contextMenu: '100',
+        overlay: '110',
+        overlayContent: '111'
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)'
