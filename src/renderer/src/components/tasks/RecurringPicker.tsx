@@ -232,7 +232,11 @@ export function RecurringPicker({
         <button
           type="button"
           onClick={handleApply}
-          className="text-xs px-3 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+          // 요일 0개로 적용하면 'weekly:'가 만들어져, 표시는 고른 적 없는 일요일
+          // 반복을 주장하고 다음 회차는 영영 생기지 않는다(빈 요일 목록 → 다음
+          // 발생일 계산 불가). 애초에 못 만들게 막는다.
+          disabled={type === 'weekly' && weekDays.length === 0}
+          className="text-xs px-3 py-1 rounded bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-30 disabled:hover:bg-primary-500"
         >
           {t('common.apply')}
         </button>

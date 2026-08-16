@@ -28,6 +28,20 @@ function formatDate(y: number, m: number, d: number): string {
 }
 
 /**
+ * 'weekly:1,3' → [1,3]. 빈 세그먼트는 버린다 — `''.split(',')`는 `['']`이고
+ * `Number('')`는 0이라, 요일을 하나도 안 고른 'weekly:'가 일요일 반복으로
+ * 둔갑했다(표시는 "매주 일", 발생일 판정은 매주 일요일 참).
+ */
+function parseWeeklyDays(pattern: string): number[] {
+  return pattern
+    .slice('weekly:'.length)
+    .split(',')
+    .filter((part) => part.trim() !== '')
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+}
+
+/**
  * 반복 패턴과 기준일로부터 다음 발생일(YYYY-MM-DD)을 반환한다.
  * 인식 불가 패턴은 null.
  */
@@ -43,8 +57,7 @@ export function nextRecurringDate(pattern: string, fromISODate: string): string 
 
   // ── weekly:d[,d,...] ───────────────────────────────────
   if (pattern.startsWith('weekly:')) {
-    const dayParts = pattern.slice('weekly:'.length).split(',')
-    const targetDays = dayParts.map(Number).filter((n) => !Number.isNaN(n))
+    const targetDays = parseWeeklyDays(pattern)
     if (targetDays.length === 0) return null
 
     // from 날짜의 요일 (0=일)
@@ -130,13 +143,10 @@ export function formatRecurringPattern(pattern: string | null): string | null {
 
   if (pattern.startsWith('weekly:')) {
     const names = tList('date.weekdaysShort')
-    const days = pattern
-      .replace('weekly:', '')
-      .split(',')
-      .map((d) => names[Number(d)])
-      .filter(Boolean)
-      .join(', ')
-    return i18n.t('recurring.weeklyOn', { days })
+    const targetDays = parseWeeklyDays(pattern)
+    // 고른 요일이 없으면 없는 요일을 지어내지 않고 일반 라벨로 떨어진다.
+    if (targetDays.length === 0) return i18n.t('recurring.label')
+    return i18n.t('recurring.weeklyOn', { days: targetDays.map((d) => names[d]).join(', ') })
   }
 
   if (pattern.startsWith('monthly:')) {
@@ -237,13 +247,8 @@ export function occursOn(pattern: string | null, anchorDueDate: string | null, d
   if (pattern === 'daily') return true
   const [y, m, d] = parseDate(dateStr)
   if (pattern.startsWith('weekly:')) {
-    const targetDays = pattern
-      .slice('weekly:'.length)
-      .split(',')
-      .map(Number)
-      .filter((n) => !Number.isNaN(n))
-    if (targetDays.length === 0) return true
-    return targetDays.includes(new Date(y, m, d).getDay())
+    // 요일이 비었으면 '매주'로 볼 근거가 없다 — 위에서 걸러진 자기 dueDate만 발생일.
+    return parseWeeklyDays(pattern).includes(new Date(y, m, d).getDay())
   }
   if (pattern.startsWith('monthly:')) {
     const day = Number(pattern.slice('monthly:'.length))

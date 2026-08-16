@@ -155,3 +155,23 @@ describe('occursOn', () => {
     expect(occursOn('weekly', null, '2026-08-18')).toBe(true)
   })
 })
+
+// 요일을 하나도 안 고르고 '매주'를 적용하면 패턴이 'weekly:'가 된다. 이 값은
+// (a) 표시에서 Number('')=0 → '일'로 읽혀 고른 적 없는 일요일 반복을 주장했고,
+// (b) nextRecurringDate가 null이라 다음 회차가 영영 생기지 않는다.
+describe('빈 weekly 패턴', () => {
+  it('없는 요일을 지어내지 않는다', async () => {
+    const { formatRecurringPattern } = await import('./recurrence')
+    const label = formatRecurringPattern('weekly:')
+    expect(label).not.toContain('일')
+  })
+
+  it('발생일 판정이 아무 날이나 참이라고 하지 않는다', async () => {
+    const { occursOn } = await import('./recurrence')
+    // 요일이 비었으면 '매주'로 볼 근거가 없다 — 자기 dueDate만 발생일.
+    expect(occursOn('weekly:', '2026-08-10', '2026-08-10')).toBe(true)
+    // 8/16은 일요일 — Number('')=0을 요일 0으로 읽으면 여기서 참이 된다.
+    expect(occursOn('weekly:', '2026-08-10', '2026-08-16')).toBe(false)
+    expect(occursOn('weekly:', '2026-08-10', '2026-08-17')).toBe(false)
+  })
+})

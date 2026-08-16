@@ -12,7 +12,7 @@ import '@testing-library/jest-dom/vitest'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect, useState } from 'react'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import i18n from '../../i18n'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
@@ -201,5 +201,22 @@ describe('QuickAdd', () => {
     render(<QuickAdd />)
     const input = await screen.findByRole('textbox')
     await waitFor(() => expect(input).toHaveFocus())
+  })
+})
+
+describe('RecurringPicker — 빈 매주 패턴 차단', () => {
+  it('요일을 고르기 전에는 적용할 수 없다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<RecurringPicker value={null} onChange={onChange} trigger={<button type="button">반복 설정</button>} />)
+    await user.click(screen.getByRole('button', { name: '반복 설정' }))
+    await user.click(await screen.findByRole('button', { name: '매주' }))
+
+    // 요일 0개로 적용하면 'weekly:' 패턴이 만들어져, 표시로는 고른 적 없는
+    // 일요일 반복을 주장하고 다음 회차는 영영 생기지 않는다.
+    const apply = screen.getByRole('button', { name: '적용' })
+    expect(apply).toBeDisabled()
+    await user.click(apply)
+    expect(onChange).not.toHaveBeenCalled()
   })
 })
