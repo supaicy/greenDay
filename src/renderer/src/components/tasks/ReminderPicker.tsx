@@ -95,8 +95,19 @@ export function ReminderPicker({
     setOpen(false)
   }
 
+  // Popover는 TaskDetail 수명 내내 마운트돼 있고 TaskDetail은 task id로 키가
+  // 걸려 있지 않다. 닫을 때 비우지 않으면 A에서 입력하다 만 값이 B의 픽커에
+  // 그대로 채워진 채 열린다(예전에는 열릴 때만 마운트돼 저절로 초기화됐다).
+  const handleOpenChange = (next: boolean): void => {
+    setOpen(next)
+    if (!next) {
+      setCustomDate('')
+      setCustomTime('09:00')
+    }
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       {/* 트리거는 호출처가 준다. 예전에는 호출처 버튼이 이 픽커를 mount하고
           픽커가 자기 버튼을 또 그려서, 첫 클릭은 두 번째 버튼을 나타나게 할
           뿐이었다 — 열려면 두 번 눌러야 했다. */}

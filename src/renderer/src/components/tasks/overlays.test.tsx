@@ -320,3 +320,23 @@ describe('오버레이가 열린 동안 Cmd 단축키', () => {
     expect(removeTask).not.toHaveBeenCalled()
   })
 })
+
+describe('ReminderPicker — 상태 누수', () => {
+  it('닫으면 사용자 지정 입력이 비워진다', async () => {
+    const user = userEvent.setup()
+    render(
+      <ReminderPicker dueDate={null} value={null} onChange={() => {}} trigger={<button type="button">알림</button>} />
+    )
+    await user.click(screen.getByRole('button', { name: '알림' }))
+    const date = document.querySelector('input[type="date"]') as HTMLInputElement
+    await user.type(date, '2026-08-20')
+    expect(date.value).toBe('2026-08-20')
+
+    // 다른 할일로 옮겨가는 상황: 픽커는 언마운트되지 않고 닫히기만 한다.
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: '알림' }))
+
+    const reopened = document.querySelector('input[type="date"]') as HTMLInputElement
+    expect(reopened.value).toBe('')
+  })
+})

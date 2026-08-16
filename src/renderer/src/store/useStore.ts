@@ -532,7 +532,14 @@ export const useStore = create<Store>((set, get) => ({
     // 즉시 버리면 "지난주 운동은 8시였다"는 기록까지 사라지므로, 보존 기간을 둔다.
     if (patch.scheduledOverrides) {
       const cutoff = shiftIsoByDays(todayString(), -OVERRIDE_RETENTION_DAYS)
-      const kept = Object.entries(patch.scheduledOverrides).filter(([date]) => date >= cutoff)
+      const stored = get().tasks.find((t) => t.id === patch.id)?.scheduledOverrides ?? {}
+      const kept = Object.entries(patch.scheduledOverrides).filter(([date, pair]) => {
+        if (date >= cutoff) return true
+        // 오래됐어도 이번에 새로 쓰거나 바꾼 키는 남긴다 — 캘린더를 되짚어가
+        // 옛 회차를 옮기면 저장이 조용히 무효가 됐다. 손대지 않고 그대로
+        // 실려 온 옛 키만 정리 대상이다.
+        return JSON.stringify(pair) !== JSON.stringify(stored[date] ?? null) || !(date in stored)
+      })
       patch.scheduledOverrides = kept.length > 0 ? Object.fromEntries(kept) : null
     }
 

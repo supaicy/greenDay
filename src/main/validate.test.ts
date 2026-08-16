@@ -81,3 +81,19 @@ describe('validateTaskUpdate — scheduledOverrides 모양', () => {
     expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: huge })).toThrow()
   })
 })
+
+// 생성 경로도 같은 검사를 받아야 한다. update만 막으면, createTask가 그대로
+// 디스크에 직렬화하므로 신뢰 경계에 구멍이 남는다.
+describe('validateTaskInput — scheduledOverrides 모양', () => {
+  it('정상 페이로드는 통과시킨다', () => {
+    const ok = { id: 't1', title: '운동', scheduledOverrides: { '2026-08-17': null } }
+    expect(validateTaskInput(ok)).toBe(ok)
+  })
+
+  it('update와 같은 규칙으로 거부한다', () => {
+    expect(() => validateTaskInput({ id: 't1', title: 'x', scheduledOverrides: { bad: null } })).toThrow()
+    expect(() => validateTaskInput({ id: 't1', title: 'x', scheduledOverrides: [] })).toThrow()
+    const polluted = JSON.parse('{"__proto__": null}')
+    expect(() => validateTaskInput({ id: 't1', title: 'x', scheduledOverrides: polluted })).toThrow()
+  })
+})

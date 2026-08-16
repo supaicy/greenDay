@@ -10,6 +10,8 @@ export function validateTaskInput(input: unknown): Record<string, unknown> {
   if (typeof obj.title !== 'string') {
     throw new Error('Invalid task payload')
   }
+  // 생성 경로도 같은 검사를 받는다 — createTask가 이 값을 그대로 직렬화한다.
+  if ('scheduledOverrides' in obj) validateScheduledOverrides(obj.scheduledOverrides)
   return obj
 }
 

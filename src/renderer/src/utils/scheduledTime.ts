@@ -45,10 +45,20 @@ function toLocalIso(d: Date): string {
 export function getScheduledForOccurrence(
   task: Pick<
     Task,
-    'scheduledStart' | 'scheduledEnd' | 'isRecurring' | 'recurringPattern' | 'dueDate' | 'scheduledOverrides'
+    | 'scheduledStart'
+    | 'scheduledEnd'
+    | 'isRecurring'
+    | 'recurringPattern'
+    | 'dueDate'
+    | 'scheduledOverrides'
+    | 'completed'
   >,
   occurrenceDate: string // "YYYY-MM-DD"
 ): { start: string; end: string } | null {
+  // 완료한 반복 인스턴스는 자기 날짜에만 남는다. 미래 발생일은 완료로 새로
+  // 스폰된 인스턴스의 몫이다 — 둘 다 주장하면 같은 블록이 두 개 뜨고,
+  // 회차를 완료할 때마다 하나씩 늘어난다.
+  if (task.isRecurring && task.completed && task.dueDate && occurrenceDate !== task.dueDate) return null
   // 오버라이드는 반복 회차의 예외라 반복 task에만 의미가 있다. 반복을 끈 뒤
   // 남은 값을 읽으면 유령 블록이 된다(스토어가 정리하지만, 여기서도 게이트를 둔다).
   if (task.isRecurring) {
@@ -142,6 +152,17 @@ export function resolveTimeBlockDrop(ctx: TimeBlockDropContext): (Partial<Task> 
     }
     overrides[dayStr] = { start, end }
     return { id: task.id, scheduledOverrides: overrides }
+  }
+  // 레일에서 반복 할일을 놓았는데 그날이 발생일이 아니면, 템플릿만 세팅하면
+  // 레일에서는 빠지고(scheduledStart가 생겼으니) 블록은 occursOn에 막혀 안 그려진다
+  // — 양쪽 화면에서 사라진다. 놓은 그날의 회차를 함께 만들어 준다.
+  if (task.isRecurring && !occursOn(task.recurringPattern, task.dueDate, dayStr)) {
+    return {
+      id: task.id,
+      scheduledStart: start,
+      scheduledEnd: end,
+      scheduledOverrides: { ...(task.scheduledOverrides ?? {}), [dayStr]: { start, end } }
+    }
   }
   return { id: task.id, scheduledStart: start, scheduledEnd: end }
 }

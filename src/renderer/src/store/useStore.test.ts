@@ -341,17 +341,21 @@ describe('updateTask — scheduledOverrides 불변식 (마감일·정리)', () =
 })
 
 describe('updateTask — 오버라이드 보존 기간', () => {
-  it('아주 오래된 키는 털어내되 최근 이력은 남긴다', async () => {
+  // 정리 대상은 '이미 저장돼 있고 이번에 손대지 않은 채 그대로 실려 온 옛 키'다.
+  // 새로 쓰는 키는 아무리 옛날 날짜여도 남긴다 — 캘린더를 되짚어가 옛 회차를
+  // 옮기는 것이 실제 사용 경로이고, 거기서 저장이 조용히 무효가 되면 안 된다.
+  it('손대지 않은 옛 키는 털어내되 최근 이력은 남긴다', async () => {
     const recent = new Date()
     recent.setDate(recent.getDate() - 10)
     const recentKey = recent.toISOString().slice(0, 10)
+    const stored = { '2020-01-05': null, [recentKey]: { start: `${recentKey}T08:00:00`, end: `${recentKey}T09:00:00` } }
     useStore.setState({
-      tasks: [task({ id: 'r', isRecurring: true, recurringPattern: 'daily', dueDate: '2020-01-01' })]
+      tasks: [
+        task({ id: 'r', isRecurring: true, recurringPattern: 'daily', dueDate: '2020-01-01', scheduledOverrides: stored })
+      ]
     })
-    await useStore.getState().updateTask({
-      id: 'r',
-      scheduledOverrides: { '2020-01-05': null, [recentKey]: { start: `${recentKey}T08:00:00`, end: `${recentKey}T09:00:00` } }
-    })
+    // 저장된 맵을 그대로 다시 넘긴다(무관한 수정에 딸려 오는 형태)
+    await useStore.getState().updateTask({ id: 'r', scheduledOverrides: { ...stored } })
     const keys = Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})
     expect(keys).toEqual([recentKey])
   })
@@ -399,5 +403,51 @@ describe('batchComplete recurrence — 기한 없는 반복', () => {
     await useStore.getState().batchComplete()
     const spawned = useStore.getState().tasks.filter((t) => !t.completed)
     expect(spawned.map((t) => t.dueDate)).toEqual(['2026-08-16'])
+  })
+})
+
+describe('updateTask — 보존 기간이 지금 쓰는 키를 버리지 않는다', () => {
+  it('90일보다 오래된 날짜라도 이번에 쓰는 회차는 저장된다', async () => {
+    const old = '2020-03-05'
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'r',
+          isRecurring: true,
+          recurringPattern: 'daily',
+          dueDate: '2020-03-01',
+          scheduledStart: '2020-03-01T14:00:00',
+          scheduledEnd: '2020-03-01T15:00:00'
+        })
+      ]
+    })
+    // 아주 오래된 날짜를 캘린더에서 되짚어가 리사이즈하는 경우
+    await useStore.getState().updateTask({
+      id: 'r',
+      scheduledOverrides: { [old]: { start: `${old}T08:00:00`, end: `${old}T09:00:00` } }
+    })
+    expect(useStore.getState().tasks[0].scheduledOverrides).toEqual({
+      [old]: { start: `${old}T08:00:00`, end: `${old}T09:00:00` }
+    })
+  })
+
+  it('이번에 안 건드린 오래된 키는 그대로 턴다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'r',
+          isRecurring: true,
+          recurringPattern: 'daily',
+          dueDate: '2020-03-01',
+          scheduledOverrides: { '2020-03-05': null, '2020-03-06': null }
+        })
+      ]
+    })
+    // 한 키만 새로 쓰고 나머지는 그대로 넘긴다 → 안 건드린 옛 키는 정리 대상
+    await useStore.getState().updateTask({
+      id: 'r',
+      scheduledOverrides: { '2020-03-05': null, '2020-03-06': null, '2020-03-07': null }
+    })
+    expect(Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})).toEqual(['2020-03-07'])
   })
 })

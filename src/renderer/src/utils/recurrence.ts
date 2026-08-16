@@ -314,7 +314,10 @@ export function occursOn(pattern: string | null, anchorDueDate: string | null, d
   }
   if (pattern.startsWith('monthly:')) {
     const day = Number(pattern.slice('monthly:'.length))
-    return Number.isNaN(day) ? true : d === day
+    if (Number.isNaN(day)) return true
+    // nextRecurringDate와 같은 클램프를 쓴다 — 안 그러면 스포너가 잡는 2월 28일에
+    // 블록이 안 그려진다.
+    return d === Math.min(day, lastDayOfMonth(y, m))
   }
   if (pattern.startsWith('yearly:')) {
     const parsed = parseYearlyMonthDay(pattern)

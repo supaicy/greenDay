@@ -223,3 +223,16 @@ describe('밀린 반복 따라잡기', () => {
     expect(nextRecurringDate('weekly:1', '2026-08-17', '2026-08-16')).toBe('2026-08-24')
   })
 })
+
+// nextRecurringDate는 monthly:31을 말일로 당기는데 occursOn은 d === day라
+// 그날을 발생일로 보지 않았다 — 스포너가 만든 날짜에 블록이 안 그려진다.
+describe('occursOn monthly 말일 클램프', () => {
+  it('스포너가 잡는 날짜를 발생일로 인정한다', async () => {
+    const { occursOn, nextRecurringDate } = await import('./recurrence')
+    const next = nextRecurringDate('monthly:31', '2026-01-31')
+    expect(next).toBe('2026-02-28')
+    expect(occursOn('monthly:31', '2026-01-31', next as string)).toBe(true)
+    expect(occursOn('monthly:31', '2026-01-31', '2026-03-31')).toBe(true)
+    expect(occursOn('monthly:31', '2026-01-31', '2026-03-30')).toBe(false)
+  })
+})

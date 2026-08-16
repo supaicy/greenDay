@@ -269,3 +269,75 @@ describe('getScheduledForOccurrence — 반복이 아닌 task', () => {
     })
   })
 })
+
+// 완료한 반복 인스턴스는 자기 날짜에만 남아야 한다. 완료해도 템플릿이 미래
+// 발생일을 계속 주장하면, 스폰된 다음 인스턴스와 나란히 블록이 두 개 뜨고
+// 회차를 완료할 때마다 하나씩 늘어난다.
+describe('getScheduledForOccurrence — 완료한 반복 인스턴스', () => {
+  const doneMon: Task = {
+    ...baseTask,
+    recurringPattern: 'weekly:1',
+    dueDate: '2026-08-10',
+    completed: true,
+    completedAt: '2026-08-10T15:00:00'
+  }
+
+  it('완료한 회차는 자기 날짜에만 그린다', () => {
+    // 자기 발생일 — 한 일을 보여주는 건 유지
+    expect(getScheduledForOccurrence(doneMon, '2026-08-10')).not.toBeNull()
+    // 다음 발생일은 새로 스폰된 인스턴스의 몫이다
+    expect(getScheduledForOccurrence(doneMon, '2026-08-17')).toBeNull()
+    expect(getScheduledForOccurrence(doneMon, '2026-08-24')).toBeNull()
+  })
+
+  it('미완료 회차는 그대로 발생일마다 그린다', () => {
+    const open: Task = { ...doneMon, completed: false, completedAt: null }
+    expect(getScheduledForOccurrence(open, '2026-08-17')).not.toBeNull()
+  })
+
+  it('완료한 회차의 오버라이드는 자기 날짜에서 존중된다', () => {
+    const t: Task = {
+      ...doneMon,
+      scheduledOverrides: { '2026-08-10': { start: '2026-08-10T08:00:00', end: '2026-08-10T09:00:00' } }
+    }
+    expect(getScheduledForOccurrence(t, '2026-08-10')).toEqual({
+      start: '2026-08-10T08:00:00',
+      end: '2026-08-10T09:00:00'
+    })
+  })
+})
+
+// 레일에서 반복 할일을 비발생일에 놓으면, 템플릿만 세팅돼 레일에서는 빠지는데
+// occursOn 게이트에 막혀 블록도 안 그려진다 — 양쪽 화면에서 사라진다.
+describe('resolveTimeBlockDrop — 레일에서 비발생일로', () => {
+  const weeklyMonUnscheduled: Task = {
+    ...baseTask,
+    recurringPattern: 'weekly:1',
+    dueDate: null,
+    scheduledStart: null,
+    scheduledEnd: null
+  }
+
+  it('놓은 날이 발생일이 아니면 그날 오버라이드도 함께 남긴다', () => {
+    // 2026-08-19는 수요일 — weekly:1(월)의 발생일이 아니다
+    const patch = resolveTimeBlockDrop({
+      yPx: 9 * 60, dayStr: '2026-08-19', startHour: 0, pxPerMin: 1,
+      task: weeklyMonUnscheduled, isBlockMove: false, sourceDate: null
+    })
+    expect(patch?.scheduledStart).toBe('2026-08-19T09:00:00')
+    expect(patch?.scheduledOverrides).toEqual({
+      '2026-08-19': { start: '2026-08-19T09:00:00', end: '2026-08-19T09:30:00' }
+    })
+    // 실제로 그날 그려지는지 확인
+    const after = { ...weeklyMonUnscheduled, ...patch } as Task
+    expect(getScheduledForOccurrence(after, '2026-08-19')).not.toBeNull()
+  })
+
+  it('발생일에 놓으면 템플릿만 세팅한다', () => {
+    const patch = resolveTimeBlockDrop({
+      yPx: 9 * 60, dayStr: '2026-08-17', startHour: 0, pxPerMin: 1,
+      task: { ...weeklyMonUnscheduled, dueDate: '2026-08-10' }, isBlockMove: false, sourceDate: null
+    })
+    expect(patch?.scheduledOverrides).toBeUndefined()
+  })
+})
