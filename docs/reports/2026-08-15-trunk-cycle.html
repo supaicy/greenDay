@@ -35,10 +35,10 @@
 <body>
 <main>
 <h1>트렁크 확정 사이클</h1>
-<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 30개 · push 안 함(정책 유지)</div>
+<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 32개 · push 안 함(정책 유지)</div>
 
 <div class="tldr">
-<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 이어 4개 렌즈 리뷰와 코드리뷰를 돌려, 실증된 지적만 반영했다(오버레이 프리미티브 결함 3건 포함). 헬스: typecheck 0 · lint 0 errors · <strong>547 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
+<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 이어 <strong>/simplify → /review → /code-review</strong>를 순차로 돌려 실증된 지적만 반영했다 — 세 렌즈가 독립 재현한 단축키 회귀, 완료한 반복의 블록 복제, 배포본 51.7MB→2.2MB가 그 소득이다. 헬스: typecheck 0 · lint 0 errors · <strong>558 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
 </div>
 
 <h2>1 · 확정된 결정</h2>
@@ -109,17 +109,27 @@
 </table>
 <p class="note">교차모델 검증은 불발 — Codex CLI가 이 머신에서 인증되지 않았다(<code>CODEX_MODE: not_authed</code>, 기존 학습에도 기록됨). 이번 리뷰는 Claude 단독이다.</p>
 
-<h2>8 · 헬스 전/후</h2>
+<h2>8 · /code-review — 마무리 판정</h2>
+<p class="note">마지막으로 코드리뷰를 돌렸다. 6건이 나왔고 <strong>전부 이번 사이클이 만든 결함</strong>이었다 — 그중 둘은 앞선 리뷰들이 못 본 것이다.</p>
+<ul>
+<li><strong>완료한 반복이 블록을 영구 복제했다 (high)</strong> — 스폰이 시간블록 템플릿을 물려받게 만든 결정의 대가다. 완료한 인스턴스도 미래 발생일을 계속 주장해, 다음 인스턴스와 나란히 블록이 두 개 뜨고 회차를 완료할 때마다 하나씩 늘었다. 완료한 회차는 자기 날짜에만 남도록 게이트</li>
+<li><strong>레일 → 비발생일 드롭이 할일을 증발시켰다</strong> — 템플릿이 생겨 레일에서는 빠지는데 발생일 게이트에 막혀 블록도 안 그려졌다. 놓은 그날의 회차를 함께 만든다</li>
+<li><strong>90일 보존 정리가 지금 쓰는 키를 버렸다</strong> — 앞 라운드에서 무한 증가를 막으려 넣은 것이 역효과였다. 캘린더를 되짚어가 옛 회차를 옮기면 저장이 조용히 무효였고, 그게 유일한 키면 맵 전체가 날아갔다</li>
+<li>생성 경로가 IPC 검증에서 빠져 있던 비대칭, <code>occursOn</code>의 monthly 말일 클램프 누락(스포너와 불일치), 상시 마운트로 바뀐 알림 픽커의 입력값이 다른 할일로 새던 것</li>
+</ul>
+<p class="note">리뷰어가 확인하고 통과시킨 것: Escape의 <code>defaultPrevented</code> 가드와 <code>role=dialog|alertdialog|menu</code> 단축키 게이트가 벤더링한 Radix <code>DismissableLayer</code> 동작과 맞다는 점, 의존성 재분류가 <code>externalizeDepsPlugin</code> 적용 범위상 안전하다는 점, <code>darkMode: ['class']</code>가 실제로 해소된다는 점.</p>
+
+<h2>9 · 헬스 전/후</h2>
 <table>
 <tr><th></th><th>시작 (08-15 아침)</th><th>종료</th></tr>
 <tr><td>typecheck</td><td>0 errors</td><td>0 errors</td></tr>
 <tr><td>biome lint</td><td>0 errors / 7 warnings</td><td>0 errors / 7 warnings (기존분)</td></tr>
-<tr><td>vitest</td><td>478 passed</td><td><strong>547 passed</strong> (+69, 컴포넌트 테스트 첫 도입)</td></tr>
+<tr><td>vitest</td><td>478 passed</td><td><strong>558 passed</strong> (+80, 컴포넌트 테스트 첫 도입)</td></tr>
 <tr><td>렌더러 번들</td><td>1,131kB (미압축)</td><td>604kB (minify)</td></tr>
 <tr><td>배포 의존성</td><td>51.7MB / 36패키지</td><td><strong>2.2MB / 2패키지</strong></td></tr>
 </table>
 
-<h2>9 · 다음 남은 것</h2>
+<h2>10 · 다음 남은 것</h2>
 <ul>
 <li><strong>출시 서류(사용자만 가능):</strong> 개인사업자 등록 → 영문 사업자등록증명(90일) → 유료 앱 계약 → ₩19,000 입력. 상세: <code>docs/reports/2026-08-07-paid-app-agreement.html</code></li>
 <li><strong>미검증 U-1~5:</strong> Google OAuth 클라이언트 ID·CalDAV 앱 암호·상위 릴리스·MAS 빌드 필요 — 자격증명이 생기면 착수</li>
