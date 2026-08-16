@@ -42,3 +42,42 @@ describe('validateTaskUpdate', () => {
     expect(() => validateTaskUpdate([])).toThrow('Invalid task payload')
   })
 })
+
+// scheduledOverrides는 렌더러가 보내는 중첩 페이로드다. IPC 경계에서 모양을
+// 확인하지 않으면 그대로 디스크에 직렬화된다(database.ts updateTask).
+// 신뢰 경계의 방어는 렌더러가 아니라 여기 있어야 한다.
+describe('validateTaskUpdate — scheduledOverrides 모양', () => {
+  it('정상 페이로드는 통과시킨다', () => {
+    const ok = {
+      id: 't1',
+      scheduledOverrides: { '2026-08-17': { start: '2026-08-17T08:00:00', end: '2026-08-17T09:00:00' } }
+    }
+    expect(validateTaskUpdate(ok)).toBe(ok)
+    expect(validateTaskUpdate({ id: 't1', scheduledOverrides: { '2026-08-17': null } })).toBeTruthy()
+    expect(validateTaskUpdate({ id: 't1', scheduledOverrides: null })).toBeTruthy()
+  })
+
+  it('날짜 형식이 아닌 키를 거부한다', () => {
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: { 'not-a-date': null } })).toThrow()
+    // JSON.parse는 리터럴과 달리 '__proto__'를 실제 own 키로 만든다. 이 맵은
+    // 저장 후 다시 파싱되므로, 그런 키가 디스크까지 가지 않게 막아야 한다.
+    const polluted = JSON.parse('{"__proto__": {"start": "x", "end": "y"}}')
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: polluted })).toThrow()
+  })
+
+  it('start/end가 문자열이 아닌 값을 거부한다', () => {
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: { '2026-08-17': { start: 1, end: 2 } } })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: { '2026-08-17': {} } })).toThrow()
+  })
+
+  it('배열이나 원시값을 오버라이드 맵으로 받지 않는다', () => {
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: [] })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: 'x' })).toThrow()
+  })
+
+  it('키 개수를 제한한다 — 무한히 커지는 맵이 디스크로 가지 않게', () => {
+    const huge: Record<string, null> = {}
+    for (let i = 0; i < 1001; i++) huge[`2026-01-${String((i % 28) + 1).padStart(2, '0')}-${i}`] = null
+    expect(() => validateTaskUpdate({ id: 't1', scheduledOverrides: huge })).toThrow()
+  })
+})

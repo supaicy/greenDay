@@ -274,16 +274,22 @@ export function updateTask(task: Record<string, unknown>): void {
     scheduledStart: 'scheduled_start',
     scheduledEnd: 'scheduled_end'
   }
+  // 직렬화를 먼저 끝낸 뒤에 레코드를 건드린다. 순환 참조 등으로 JSON.stringify가
+  // 중간에 던지면, 앞쪽 스칼라 필드만 바뀐 절반짜리 레코드가 메모리에 남고
+  // 나중의 무관한 save()가 그 상태를 그대로 디스크에 적는다.
+  const serialized: Record<string, string | null> = {}
+  if (task.tags !== undefined) serialized.tags = JSON.stringify(task.tags)
+  if (task.attachments !== undefined) serialized.attachments = JSON.stringify(task.attachments)
+  if (task.scheduledOverrides !== undefined) {
+    serialized.scheduled_overrides = task.scheduledOverrides === null ? null : JSON.stringify(task.scheduledOverrides)
+  }
+
   for (const [key, col] of Object.entries(fields)) {
     if (task[key] !== undefined) {
       existing[col] = key === 'isRecurring' ? (task[key] ? 1 : 0) : task[key]
     }
   }
-  if (task.tags !== undefined) existing.tags = JSON.stringify(task.tags)
-  if (task.scheduledOverrides !== undefined) {
-    existing.scheduled_overrides = task.scheduledOverrides === null ? null : JSON.stringify(task.scheduledOverrides)
-  }
-  if (task.attachments !== undefined) existing.attachments = JSON.stringify(task.attachments)
+  for (const [col, value] of Object.entries(serialized)) existing[col] = value
   if (task.completed !== undefined) {
     existing.completed = task.completed ? 1 : 0
     existing.completed_at = task.completed ? new Date().toISOString() : null
