@@ -245,3 +245,43 @@ describe('toggleHabitLog scoring', () => {
     expect(useStore.getState().score.total).toBe(10)
   })
 })
+
+// 시간블록 오버라이드는 반복 시리즈에 딸린 개념이다. 배정을 해제하거나 반복을
+// 끄면 함께 사라져야 하는데, 규칙이 호출처에 흩어져 있어 한 곳(레일 드롭)이
+// 빠졌고 거기서 유령 블록이 남았다. 규칙은 스토어가 갖는다.
+describe('updateTask — scheduledOverrides 불변식', () => {
+  const recurringWithOverride = () =>
+    task({
+      id: 'r',
+      isRecurring: true,
+      recurringPattern: 'weekly:1',
+      dueDate: '2026-08-10',
+      scheduledStart: '2026-08-10T14:00:00',
+      scheduledEnd: '2026-08-10T15:00:00',
+      scheduledOverrides: { '2026-08-17': { start: '2026-08-17T08:00:00', end: '2026-08-17T09:00:00' } }
+    })
+
+  it('배정을 해제하면 회차 오버라이드도 지운다', async () => {
+    useStore.setState({ tasks: [recurringWithOverride()] })
+    await useStore.getState().updateTask({ id: 'r', scheduledStart: null, scheduledEnd: null })
+    expect(useStore.getState().tasks[0].scheduledOverrides ?? null).toBeNull()
+  })
+
+  it('반복을 끄면 회차 오버라이드도 지운다', async () => {
+    useStore.setState({ tasks: [recurringWithOverride()] })
+    await useStore.getState().updateTask({ id: 'r', isRecurring: false, recurringPattern: null })
+    expect(useStore.getState().tasks[0].scheduledOverrides ?? null).toBeNull()
+  })
+
+  it('반복 패턴이 바뀌면 이전 발생일 기준 오버라이드를 버린다', async () => {
+    useStore.setState({ tasks: [recurringWithOverride()] })
+    await useStore.getState().updateTask({ id: 'r', recurringPattern: 'weekly:3' })
+    expect(useStore.getState().tasks[0].scheduledOverrides ?? null).toBeNull()
+  })
+
+  it('무관한 수정은 오버라이드를 건드리지 않는다', async () => {
+    useStore.setState({ tasks: [recurringWithOverride()] })
+    await useStore.getState().updateTask({ id: 'r', title: '이름만 변경' })
+    expect(Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})).toEqual(['2026-08-17'])
+  })
+})

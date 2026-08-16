@@ -3,24 +3,28 @@ import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { tList } from '../../i18n'
+import { parseWeeklyDays } from '../../utils/recurrence'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 type RecurringType = 'daily' | 'weekly' | 'monthly' | 'yearly'
 
-function parsePattern(pattern: string | null): {
+/** 픽커가 편집 중인 초안. 다섯 값이 한 패턴에서 나오므로 한 덩어리로 다룬다. */
+interface RecurrenceDraft {
   type: RecurringType
   weekDays: number[]
   monthDay: number
   yearMonth: number
   yearDay: number
-} {
+}
+
+function parsePattern(pattern: string | null): RecurrenceDraft {
   if (!pattern) return { type: 'daily', weekDays: [], monthDay: 1, yearMonth: 1, yearDay: 1 }
 
   if (pattern === 'daily') return { type: 'daily', weekDays: [], monthDay: 1, yearMonth: 1, yearDay: 1 }
 
   if (pattern.startsWith('weekly:')) {
-    const days = pattern.replace('weekly:', '').split(',').map(Number)
-    return { type: 'weekly', weekDays: days, monthDay: 1, yearMonth: 1, yearDay: 1 }
+    // 빈 세그먼트를 요일 0으로 읽지 않도록 공용 파서를 쓴다(유령 일요일 방지).
+    return { type: 'weekly', weekDays: parseWeeklyDays(pattern), monthDay: 1, yearMonth: 1, yearDay: 1 }
   }
 
   if (pattern.startsWith('monthly:')) {
@@ -36,18 +40,12 @@ function parsePattern(pattern: string | null): {
   return { type: 'daily', weekDays: [], monthDay: 1, yearMonth: 1, yearDay: 1 }
 }
 
-function buildPattern(
-  type: RecurringType,
-  weekDays: number[],
-  monthDay: number,
-  yearMonth: number,
-  yearDay: number
-): string {
+function buildPattern({ type, weekDays, monthDay, yearMonth, yearDay }: RecurrenceDraft): string {
   switch (type) {
     case 'daily':
       return 'daily'
     case 'weekly':
-      return `weekly:${weekDays.sort((a, b) => a - b).join(',')}`
+      return `weekly:${[...weekDays].sort((a, b) => a - b).join(',')}`
     case 'monthly':
       return `monthly:${monthDay}`
     case 'yearly':
@@ -71,29 +69,26 @@ export function RecurringPicker({
   const isDark = theme === 'dark'
 
   const [open, setOpen] = useState(false)
-  const [type, setType] = useState<RecurringType>(() => parsePattern(value).type)
-  const [weekDays, setWeekDays] = useState<number[]>(() => parsePattern(value).weekDays)
-  const [monthDay, setMonthDay] = useState(() => parsePattern(value).monthDay)
-  const [yearMonth, setYearMonth] = useState(() => parsePattern(value).yearMonth)
-  const [yearDay, setYearDay] = useState(() => parsePattern(value).yearDay)
+  // 다섯 값이 한 패턴에서 나오므로 한 덩어리로 둔다 — 따로 두면 같은 문자열을
+  // 다섯 번 파싱하고 동기화도 setter 다섯 개가 된다.
+  const [draft, setDraft] = useState<RecurrenceDraft>(() => parsePattern(value))
+  const { type, weekDays, monthDay, yearMonth, yearDay } = draft
 
   // 예전에는 열릴 때만 마운트돼 초기값 파싱으로 충분했지만, Popover는 계속
   // 마운트돼 있으므로 외부에서 value가 바뀌면 동기화해야 재오픈 시 최신이다.
   useEffect(() => {
-    const p = parsePattern(value)
-    setType(p.type)
-    setWeekDays(p.weekDays)
-    setMonthDay(p.monthDay)
-    setYearMonth(p.yearMonth)
-    setYearDay(p.yearDay)
+    setDraft(parsePattern(value))
   }, [value])
 
   const toggleWeekDay = (day: number) => {
-    setWeekDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]))
+    setDraft((d) => ({
+      ...d,
+      weekDays: d.weekDays.includes(day) ? d.weekDays.filter((x) => x !== day) : [...d.weekDays, day]
+    }))
   }
 
   const handleApply = () => {
-    onChange(buildPattern(type, weekDays, monthDay, yearMonth, yearDay))
+    onChange(buildPattern(draft))
     setOpen(false)
   }
 
@@ -121,7 +116,7 @@ export function RecurringPicker({
           <button
             type="button"
             key={t}
-            onClick={() => setType(t)}
+            onClick={() => setDraft((d) => ({ ...d, type: t }))}
             className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
               type === t
                 ? 'bg-primary-500 text-white'
@@ -173,7 +168,7 @@ export function RecurringPicker({
             min={1}
             max={31}
             value={monthDay}
-            onChange={(e) => setMonthDay(Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)))}
+            onChange={(e) => setDraft((d) => ({ ...d, monthDay: Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)) }))}
             className={`w-20 text-sm px-2 py-1 rounded border outline-none ${
               isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
             }`}
@@ -191,7 +186,7 @@ export function RecurringPicker({
           <div className="flex items-center gap-2">
             <select
               value={yearMonth}
-              onChange={(e) => setYearMonth(parseInt(e.target.value, 10))}
+              onChange={(e) => setDraft((d) => ({ ...d, yearMonth: parseInt(e.target.value, 10) }))}
               className={`text-sm px-2 py-1 rounded border outline-none ${
                 isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
               }`}
@@ -207,7 +202,7 @@ export function RecurringPicker({
               min={1}
               max={31}
               value={yearDay}
-              onChange={(e) => setYearDay(Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)))}
+              onChange={(e) => setDraft((d) => ({ ...d, yearDay: Math.max(1, Math.min(31, parseInt(e.target.value, 10) || 1)) }))}
               className={`w-16 text-sm px-2 py-1 rounded border outline-none ${
                 isDark ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300 text-gray-700'
               }`}

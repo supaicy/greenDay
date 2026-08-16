@@ -99,6 +99,12 @@ export function useKeyboardShortcuts() {
         return
       }
 
+      // 모달이 떠 있으면 아래 단축키는 전부 쉰다. 포커스가 입력칸이 아닌 곳(버튼·
+      // select·다이얼로그 본체)에 있으면 Backspace가 스크림 뒤의 선택 태스크를
+      // 지우고, 1-4가 우선순위를 바꾸고, Cmd+Z가 되돌리기를 실행했다.
+      // 예전에는 ConfirmDialog만 자기 캡처 리스너로 이를 막아, 나머지 모달은 뚫렸다.
+      if (document.querySelector('[role="dialog"][data-state="open"],[role="alertdialog"][data-state="open"]')) return
+
       // 입력 필드에 포커스가 있으면 아래 단축키 무시
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return

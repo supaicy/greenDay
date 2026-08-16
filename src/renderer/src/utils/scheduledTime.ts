@@ -43,12 +43,18 @@ function toLocalIso(d: Date): string {
  * suffix (Z or ±HH:MM) would be silently propagated and cause parsing drift.
  */
 export function getScheduledForOccurrence(
-  task: Pick<Task, 'scheduledStart' | 'scheduledEnd' | 'isRecurring' | 'recurringPattern' | 'dueDate'> &
-    Pick<Task, 'scheduledOverrides'>,
+  task: Pick<
+    Task,
+    'scheduledStart' | 'scheduledEnd' | 'isRecurring' | 'recurringPattern' | 'dueDate' | 'scheduledOverrides'
+  >,
   occurrenceDate: string // "YYYY-MM-DD"
 ): { start: string; end: string } | null {
-  const override = task.scheduledOverrides?.[occurrenceDate]
-  if (override !== undefined) return override
+  // 오버라이드는 반복 회차의 예외라 반복 task에만 의미가 있다. 반복을 끈 뒤
+  // 남은 값을 읽으면 유령 블록이 된다(스토어가 정리하지만, 여기서도 게이트를 둔다).
+  if (task.isRecurring) {
+    const override = task.scheduledOverrides?.[occurrenceDate]
+    if (override !== undefined) return override
+  }
   if (!task.scheduledStart || !task.scheduledEnd) return null
   if (!task.isRecurring) {
     return { start: task.scheduledStart, end: task.scheduledEnd }
@@ -106,8 +112,10 @@ export interface TimeBlockDropContext {
 export function resolveTimeBlockDrop(ctx: TimeBlockDropContext): (Partial<Task> & { id: string }) | null {
   const { yPx, dayStr, startHour, pxPerMin, task, isBlockMove, sourceDate } = ctx
   const totalMin = startHour * 60 + yPx / pxPerMin
-  const pad = (n: number): string => String(n).padStart(2, '0')
-  const rawStart = `${dayStr}T${pad(Math.floor(totalMin / 60))}:${pad(Math.floor(totalMin % 60))}:00`
+  // 분 단위로 더해 직렬화한다. 시/분을 따로 pad하면 컬럼 아래로 넘칠 때
+  // 'T24:05'처럼 파싱 불가한 문자열이 나온다.
+  const dayStartMs = new Date(`${dayStr}T00:00:00`).getTime()
+  const rawStart = toLocalIsoMinute(new Date(dayStartMs + Math.floor(totalMin) * 60000))
   const dayEnd = new Date(`${dayStr}T23:59:00`).getTime()
   // 하루 끝에서 최소 블록(15분)을 확보하지 못하면 updateTask가 조용히 거부하므로 시작을 끌어올린다.
   const startMs = Math.min(new Date(snapTo15Min(rawStart)).getTime(), dayEnd - MIN_BLOCK_MS)

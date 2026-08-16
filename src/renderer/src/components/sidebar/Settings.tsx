@@ -323,7 +323,7 @@ export function Settings() {
           내용이 뷰포트의 ~2.8배인 이 패널에서 아래로 내려가면 닫기 버튼이 사라졌다. */}
       <DialogContent
         showCloseButton={false}
-        className="flex w-[480px] max-w-none max-h-[80vh] flex-col overflow-hidden rounded-xl p-0 gap-0"
+        className="flex w-[480px] max-h-[80vh] flex-col overflow-hidden rounded-xl p-0 gap-0"
       >
         <div className={`flex shrink-0 items-center justify-between px-5 py-4 border-b ${dividerLine(isDark)}`}>
           <DialogTitle className="text-base font-semibold">{t('settings.title')}</DialogTitle>

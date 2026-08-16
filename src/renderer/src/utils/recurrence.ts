@@ -32,7 +32,7 @@ function formatDate(y: number, m: number, d: number): string {
  * `Number('')`는 0이라, 요일을 하나도 안 고른 'weekly:'가 일요일 반복으로
  * 둔갑했다(표시는 "매주 일", 발생일 판정은 매주 일요일 참).
  */
-function parseWeeklyDays(pattern: string): number[] {
+export function parseWeeklyDays(pattern: string): number[] {
   return pattern
     .slice('weekly:'.length)
     .split(',')
@@ -180,18 +180,31 @@ export type RecurrenceSpawn = AddTaskOptions & {
  * task 완료 시 만들어야 할 다음 반복 인스턴스를 계산한다. 만들 것이 없으면 null.
  * 같은 패턴·제목·기한의 미완료 인스턴스가 existing에 이미 있으면 중복 스폰하지 않는다.
  */
-export function nextRecurrenceSpawn(task: Task, existing: Task[], today: string): RecurrenceSpawn | null {
+/** 시리즈 정체성 키. 지금은 패턴+제목+기한 — 시리즈 id가 생기면 여기만 바뀐다. */
+function seriesKey(pattern: string, title: string, dueDate: string): string {
+  return `${pattern}\u0000${title}\u0000${dueDate}`
+}
+
+/**
+ * 미완료 반복 인스턴스 색인. 같은 키가 여럿일 수 있어(중복 데이터) 개수를 센다.
+ * 일괄 완료가 태스크마다 전체 배열을 훑지 않도록 한 번만 만들어 재사용한다.
+ */
+export function buildRecurrenceIndex(tasks: Task[]): Map<string, number> {
+  const index = new Map<string, number>()
+  for (const t of tasks) {
+    if (t.completed || !t.isRecurring || !t.recurringPattern || !t.dueDate) continue
+    const key = seriesKey(t.recurringPattern, t.title, t.dueDate)
+    index.set(key, (index.get(key) ?? 0) + 1)
+  }
+  return index
+}
+
+export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, number>, today: string): RecurrenceSpawn | null {
   if (!task.isRecurring || !task.recurringPattern) return null
   const next = nextRecurringDate(task.recurringPattern, task.dueDate ?? today)
   if (!next) return null
-  const exists = existing.some(
-    (t) =>
-      !t.completed &&
-      t.isRecurring &&
-      t.recurringPattern === task.recurringPattern &&
-      t.title === task.title &&
-      t.dueDate === next
-  )
+  const index = existing instanceof Map ? existing : buildRecurrenceIndex(existing)
+  const exists = (index.get(seriesKey(task.recurringPattern, task.title, next)) ?? 0) > 0
   if (exists) return null
   const reminderAt =
     task.reminderAt && task.dueDate ? shiftIsoByDays(task.reminderAt, daysBetween(task.dueDate, next)) : null
@@ -216,18 +229,29 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[], today: string)
  * 시점 기준으로 중복 판정하지 않으면 8/16 인스턴스가 한 번 더 생긴다.
  */
 export function collectRecurrenceSpawns(completing: Task[], existing: Task[], today: string): RecurrenceSpawn[] {
+  // 반복이 하나도 없으면(흔한 경우) 정렬도 색인도 만들지 않는다.
+  if (!completing.some((t) => t.isRecurring && t.recurringPattern)) return []
+
   const ordered = [...completing].sort((a, b) => (a.dueDate ?? today).localeCompare(b.dueDate ?? today))
-  let working = existing
+  // 색인을 한 번 만들고 완료/스폰을 반영해 나간다. 예전에는 태스크마다 전체
+  // 배열을 복사하고 다시 훑어 O(n·m)이었다(3,000건 전체 선택 시 ~50ms).
+  const index = buildRecurrenceIndex(existing)
   const spawns: RecurrenceSpawn[] = []
   for (const task of ordered) {
-    const spawn = nextRecurrenceSpawn(task, working, today)
+    const spawn = nextRecurrenceSpawn(task, index, today)
     if (spawn) {
       spawns.push(spawn)
-      // 유령의 id는 원본과 달라야 한다 — 같으면 바로 아래 완료 표시에 휩쓸려,
-      // 같은 기한의 중복 인스턴스가 이 유령을 미완료 dup으로 못 보고 또 스폰한다.
-      working = [...working, { ...task, id: `${task.id}:spawn`, completed: false, dueDate: spawn.dueDate }]
+      // 스폰한 회차를 색인에 올려, 같은 기한의 중복 인스턴스가 또 스폰하지 않게 한다.
+      const key = seriesKey(spawn.recurringPattern, spawn.title, spawn.dueDate)
+      index.set(key, (index.get(key) ?? 0) + 1)
     }
-    working = working.map((t) => (t.id === task.id ? { ...t, completed: true } : t))
+    // 이 태스크는 이제 완료 — 색인에서 뺀다.
+    if (task.isRecurring && task.recurringPattern && task.dueDate) {
+      const ownKey = seriesKey(task.recurringPattern, task.title, task.dueDate)
+      const left = (index.get(ownKey) ?? 0) - 1
+      if (left > 0) index.set(ownKey, left)
+      else index.delete(ownKey)
+    }
   }
   return spawns
 }
@@ -255,9 +279,7 @@ export function occursOn(pattern: string | null, anchorDueDate: string | null, d
     return Number.isNaN(day) ? true : d === day
   }
   if (pattern.startsWith('yearly:')) {
-    const mmdd = pattern.slice('yearly:'.length)
-    const pad = (n: number): string => String(n).padStart(2, '0')
-    return `${pad(m + 1)}-${pad(d)}` === mmdd
+    return formatDate(y, m, d).slice(5) === pattern.slice('yearly:'.length)
   }
   return true
 }

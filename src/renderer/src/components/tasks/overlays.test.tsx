@@ -193,6 +193,21 @@ describe('ui 프리미티브 — 프로젝트 규칙', () => {
     expect(dialog.className).toContain('rounded-2xl')
     expect(dialog.className).not.toContain('sm:rounded-lg')
   })
+
+  it('다이얼로그의 폭 지정도 호출처가 이길 수 있다', async () => {
+    render(
+      <Dialog open>
+        <DialogContent className="w-[480px]">
+          <DialogTitle>설정</DialogTitle>
+        </DialogContent>
+      </Dialog>
+    )
+    const dialog = await screen.findByRole('dialog')
+    // 같은 함정: w-*는 max-w-*를 못 이긴다. 기본에 max-w-lg가 남아 있으면
+    // 호출처가 max-w-none 해독제를 매번 같이 써야 한다(두 곳이 그러고 있었다).
+    expect(dialog.className).toContain('w-[480px]')
+    expect(dialog.className).not.toContain('max-w-lg')
+  })
 })
 
 describe('QuickAdd', () => {
@@ -218,5 +233,21 @@ describe('RecurringPicker — 빈 매주 패턴 차단', () => {
     expect(apply).toBeDisabled()
     await user.click(apply)
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('모달이 열려 있는 동안 앱 단축키', () => {
+  it('뒤에 선택된 할일을 지우지 않는다', async () => {
+    const user = userEvent.setup()
+    useStore.setState({ selectedTaskId: 'task-1', showQuickAdd: true })
+    render(<EscapeHarness />)
+    expect(await screen.findByText('빠른 추가')).toBeInTheDocument()
+
+    // 포커스가 입력칸이 아닌 곳(다이얼로그 본체)에 있을 때 Backspace가
+    // 스크림 뒤의 선택 태스크를 삭제하던 경로. 1-4(우선순위), Cmd+Z도 같은 문제.
+    screen.getByRole('dialog').focus()
+    await user.keyboard('{Backspace}')
+
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
   })
 })

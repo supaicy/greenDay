@@ -22,6 +22,10 @@ export function BatchBar() {
   const lists = useStore((s) => s.lists)
   const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
+  // 바 안의 중립 버튼 공통 클래스 — 트리거·일반 버튼이 같은 생김새를 쓴다.
+  const barBtnCls = `flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 ${
+    isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
+  }`
 
   if (!batchMode) return null
 
@@ -40,9 +44,7 @@ export function BatchBar() {
       <button
         type="button"
         onClick={selectAllBatch}
-        className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors ${
-          isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
-        }`}
+        className={barBtnCls}
         title={t('batch.selectAll')}
       >
         <CheckSquare size={15} />
@@ -72,9 +74,7 @@ export function BatchBar() {
           <button
             type="button"
             disabled={count === 0}
-            className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 ${
-              isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={barBtnCls}
             title={t('batch.move')}
           >
             <ArrowRight size={15} />
@@ -97,9 +97,7 @@ export function BatchBar() {
           <button
             type="button"
             disabled={count === 0}
-            className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors disabled:opacity-30 ${
-              isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={barBtnCls}
             title={t('priority.label')}
           >
             <Flag size={15} />

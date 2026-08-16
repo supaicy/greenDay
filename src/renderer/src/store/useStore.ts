@@ -209,8 +209,8 @@ function mapTask(row: Record<string, unknown>): Task {
     reminderAt: (row.reminder_at as string) || null,
     listId: (row.list_id as string) || 'inbox',
     parentId: (row.parent_id as string) || null,
-    tags: safeParseArray<string>(row.tags as string),
-    attachments: safeParseArray<string>(row.attachments as string),
+    tags: safeParseJson<string[]>(row.tags as string, []),
+    attachments: safeParseJson<string[]>(row.attachments as string, []),
     createdAt: row.created_at as string,
     completedAt: (row.completed_at as string) || null,
     deletedAt: (row.deleted_at as string) || null,
@@ -219,18 +219,10 @@ function mapTask(row: Record<string, unknown>): Task {
     recurringPattern: (row.recurring_pattern as string) || null,
     scheduledStart: (row.scheduled_start as string) || null,
     scheduledEnd: (row.scheduled_end as string) || null,
-    scheduledOverrides: safeParseRecord(row.scheduled_overrides as string)
+    scheduledOverrides: safeParseJson<Task['scheduledOverrides']>(row.scheduled_overrides as string, null)
   }
 }
-function safeParseRecord<T>(s: string | undefined | null): Record<string, T> | null {
-  if (!s) return null
-  try {
-    const parsed = JSON.parse(s)
-    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
+
 function mapList(row: Record<string, unknown>): TaskList {
   return {
     id: row.id as string,
@@ -257,7 +249,7 @@ function mapHabit(row: Record<string, unknown>): Habit {
     name: row.name as string,
     color: row.color as string,
     frequency: row.frequency as 'daily' | 'weekly',
-    targetDays: safeParseArray<number>(row.target_days as string),
+    targetDays: safeParseJson<number[]>(row.target_days as string, []),
     createdAt: row.created_at as string
   }
 }
@@ -298,11 +290,13 @@ export function applyReorder(tasks: Task[], ids: string[]): Task[] {
     .sort((a, b) => a.sortOrder - b.sortOrder)
 }
 
-function safeParseArray<T = unknown>(s: string | undefined | null): T[] {
+/** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
+function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
+  if (!s) return fallback
   try {
-    return JSON.parse(s || '[]') as T[]
+    return (JSON.parse(s) as T) ?? fallback
   } catch {
-    return []
+    return fallback
   }
 }
 
@@ -484,25 +478,10 @@ export const useStore = create<Store>((set, get) => ({
     // 스토어 쓰기는 한 번. 건당 set()은 선택 수만큼 전체 재렌더를 만든다.
     set((s) => ({ tasks: [...s.tasks, ...newTasks] }))
 
-    for (const t of newTasks) {
-      window.api.createTask({
-        id: t.id,
-        title: t.title,
-        description: '',
-        priority: t.priority,
-        dueDate: t.dueDate,
-        dueTime: t.dueTime,
-        reminderAt: t.reminderAt,
-        listId: t.listId,
-        parentId: t.parentId,
-        tags: t.tags,
-        attachments: [],
-        isRecurring: t.isRecurring,
-        recurringPattern: t.recurringPattern,
-        scheduledStart: t.scheduledStart,
-        scheduledEnd: t.scheduledEnd
-      })
-    }
+    // 방금 만든 Task를 그대로 넘긴다. 필드를 손으로 다시 나열하면 IPC 경계가
+    // Record<string, unknown>이라 타입이 안 잡히고, Task에 필드가 늘 때 조용히
+    // 빠진다. main의 createTask는 이름으로 읽고 나머지는 무시한다.
+    for (const t of newTasks) window.api.createTask(t)
   },
   updateTask: async (task) => {
     // Invariant guard: if the caller is changing scheduledStart/End, ensure the pair is valid
@@ -525,10 +504,25 @@ export const useStore = create<Store>((set, get) => ({
         }
       }
     }
+
+    // scheduledOverrides는 반복 시리즈에 딸린 회차 예외다. 시리즈의 시간블록이
+    // 사라지거나 반복 자체가 끝나거나 패턴이 바뀌면 과거 발생일 기준의 예외는
+    // 의미가 없다 — 남기면 유령 블록이 된다. 규칙을 여기서 한 번에 지킨다:
+    // 예전에는 호출처마다 손으로 지웠고, 레일 드롭 한 곳이 빠져 있었다.
+    const patch = { ...task }
+    if (patch.scheduledOverrides === undefined) {
+      const current = get().tasks.find((t) => t.id === task.id)
+      const unscheduled = 'scheduledStart' in patch && patch.scheduledStart === null
+      const recurrenceOff = patch.isRecurring === false
+      const patternChanged =
+        patch.recurringPattern !== undefined && current != null && patch.recurringPattern !== current.recurringPattern
+      if (unscheduled || recurrenceOff || patternChanged) patch.scheduledOverrides = null
+    }
+
     set((s) => ({
-      tasks: s.tasks.map((t) => (t.id === task.id ? { ...t, ...task } : t))
+      tasks: s.tasks.map((t) => (t.id === patch.id ? { ...t, ...patch } : t))
     }))
-    window.api.updateTask(task)
+    window.api.updateTask(patch)
   },
   toggleTask: async (id) => {
     const task = get().tasks.find((t) => t.id === id)

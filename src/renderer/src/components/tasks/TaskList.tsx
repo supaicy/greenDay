@@ -164,8 +164,8 @@ export function TaskListView() {
       onDrop={(e) => {
         const id = e.dataTransfer.getData(DND_MIME.TASK_BLOCK)
         if (!id) return
-        // 배정 해제 — 반복 회차 오버라이드도 함께 지워 유령 블록을 남기지 않는다.
-        void useStore.getState().updateTask({ id, scheduledStart: null, scheduledEnd: null, scheduledOverrides: null })
+        // 배정 해제. 회차 오버라이드 정리는 스토어의 불변식이 맡는다.
+        void useStore.getState().updateTask({ id, scheduledStart: null, scheduledEnd: null })
       }}
     >
       <div

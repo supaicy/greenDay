@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { useToday } from '../../hooks/useToday'
-import { toDateString } from '../../utils/date'
+import { shiftIsoByDays } from '../../utils/recurrence'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Clock, AlertTriangle } from 'lucide-react'
 import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
@@ -30,17 +30,12 @@ export function TimelineView(): React.ReactElement {
   const todayStr = useToday()
 
   const groups = useMemo(() => {
-    const now = new Date()
-
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowStr = toDateString(tomorrow)
-
+    // 전부 todayStr에서 파생한다. 렌더 시각의 new Date()로 잡으면 자정을 넘겨도
+    // '내일'과 '이번 주 끝'만 어제 기준으로 남아 그룹이 어긋난다.
+    const tomorrowStr = shiftIsoByDays(todayStr, 1)
     // 이번 주 끝 (토요일)
-    const endOfWeek = new Date(now)
-    const dayOfWeek = endOfWeek.getDay()
-    endOfWeek.setDate(endOfWeek.getDate() + (6 - dayOfWeek))
-    const endOfWeekStr = toDateString(endOfWeek)
+    const [y, m, d] = todayStr.split('-').map(Number)
+    const endOfWeekStr = shiftIsoByDays(todayStr, 6 - new Date(y, m - 1, d).getDay())
 
     const activeTasks = tasks.filter(isActiveTopLevel)
 

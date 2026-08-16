@@ -4,6 +4,7 @@ import type { Task } from '../../types'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { snapTo15Min, toLocalIsoMinute } from '../../utils/scheduledTime'
+import { toDateString } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
 
 interface Props {
@@ -42,7 +43,7 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   // Serialize Date → local ISO "YYYY-MM-DDTHH:mm:00"
 
   // 이 블록이 그려진 발생일. 반복 할일은 드롭/리사이즈가 이 날짜의 회차만 건드린다.
-  const occurrenceDate = toLocalIsoMinute(start).slice(0, 10)
+  const occurrenceDate = toDateString(start)
 
   const onDragStart = (e: React.DragEvent): void => {
     e.dataTransfer.setData(DND_MIME.TASK_BLOCK, task.id)
@@ -111,8 +112,8 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   }
 
   const unschedule = (): void => {
-    // 시리즈 배정 해제 — 회차 오버라이드도 함께 지워 유령 블록을 남기지 않는다.
-    void updateTask({ id: task.id, scheduledStart: null, scheduledEnd: null, scheduledOverrides: null })
+    // 시리즈 배정 해제. 회차 오버라이드 정리는 스토어의 불변식이 맡는다.
+    void updateTask({ id: task.id, scheduledStart: null, scheduledEnd: null })
     setMenuOpen(false)
   }
 
