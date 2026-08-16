@@ -282,6 +282,32 @@ iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
 리뷰 4개 렌즈가 지적한 것 중 **구조·동작을 바꾸는** 것들. 이번 사이클에서는 순수
 품질 수정만 반영했다(`51438dc`). 아래는 착수 시 별도 판단이 필요하다.
 
+### [P2] CalDAV/Google 내보내기가 회차 이동을 전혀 반영하지 않는다
+- **What:** `taskToEvent`(`src/main/caldav/sync.ts`)는 `scheduled_start/end` 원본 컬럼만 읽고 `rrule: null`을 낸다. 회차를 옮기거나 리사이즈하면 이제 `scheduledOverrides`만 바뀌므로, `fingerprint()`(start/end 기반)가 그대로라 **재업로드 시도조차 없다.**
+- **Why 이번에 커졌나:** 전에는 같은 드래그가 템플릿을 바꿔서 동기화가 반응했다. 지금은 로컬과 내보낸 캘린더가 조용히 갈라진다.
+- **How:** `getScheduledForOccurrence`·`occursOn`을 `src/shared/`로 옮기고 내보내기가 발생일을 계산하게 한다(최소한 오버라이드 맵을 fingerprint에 포함). U-1/U-3 자격증명이 생겨 동기화를 실검증할 때 함께.
+- **Added:** 2026-08-16 /review (data-migration·adversarial)
+
+### [P3] 낙관적 갱신이 실패해도 화면과 디스크가 갈라진 채 남는다
+- **What:** `updateTask`는 유효하지 않은 값을 `console.warn` 후 조용히 버리고, `window.api.updateTask(patch)`는 await도 catch도 없다. 메인에서 검증이 throw하면 reject가 아무도 안 받는다 — 화면은 이미 바뀐 뒤라 재시작 전까지 어긋난다.
+- **재현 경로:** 하루 끝 클램프가 23:44를 만들어(15분 그리드 밖) 그 블록을 리사이즈하면 1분짜리 쌍이 되어 거부되는데, TimeBlock이 드래그 중 DOM 높이를 직접 바꿔놔 화면은 리사이즈된 모습으로 남는다.
+- **How:** 거부 시 이전 상태로 되돌리고 토스트로 알린다. IPC 실패도 같은 경로로.
+- **Added:** 2026-08-16 /review (adversarial)
+
+### [P3] UnscheduledRail의 '배정 안 됨' 판정이 회차 모델을 모른다
+- **What:** `!x.scheduledStart`만 본다. 템플릿 없이 오버라이드만 가진 반복 할일은 블록이 있는데도 레일에 남고, 모든 회차가 null로 억제된 할일은 블록이 없는데 레일에 안 나온다(어느 화면에서도 손댈 수 없는 좌초 상태).
+- **Added:** 2026-08-16 /review (adversarial)
+
+### [P4] 정렬 순서(sortOrder)를 렌더러와 main이 각자 계산한다
+- **What:** `addTasks`가 리스트별로 이어 붙여 계산하지만 `database.createTask`는 그 값을 무시하고 다시 매긴다(`createdAt`도 마찬가지). 지금은 우연히 일치하지만 필터가 미묘하게 다르다(main은 `!deleted_at`, 렌더러는 메모리 전부).
+- **How:** main이 `task.sortOrder`를 존중하거나(없을 때만 계산), 렌더러 계산을 걷어내고 main을 단일 출처로.
+- **Added:** 2026-08-16 /review (maintainability)
+
+### [P4] 다운그레이드 시 회차 오버라이드가 되살아난다
+- **What:** 구버전 빌드는 `scheduled_overrides`를 읽지도 지우지도 않지만 드래그하면 `scheduled_start/end`는 쓴다. 다시 업그레이드하면 옛 오버라이드가 우선하므로 구버전에서 한 편집이 되돌아간 것처럼 보인다. 데이터 파일에 스키마 버전이 없어 감지할 수도 없다.
+- **How:** 데이터 파일에 스키마 버전을 찍고, 낮은 버전에서 손댄 행의 오버라이드를 정리한다.
+- **Added:** 2026-08-16 /review (data-migration)
+
 ### [P3] 회차 스케줄 변경이 세 곳에 각자 구현돼 있다
 - **What:** 드롭은 `resolveTimeBlockDrop`(회차 오버라이드), 리사이즈는 `TimeBlock.tsx`의 인라인 `if (task.isRecurring)` 분기, 배정 해제는 시리즈 전체를 지운다. 셋 다 "이번 회차냐 시리즈냐"를 각자 판정한다.
 - **Why:** 지금은 셋 다 맞지만, 다음 규칙 변경("이번 회차만/이후 전부" 선택, 시리즈 id 도입)이 오면 세 곳을 찾아야 한다. 게다가 **한 회차만 배정 해제하는 방법이 없다** — `overrides[date] = null`이 정확히 그것인데 UI 진입점이 없다(제품 결정 필요).
