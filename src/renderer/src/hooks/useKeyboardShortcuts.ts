@@ -51,10 +51,26 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Cmd+Shift+A: 빠른 추가 토글
+      // Cmd+Shift+A: 빠른 추가 토글. 오버레이 가드보다 위에 둔다 — 빠른 추가는
+      // 다른 오버레이 위로 전환되는 것이 의도된 동작이다.
       if (isMod && e.shiftKey && (key === 'a' || key === 'A')) {
         e.preventDefault()
         useStore.getState().setShowQuickAdd(!useStore.getState().showQuickAdd)
+        return
+      }
+
+      // 오버레이가 떠 있으면 아래 단축키는 전부 쉰다. Escape와 Cmd+Shift+A만 위에
+      // 남는다. 포커스가 입력칸이 아닌 곳(버튼·select·다이얼로그 본체·메뉴 컨테이너)에
+      // 있으면 Backspace가 스크림 뒤의 선택 태스크를 지우고, 1-4가 우선순위를 바꾸고,
+      // Cmd+Z가 되돌리기를, Cmd+D가 마감일을 바꿨다.
+      // 예전에는 ConfirmDialog만 자기 캡처 리스너로 이를 막았고, 나머지 오버레이는
+      // 뚫려 있었다 — 그 리스너를 걷어낸 뒤로는 파괴적 확인 창까지 뚫렸다.
+      // 메뉴(role=menu)도 포함해야 한다: Radix DropdownMenu는 dialog가 아니다.
+      if (
+        document.querySelector(
+          '[role="dialog"][data-state="open"],[role="alertdialog"][data-state="open"],[role="menu"][data-state="open"]'
+        )
+      ) {
         return
       }
 
@@ -98,12 +114,6 @@ export function useKeyboardShortcuts() {
         if (taskId) updateTask({ id: taskId, dueDate: todayString() })
         return
       }
-
-      // 모달이 떠 있으면 아래 단축키는 전부 쉰다. 포커스가 입력칸이 아닌 곳(버튼·
-      // select·다이얼로그 본체)에 있으면 Backspace가 스크림 뒤의 선택 태스크를
-      // 지우고, 1-4가 우선순위를 바꾸고, Cmd+Z가 되돌리기를 실행했다.
-      // 예전에는 ConfirmDialog만 자기 캡처 리스너로 이를 막아, 나머지 모달은 뚫렸다.
-      if (document.querySelector('[role="dialog"][data-state="open"],[role="alertdialog"][data-state="open"]')) return
 
       // 입력 필드에 포커스가 있으면 아래 단축키 무시
       const target = e.target as HTMLElement

@@ -175,3 +175,51 @@ describe('빈 weekly 패턴', () => {
     expect(occursOn('weekly:', '2026-08-10', '2026-08-17')).toBe(false)
   })
 })
+
+// 월말·윤년 넘침. formatDate가 new Date(y,m,d)로 정규화하므로 2월 31일은 3월 3일이
+// 되고, 그 값이 다음 회차의 기준일이 되어 드리프트가 영구히 쌓인다.
+describe('월말/윤년 넘침', () => {
+  it('monthly:31은 그 달의 말일로 잡힌다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    expect(nextRecurringDate('monthly:31', '2026-01-31')).toBe('2026-02-28')
+    expect(nextRecurringDate('monthly:31', '2026-03-31')).toBe('2026-04-30')
+    expect(nextRecurringDate('monthly:30', '2026-01-30')).toBe('2026-02-28')
+  })
+
+  it('윤년 생일(yearly:02-29)은 평년에 2월 말일로 잡힌다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    expect(nextRecurringDate('yearly:02-29', '2028-02-29')).toBe('2029-02-28')
+  })
+})
+
+// 픽커는 yearly:7-21처럼 0을 채우지 않고 만든다. 발생일 판정이 문자열 비교라
+// 1~9월 매년 반복은 늘 false였다 — 블록이 기준일 말고는 아무 데도 안 그려졌다.
+describe('yearly 패턴의 0 채움', () => {
+  it('패딩 없는 패턴도 발생일로 인식한다', async () => {
+    const { occursOn } = await import('./recurrence')
+    expect(occursOn('yearly:7-21', '2026-07-21', '2027-07-21')).toBe(true)
+    expect(occursOn('yearly:07-21', '2026-07-21', '2027-07-21')).toBe(true)
+    expect(occursOn('yearly:7-21', '2026-07-21', '2027-07-22')).toBe(false)
+  })
+
+  it('다음 발생일 계산도 패딩 없는 패턴을 받는다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    expect(nextRecurringDate('yearly:7-21', '2026-07-21')).toBe('2027-07-21')
+  })
+})
+
+// 오래 밀린 반복은 완료해도 계속 연체로 스폰됐다(1월 기한을 8월에 완료하면
+// 다음 회차가 1월 2일). 따라잡으려면 수백 번 완료해야 했다.
+describe('밀린 반복 따라잡기', () => {
+  it('다음 회차는 오늘 이후로 잡힌다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    const next = nextRecurringDate('daily', '2026-01-01', '2026-08-16')
+    expect(next).toBe('2026-08-17')
+  })
+
+  it('밀리지 않은 반복은 그대로 다음 칸이다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    expect(nextRecurringDate('daily', '2026-08-16', '2026-08-16')).toBe('2026-08-17')
+    expect(nextRecurringDate('weekly:1', '2026-08-17', '2026-08-16')).toBe('2026-08-24')
+  })
+})

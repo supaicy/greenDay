@@ -132,6 +132,11 @@ describe('팝오버와 모달', () => {
   })
 })
 
+function ShortcutHarness(): React.JSX.Element {
+  useKeyboardShortcuts()
+  return <div />
+}
+
 function EscapeHarness(): React.JSX.Element {
   useKeyboardShortcuts()
   const showQuickAdd = useStore((s) => s.showQuickAdd)
@@ -249,5 +254,44 @@ describe('모달이 열려 있는 동안 앱 단축키', () => {
     await user.keyboard('{Backspace}')
 
     expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+})
+
+describe('오버레이가 열린 동안 Cmd 단축키', () => {
+  it('모달 뒤에서 Cmd+Z(되돌리기)·Cmd+D(오늘로)가 실행되지 않는다', async () => {
+    const user = userEvent.setup()
+    const popUndo = vi.fn()
+    const updateTask = vi.fn()
+    useStore.setState({ selectedTaskId: 'task-1', showQuickAdd: true, popUndo, updateTask })
+    render(<EscapeHarness />)
+    expect(await screen.findByText('빠른 추가')).toBeInTheDocument()
+    screen.getByRole('dialog').focus()
+
+    await user.keyboard('{Meta>}z{/Meta}')
+    await user.keyboard('{Meta>}d{/Meta}')
+
+    // 파괴적 확인 창(ConfirmDialog) 앞에서 특히 나쁘다 — 예전에는 그 컴포넌트가
+    // 자기 캡처 리스너로 모든 키를 삼켜 막고 있었다.
+    expect(popUndo).not.toHaveBeenCalled()
+    expect(updateTask).not.toHaveBeenCalled()
+  })
+
+  it('드롭다운 메뉴가 열려 있어도 뒤의 할일이 지워지지 않는다', async () => {
+    const user = userEvent.setup()
+    const removeTask = vi.fn()
+    useStore.setState({ selectedTaskId: 'task-1', showQuickAdd: false, removeTask })
+    render(
+      <>
+        <ShortcutHarness />
+        <SortMenu trigger={<button type="button">정렬</button>} />
+      </>
+    )
+    await user.click(screen.getByRole('button', { name: '정렬' }))
+    await screen.findByRole('menu')
+
+    // Radix 메뉴는 role="menu"라 다이얼로그 셀렉터에 걸리지 않는다.
+    await user.keyboard('{Backspace}')
+
+    expect(removeTask).not.toHaveBeenCalled()
   })
 })

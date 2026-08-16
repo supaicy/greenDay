@@ -238,3 +238,17 @@ describe('resolveTimeBlockDrop', () => {
     })
   })
 })
+
+// 벽시계 분을 epoch ms에 더하면 서머타임 전환일 이후가 통째로 한 시간 밀린다.
+// 앱은 en 로케일을 지원하므로 KST 밖에서도 맞아야 한다.
+describe('resolveTimeBlockDrop — 서머타임', () => {
+  it('전환일에도 그리드 행과 저장 시각이 일치한다', () => {
+    const plain: Task = { ...baseTask, isRecurring: false, recurringPattern: null, scheduledStart: null, scheduledEnd: null }
+    // 2026-03-08은 미국 DST 시작일. startHour 9 + 0px = 09:00 행.
+    const patch = resolveTimeBlockDrop({
+      yPx: 0, dayStr: '2026-03-08', startHour: 9, pxPerMin: 1,
+      task: plain, isBlockMove: false, sourceDate: null
+    })
+    expect(patch?.scheduledStart).toBe('2026-03-08T09:00:00')
+  })
+})

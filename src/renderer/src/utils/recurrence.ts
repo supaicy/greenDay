@@ -18,6 +18,11 @@ function parseDate(iso: string): [number, number, number] {
   return [Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])]
 }
 
+/** 그 달의 마지막 날(1-31). 다음 달 0일 = 이번 달 말일. */
+function lastDayOfMonth(y: number, m: number): number {
+  return new Date(y, m + 1, 0).getDate()
+}
+
 /** [year, month(0-based), day] → 'YYYY-MM-DD' */
 function formatDate(y: number, m: number, d: number): string {
   const date = new Date(y, m, d) // 로컬 날짜로 정규화
@@ -42,10 +47,42 @@ export function parseWeeklyDays(pattern: string): number[] {
 }
 
 /**
+ * 'yearly:7-21' → [6, 21]. 픽커는 0을 채우지 않고 만드는데(RecurringPicker의
+ * buildPattern) 날짜 문자열은 늘 패딩돼 있다 — 문자열로 비교하면 1~9월 매년
+ * 반복이 영영 발생일로 인식되지 않았다. 파싱을 한곳에 모아 숫자로 비교한다.
+ */
+export function parseYearlyMonthDay(pattern: string): [number, number] | null {
+  const parts = pattern.slice('yearly:'.length).split('-')
+  if (parts.length !== 2) return null
+  const month = Number(parts[0]) - 1
+  const day = Number(parts[1])
+  if (Number.isNaN(month) || Number.isNaN(day)) return null
+  return [month, day]
+}
+
+/**
  * 반복 패턴과 기준일로부터 다음 발생일(YYYY-MM-DD)을 반환한다.
  * 인식 불가 패턴은 null.
  */
-export function nextRecurringDate(pattern: string, fromISODate: string): string | null {
+export function nextRecurringDate(pattern: string, fromISODate: string, notBefore?: string): string | null {
+  let next = computeNextRecurringDate(pattern, fromISODate)
+  if (!notBefore || !next) return next
+  // 오래 밀린 반복은 따라잡는다. 1월 기한의 매일 할일을 8월에 완료하면 예전에는
+  // 다음 회차가 1월 2일이라 여전히 연체였고, 비우려면 227번을 완료해야 했다.
+  let guard = 0
+  // 오늘을 포함해 이하인 동안 전진한다 — 오늘 완료한 회차를 다시 오늘로 잡지 않게.
+  while (next <= notBefore && guard++ < MAX_CATCH_UP_STEPS) {
+    const advanced = computeNextRecurringDate(pattern, next)
+    if (!advanced || advanced === next) break
+    next = advanced
+  }
+  return next
+}
+
+/** 따라잡기 루프 상한. 매일 반복이라도 3년치면 충분하고, 잘못된 패턴에 매달리지 않는다. */
+const MAX_CATCH_UP_STEPS = 1200
+
+function computeNextRecurringDate(pattern: string, fromISODate: string): string | null {
   if (!pattern) return null
 
   const [y, m, d] = parseDate(fromISODate)
@@ -85,18 +122,18 @@ export function nextRecurringDate(pattern: string, fromISODate: string): string 
     const nextMonth = m + 1
     const nextYear = nextMonth > 11 ? y + 1 : y
     const normalizedMonth = nextMonth > 11 ? 0 : nextMonth
-    return formatDate(nextYear, normalizedMonth, day)
+    // 그 달에 없는 날짜는 말일로 당긴다. 넘치게 두면 formatDate가 2월 31일을
+    // 3월 3일로 정규화하고, 그 값이 다음 회차의 기준일이 되어 드리프트가 쌓인다.
+    return formatDate(nextYear, normalizedMonth, Math.min(day, lastDayOfMonth(nextYear, normalizedMonth)))
   }
 
   // ── yearly:MM-DD ──────────────────────────────────────
   if (pattern.startsWith('yearly:')) {
-    const mmdd = pattern.slice('yearly:'.length) // 예: '07-21'
-    const parts = mmdd.split('-')
-    if (parts.length !== 2) return null
-    const targetMonth = Number(parts[0]) - 1 // 0-based
-    const targetDay = Number(parts[1])
-    if (Number.isNaN(targetMonth) || Number.isNaN(targetDay)) return null
-    return formatDate(y + 1, targetMonth, targetDay)
+    const parsed = parseYearlyMonthDay(pattern)
+    if (!parsed) return null
+    const [targetMonth, targetDay] = parsed
+    // 2월 29일 생일은 평년에 말일로 당긴다(넘치면 3월 1일로 굳는다).
+    return formatDate(y + 1, targetMonth, Math.min(targetDay, lastDayOfMonth(y + 1, targetMonth)))
   }
 
   return null
@@ -201,7 +238,8 @@ export function buildRecurrenceIndex(tasks: Task[]): Map<string, number> {
 
 export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, number>, today: string): RecurrenceSpawn | null {
   if (!task.isRecurring || !task.recurringPattern) return null
-  const next = nextRecurringDate(task.recurringPattern, task.dueDate ?? today)
+  // today를 하한으로 준다 — 밀린 시리즈가 계속 연체 상태로 스폰되지 않게.
+  const next = nextRecurringDate(task.recurringPattern, task.dueDate ?? today, today)
   if (!next) return null
   const index = existing instanceof Map ? existing : buildRecurrenceIndex(existing)
   const exists = (index.get(seriesKey(task.recurringPattern, task.title, next)) ?? 0) > 0
@@ -279,7 +317,11 @@ export function occursOn(pattern: string | null, anchorDueDate: string | null, d
     return Number.isNaN(day) ? true : d === day
   }
   if (pattern.startsWith('yearly:')) {
-    return formatDate(y, m, d).slice(5) === pattern.slice('yearly:'.length)
+    const parsed = parseYearlyMonthDay(pattern)
+    if (!parsed) return true
+    const [month, day] = parsed
+    // 그 해에 없는 날(평년 2/29)은 말일을 발생일로 본다 — nextRecurringDate와 같은 규칙.
+    return m === month && d === Math.min(day, lastDayOfMonth(y, month))
   }
   return true
 }

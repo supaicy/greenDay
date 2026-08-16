@@ -23,7 +23,7 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
-import { nextRecurrenceSpawn, collectRecurrenceSpawns } from '../utils/recurrence'
+import { nextRecurrenceSpawn, collectRecurrenceSpawns, shiftIsoByDays } from '../utils/recurrence'
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
@@ -37,6 +37,9 @@ import { isCapableModel } from '../utils/aiModels'
 import i18n, { detectLanguage, persistLanguage, type Language } from '../i18n'
 
 export type Theme = 'dark' | 'light'
+
+/** 회차 오버라이드 보존 기간(일). 이보다 오래된 키는 쓸 때 턴다. */
+const OVERRIDE_RETENTION_DAYS = 90
 
 // i18n/index.ts와 같은 가드. 스토어 생성 시점에 localStorage를 바로 읽으면 DOM 없는
 // 환경(vitest node)에서 import만으로 죽어, 스토어 로직 전체가 테스트 불가가 된다.
@@ -516,7 +519,21 @@ export const useStore = create<Store>((set, get) => ({
       const recurrenceOff = patch.isRecurring === false
       const patternChanged =
         patch.recurringPattern !== undefined && current != null && patch.recurringPattern !== current.recurringPattern
-      if (unscheduled || recurrenceOff || patternChanged) patch.scheduledOverrides = null
+      // 마감일도 무효화 사유다 — occursOn이 dueDate를 기준점으로 쓰므로, 날짜가
+      // 바뀌면 발생일 집합이 통째로 다시 매핑된다. 옛 키를 남기면 값이 있는 키는
+      // 유령 블록이 되고, null 키는 이제 진짜 발생일인 날을 영영 가린다.
+      const dueDateChanged = patch.dueDate !== undefined && current != null && patch.dueDate !== current.dueDate
+      if (unscheduled || recurrenceOff || patternChanged || dueDateChanged) patch.scheduledOverrides = null
+    }
+
+    // 오버라이드 맵은 키를 쌓기만 한다(드롭·리사이즈가 추가만 하고 지우지 않는다).
+    // 완료하지 않은 매일 반복을 계속 옮기면 상호작용마다 키가 하나씩 늘고,
+    // IPC 경계의 상한(1000키)에 닿으면 저장이 조용히 거부된다. 다만 지난 키를
+    // 즉시 버리면 "지난주 운동은 8시였다"는 기록까지 사라지므로, 보존 기간을 둔다.
+    if (patch.scheduledOverrides) {
+      const cutoff = shiftIsoByDays(todayString(), -OVERRIDE_RETENTION_DAYS)
+      const kept = Object.entries(patch.scheduledOverrides).filter(([date]) => date >= cutoff)
+      patch.scheduledOverrides = kept.length > 0 ? Object.fromEntries(kept) : null
     }
 
     set((s) => ({

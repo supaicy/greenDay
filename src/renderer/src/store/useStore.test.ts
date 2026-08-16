@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useStore } from './useStore'
 import type { Task } from '../types'
 
@@ -106,7 +106,17 @@ describe('batchComplete scoring', () => {
   })
 })
 
+// 반복 스폰은 '오늘'을 하한으로 쓴다(밀린 시리즈 따라잡기). 실제 시계에 기대면
+// 기대값이 날짜마다 달라지므로 고정한다.
 describe('batchComplete recurrence', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   // toggleTask는 완료 시 다음 인스턴스를 만들지만 batchComplete는 안 만들어
   // 일괄 완료가 반복 시리즈를 조용히 끝냈다 (TODOS 2026-08-05 /review).
   it('spawns the next instance of a recurring task, like toggleTask does', async () => {
@@ -163,6 +173,14 @@ describe('batchComplete recurrence', () => {
 })
 
 describe('batchComplete recurrence — 스토어 쓰기 횟수', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   // 바로 위 addScores 주석이 지적한 것과 같은 이유: 건당 addTask는 선택 수만큼
   // 스토어 쓰기(=전체 재렌더)와 IPC를 만든다. 스폰도 한 번에 반영해야 한다.
   it('writes the store once for the whole batch, however many spawns', async () => {
@@ -205,6 +223,14 @@ describe('batchComplete recurrence — 스토어 쓰기 횟수', () => {
 })
 
 describe('batchComplete recurrence — duplicate instances', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   // 같은 시리즈의 같은 기한 인스턴스 2개(중복 데이터)를 함께 완료해도,
   // 하나씩 완료했을 때처럼 다음 회차는 하나만 생겨야 한다.
   it('spawns only one next instance for duplicate same-day occurrences', async () => {
@@ -283,5 +309,50 @@ describe('updateTask — scheduledOverrides 불변식', () => {
     useStore.setState({ tasks: [recurringWithOverride()] })
     await useStore.getState().updateTask({ id: 'r', title: '이름만 변경' })
     expect(Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})).toEqual(['2026-08-17'])
+  })
+})
+
+describe('updateTask — scheduledOverrides 불변식 (마감일·정리)', () => {
+  const withOverrides = (over: Record<string, { start: string; end: string } | null>) =>
+    task({
+      id: 'r',
+      isRecurring: true,
+      recurringPattern: 'weekly:1',
+      dueDate: '2026-08-10',
+      scheduledStart: '2026-08-10T14:00:00',
+      scheduledEnd: '2026-08-10T15:00:00',
+      scheduledOverrides: over
+    })
+
+  // occursOn은 dueDate를 기준점으로 쓴다. 마감일이 바뀌면 발생일 집합 자체가
+  // 다시 매핑되므로, 옛 날짜 키는 유령 블록이 되거나(값이 있으면) 이제 진짜
+  // 발생일인 날을 영영 가린다(값이 null이면).
+  it('마감일이 바뀌면 회차 오버라이드를 버린다', async () => {
+    useStore.setState({ tasks: [withOverrides({ '2026-08-17': { start: '2026-08-17T08:00:00', end: '2026-08-17T09:00:00' } })] })
+    await useStore.getState().updateTask({ id: 'r', dueDate: '2026-09-07' })
+    expect(useStore.getState().tasks[0].scheduledOverrides ?? null).toBeNull()
+  })
+
+  it('같은 마감일로 다시 저장하는 것은 버리지 않는다', async () => {
+    useStore.setState({ tasks: [withOverrides({ '2026-08-17': null })] })
+    await useStore.getState().updateTask({ id: 'r', dueDate: '2026-08-10', title: '제목만 변경' })
+    expect(Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})).toEqual(['2026-08-17'])
+  })
+})
+
+describe('updateTask — 오버라이드 보존 기간', () => {
+  it('아주 오래된 키는 털어내되 최근 이력은 남긴다', async () => {
+    const recent = new Date()
+    recent.setDate(recent.getDate() - 10)
+    const recentKey = recent.toISOString().slice(0, 10)
+    useStore.setState({
+      tasks: [task({ id: 'r', isRecurring: true, recurringPattern: 'daily', dueDate: '2020-01-01' })]
+    })
+    await useStore.getState().updateTask({
+      id: 'r',
+      scheduledOverrides: { '2020-01-05': null, [recentKey]: { start: `${recentKey}T08:00:00`, end: `${recentKey}T09:00:00` } }
+    })
+    const keys = Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})
+    expect(keys).toEqual([recentKey])
   })
 })

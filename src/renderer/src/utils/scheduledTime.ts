@@ -112,10 +112,13 @@ export interface TimeBlockDropContext {
 export function resolveTimeBlockDrop(ctx: TimeBlockDropContext): (Partial<Task> & { id: string }) | null {
   const { yPx, dayStr, startHour, pxPerMin, task, isBlockMove, sourceDate } = ctx
   const totalMin = startHour * 60 + yPx / pxPerMin
-  // 분 단위로 더해 직렬화한다. 시/분을 따로 pad하면 컬럼 아래로 넘칠 때
-  // 'T24:05'처럼 파싱 불가한 문자열이 나온다.
-  const dayStartMs = new Date(`${dayStr}T00:00:00`).getTime()
-  const rawStart = toLocalIsoMinute(new Date(dayStartMs + Math.floor(totalMin) * 60000))
+  // 로컬 날짜 구성요소로 만든다. 분 단위로 더하는 것은 같지만, epoch ms 산술로
+  // 하면 서머타임 전환일에 전환 이후 시간대가 통째로 한 시간 밀린다(실측:
+  // America/New_York 2026-03-08의 09:00 행이 10:00으로 저장됐다).
+  // 시/분을 따로 pad하지 않는 이유는 그대로다 — 컬럼 아래로 넘칠 때 'T24:05'
+  // 같은 파싱 불가 문자열이 나온다. Date 생성자가 다음 날로 굴려준다.
+  const [dy, dm, dd] = dayStr.split('-').map(Number)
+  const rawStart = toLocalIsoMinute(new Date(dy, dm - 1, dd, 0, Math.floor(totalMin)))
   const dayEnd = new Date(`${dayStr}T23:59:00`).getTime()
   // 하루 끝에서 최소 블록(15분)을 확보하지 못하면 updateTask가 조용히 거부하므로 시작을 끌어올린다.
   const startMs = Math.min(new Date(snapTo15Min(rawStart)).getTime(), dayEnd - MIN_BLOCK_MS)

@@ -102,6 +102,25 @@ function load(): DbData {
   }
 }
 
+/**
+ * 구버전 픽커는 요일을 하나도 고르지 않은 채 '매주'를 적용할 수 있었고, 그 행은
+ * recurring_pattern='weekly:'로 남았다. 예전 파서는 빈 문자열을 Number('')=0으로
+ * 읽어 매주 일요일로 굴렸지만, 지금 파서는 빈 목록이라 다음 회차를 계산하지 못한다
+ * — 그대로 두면 업그레이드한 사용자의 시리즈가 아무 신호 없이 끝난다.
+ * 마감일이 있으면 그 요일로 복구하고, 없으면 반복을 꺼서 화면에 드러낸다.
+ */
+function normalizeLegacyWeeklyPattern(t: Record<string, unknown>): void {
+  if (t.recurring_pattern !== 'weekly:') return
+  const due = typeof t.due_date === 'string' ? t.due_date : null
+  if (due) {
+    const [y, m, d] = due.split('-').map(Number)
+    t.recurring_pattern = `weekly:${new Date(y, m - 1, d).getDay()}`
+  } else {
+    t.recurring_pattern = null
+    t.is_recurring = 0
+  }
+}
+
 export function initDatabase(): void {
   const userDataPath = app.getPath('userData')
   if (!existsSync(userDataPath)) mkdirSync(userDataPath, { recursive: true })
@@ -121,6 +140,8 @@ export function initDatabase(): void {
     if (t.attachments === undefined) t.attachments = '[]'
     if (t.scheduled_start === undefined) t.scheduled_start = null
     if (t.scheduled_end === undefined) t.scheduled_end = null
+    if (t.scheduled_overrides === undefined) t.scheduled_overrides = null
+    normalizeLegacyWeeklyPattern(t)
   })
   data.lists.forEach((l) => {
     if (l.folder_id === undefined) l.folder_id = null
@@ -253,7 +274,7 @@ export function createTask(task: Record<string, unknown>): void {
     recurring_pattern: task.recurringPattern || null,
     scheduled_start: task.scheduledStart || null,
     scheduled_end: task.scheduledEnd || null,
-    scheduled_overrides: null
+    scheduled_overrides: task.scheduledOverrides ? JSON.stringify(task.scheduledOverrides) : null
   })
   save()
 }
