@@ -35,10 +35,10 @@
 <body>
 <main>
 <h1>트렁크 확정 사이클</h1>
-<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 19개 · push 안 함(정책 유지)</div>
+<div class="meta">2026-08-15 · 브랜치 <code>supaicy/coordinate</code> (워크트리 <code>~/orca/workspaces/ticktick/coordinate</code>) · 커밋 30개 · push 안 함(정책 유지)</div>
 
 <div class="tldr">
-<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 이어 4개 렌즈 리뷰와 코드리뷰를 돌려, 실증된 지적만 반영했다(오버레이 프리미티브 결함 3건 포함). 헬스: typecheck 0 · lint 0 errors · <strong>510 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
+<strong>TL;DR</strong> — 트렁크를 <code>supaicy/coordinate</code>로 확정하고, 백로그의 확정 버그 3건(일괄 완료 반복 시리즈 중단, 자정 넘김, 반복 시간블록 매일 뜸)을 고친 뒤, main에 갇혀 있던 shadcn/Radix 오버레이 전환을 트렁크 위에 전부 재작업했다. 이어 4개 렌즈 리뷰와 코드리뷰를 돌려, 실증된 지적만 반영했다(오버레이 프리미티브 결함 3건 포함). 헬스: typecheck 0 · lint 0 errors · <strong>547 tests green</strong>(시작 478) · 렌더러 minify로 메인 청크 1,470→604kB.
 </div>
 
 <h2>1 · 확정된 결정</h2>
@@ -96,16 +96,30 @@
 </table>
 <p class="note">회귀 테스트 3건 추가(z 순서·모서리·포커스). 리뷰어가 "검증 못 했다"고 밝힌 사각(<code>showExport</code> 잔존 여부)도 직접 확인했다 — coordinate엔 애초에 없다.</p>
 
-<h2>7 · 헬스 전/후</h2>
+<h2>7 · /review — 전문가 6종 + 적대적 리뷰 (2026-08-16)</h2>
+<p class="note">coordinate 워크트리를 대상으로 리뷰를 다시 돌렸다(첫 실행은 세션 cwd 탓에 동결된 main을 읽었다). 36건 중 실증된 것만 반영했고, 세 렌즈가 <strong>독립적으로 같은 회귀</strong>를 재현한 것이 가장 큰 소득이다.</p>
+<table>
+<tr><th>렌즈</th><th>결과</th></tr>
+<tr><td class="k">적대적 · 테스팅 · 유지보수</td><td><strong>단축키가 오버레이 뒤로 샜다 (3중 교차확인, 실측 재현)</strong> — 모달 가드를 Cmd 계열 분기보다 아래에 둬서 무력했다. ConfirmDialog의 캡처 리스너를 걷어낸 뒤라 <em>파괴적 확인 창 앞에서도</em> Cmd+Z·Cmd+D가 실행됐다(회귀). 게다가 Radix DropdownMenu는 <code>role="menu"</code>라 가드에 아예 안 걸려, 정렬 메뉴를 열어둔 채 Backspace를 누르면 뒤의 할일이 지워졌다 → 가드를 Escape 직후로 올리고 메뉴 포함</td></tr>
+<tr><td class="k">적대적</td><td><strong>날짜 산술 4건</strong> — <code>monthly:31</code>이 2월에 넘쳐 3월 3일이 되고 그 값이 다음 기준일이 돼 드리프트가 영구히 쌓임(말일 클램프) · 픽커가 <code>yearly:7-21</code>처럼 0을 안 채우는데 판정은 문자열 비교라 1~9월 매년 반복이 늘 false · 서머타임 전환일에 드롭이 한 시간 밀림(America/New_York 09:00행→10:00 저장, 별도 프로세스로 실측) · 오래 밀린 반복이 완료해도 계속 연체로 스폰</td></tr>
+<tr><td class="k">데이터 이관</td><td><strong>CRITICAL 3건</strong> — 마감일 변경 시 오버라이드 무효화 누락(유령 블록/영구 가림) · 구버전 <code>weekly:</code> 행이 업그레이드 후 조용히 반복을 멈춤(로드 시 마감일 요일로 정규화) · CalDAV 내보내기가 회차 이동을 전혀 반영 못 함(TODOS 등록). 그 밖에 createTask가 오버라이드를 저장하지 않던 것, 백필 누락, 무한 증가(90일 보존 기간)</td></tr>
+<tr><td class="k">보안</td><td>새 중첩 페이로드가 IPC 경계를 검증 없이 통과 → <code>validate.ts</code>에서 키 형식·값 모양·개수 상한 검사(JSON.parse가 만드는 <code>__proto__</code> own 키 포함). 직렬화 실패가 절반짜리 레코드를 남기던 순서도 교체</td></tr>
+<tr><td class="k">성능</td><td><strong>배포본 51.7MB → 2.2MB</strong> — 렌더러 전용 패키지 34개가 번들에 인라인되면서 app.asar에도 통째로 복사되고 있었다(main TODOS의 4.2MB 추정보다 훨씬 큼). main/preload가 실제로 요구하는 건 <code>electron-updater</code>·<code>uuid</code> 둘뿐</td></tr>
+<tr><td class="k">API 계약 · 테스팅</td><td>영속화 경계에 왕복 테스트가 없어 새 컬럼 누락을 아무도 못 잡았다 → 추가. 컴포넌트 테스트의 <code>window.api</code> 스텁·스토어 격리, 시계 고정, 커버가 없던 <code>useToday</code> 자정 롤오버·재무장까지</td></tr>
+</table>
+<p class="note">교차모델 검증은 불발 — Codex CLI가 이 머신에서 인증되지 않았다(<code>CODEX_MODE: not_authed</code>, 기존 학습에도 기록됨). 이번 리뷰는 Claude 단독이다.</p>
+
+<h2>8 · 헬스 전/후</h2>
 <table>
 <tr><th></th><th>시작 (08-15 아침)</th><th>종료</th></tr>
 <tr><td>typecheck</td><td>0 errors</td><td>0 errors</td></tr>
 <tr><td>biome lint</td><td>0 errors / 7 warnings</td><td>0 errors / 7 warnings (기존분)</td></tr>
-<tr><td>vitest</td><td>478 passed</td><td><strong>510 passed</strong> (+32, 컴포넌트 테스트 첫 도입)</td></tr>
+<tr><td>vitest</td><td>478 passed</td><td><strong>547 passed</strong> (+69, 컴포넌트 테스트 첫 도입)</td></tr>
 <tr><td>렌더러 번들</td><td>1,131kB (미압축)</td><td>604kB (minify)</td></tr>
+<tr><td>배포 의존성</td><td>51.7MB / 36패키지</td><td><strong>2.2MB / 2패키지</strong></td></tr>
 </table>
 
-<h2>8 · 다음 남은 것</h2>
+<h2>9 · 다음 남은 것</h2>
 <ul>
 <li><strong>출시 서류(사용자만 가능):</strong> 개인사업자 등록 → 영문 사업자등록증명(90일) → 유료 앱 계약 → ₩19,000 입력. 상세: <code>docs/reports/2026-08-07-paid-app-agreement.html</code></li>
 <li><strong>미검증 U-1~5:</strong> Google OAuth 클라이언트 ID·CalDAV 앱 암호·상위 릴리스·MAS 빌드 필요 — 자격증명이 생기면 착수</li>
@@ -117,7 +131,7 @@
 </ul>
 
 <footer class="note" style="margin-top:40px; padding-top:14px; border-top:1px solid var(--line)">
-결정 근거: <code>docs/reports/2026-08-07-todos-validity-audit.html</code>(main 워킹트리) · 남은 작업 전체: <code>docs/reports/2026-08-15-remaining-work.html</code>(main 워킹트리) · 커밋 범위 <code>2ebc3ab..03e4bb6</code>
+결정 근거: <code>docs/reports/2026-08-07-todos-validity-audit.html</code>(main 워킹트리) · 남은 작업 전체: <code>docs/reports/2026-08-15-remaining-work.html</code>(main 워킹트리) · 커밋 범위 <code>2ebc3ab..HEAD</code>
 </footer>
 </main>
 </body>
