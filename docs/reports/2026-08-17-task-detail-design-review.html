@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>할일 상세 패널 디자인 평가</title>
+<style>
+  :root {
+    --bg:#fafaf9; --surface:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#16a34a; --accent-soft:#f0fdf4; --warn:#b45309; --warn-soft:#fffbeb;
+    --hot:#b91c1c; --hot-soft:#fef2f2; --cool:#1d4ed8; --cool-soft:#eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e; --line:#44403c;
+      --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33;
+      --hot:#f87171; --hot-soft:#7f1d1d33; --cool:#93c5fd; --cool-soft:#1e3a8a33; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system, "Apple SD Gothic Neo", "Pretendard", sans-serif; }
+  main { max-width: 940px; margin:0 auto; padding: 40px 24px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:26px; }
+  h2 { font-size:19px; margin:40px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+  h3 { font-size:16px; margin:26px 0 8px; }
+  .tldr { background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:16px 20px; }
+  .tldr strong { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap; }
+  code { font:13px ui-monospace,"SF Mono",Menlo,monospace; background:var(--surface);
+    border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  pre { background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    padding:12px 14px; overflow-x:auto; font:12.5px/1.5 ui-monospace,Menlo,monospace; }
+  ul { padding-left:22px; margin:8px 0; } li { margin:5px 0; }
+  .note { color:var(--muted); font-size:13.5px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:14px 0; }
+  .card.hot { border-left:4px solid var(--hot); }
+  .card.warm { border-left:4px solid var(--warn); }
+  .card.cool { border-left:4px solid var(--cool); }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; border-radius:5px; padding:1px 7px; white-space:nowrap; }
+  .tag.three { background:var(--hot-soft); color:var(--hot); }
+  .tag.two { background:var(--warn-soft); color:var(--warn); }
+  .tag.one { background:var(--cool-soft); color:var(--cool); }
+  figure { margin:16px 0; }
+  figure img { max-width:100%; border:1px solid var(--line); border-radius:8px; display:block; }
+  figcaption { color:var(--muted); font-size:12.5px; margin-top:6px; }
+  .ratio { font-variant-numeric: tabular-nums; }
+  .bad { color:var(--hot); font-weight:600; }
+  .ok { color:var(--accent); font-weight:600; }
+  footer { margin-top:48px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+<h1>할일 상세 패널 디자인 평가</h1>
+<div class="meta">2026-08-17 · Greenday (macOS, 다크 모드) · 평가자 3인: <strong>Claude 디자인 렌즈</strong> · <strong>Claude 엔지니어 렌즈</strong> · <strong>Codex (gpt-5.6-sol)</strong> · 실행 중인 앱을 CDP로 캡쳐해 같은 화면을 셋에게 각각 보여줬습니다</div>
+
+<div class="tldr">
+<strong>TL;DR</strong> — 세 평가가 <strong>독립적으로 같은 결론</strong>에 도달했습니다: 이 패널의 가장 큰 문제는 색이나 아이콘이 아니라 <strong>공간 배분</strong>입니다. 빈 메모가 패널의 <strong>67%(534px)</strong>를 먹고, 실제 할 일인 하위작업·첨부는 바닥 15%로 밀려 있습니다. 두 번째는 메타 스트립이 <code>flex-wrap</code>이라 <strong>기본 폭 400px에서 이미 세 줄로 깨진다</strong>는 것입니다. 셋 다 지목한 항목이 5개이고, 그중 넷은 수치까지 일치합니다.
+</div>
+
+<h2>0 · 평가 대상 화면</h2>
+<figure>
+  <img src="assets/2026-08-17-detail-panel.png" alt="할일 상세 패널" onerror="this.style.display='none';this.nextElementSibling.textContent='(이미지는 별도 파일로 전달했습니다 — detail-panel.png)'">
+  <figcaption>상세 패널 단독 캡쳐(2배). 실제 크기 624×800 CSS px. 목록에서 "Firebase 콘솔 앱 등록 → GoogleService-Info.plist / google-services.json 배치"를 선택한 상태.</figcaption>
+</figure>
+<p class="note">평가는 <strong>시각 디자인과 정보 배치</strong>에 한정했습니다. 코드 품질·버그는 앞선 리뷰 라운드(/simplify, /review, /code-review, Codex 교차리뷰)에서 이미 다뤘고, 이번 프롬프트에서 제외했습니다.</p>
+
+<h2>1 · 세 평가가 합의한 것 <span class="tag three">3/3 합의</span></h2>
+<p class="note">서로의 결과를 모르는 상태에서 셋 다 짚은 항목입니다. 신뢰도가 가장 높고, 여기부터 손대는 게 맞습니다.</p>
+
+<div class="card hot">
+<h3>① 빈 메모가 패널의 3분의 2를 먹는다 — 최우선</h3>
+<p><strong>현재:</strong> <code>TaskDetail.tsx:387-406</code>에서 메모가 <code>flex-1</code>, 하단 블록이 <code>flex-shrink-0 max-h-[38%]</code>입니다. 메모가 남는 높이를 전부 가져가므로, 글자 두 개만 적힌 메모가 <strong>534px(67%)</strong>를 차지하고 하위작업·첨부는 <strong>120px(15%)</strong>로 눌립니다.</p>
+<p><strong>사용자가 겪는 것:</strong> 빈 태스크를 열면 화면 한가운데가 아무 표시 없는 회색 면입니다. 클릭해서 커서가 뜨기 전까지 여기가 입력란인지 알 수 없고, 정작 할 일(하위작업 추가)은 시선을 바닥까지 옮겨야 보입니다.</p>
+<p><strong>세 평가의 처방이 같습니다</strong> — 본문을 스크롤 컨테이너 하나로 합치고, 메모는 최소 높이만 보장한 뒤 내용만큼 자라게 합니다.</p>
+<pre>&lt;div className="flex-1 min-h-0 overflow-y-auto"&gt;
+  &lt;div className="min-h-[7.5rem] px-4 py-3"&gt;&lt;AtomicCodeMirrorEditor … /&gt;&lt;/div&gt;
+  &lt;div className="border-t px-4 py-3"&gt;&lt;SubtaskList … /&gt;&lt;AttachmentList … /&gt;&lt;/div&gt;
+&lt;/div&gt;</pre>
+<p class="note">덧붙여 CM6 <code>placeholder()</code>를 붙여 "메모 추가…"를 띄우면 빈 면이 편집 영역임을 알립니다. 디자인 렌즈는 여기에 더해 메모에 <code>bg-surface-canvas</code>(#1C1C1E) 면을 깔아 figure/ground를 만들라고 제안했습니다.</p>
+</div>
+
+<div class="card hot">
+<h3>② 메타 스트립이 폭에 따라 요동친다 — 기본 폭에서 3줄</h3>
+<p><strong>현재:</strong> <code>TaskDetail.tsx:245</code>의 <code>flex flex-wrap items-center gap-2</code>에 성격이 다른 컨트롤 6종이 순서만 정해진 채 흘러듭니다.</p>
+<p><strong>실측:</strong> 캡쳐한 624px에서 2줄인데, <strong>기본 폭 400px에서는 3줄</strong>입니다(콘텐츠 368px에 마감일 141+시간 74+우선순위 172+리스트 92+알림 56+반복 56+태그 160). 즉 대부분의 사용자가 보는 기본 상태가 캡쳐보다 어지럽습니다.</p>
+<p><strong>결과:</strong> 줄바꿈 위치가 폭·번역 길이·알림 설정 여부에 따라 계속 바뀌어 <em>속성의 위치를 학습할 수 없습니다.</em> 게다가 반복(scheduling)이 태그(classification) 옆으로 밀려 의미 그룹이 깨집니다.</p>
+<p><strong>처방(3인 공통):</strong> 라벨 2열 그리드로 고정합니다.</p>
+<pre>&lt;div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 px-4 py-3"&gt;
+  &lt;span&gt;마감일&lt;/span&gt;   &lt;div&gt;날짜 + 시각&lt;/div&gt;
+  &lt;span&gt;우선순위&lt;/span&gt; &lt;div&gt;…&lt;/div&gt;
+  &lt;span&gt;목록&lt;/span&gt;     &lt;div&gt;…&lt;/div&gt;   … 알림 / 반복 / 태그
+&lt;/div&gt;</pre>
+<p class="note">높이는 90px → 약 170px로 늘지만, 그 예산은 ①에서 회수한 메모 공간에서 그대로 나옵니다. 지금은 어느 컨트롤이 무엇인지 알려주는 라벨이 <strong>하나도 없다</strong>는 점도 함께 해결됩니다.</p>
+</div>
+
+<div class="card hot">
+<h3>③ 제목이 잘리는데 말줄임도 툴팁도 없다</h3>
+<p><strong>현재:</strong> <code>TaskDetail.tsx:218-225</code>가 <code>&lt;input type="text"&gt;</code>입니다. input은 넘치는 글자를 캐럿 기준으로 스크롤할 뿐이라 <em>"…/ google-serv"</em>에서 그냥 끊깁니다. <code>title</code> 속성도 없습니다.</p>
+<p><strong>가장 아픈 지점:</strong> 가운데 <strong>목록에서는 같은 제목이 두 줄로 온전히 보입니다.</strong> 즉 <em>상세를 열면 목록보다 정보가 줄어듭니다.</em> 기본 폭 400px에서는 15자 남짓만 남습니다.</p>
+<p><strong>처방:</strong> 두 줄까지 자라는 <code>textarea</code>로 교체합니다(Chromium 13x이라 <code>field-sizing: content</code> 사용 가능). 기존 Enter→blur는 유지하되 IME 조합 가드를 함께 넣습니다.</p>
+<pre>&lt;textarea rows={1} title={title}
+  className="flex-1 min-w-0 bg-transparent text-lg font-semibold outline-none
+             resize-none [field-sizing:content] max-h-[3.5rem] leading-snug" /&gt;</pre>
+</div>
+
+<div class="card hot">
+<h3>④ 회색이 대비 기준 미달 — 유일한 액션 두 개가 안 보인다</h3>
+<p>세 평가가 <strong>같은 수치</strong>를 냈습니다(패널 배경 #2C2C2E 기준).</p>
+<table>
+<tr><th>대상</th><th>현재 색</th><th>대비</th><th>판정</th><th>제안</th></tr>
+<tr><td>+ 하위 작업 추가 / + 파일 추가</td><td><code>gray-500</code> #73737B</td><td class="ratio">2.96:1</td><td class="bad">미달 (본문 4.5 / UI 3.0)</td><td><code>gray-400</code> → <span class="ratio ok">5.49:1</span></td></tr>
+<tr><td>태그 입력 placeholder</td><td><code>gray-600</code> #54545C</td><td class="ratio">1.85:1</td><td class="bad">사실상 안 보임</td><td><code>gray-400</code></td></tr>
+<tr><td>구조 구분선</td><td><code>surface-divider</code> #3A3A3C</td><td class="ratio">1.23:1</td><td class="bad">레이아웃을 지탱하는데 가장 흐림</td><td><code>surface-line</code> #48484A → <span class="ratio">1.53:1</span></td></tr>
+</table>
+<p><strong>결과:</strong> 빈 상태에서 <em>패널의 유일한 액션 두 개</em>가 비활성 메뉴처럼 보입니다. 태그 placeholder는 더 나쁩니다 — 그 문구가 태그 필드의 <strong>유일한 라벨</strong>인데 안 보입니다.</p>
+<p class="note">덧붙여: <code>tailwind.config.js</code> 주석에 적힌 자체 실측치(5.49:1)와 정확히 일치합니다. 즉 팔레트 의도대로 되돌리는 셈입니다.</p>
+</div>
+
+<div class="card hot">
+<h3>⑤ 빈 상태에 섹션 머리말이 없다</h3>
+<p><strong>현재:</strong> 하위작업 헤더는 항목이 있을 때만 렌더되고(<code>SubtaskList.tsx:41-45</code>), 첨부는 헤더 자체가 없습니다. 비어 있으면 같은 아이콘·같은 색·같은 크기의 회색 링크 두 줄만 바닥에 뜹니다.</p>
+<p><strong>처방:</strong> 개수가 0이어도 <code>하위 작업 0/3</code>, <code>첨부 0</code> 헤더를 항상 표시합니다. 부모 <code>space-y-3</code>와 자식 <code>mt-3</code>가 겹쳐 두 액션 사이가 24px로 벌어지는 것도 함께 정리합니다(자식의 <code>mt-3</code> 제거).</p>
+</div>
+
+<h2>2 · 둘이 합의한 것 <span class="tag two">2/3 합의</span></h2>
+
+<div class="card warm">
+<h3>컨트롤 높이·모서리가 제각각 (디자인 렌즈 + Codex)</h3>
+<p>한 줄 안에 <strong>네 가지 높이</strong>가 섞여 있습니다.</p>
+<table>
+<tr><th>컨트롤</th><th>클래스</th><th>높이</th></tr>
+<tr><td>날짜 / 시각 입력</td><td><code>text-sm px-2 py-1 border rounded</code></td><td>30px</td></tr>
+<tr><td>우선순위 칩</td><td><code>text-xs px-2 py-1 border rounded</code></td><td>26px</td></tr>
+<tr><td>리스트 select</td><td>위와 같음 + macOS 네이티브 크롬</td><td>26px + α</td></tr>
+<tr><td>태그 칩</td><td><code>text-xs px-2 py-0.5</code> (테두리 없음)</td><td>20px</td></tr>
+</table>
+<p>모서리도 셋입니다 — 컨트롤 <code>rounded</code> 4px, 팝오버 <code>rounded-md</code> 6px, <code>--radius</code> 8px. 타입 크기도 <code>text-sm</code>과 <code>text-xs</code>가 섞입니다.</p>
+<p><strong>처방:</strong> 속성 트리거를 하나로 통일 — <code>h-8 rounded-md border border-surface-line bg-surface-sunken px-2.5 text-[13px]</code>. 13px은 macOS 컨트롤 관례에도 맞습니다.</p>
+</div>
+
+<div class="card warm">
+<h3>네이티브 <code>&lt;select&gt;</code>만 이질적 (디자인 렌즈 + Codex)</h3>
+<p><code>TaskDetail.tsx:320</code>의 리스트 선택만 raw <code>&lt;select&gt;</code>라 자체 chevron·폰트·안쪽 여백을 갖습니다. 바로 옆 알림·반복 버튼은 <em>같은 일</em>(목록에서 하나 고르기)을 Radix Popover로 합니다. 저장소에 이미 <code>components/ui/dropdown-menu.tsx</code>가 벤더링돼 있고 <code>SortMenu.tsx:50</code>이 하우스 패턴을 확립해 뒀습니다.</p>
+<p><strong>처방:</strong> select를 드롭다운 메뉴로 교체(트리거는 <code>pickerBtnCls</code>). 컨트롤 언어가 하나 줄고 팝오버 모서리도 저절로 맞습니다.</p>
+</div>
+
+<div class="card warm">
+<h3>우선순위가 "필터 툴바"처럼 보인다 (디자인 렌즈 + Codex)</h3>
+<p>네 칩을 항상 노출하고 선택된 것만 유색 면을 가집니다. 그 결과 <strong>가장 채도 높은 물체가 "낮음"</strong>이 되어, 18px 흰 제목보다 먼저 눈에 들어옵니다. 게다가 헤더의 완료 원도 같은 파랑이라 낮은 우선순위 태스크에서 파랑이 두 번 발화합니다.</p>
+<p><strong>처방(두 갈래):</strong> ⓐ 깃발 아이콘 + 값 + chevron의 <em>단일 트리거</em>로 줄여 팝오버에서 고르게 하거나(폭 100px 회수, 목록의 <code>⚑ 낮음</code> 표기와 언어 통일), ⓑ 세그먼티드 컨트롤로 묶되 <code>low</code>/<code>none</code>은 채운 면 대신 테두리로 선택을 표시합니다.</p>
+</div>
+
+<h2>3 · 한 평가만 짚은 것 <span class="tag one">1/3</span></h2>
+<p class="note">합의가 없다고 틀린 건 아닙니다. 다만 근거가 한 갈래뿐이라 판단이 더 필요합니다.</p>
+<table>
+<tr><th>출처</th><th>지적</th><th>근거</th></tr>
+<tr><td>엔지니어</td><td><strong>마감일을 <code>DueDatePicker</code>로 교체</strong> — "오늘/내일/다음 주" 빠른 선택이 없어 매번 연·월·일을 타이핑한다. 지우기 X가 값이 있을 때만 나타나 폭이 14px 변하고 그 순간 스트립 전체가 재줄바꿈된다</td><td>할일 앱에서 가장 잦은 조작인데 경로가 가장 원시적. 215px 점유</td></tr>
+<tr><td>엔지니어</td><td><strong>스크롤 컨테이너가 둘</strong> — 메모는 CM6 내부, 하단은 <code>max-h-[38%] overflow-y-auto</code>. 휠이 커서 위치에 따라 다르게 동작</td><td>①의 처방으로 함께 해소됨</td></tr>
+<tr><td>엔지니어</td><td><strong>리사이즈 핸들이 키보드 첫 탭 스톱인데 아무 일도 안 한다</strong> — <code>onMouseDown</code>만 있음. 화살표 키 리사이즈 + 더블클릭 기본값 복귀 제안</td><td>DOM 순서상 패널의 첫 포커스 요소. 폭을 흐트러뜨리면 400으로 되돌릴 방법이 없음</td></tr>
+<tr><td>엔지니어</td><td><strong>드래그 중 커서·선택이 샌다</strong> — 핸들을 끌면 메모 위에서 I-beam으로 바뀌고 본문이 파랗게 선택됨. <code>body.style.cursor/userSelect</code> 미설정</td><td>8px 핸들이라 조준도 빡빡함 → 12px 제안</td></tr>
+<tr><td>엔지니어</td><td><strong>하위작업 추가가 두 번 클릭</strong> — <code>showInput</code> 토글. 두 요소 높이가 같아 공간 이득 0인데 클릭만 늘어남. 가운데 목록은 항상 열린 입력</td><td>상태 하나·이펙트 하나가 같이 사라짐</td></tr>
+<tr><td>디자인</td><td><strong>값 없는 필드가 가장 시끄럽다</strong> — 빈 날짜/시각이 <code>surface-sunken</code>(#3A3A3C, 패널보다 밝음) 위에 네이티브 placeholder를 띄워, 데이터가 없는데 패널이 차 보인다</td><td>우선순위 칩은 <code>border-transparent</code>로 올바르게 사라짐 — 같은 규칙 적용 제안</td></tr>
+<tr><td>디자인</td><td><strong>medium 노랑이 세 가지</strong> — <code>yellow-400</code>(priority.ts:8, TaskItem.tsx:11)와 <code>amber-300/500</code>(PRIORITY_SURFACE, PRIORITY_COLOR)이 공존</td><td>amber로 통일하고 TaskItem의 로컬 맵 삭제</td></tr>
+<tr><td>디자인</td><td><strong>삭제 버튼이 닫기와 8px 간격, 확인 없이 즉시 실행</strong></td><td>휴지통+Undo가 있어 데이터 손실은 아니나 패널이 닫혀 위치를 잃음</td></tr>
+<tr><td>Codex</td><td><strong>시각 입력 아이콘만 검게 남아 비활성처럼 보인다</strong> — 날짜만 picker indicator 보정, 시각은 미보정</td><td><code>color-scheme: dark</code> + 양쪽에 동일 filter 적용</td></tr>
+</table>
+
+<h2>4 · 권고 실행 순서</h2>
+<p class="note">세 평가의 TOP 목록을 합치고, 합의 수와 비용 대비 효과로 정렬했습니다.</p>
+<table>
+<tr><th>순서</th><th>작업</th><th>합의</th><th>효과</th></tr>
+<tr><td>1</td><td>본문을 단일 스크롤로 합치고 메모에 <code>min-h</code> + placeholder</td><td><span class="tag three">3/3</span></td><td>패널의 67% 낭비 해소. 하위작업이 화면 상단으로 올라옴</td></tr>
+<tr><td>2</td><td>메타 스트립을 라벨 2열 그리드로</td><td><span class="tag three">3/3</span></td><td>기본 폭 3줄 → 안정된 행. 라벨 부재 동시 해결</td></tr>
+<tr><td>3</td><td>제목을 2줄 <code>textarea</code> + <code>title</code> 속성</td><td><span class="tag three">3/3</span></td><td>상세가 목록보다 정보를 덜 주는 역전 해소</td></tr>
+<tr><td>4</td><td>대비 미달 회색 3종 상향</td><td><span class="tag three">3/3</span></td><td>유일한 액션 두 개가 보이게 됨. 한 줄짜리 수정</td></tr>
+<tr><td>5</td><td>컨트롤 높이·모서리 통일(<code>h-8</code>/<code>rounded-md</code>), select → 드롭다운</td><td><span class="tag two">2/3</span></td><td>한 줄 안 네 가지 높이 정리</td></tr>
+<tr><td>6</td><td>우선순위를 단일 트리거 또는 세그먼티드로</td><td><span class="tag two">2/3</span></td><td>폭 100px 회수 + 목록과 표기 통일</td></tr>
+<tr><td>7</td><td><code>DueDatePicker</code>(오늘/내일/다음 주 칩)</td><td><span class="tag one">1/3</span></td><td>가장 잦은 조작의 경로 단축. 범위가 커 별도 판단</td></tr>
+</table>
+
+<h2>5 · 이번에 이미 고친 것</h2>
+<ul>
+<li><strong>달력 아이콘 중복 제거</strong> — 마감일 앞 lucide <code>Calendar</code>와 <code>&lt;input type="date"&gt;</code>의 네이티브 글리프가 나란히 두 개 보였습니다. 장식 아이콘을 걷어내고 의미는 <code>aria-label</code>로 남겼습니다(<code>5397140</code>).</li>
+<li><strong>선택 행의 남색 제거</strong> — 목록에서 선택된 행이 <code>bg-primary-900/30</code>이라 옆 패널(#2C2C2E)과 계열이 갈렸습니다. 중립색으로 통일하고 선택은 왼쪽 우선순위 액센트 바로 표시합니다(<code>3f73445</code>).</li>
+<li><strong>우선순위 면색</strong> — 상세 화면에서 선택된 등급에 면색+테두리를 넣어 한눈에 읽히게 했습니다. 다만 위 3장에서 보듯 <em>"낮음"이 가장 채도 높은 물체가 되는</em> 부작용이 지적됐으니, 5·6번 작업 때 함께 조정하는 게 좋습니다.</li>
+</ul>
+
+<footer>
+평가 방법: 실행 중인 dev 앱을 CDP(<code>--remote-debugging-port=9222</code>)로 붙어 <code>Page.captureScreenshot</code>으로 패널만 2배 클립 캡쳐 → 같은 이미지를 세 평가자에게 각각 전달(Codex는 <code>-i</code> 이미지 첨부). 대비율은 각 평가자가 Tailwind 토큰 값에서 독립 계산했고 세 수치가 일치했습니다. 코드 품질·버그는 이번 범위에서 제외.
+</footer>
+</main>
+</body>
+</html>
