@@ -47,7 +47,13 @@ export function AttachmentList({
   }
 
   return (
-    <div className="mt-3">
+    <div>
+      {/* 헤더는 0개여도 그린다 — 하위작업과 같은 규칙. 없으면 빈 상태에서
+          '+ 파일 추가' 한 줄만 남아 무슨 섹션인지 알 수 없었다. */}
+      <div className={`text-xs font-medium mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {t('detail.attachments')} {attachments.length}
+      </div>
+
       {/* 첨부 파일 목록 */}
       {attachments.length > 0 && (
         <div className="space-y-1 mb-2">
@@ -94,7 +100,7 @@ export function AttachmentList({
         onClick={handleAdd}
         className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded transition-colors w-full ${
           isDark
-            ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/50'
+            ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
             : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
         }`}
       >

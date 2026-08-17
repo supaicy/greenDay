@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, Trash2, Tag, List, Clock, Bell, Repeat, Circle, CheckCircle2 } from 'lucide-react'
-import { EditorView } from '@codemirror/view'
+import { X, Trash2, List, Clock, Bell, Repeat, Circle, CheckCircle2 } from 'lucide-react'
+import { EditorView, placeholder as cmPlaceholder } from '@codemirror/view'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
 import '@atomic-editor/editor/styles.css'
 import { useTranslation } from 'react-i18next'
@@ -8,10 +8,17 @@ import { useStore } from '../../store/useStore'
 import { SubtaskList } from './SubtaskList'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
+import { DueDatePicker } from './DueDatePicker'
 import { AttachmentList } from './AttachmentList'
 import { PRIORITY_OPTIONS, PRIORITY_SURFACE, PRIORITY_SURFACE_LIGHT } from '../../utils/priority'
 import { formatRecurringPattern } from '../../utils/recurrence'
 import { clampDetailWidth } from '../../store/detailWidth'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import type { Priority } from '../../types'
 
 function formatScheduledRange(startIso: string, endIso: string): string {
@@ -128,7 +135,12 @@ export function TaskDetail() {
     return () => window.removeEventListener('beforeunload', flushNotes)
   }, [flushNotes])
 
-  const editorExtensions = useMemo(() => (isDark ? [DARK_EDITOR_THEME] : [LIGHT_EDITOR_THEME]), [isDark])
+  // placeholder가 없으면 빈 메모 영역이 그냥 회색 면이라, 여기가 입력란인지
+  // 클릭해서 캐럿이 뜨기 전까지 알 수 없었다.
+  const editorExtensions = useMemo(
+    () => [isDark ? DARK_EDITOR_THEME : LIGHT_EDITOR_THEME, cmPlaceholder(t('detail.notesPlaceholder'))],
+    [isDark, t]
+  )
 
   // 창 너비 변화를 추적 → 렌더 시 clamp가 새 너비 기준으로 다시 계산된다.
   // 저장값을 덮어쓰지 않으므로(persist 안 함), 창을 좁혔다 다시 넓히면
@@ -155,14 +167,24 @@ export function TaskDetail() {
   }
   const removeTag = (tag: string) => save({ tags: task.tags.filter((t) => t !== tag) })
 
-  const inputCls = isDark
-    ? 'bg-surface-sunken text-gray-100 border-surface-line'
-    : 'bg-gray-100 text-gray-700 border-gray-300'
   const labelCls = isDark ? 'text-gray-400' : 'text-gray-500'
-  // 알림/반복 픽커 트리거 버튼 공통 클래스 (구 PickerRow의 트리거 부분)
-  const pickerBtnCls = (active: boolean, activeCls: string): string =>
-    `flex items-center gap-1 text-xs px-2 py-1 rounded border ${
-      active ? activeCls : `${labelCls} ${isDark ? 'border-surface-line' : 'border-gray-300'}`
+  const metaLabelCls = `text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`
+  // outline-none만 걸고 대체 표시가 없으면 키보드 사용자가 초점을 잃는다.
+  const focusRingCls = 'outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60'
+  /**
+   * 속성 컨트롤 공통 셸. 전에는 한 줄 안에 높이가 30/26/26/20px로 네 가지,
+   * 타입 크기도 text-sm과 text-xs가 섞이고 모서리도 4px/6px/8px 세 가지였다.
+   * 값이 없는 컨트롤은 테두리를 지워 조용히 물러난다(빈 칸이 가장 시끄러웠다).
+   */
+  const ctlCls = (filled: boolean): string =>
+    `inline-flex h-8 w-fit max-w-full items-center gap-1.5 truncate rounded-md px-2.5 text-[13px] transition-colors ${focusRingCls} ${
+      filled
+        ? isDark
+          ? 'border border-surface-line bg-surface-sunken text-gray-100 hover:bg-surface-line/60'
+          : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+        : isDark
+          ? 'border border-transparent text-gray-400 hover:bg-surface-sunken'
+          : 'border border-transparent text-gray-500 hover:bg-gray-100'
     }`
 
   // 우측 패널 폭: 드래그 중이면 라이브값, 아니면 저장값(없으면 기본 400).
@@ -179,16 +201,30 @@ export function TaskDetail() {
     const right = panel.getBoundingClientRect().right
     const controller = new AbortController()
     const { signal } = controller
+    // 드래그 중에는 커서와 선택을 문서 전체에 고정한다. 안 하면 포인터가 메모
+    // 편집기 위를 지날 때 I-beam으로 바뀌고 본문이 파랗게 선택된다.
+    const prevCursor = document.body.style.cursor
+    const prevSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const restoreBody = (): void => {
+      document.body.style.cursor = prevCursor
+      document.body.style.userSelect = prevSelect
+    }
     const onMove = (ev: MouseEvent) => setDragWidth(clampDetailWidth(right - ev.clientX, window.innerWidth, showAiChat))
     const onUp = (ev: MouseEvent) => {
       controller.abort()
+      restoreBody()
       dragCleanup.current = null
       setDetailPanelWidthPx(right - ev.clientX, window.innerWidth)
       setDragWidth(null)
     }
     window.addEventListener('mousemove', onMove, { signal })
     window.addEventListener('mouseup', onUp, { signal })
-    dragCleanup.current = () => controller.abort()
+    dragCleanup.current = () => {
+      controller.abort()
+      restoreBody()
+    }
   }
 
   return (
@@ -197,171 +233,216 @@ export function TaskDetail() {
       className={`relative flex-shrink-0 border-l flex flex-col transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] ${isDark ? 'bg-surface-raised border-surface-line' : 'bg-white border-gray-200'}`}
       style={{ width, transform: shown ? 'translateX(0)' : 'translateX(100%)' }}
     >
-      {/* 좌측 경계 드래그 핸들: 폭 조절 */}
-      <button
-        type="button"
+      {/* 좌측 경계 드래그 핸들: 폭 조절. DOM 순서상 패널의 첫 포커스 요소라
+          키보드로도 동작해야 한다 — 전에는 onMouseDown만 있어 죽은 탭 스톱이었다.
+          더블클릭하면 기본 폭으로 되돌린다(전에는 되돌릴 방법이 없었다). */}
+      {/* biome-ignore lint/a11y/useSemanticElements: WAI-ARIA window splitter 패턴 — <hr>은 포커스도 드래그도 받지 못한다 */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
         aria-label={t('detail.resizePanel')}
+        aria-valuenow={Math.round(width)}
+        aria-valuemin={320}
+        tabIndex={0}
         onMouseDown={startResize}
-        className="absolute left-0 top-0 h-full w-2 -ml-1 cursor-col-resize z-10 hover:bg-primary-500/40 transition-colors"
+        onDoubleClick={() => setDetailPanelWidthPx(DEFAULT_DETAIL_WIDTH, window.innerWidth)}
+        onKeyDown={(e) => {
+          const step = e.shiftKey ? 64 : 16
+          if (e.key === 'ArrowLeft') setDetailPanelWidthPx(width + step, window.innerWidth)
+          else if (e.key === 'ArrowRight') setDetailPanelWidthPx(width - step, window.innerWidth)
+          else return
+          e.preventDefault()
+        }}
+        title={t('detail.resizeHint')}
+        className={`absolute left-0 top-0 h-full w-3 -ml-1.5 cursor-col-resize z-10 transition-colors hover:bg-primary-500/40 ${focusRingCls}`}
       />
 
-      {/* 헤더: 완료 + 제목 + 삭제/닫기 */}
-      <div className={`flex items-center gap-2 px-4 pt-4 pb-3 border-b ${isDark ? 'border-surface-divider' : 'border-gray-200'}`}>
+      {/* 헤더: 완료 + 제목 + 삭제/닫기. 제목이 두 줄까지 자라므로 items-start. */}
+      <div className={`flex items-start gap-2 px-4 py-3 border-b ${isDark ? 'border-surface-line' : 'border-gray-200'}`}>
         <button
           type="button"
           onClick={() => toggleTask(task.id)}
           aria-label={task.completed ? t('detail.uncomplete') : t('detail.complete')}
-          className={`shrink-0 transition-colors ${task.completed ? 'text-primary-500' : priorityColor}`}
+          className={`shrink-0 mt-1 transition-colors ${task.completed ? 'text-primary-500' : priorityColor}`}
         >
-          {task.completed ? <CheckCircle2 size={22} /> : <Circle size={22} />}
+          {task.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
         </button>
-        <input
-          type="text"
+        {/* input은 넘치는 글자를 캐럿 기준으로 스크롤할 뿐이라 제목이 그냥 잘렸다 —
+            가운데 목록은 같은 제목을 두 줄로 온전히 보여주는데 상세가 더 적게 보여줬다.
+            두 줄까지 자라는 textarea로 바꾸고 전체 제목은 title 속성에 남긴다. */}
+        <textarea
+          rows={1}
           value={title}
+          title={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => title.trim() && save({ title: title.trim() })}
-          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-          className={`flex-1 min-w-0 bg-transparent text-lg font-semibold outline-none ${isDark ? 'text-gray-100' : 'text-gray-800'}`}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              ;(e.target as HTMLTextAreaElement).blur()
+            }
+          }}
+          className={`flex-1 min-w-0 resize-none bg-transparent px-1 -mx-1 rounded text-lg font-semibold leading-snug
+            [field-sizing:content] max-h-[3.5rem] overflow-y-auto ${focusRingCls} ${
+              isDark ? 'text-gray-100 hover:bg-surface-sunken/50' : 'text-gray-800 hover:bg-gray-100'
+            }`}
         />
-        <button
-          type="button"
-          onClick={() => removeTask(task.id)}
-          className="shrink-0 text-gray-400 hover:text-red-400 transition-colors"
-          aria-label={t('common.delete')}
-        >
-          <Trash2 size={16} />
-        </button>
-        <button
-          type="button"
-          onClick={() => selectTask(null)}
-          className={`shrink-0 transition-colors ${labelCls} hover:text-gray-300`}
-          aria-label={t('common.close')}
-        >
-          <X size={18} />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => removeTask(task.id)}
+            className={`p-1.5 rounded transition-colors text-gray-400 hover:text-red-400 ${focusRingCls} ${
+              isDark ? 'hover:bg-surface-sunken' : 'hover:bg-gray-100'
+            }`}
+            aria-label={t('common.delete')}
+          >
+            <Trash2 size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => selectTask(null)}
+            className={`p-1.5 rounded transition-colors ${labelCls} ${focusRingCls} ${
+              isDark ? 'hover:text-gray-200 hover:bg-surface-sunken' : 'hover:text-gray-800 hover:bg-gray-100'
+            }`}
+            aria-label={t('common.close')}
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
-      {/* 메타: 마감일/시간 · 우선순위 · 리스트 · 알림 · 반복 · 태그 (좁은 폭에서 줄바꿈) */}
-      <div className={`flex flex-wrap items-center gap-2 px-4 py-3 border-b ${isDark ? 'border-surface-divider' : 'border-gray-100'}`}>
+      {/* 메타: 의미 단위로 고정한 라벨 2열 그리드. 전에는 flex-wrap 자루라
+          폭·번역 길이·값 유무에 따라 줄바꿈 위치가 계속 바뀌어(기본 폭 400px에선
+          3줄) 속성 위치를 학습할 수 없었고, 어느 컨트롤이 무엇인지 알려주는
+          라벨도 하나 없었다. 일정(마감일·알림·반복) → 분류(우선순위·목록·태그) 순. */}
+      <div
+        className={`grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 px-4 py-3 border-b ${
+          isDark ? 'border-surface-line' : 'border-gray-100'
+        }`}
+      >
         {task.scheduledStart && task.scheduledEnd && (
-          <span className="flex items-center gap-1 text-xs text-gray-400 w-full">
-            <Clock size={13} />{' '}
-            {t('detail.scheduled', { range: formatScheduledRange(task.scheduledStart, task.scheduledEnd) })}
-          </span>
+          <>
+            <span className={metaLabelCls}>
+              <Clock size={12} className="inline mr-1 -mt-0.5" />
+              {t('detail.scheduled', { range: '' }).replace(/[:：].*$/, '')}
+            </span>
+            <span className="text-xs text-gray-400">
+              {formatScheduledRange(task.scheduledStart, task.scheduledEnd)}
+            </span>
+          </>
         )}
-        {/* 마감일 + 시간 — 앞에 달력 아이콘을 따로 두지 않는다. date/time 입력이
-            네이티브 글리프(달력·시계)를 자체적으로 그려서 아이콘이 두 번 보였다.
-            의미는 aria-label로 남긴다. */}
-        <div className="flex items-center gap-1.5">
-          <input
-            type="date"
-            aria-label={t('task.dueDate')}
-            value={dueDate}
-            onChange={(e) => {
-              setDueDate(e.target.value)
-              save({ dueDate: e.target.value || null })
-            }}
-            className={`text-sm rounded px-2 py-1 outline-none border ${inputCls}`}
-          />
-          <input
-            type="time"
-            aria-label={t('task.dueTime')}
-            value={dueTime}
-            onChange={(e) => {
-              setDueTime(e.target.value)
-              save({ dueTime: e.target.value || null })
-            }}
-            className={`w-[74px] text-sm rounded px-2 py-1 outline-none border ${inputCls}`}
-          />
-          {(dueDate || dueTime) && (
-            <button
-              type="button"
-              onClick={() => {
-                setDueDate('')
-                setDueTime('')
-                save({ dueDate: null, dueTime: null })
-              }}
-              className={labelCls}
-              aria-label={t('detail.clearDueDate')}
-            >
-              <X size={14} />
+
+        <span className={metaLabelCls}>{t('task.dueDate')}</span>
+        <DueDatePicker
+          dueDate={dueDate || null}
+          dueTime={dueTime || null}
+          onChange={(next) => {
+            setDueDate(next.dueDate ?? '')
+            setDueTime(next.dueTime ?? '')
+            save({ dueDate: next.dueDate, dueTime: next.dueTime })
+          }}
+          trigger={
+            <button type="button" className={ctlCls(!!dueDate || !!dueTime)}>
+              {dueDate || dueTime
+                ? `${dueDate || ''}${dueTime ? ` ${dueTime}` : ''}`.trim()
+                : t('detail.noDueDate')}
             </button>
-          )}
-        </div>
-        {/* 우선순위 */}
-        <div className="flex gap-1">
+          }
+        />
+
+        <span className={metaLabelCls}>{t('reminder.label')}</span>
+        <ReminderPicker
+          dueDate={task.dueDate}
+          value={task.reminderAt}
+          onChange={(v) => save({ reminderAt: v })}
+          trigger={
+            <button type="button" className={ctlCls(!!task.reminderAt)}>
+              <Bell size={13} />
+              {task.reminderAt ? new Date(task.reminderAt).toLocaleString(i18nLocale) : t('common.none')}
+            </button>
+          }
+        />
+
+        <span className={metaLabelCls}>{t('recurring.label')}</span>
+        <RecurringPicker
+          value={task.recurringPattern}
+          onChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
+          trigger={
+            <button type="button" className={ctlCls(task.isRecurring)}>
+              <Repeat size={13} />
+              {(task.isRecurring && formatRecurringPattern(task.recurringPattern)) || t('common.none')}
+            </button>
+          }
+        />
+
+        {/* 우선순위 — 진짜 세그먼티드 컨트롤. 네 버튼이 서로 무관하게 노출되던 것을
+            radiogroup으로 묶는다. 채운 면은 medium/high만(utils/priority.ts 참고). */}
+        <span className={metaLabelCls}>{t('priority.label')}</span>
+        <div
+          role="radiogroup"
+          aria-label={t('priority.label')}
+          className={`inline-flex w-fit rounded-md p-0.5 ${isDark ? 'bg-surface-sunken' : 'bg-gray-100'}`}
+        >
           {PRIORITY_OPTIONS.map((opt) => (
+            // biome-ignore lint/a11y/useSemanticElements: 세그먼티드 컨트롤 — input[type=radio]는 이 형태로 스타일링할 수 없다
             <button
               type="button"
+              role="radio"
+              aria-checked={priority === opt.value}
               key={opt.value}
               onClick={() => {
                 setPriority(opt.value)
                 save({ priority: opt.value })
               }}
-              // 고른 우선순위는 면색으로 알린다 — 글자색만으로는 어느 것이 선택됐는지,
-              // 그게 어느 단계인지가 한눈에 안 들어왔다.
-              className={`text-xs px-2 py-1 rounded border transition-colors ${
+              className={`h-7 px-2.5 rounded text-xs transition-colors border ${focusRingCls} ${
                 priority === opt.value
                   ? isDark
                     ? PRIORITY_SURFACE[opt.value]
                     : PRIORITY_SURFACE_LIGHT[opt.value]
-                  : isDark
-                    ? 'text-gray-400 border-transparent hover:bg-surface-sunken'
-                    : 'text-gray-400 border-transparent hover:bg-gray-100'
+                  : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'}`
               }`}
             >
               {t(opt.labelKey)}
             </button>
           ))}
         </div>
-        {/* 리스트 */}
-        <div className="flex items-center gap-1">
-          <List size={14} className={labelCls} />
-          <select
-            value={listId}
-            onChange={(e) => {
-              setListId(e.target.value)
-              save({ listId: e.target.value })
-            }}
-            className={`text-xs rounded px-2 py-1 outline-none border ${inputCls}`}
-          >
+
+        {/* 목록 — 네이티브 select만 macOS 크롬을 그려 유일하게 이질적이었다.
+            알림·반복과 같은 일(목록에서 하나 고르기)이므로 같은 프리미티브를 쓴다. */}
+        <span className={metaLabelCls}>{t('detail.listLabel')}</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={ctlCls(true)}>
+              <List size={13} />
+              {lists.find((l) => l.id === listId)?.name ?? ''}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[160px]">
             {lists.map((l) => (
-              <option key={l.id} value={l.id}>
+              <DropdownMenuItem
+                key={l.id}
+                onSelect={() => {
+                  setListId(l.id)
+                  save({ listId: l.id })
+                }}
+                className="gap-2 text-sm"
+              >
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
                 {l.name}
-              </option>
+              </DropdownMenuItem>
             ))}
-          </select>
-        </div>
-        {/* 알림 — 트리거는 여기서 주고, 열림/닫힘·포커스는 Radix Popover가 관리 */}
-        <ReminderPicker
-          dueDate={task.dueDate}
-          value={task.reminderAt}
-          onChange={(v) => save({ reminderAt: v })}
-          trigger={
-            <button type="button" className={pickerBtnCls(!!task.reminderAt, 'text-primary-400 border-primary-500/30')}>
-              <Bell size={13} />{' '}
-              {task.reminderAt ? new Date(task.reminderAt).toLocaleString(i18nLocale) : t('reminder.label')}
-            </button>
-          }
-        />
-        {/* 반복 */}
-        <RecurringPicker
-          value={task.recurringPattern}
-          onChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
-          trigger={
-            <button type="button" className={pickerBtnCls(task.isRecurring, 'text-purple-400 border-purple-500/30')}>
-              <Repeat size={13} />{' '}
-              {(task.isRecurring && formatRecurringPattern(task.recurringPattern)) || t('recurring.label')}
-            </button>
-          }
-        />
-        {/* 태그 */}
-        <div className="flex items-center gap-1 flex-1 min-w-[160px]">
-          <Tag size={14} className={labelCls} />
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <span className={metaLabelCls}>{t('detail.tagsLabel')}</span>
+        <div className="flex flex-wrap items-center gap-1">
           {task.tags.map((tag) => (
             <span
               key={tag}
-              className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${isDark ? 'bg-surface-sunken text-gray-200' : 'bg-gray-200 text-gray-600'}`}
+              className={`flex items-center gap-1 h-7 text-xs px-2 rounded-md ${
+                isDark ? 'bg-surface-sunken text-gray-200' : 'bg-gray-200 text-gray-600'
+              }`}
             >
               {tag}
               <button type="button" onClick={() => removeTag(tag)} className="hover:text-red-400">
@@ -378,15 +459,19 @@ export function TaskDetail() {
               if (e.key === 'Enter') addTag()
             }}
             placeholder={t('detail.tagsPlaceholder')}
-            className={`flex-1 min-w-[60px] text-xs bg-transparent outline-none ${isDark ? 'placeholder-gray-600' : 'placeholder-gray-400'}`}
+            className={`h-7 min-w-[80px] flex-1 rounded-md px-1 text-xs bg-transparent outline-none ${focusRingCls} ${
+              isDark ? 'placeholder-gray-400' : 'placeholder-gray-500'
+            }`}
           />
         </div>
       </div>
 
-      {/* 본문: 메모(히어로, 세로로 채움) + 하위작업·첨부(아래 바운드 스크롤 영역) */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        {/* 메모 (라이브프리뷰) */}
-        <div className="flex-1 min-h-0 flex flex-col px-4 py-3">
+      {/* 본문: 스크롤 컨테이너 하나. 전에는 메모가 flex-1이라 빈 메모가 패널의
+          67%(534px)를 먹고 하위작업·첨부를 바닥 15%로 밀어냈고, 스크롤 영역이
+          둘이라 휠이 커서 위치에 따라 다르게 동작했다. 메모는 최소 높이만
+          보장하고 내용만큼 자란다. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="min-h-[7.5rem] px-4 py-3">
           <AtomicCodeMirrorEditor
             documentId={task.id}
             markdownSource={task.description}
@@ -395,8 +480,7 @@ export function TaskDetail() {
             extensions={editorExtensions}
           />
         </div>
-        {/* 하위작업 · 첨부 */}
-        <div className={`flex-shrink-0 max-h-[38%] overflow-y-auto border-t px-4 py-3 space-y-3 ${isDark ? 'border-surface-divider' : 'border-gray-100'}`}>
+        <div className={`border-t px-4 py-3 space-y-4 ${isDark ? 'border-surface-line' : 'border-gray-100'}`}>
           <SubtaskList taskId={task.id} />
           <AttachmentList
             taskId={task.id}

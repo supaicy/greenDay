@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { Circle, CheckCircle2, Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
@@ -12,17 +12,12 @@ export function SubtaskList({ taskId }: { taskId: string }) {
   const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [newTitle, setNewTitle] = useState('')
-  const [showInput, setShowInput] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { subtasks, completedCount } = useMemo(() => {
     const subs = tasks.filter((t) => t.parentId === taskId)
     return { subtasks: subs, completedCount: subs.filter((t) => t.completed).length }
   }, [tasks, taskId])
-
-  useEffect(() => {
-    if (showInput) inputRef.current?.focus()
-  }, [showInput])
 
   const handleAdd = async () => {
     if (!newTitle.trim()) return
@@ -36,13 +31,13 @@ export function SubtaskList({ taskId }: { taskId: string }) {
   }
 
   return (
-    <div className="mt-3">
-      {/* 헤더 */}
-      {subtasks.length > 0 && (
-        <div className={`text-xs mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-          {t('detail.subtasks', { done: completedCount, total: subtasks.length })}
-        </div>
-      )}
+    // mt-3을 두면 부모의 space-y와 겹쳐 블록 사이가 두 배로 벌어진다 — 간격은 부모가 소유.
+    <div>
+      {/* 헤더는 항목이 0개여도 그린다. 없으면 빈 상태에 회색 링크 두 줄만 남아
+          그것이 무슨 섹션인지 알 수 없었다. */}
+      <div className={`text-xs font-medium mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {t('detail.subtasks', { done: completedCount, total: subtasks.length })}
+      </div>
 
       {/* 하위 작업 목록 */}
       <div className="space-y-0.5">
@@ -97,57 +92,31 @@ export function SubtaskList({ taskId }: { taskId: string }) {
         ))}
       </div>
 
-      {/* 하위 작업 추가 */}
-      {showInput ? (
-        <div
-          className={`flex items-center gap-2 px-2 py-1.5 mt-1 rounded border ${
-            isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'
+      {/* 하위 작업 추가 — 입력을 항상 열어 둔다. 토글 링크는 높이가 입력칸과
+          같아서 공간 이득이 0인데 클릭만 한 번 더 들었다(가운데 목록의
+          '+ 할 일 추가'는 이미 항상 열린 입력이다). */}
+      <div
+        className={`flex items-center gap-2 px-2 py-1.5 mt-1 rounded border ${
+          isDark ? 'border-surface-line bg-surface-sunken/40' : 'border-gray-200 bg-gray-50'
+        }`}
+      >
+        <Plus size={16} className={isDark ? 'text-gray-400' : 'text-gray-400'} />
+        <input
+          ref={inputRef}
+          type="text"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return
+            if (e.key === 'Enter') handleAdd()
+            if (e.key === 'Escape') setNewTitle('')
+          }}
+          placeholder={t('detail.addSubtask')}
+          className={`flex-1 bg-transparent text-sm outline-none ${
+            isDark ? 'text-gray-200 placeholder-gray-400' : 'text-gray-700 placeholder-gray-500'
           }`}
-        >
-          <Circle size={16} className={isDark ? 'text-gray-600' : 'text-gray-300'} />
-          <input
-            ref={inputRef}
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.nativeEvent.isComposing) return
-              if (e.key === 'Enter') handleAdd()
-              if (e.key === 'Escape') {
-                setShowInput(false)
-                setNewTitle('')
-              }
-            }}
-            placeholder={t('detail.addSubtaskPlaceholder')}
-            className={`flex-1 bg-transparent text-sm outline-none ${
-              isDark ? 'text-gray-200 placeholder-gray-600' : 'text-gray-700 placeholder-gray-400'
-            }`}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setShowInput(false)
-              setNewTitle('')
-            }}
-            className={isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowInput(true)}
-          className={`flex items-center gap-2 px-2 py-1.5 mt-1 text-sm rounded transition-colors w-full ${
-            isDark
-              ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/50'
-              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <Plus size={16} />
-          {t('detail.addSubtask')}
-        </button>
-      )}
+        />
+      </div>
     </div>
   )
 }

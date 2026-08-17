@@ -315,4 +315,10 @@ html.dark select option {
 }
 .atomic-cm-editor .cm-content {
   margin-inline: 0 !important;
+  /* 에디터 기본값은 padding-bottom: 320px(스크롤 여유분) + min-height: 100%다.
+     에디터가 자기 스크롤 영역을 가질 때는 맞지만, 상세 패널은 본문 전체가 하나의
+     스크롤이라 그 320px이 빈 메모를 373px짜리 회색 면으로 만들고 하위작업을
+     화면 밖으로 밀어냈다. 여유분을 문단 하나 정도로 줄인다. */
+  padding-bottom: 1.5rem !important;
+  min-height: 0 !important;
 }

@@ -9,7 +9,7 @@ import type { Task } from '../../types'
 const PRIORITY_COLORS = {
   none: 'text-gray-500',
   low: 'text-blue-400',
-  medium: 'text-yellow-400',
+  medium: 'text-amber-400',
   high: 'text-red-400'
 }
 
@@ -17,7 +17,7 @@ const PRIORITY_COLORS = {
 const PRIORITY_BAR: Record<keyof typeof PRIORITY_COLORS, string> = {
   none: 'bg-gray-500',
   low: 'bg-blue-400',
-  medium: 'bg-yellow-400',
+  medium: 'bg-amber-400',
   high: 'bg-red-400'
 }
 
