@@ -9,7 +9,7 @@ import { SubtaskList } from './SubtaskList'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { AttachmentList } from './AttachmentList'
-import { PRIORITY_OPTIONS } from '../../utils/priority'
+import { PRIORITY_OPTIONS, PRIORITY_SURFACE, PRIORITY_SURFACE_LIGHT } from '../../utils/priority'
 import { formatRecurringPattern } from '../../utils/recurrence'
 import { clampDetailWidth } from '../../store/detailWidth'
 import type { Priority } from '../../types'
@@ -295,12 +295,16 @@ export function TaskDetail() {
                 setPriority(opt.value)
                 save({ priority: opt.value })
               }}
-              className={`text-xs px-2 py-1 rounded transition-colors ${
+              // 고른 우선순위는 면색으로 알린다 — 글자색만으로는 어느 것이 선택됐는지,
+              // 그게 어느 단계인지가 한눈에 안 들어왔다.
+              className={`text-xs px-2 py-1 rounded border transition-colors ${
                 priority === opt.value
-                  ? `${opt.color} ${isDark ? 'bg-surface-sunken' : 'bg-gray-200'}`
+                  ? isDark
+                    ? PRIORITY_SURFACE[opt.value]
+                    : PRIORITY_SURFACE_LIGHT[opt.value]
                   : isDark
-                    ? 'text-gray-400 hover:bg-surface-sunken'
-                    : 'text-gray-400 hover:bg-gray-100'
+                    ? 'text-gray-400 border-transparent hover:bg-surface-sunken'
+                    : 'text-gray-400 border-transparent hover:bg-gray-100'
               }`}
             >
               {t(opt.labelKey)}

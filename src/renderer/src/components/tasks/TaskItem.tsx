@@ -13,6 +13,14 @@ const PRIORITY_COLORS = {
   high: 'text-red-400'
 }
 
+/** 선택된 행 왼쪽 액센트 바 색. 위 글자색과 같은 계열의 면색이다. */
+const PRIORITY_BAR: Record<keyof typeof PRIORITY_COLORS, string> = {
+  none: 'bg-gray-500',
+  low: 'bg-blue-400',
+  medium: 'bg-yellow-400',
+  high: 'bg-red-400'
+}
+
 // 서브태스크 카운트를 위한 셀렉터 (각 값을 개별 구독하여 불필요한 리렌더 방지)
 function useSubtaskCount(taskId: string) {
   const total = useStore((s) => {
@@ -102,22 +110,32 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
           onDrop?.(task.id)
         }}
         onDragEnd={() => setDragTaskId(null)}
-        className={`group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
+        // 선택/일괄선택 표시는 왼쪽 액센트 바 + 중립 표면색이다. 예전에는 남색
+        // (primary-900/30)을 깔았는데, 옆에 붙는 상세 패널·사이드바가 채도 3%의
+        // 중립 회색(#2C2C2E)이라 큰 면이 맞붙으면 선택 행만 색 계열이 달라 붕 떴다.
+        className={`group relative flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
           isDark ? 'border-b border-gray-800/50' : 'border-b border-gray-200'
         } ${dragTaskId === task.id ? 'opacity-40' : ''} ${
-          isBatchSelected
+          isBatchSelected || selectedTaskId === task.id
             ? isDark
-              ? 'bg-primary-900/20'
-              : 'bg-primary-50'
-            : selectedTaskId === task.id
-              ? isDark
-                ? 'bg-primary-900/30'
-                : 'bg-primary-50'
-              : isDark
-                ? 'hover:bg-gray-800/30'
-                : 'hover:bg-gray-50'
+              ? 'bg-surface-raised'
+              : 'bg-gray-100'
+            : isDark
+              ? 'hover:bg-gray-800/30'
+              : 'hover:bg-gray-50'
         }`}
       >
+        {/* 선택 표시: 색이 중립이 된 만큼 왼쪽 액센트 바로 명확히 알린다.
+            일괄 선택은 파랑, 단일 선택은 그 할일의 우선순위 색을 쓴다. */}
+        {(isBatchSelected || selectedTaskId === task.id) && (
+          <span
+            aria-hidden
+            className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-r ${
+              isBatchSelected ? 'bg-primary-500' : PRIORITY_BAR[task.priority]
+            }`}
+          />
+        )}
+
         {/* 일괄 선택 또는 체크박스 */}
         {batchMode ? (
           <span
