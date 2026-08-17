@@ -120,6 +120,7 @@
     "parsedTitle": "제목: {{title}}",
     "parsedDue": "마감일: {{date}}",
     "dueDate": "마감일",
+    "dueTime": "마감 시각",
     "dueSetTo": "({{date}}{{time}})로 설정됨",
     "aiAutofill": "AI가 서브태스크와 우선순위를 자동으로 설정합니다",
     "completedCount": "완료됨 ({{n}})",

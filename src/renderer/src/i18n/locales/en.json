@@ -120,6 +120,7 @@
     "parsedTitle": "Title: {{title}}",
     "parsedDue": "Due: {{date}}",
     "dueDate": "Due date",
+    "dueTime": "Due time",
     "dueSetTo": "Due {{date}}{{time}}",
     "aiAutofill": "AI fills in subtasks and priority for you",
     "completedCount": "Completed ({{n}})",

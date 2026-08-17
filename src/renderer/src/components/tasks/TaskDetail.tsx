@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { X, Trash2, Tag, List, Clock, Bell, Repeat, Calendar, Circle, CheckCircle2 } from 'lucide-react'
+import { X, Trash2, Tag, List, Clock, Bell, Repeat, Circle, CheckCircle2 } from 'lucide-react'
 import { EditorView } from '@codemirror/view'
 import { AtomicCodeMirrorEditor } from '@atomic-editor/editor'
 import '@atomic-editor/editor/styles.css'
@@ -249,11 +249,13 @@ export function TaskDetail() {
             {t('detail.scheduled', { range: formatScheduledRange(task.scheduledStart, task.scheduledEnd) })}
           </span>
         )}
-        {/* 마감일 + 시간 */}
+        {/* 마감일 + 시간 — 앞에 달력 아이콘을 따로 두지 않는다. date/time 입력이
+            네이티브 글리프(달력·시계)를 자체적으로 그려서 아이콘이 두 번 보였다.
+            의미는 aria-label로 남긴다. */}
         <div className="flex items-center gap-1.5">
-          <Calendar size={15} className={labelCls} />
           <input
             type="date"
+            aria-label={t('task.dueDate')}
             value={dueDate}
             onChange={(e) => {
               setDueDate(e.target.value)
@@ -263,6 +265,7 @@ export function TaskDetail() {
           />
           <input
             type="time"
+            aria-label={t('task.dueTime')}
             value={dueTime}
             onChange={(e) => {
               setDueTime(e.target.value)
