@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>상세 패널 재설계 결과</title>
+<style>
+  :root {
+    --bg:#fafaf9; --surface:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#16a34a; --accent-soft:#f0fdf4; --warn:#b45309; --warn-soft:#fffbeb;
+    --hot:#b91c1c; --hot-soft:#fef2f2; --cool:#1d4ed8; --cool-soft:#eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e; --line:#44403c;
+      --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33;
+      --hot:#f87171; --hot-soft:#7f1d1d33; --cool:#93c5fd; --cool-soft:#1e3a8a33; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:26px; }
+  h2 { font-size:19px; margin:40px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+  h3 { font-size:15.5px; margin:22px 0 6px; }
+  .tldr { background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:16px 20px; }
+  .tldr strong { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap; }
+  code { font:13px ui-monospace,"SF Mono",Menlo,monospace; background:var(--surface);
+    border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  ul { padding-left:22px; margin:8px 0; } li { margin:5px 0; }
+  .note { color:var(--muted); font-size:13.5px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:14px 0; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; border-radius:5px; padding:1px 7px; white-space:nowrap; }
+  .tag.three { background:var(--hot-soft); color:var(--hot); }
+  .tag.two { background:var(--warn-soft); color:var(--warn); }
+  .tag.one { background:var(--cool-soft); color:var(--cool); }
+  .tag.done { background:var(--accent-soft); color:var(--accent); }
+  .ba { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+  @media (max-width:720px) { .ba { grid-template-columns:1fr; } }
+  .ba figure { margin:0; }
+  .ba img { width:100%; border:1px solid var(--line); border-radius:8px; display:block; }
+  .ba figcaption { color:var(--muted); font-size:12.5px; margin-top:6px; text-align:center; }
+  .num { font-variant-numeric:tabular-nums; }
+  .down { color:var(--accent); font-weight:600; }
+  footer { margin-top:48px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+<h1>상세 패널 재설계 결과</h1>
+<div class="meta">2026-08-17 · Greenday · 3자 디자인 평가(Claude 디자인 렌즈 · Claude 엔지니어 렌즈 · Codex gpt-5.6-sol)의 권고를 전부 반영 · 커밋 <code>b2cd5d6</code>, <code>5397140</code></div>
+
+<div class="tldr">
+<strong>전부 반영했습니다.</strong> 3/3 합의 5건, 2/3 합의 3건, 단독 지적 중 실효 있는 6건까지 넣었습니다. 핵심 수치: <strong>빈 메모가 373px → 120px</strong>로 줄고 하위작업·첨부가 화면 안으로 들어왔습니다. 원인은 예상과 달랐습니다 — 레이아웃이 아니라 <strong>에디터가 넣는 <code>padding-bottom: 320px</code></strong>이었고, 실제 앱을 CDP로 측정해서 찾았습니다. 헬스: typecheck 0 · lint 0 errors · <strong>566 tests green</strong> · 빌드 정상.
+</div>
+
+<h2>1 · 전후 비교</h2>
+<div class="ba">
+  <figure>
+    <img src="assets/2026-08-17-before.png" alt="변경 전">
+    <figcaption>변경 전 — 메타가 두 줄로 흩어지고 제목이 잘림. 메모가 세로를 다 먹어 하위작업이 바닥에</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-08-17-after.png" alt="변경 후">
+    <figcaption>변경 후 — 라벨 그리드, 제목 2줄 완전 표시, 하위작업·첨부가 화면 안으로</figcaption>
+  </figure>
+</div>
+
+<h3>실측 높이 변화 (패널 800px 기준)</h3>
+<table>
+<tr><th>영역</th><th>변경 전</th><th>변경 후</th><th>비고</th></tr>
+<tr><td>헤더</td><td class="num">57px</td><td class="num">75px</td><td>제목이 2줄까지 늘어난 만큼</td></tr>
+<tr><td>메타</td><td class="num">90px (2~3줄 가변)</td><td class="num">253px (고정 7행)</td><td>라벨이 생기고 줄바꿈이 사라짐</td></tr>
+<tr><td><strong>메모</strong></td><td class="num">373px (67%)</td><td class="num down">120px</td><td>내용만큼만 차지</td></tr>
+<tr><td>하위작업·첨부</td><td class="num">120px (바닥 15%, 별도 스크롤)</td><td class="num">151px (본문 흐름 안)</td><td>스크롤 하나로 통합</td></tr>
+</table>
+
+<h2>2 · 반영 내역</h2>
+
+<h3>3/3 합의 <span class="tag three">전원 지적</span></h3>
+<table>
+<tr><th>항목</th><th>무엇을 했나</th><th>상태</th></tr>
+<tr><td>빈 메모가 패널의 3분의 2 점유</td><td>본문을 스크롤 컨테이너 하나로 합치고 메모는 <code>min-h-[7.5rem]</code>만 보장. <strong>실제 원인은 에디터의 <code>padding-bottom: 320px</code></strong>(스크롤 여유분)이라 그것을 1.5rem으로 축소. CM6 <code>placeholder()</code> 추가</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>메타가 폭에 따라 요동 (기본 폭 400px에서 3줄)</td><td><code>flex-wrap</code> → <code>grid-cols-[4.5rem_minmax(0,1fr)]</code> 라벨 2열. 일정(마감일·알림·반복) → 분류(우선순위·목록·태그) 순으로 고정. 라벨 i18n 키 11개 추가(ko/en)</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>제목이 잘리는데 말줄임·툴팁 없음</td><td><code>input</code> → 2줄까지 자라는 <code>textarea</code>(<code>[field-sizing:content]</code>) + <code>title</code> 속성 + 포커스 링 + IME 가드</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>회색 3종 대비 미달</td><td>추가 버튼 <span class="num">2.96 → 5.49:1</span>, 태그 placeholder <span class="num">1.85 → 5.49:1</span>, 구조 구분선 <span class="num">1.23 → 1.53:1</span></td><td><span class="tag done">완료</span></td></tr>
+<tr><td>빈 상태에 섹션 머리말 없음</td><td>하위작업·첨부 헤더를 0개여도 표시(<code>하위 작업 0/0</code>, <code>첨부 0</code>). 자식의 <code>mt-3</code> 제거로 이중 간격 해소</td><td><span class="tag done">완료</span></td></tr>
+</table>
+
+<h3>2/3 합의 <span class="tag two">둘이 지적</span></h3>
+<table>
+<tr><th>항목</th><th>무엇을 했나</th><th>상태</th></tr>
+<tr><td>컨트롤 높이·모서리 제각각 (30/26/26/20px, 모서리 3종)</td><td>속성 트리거를 <code>h-8 rounded-md px-2.5 text-[13px]</code>로 통일. 값이 없는 컨트롤은 테두리를 지워 물러남</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>네이티브 <code>&lt;select&gt;</code>만 이질적</td><td>벤더링된 <code>DropdownMenu</code>로 교체(<code>SortMenu</code> 하우스 패턴). macOS 크롬이 사라짐</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>우선순위가 필터 툴바처럼 보이고 '낮음'이 가장 강한 물체</td><td><code>radiogroup</code> 세그먼티드로 묶고, <strong>채운 면은 medium/high만</strong>. low/none은 테두리로 선택 표시. 앱 전체 medium 색을 amber로 통일(yellow/amber가 세 군데 섞여 있었음)</td><td><span class="tag done">완료</span></td></tr>
+</table>
+
+<h3>단독 지적 <span class="tag one">한 곳</span></h3>
+<table>
+<tr><th>항목</th><th>무엇을 했나</th><th>상태</th></tr>
+<tr><td>마감일이 네이티브 입력이라 빈 상태가 고장처럼 보이고 조작이 느림</td><td><code>DueDatePicker</code> 신설 — 오늘·내일·이번 주말·다음 주 칩 + 날짜/시각 + 지우기. 실동작 확인(칩 클릭 → 트리거가 날짜로 갱신)</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>리사이즈 핸들이 첫 탭 스톱인데 키보드로 아무 일도 안 함</td><td><code>role="separator"</code> + 화살표 키(Shift로 64px) + <strong>더블클릭 기본값 복귀</strong>. 전에는 폭을 흐트러뜨리면 되돌릴 방법이 없었음</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>드래그 중 커서·선택이 샘</td><td>드래그 동안 <code>body</code>의 커서·선택 고정, 종료·언마운트 시 복구. 핸들 8px → 12px</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>하위작업 추가가 두 번 클릭</td><td>입력을 상시 노출(<code>showInput</code> 상태와 포커스 이펙트 제거). 가운데 목록의 '할 일 추가'와 같은 동작</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>헤더 삭제·닫기가 16/18px 맨아이콘</td><td>둘 다 <code>p-1.5</code> + hover 면색(28px 타깃), 그룹으로 묶고 아이콘 크기 통일</td><td><span class="tag done">완료</span></td></tr>
+<tr><td>스크롤 컨테이너가 둘</td><td>본문 통합으로 함께 해소</td><td><span class="tag done">완료</span></td></tr>
+</table>
+
+<h3>반영하지 않은 것</h3>
+<div class="card">
+<p><strong>메모에 별도 면색(<code>bg-surface-canvas</code>) 깔기</strong> — 디자인 렌즈 단독 제안. 메모가 120px로 줄고 위아래 구분선이 <code>surface-line</code>으로 진해진 지금은 <em>figure/ground가 이미 생겼습니다.</em> 여기에 면색까지 넣으면 패널 안에 상자가 하나 더 생겨 오히려 층이 늘어납니다. 실제 화면을 보고 판단했고, 필요하면 한 줄로 되돌릴 수 있습니다.</p>
+<p><strong>제목을 클릭 전까지 읽기 전용 <code>line-clamp-2</code>로 두기</strong> — Codex 단독 제안. 편집 모드 전환이 한 단계 늘어 상시 편집 가능한 지금 동작보다 느려집니다. <code>textarea</code>가 이미 두 줄까지 보여주므로 목적(제목 전체 확인)은 달성됐습니다.</p>
+<p><strong>빈 상태를 점선 테두리 한 줄로 압축</strong> — Codex 단독 제안. 하위작업 입력을 상시 노출로 바꾸면서 그 자리가 이미 입력칸이 됐습니다. 점선까지 더하면 중복입니다.</p>
+</div>
+
+<h2>3 · 검증</h2>
+<ul>
+<li><strong>정적</strong> — typecheck 0 · biome lint 0 errors(경고 7은 기존 테스트 파일) · vitest <strong>566 passed</strong> · 프로덕션 빌드 3개 산출물 정상</li>
+<li><strong>실행</strong> — dev 앱을 CDP로 붙어 각 영역의 실제 렌더링 높이를 측정(위 표의 수치는 전부 실측). 마감일 픽커는 칩 클릭 → 트리거 라벨 갱신까지 확인</li>
+<li><strong>데이터</strong> — QA 중 설정한 마감일 1건은 원복했습니다. 앱 데이터에 남은 변경은 없습니다</li>
+</ul>
+
+<h2>4 · 남은 것</h2>
+<p class="note">이번 재설계는 상세 패널에 한정했습니다. 3자 평가에서 나왔지만 범위를 넘는 것들:</p>
+<ul>
+<li><strong>목록과 상세의 우선순위 표기 통일</strong> — 목록은 <code>⚑ 낮음</code> 텍스트, 상세는 세그먼티드입니다. 같은 데이터를 두 어휘로 말합니다(디자인 렌즈 지적). 목록 쪽을 건드리는 일이라 별도 판단이 필요합니다.</li>
+<li><strong>패널을 열 때 포커스가 아무 데도 가지 않음</strong> — 새 태스크일 때만 제목에 포커스를 주는 식의 규칙이 필요합니다.</li>
+<li><strong>시각 입력 아이콘 색</strong> — Codex 지적. 지금은 <code>DueDatePicker</code> 팝오버 안으로 들어가 노출이 줄었지만, 근본적으로는 <code>color-scheme: dark</code> 적용이 맞습니다.</li>
+</ul>
+
+<footer>
+방법: 변경 전후 모두 실행 중인 dev 앱을 CDP(<code>--remote-debugging-port=9222</code>)로 붙어 <code>Page.captureScreenshot</code>으로 패널만 2배 클립 캡쳐하고, <code>Runtime.evaluate</code>로 각 영역의 <code>getBoundingClientRect()</code> 높이를 읽었습니다. 대비율은 Tailwind 토큰 값에서 계산했고 세 평가자의 수치가 일치했습니다. 평가 원문과 근거는 같은 폴더의 <code>2026-08-17-task-detail-design-review.html</code>에 있습니다.
+</footer>
+</main>
+</body>
+</html>
