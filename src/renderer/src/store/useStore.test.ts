@@ -451,3 +451,67 @@ describe('updateTask — 보존 기간이 지금 쓰는 키를 버리지 않는�
     expect(Object.keys(useStore.getState().tasks[0].scheduledOverrides ?? {})).toEqual(['2020-03-07'])
   })
 })
+
+describe('완료 시 미래 회차 오버라이드 인계', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 10, 12, 0, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  // 사용자가 캘린더를 앞으로 넘겨 8/24 회차 시간을 고쳐두고, 8/17 회차를 완료하면
+  // 새로 스폰된 8/17 인스턴스는 템플릿만 물려받아 8/24 편집이 조용히 사라졌다.
+  it('스폰될 인스턴스가 소유할 미래 오버라이드를 함께 넘긴다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'r',
+          title: '운동',
+          isRecurring: true,
+          recurringPattern: 'weekly:1',
+          dueDate: '2026-08-10',
+          scheduledStart: '2026-08-10T14:00:00',
+          scheduledEnd: '2026-08-10T15:00:00',
+          scheduledOverrides: {
+            '2026-08-03': { start: '2026-08-03T08:00:00', end: '2026-08-03T09:00:00' },
+            '2026-08-24': { start: '2026-08-24T08:00:00', end: '2026-08-24T09:00:00' }
+          }
+        })
+      ]
+    })
+    await useStore.getState().toggleTask('r')
+
+    const spawned = useStore.getState().tasks.find((t) => !t.completed)
+    expect(spawned?.dueDate).toBe('2026-08-17')
+    // 8/24는 새 인스턴스의 회차다 → 넘어가야 한다
+    expect(spawned?.scheduledOverrides).toEqual({
+      '2026-08-24': { start: '2026-08-24T08:00:00', end: '2026-08-24T09:00:00' }
+    })
+
+    const done = useStore.getState().tasks.find((t) => t.completed)
+    // 8/03은 지난 기록이라 완료본에 남고, 넘긴 8/24는 중복되지 않게 빠진다
+    expect(Object.keys(done?.scheduledOverrides ?? {})).toEqual(['2026-08-03'])
+  })
+
+  it('넘길 미래 회차가 없으면 오버라이드 없이 스폰한다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'r2',
+          title: '독서',
+          isRecurring: true,
+          recurringPattern: 'daily',
+          dueDate: '2026-08-10',
+          scheduledStart: '2026-08-10T07:00:00',
+          scheduledEnd: '2026-08-10T08:00:00',
+          scheduledOverrides: { '2026-08-09': null }
+        })
+      ]
+    })
+    await useStore.getState().toggleTask('r2')
+    const spawned = useStore.getState().tasks.find((t) => !t.completed)
+    expect(spawned?.scheduledOverrides ?? null).toBeNull()
+  })
+})

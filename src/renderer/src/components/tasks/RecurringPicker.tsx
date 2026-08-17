@@ -104,10 +104,19 @@ export function RecurringPicker({
     yearly: t('recurring.yearly')
   }
 
+  // 닫을 때 초안을 원래 값으로 되돌린다. Popover는 TaskDetail 수명 내내 마운트돼
+  // 있어서, 고치다 Escape로 버린 값이 그대로 남았다가 다음에 열어 '적용'을 누르면
+  // 그때 커밋됐다(외부 value가 안 바뀌었으니 동기화 effect도 안 돈다).
+  // 같은 이유로 현재 반복이 같은 두 할일 사이에서도 초안이 샜다.
+  const handleOpenChange = (next: boolean): void => {
+    setOpen(next)
+    if (!next) setDraft(parsePattern(value))
+  }
+
   return (
     // 트리거는 호출처가 준다. 예전에는 호출처 버튼이 이 픽커를 mount하고
     // 픽커가 자기 버튼을 또 그려서, 열려면 두 번 눌러야 했다(2026-08-05 검증).
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="min-w-[260px] p-3">
       {/* 반복 유형 선택 */}

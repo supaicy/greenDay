@@ -52,13 +52,22 @@ export function getScheduledForOccurrence(
     | 'dueDate'
     | 'scheduledOverrides'
     | 'completed'
+    | 'completedAt'
   >,
   occurrenceDate: string // "YYYY-MM-DD"
 ): { start: string; end: string } | null {
-  // 완료한 반복 인스턴스는 자기 날짜에만 남는다. 미래 발생일은 완료로 새로
+  // 완료한 반복 인스턴스는 자기 회차에만 남는다. 미래 발생일은 완료로 새로
   // 스폰된 인스턴스의 몫이다 — 둘 다 주장하면 같은 블록이 두 개 뜨고,
   // 회차를 완료할 때마다 하나씩 늘어난다.
-  if (task.isRecurring && task.completed && task.dueDate && occurrenceDate !== task.dueDate) return null
+  //
+  // '자기 회차'는 dueDate만이 아니다. (a) 기한을 지운 반복은 dueDate가 없어
+  // 완료본이 모든 날짜에 그려졌으므로 완료 시각을 대신 쓴다. (b) 다른 날로
+  // 옮긴 회차는 오버라이드에 그 날짜가 있으므로, 그 자리도 자기 회차다.
+  if (task.isRecurring && task.completed) {
+    const ownDate = task.dueDate ?? task.completedAt?.slice(0, 10) ?? null
+    const movedHere = task.scheduledOverrides != null && occurrenceDate in task.scheduledOverrides
+    if (!movedHere && occurrenceDate !== ownDate) return null
+  }
   // 오버라이드는 반복 회차의 예외라 반복 task에만 의미가 있다. 반복을 끈 뒤
   // 남은 값을 읽으면 유령 블록이 된다(스토어가 정리하지만, 여기서도 게이트를 둔다).
   if (task.isRecurring) {

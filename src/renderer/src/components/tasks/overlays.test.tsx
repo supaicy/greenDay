@@ -14,6 +14,12 @@ import userEvent from '@testing-library/user-event'
 import { useEffect, useState } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import i18n from '../../i18n'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useStore } from '../../store/useStore'
@@ -338,5 +344,55 @@ describe('ReminderPicker — 상태 누수', () => {
 
     const reopened = document.querySelector('input[type="date"]') as HTMLInputElement
     expect(reopened.value).toBe('')
+  })
+})
+
+describe('Radix 포털과 React 이벤트 버블링', () => {
+  it('메뉴에서 삭제를 눌러도 그 행이 선택되지 않는다', async () => {
+    const user = userEvent.setup()
+    const removeList = vi.fn()
+    const setSelectedList = vi.fn()
+    // Sidebar의 구조를 그대로 축약: 선택 가능한 행 안에 드롭다운 트리거가 들어있다.
+    render(
+      // biome-ignore lint/a11y/useSemanticElements: Sidebar의 실제 구조를 그대로 재현한다 — 중첩 button(메뉴 트리거)이 있어 <button>으로 못 바꾼다
+      <div role="button" tabIndex={0} onClick={() => setSelectedList('list-1')} onKeyDown={() => {}}>
+        <span>업무</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" onClick={(e) => e.stopPropagation()}>
+              메뉴
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onSelect={() => removeList('list-1')}>삭제</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    )
+    await user.click(screen.getByRole('button', { name: '메뉴' }))
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }))
+
+    expect(removeList).toHaveBeenCalledWith('list-1')
+    // 포털은 DOM상 body 아래지만 React 트리로는 행의 자식이라 클릭이 행까지 올라간다.
+    // 그대로 두면 리스트를 지운 직후 그 삭제된 id를 선택해 빈 화면이 남는다.
+    expect(setSelectedList).not.toHaveBeenCalled()
+  })
+})
+
+describe('RecurringPicker — 버린 초안', () => {
+  it('Escape로 닫으면 고치던 값이 남지 않는다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<RecurringPicker value="daily" onChange={onChange} trigger={<button type="button">반복</button>} />)
+
+    await user.click(screen.getByRole('button', { name: '반복' }))
+    await user.click(await screen.findByRole('button', { name: '매월' }))
+    await user.keyboard('{Escape}')
+
+    // 다시 열어 적용하면, 버린 '매월'이 아니라 원래 값이어야 한다.
+    await user.click(screen.getByRole('button', { name: '반복' }))
+    await user.click(await screen.findByRole('button', { name: '적용' }))
+
+    expect(onChange).toHaveBeenCalledWith('daily')
   })
 })

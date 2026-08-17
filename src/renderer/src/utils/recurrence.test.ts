@@ -236,3 +236,26 @@ describe('occursOn monthly 말일 클램프', () => {
     expect(occursOn('monthly:31', '2026-01-31', '2026-03-30')).toBe(false)
   })
 })
+
+// 리마인더는 UTC 순간(toISOString)으로 저장된다. 날짜 문자열만 밀고 시간 부분을
+// 그대로 두면 UTC 시각이 보존돼, 서머타임을 건너는 순간 사용자가 보는 로컬
+// 시각이 한 시간 어긋난다. 벽시계 시각을 보존해야 한다.
+describe('shiftInstantByDays — 리마인더 이동', () => {
+  it('로컬 벽시계 시각을 보존한다', async () => {
+    const { shiftInstantByDays } = await import('./recurrence')
+    // 실행 시간대(테스트는 Asia/Seoul 고정)에서 09:00인 순간을 만든다
+    const at9 = new Date(2026, 2, 7, 9, 0, 0).toISOString()
+    const next = shiftInstantByDays(at9, 1)
+    const d = new Date(next)
+    expect(d.getHours()).toBe(9)
+    expect(d.getMinutes()).toBe(0)
+    expect(d.getDate()).toBe(8)
+  })
+
+  it('여러 날을 건너도 시각이 유지된다', async () => {
+    const { shiftInstantByDays } = await import('./recurrence')
+    const at730 = new Date(2026, 0, 31, 7, 30, 0).toISOString()
+    const d = new Date(shiftInstantByDays(at730, 30))
+    expect([d.getHours(), d.getMinutes()]).toEqual([7, 30])
+  })
+})

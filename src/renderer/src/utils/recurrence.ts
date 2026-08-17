@@ -159,6 +159,21 @@ export function shiftIsoByDays(iso: string, days: number): string {
 }
 
 /**
+ * ISO 순간(UTC 저장값)을 로컬 벽시계 기준으로 days일 이동한다.
+ *
+ * shiftIsoByDays는 날짜 문자열만 밀고 시간 부분을 그대로 둔다 — 'YYYY-MM-DD'
+ * 같은 날짜 값에는 맞지만, 리마인더처럼 toISOString()으로 저장된 순간에 쓰면
+ * UTC 시각이 보존돼 서머타임을 건너는 순간 사용자가 보는 시각이 한 시간
+ * 어긋난다(실측: New York에서 3/7 09:00 알림이 3/8에 10:00이 됐다).
+ */
+export function shiftInstantByDays(iso: string, days: number): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  d.setDate(d.getDate() + days)
+  return d.toISOString()
+}
+
+/**
  * 두 YYYY-MM-DD 날짜 사이의 정수 일 차이를 반환 (to - from).
  */
 export function daysBetween(fromISODate: string, toISODate: string): number {
@@ -245,7 +260,7 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, n
   const exists = (index.get(seriesKey(task.recurringPattern, task.title, next)) ?? 0) > 0
   if (exists) return null
   const reminderAt =
-    task.reminderAt && task.dueDate ? shiftIsoByDays(task.reminderAt, daysBetween(task.dueDate, next)) : null
+    task.reminderAt && task.dueDate ? shiftInstantByDays(task.reminderAt, daysBetween(task.dueDate, next)) : null
   return {
     title: task.title,
     listId: task.listId,
@@ -257,8 +272,22 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, n
     tags: task.tags,
     reminderAt,
     scheduledStart: task.scheduledStart,
-    scheduledEnd: task.scheduledEnd
+    scheduledEnd: task.scheduledEnd,
+    // 다음 인스턴스가 소유할 회차(= 그 기한 이후)의 오버라이드는 함께 넘긴다.
+    // 안 넘기면, 사용자가 미리 고쳐둔 미래 회차 시간이 완료하는 순간 조용히
+    // 템플릿으로 되돌아간다(완료본의 미래 날짜는 화면에서 가려지므로 흔적도 없다).
+    scheduledOverrides: pickOverridesFrom(task.scheduledOverrides, next)
   }
+}
+
+/** date 이상인 오버라이드만 남긴다. 없으면 null(필드 자체를 만들지 않는다). */
+export function pickOverridesFrom(
+  overrides: Task['scheduledOverrides'],
+  from: string
+): Record<string, { start: string; end: string } | null> | null {
+  if (!overrides) return null
+  const kept = Object.entries(overrides).filter(([date]) => date >= from)
+  return kept.length > 0 ? Object.fromEntries(kept) : null
 }
 
 /**

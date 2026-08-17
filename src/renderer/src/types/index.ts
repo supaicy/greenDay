@@ -138,4 +138,5 @@ export interface AddTaskOptions {
   tags?: string[]
   scheduledStart?: string | null
   scheduledEnd?: string | null
+  scheduledOverrides?: Record<string, { start: string; end: string } | null> | null
 }

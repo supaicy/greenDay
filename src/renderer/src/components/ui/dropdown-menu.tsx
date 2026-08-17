@@ -55,6 +55,11 @@ DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayNam
 // z는 프로젝트 규칙대로 콘텐츠 111 — shadcn 기본값 z-50을 그대로 두면 포털이
 // #root 밖(body 직속)이라 stacking context 없이 한 줄로 비교돼, UndoToast(90)와
 // TaskItem 컨텍스트 메뉴(100) 아래에 깔린다.
+//
+// 클릭 전파도 여기서 끊는다. 포털은 DOM상 body 아래지만 React 트리로는 트리거의
+// 자식이라, 메뉴 항목 클릭이 호출처(예: 선택 가능한 리스트 행)까지 올라간다.
+// 사이드바에서 '삭제'를 누르면 리스트를 지운 직후 그 삭제된 id가 선택돼
+// 빈 화면이 남았다. 호출처마다 막는 대신 프리미티브가 한 번에 막는다.
 const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
@@ -63,6 +68,10 @@ const DropdownMenuContent = React.forwardRef<
     <DropdownMenuPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
+      onClick={(e) => {
+        e.stopPropagation()
+        props.onClick?.(e)
+      }}
       className={cn(
         'z-overlayContent max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-dropdown-menu-content-transform-origin]',
         className

@@ -341,3 +341,43 @@ describe('resolveTimeBlockDrop — 레일에서 비발생일로', () => {
     expect(patch?.scheduledOverrides).toBeUndefined()
   })
 })
+
+// Codex 리뷰: 완료 게이트가 dueDate에 의존해 두 구멍이 있었다.
+describe('getScheduledForOccurrence — 완료 게이트의 구멍', () => {
+  it('기한 없는 반복을 완료하면 아무 날에나 그리지 않는다', () => {
+    // 기한을 지운 채 매일 반복을 완료하면, 게이트가 dueDate 없음으로 통과돼
+    // 완료본이 모든 미래 날짜에 계속 그려지고 새 인스턴스와 겹쳤다.
+    const t: Task = {
+      ...baseTask,
+      recurringPattern: 'daily',
+      dueDate: null,
+      completed: true,
+      completedAt: '2026-08-10T15:00:00'
+    }
+    expect(getScheduledForOccurrence(t, '2026-08-10')).not.toBeNull() // 완료한 그날은 남는다
+    expect(getScheduledForOccurrence(t, '2026-08-17')).toBeNull()
+    expect(getScheduledForOccurrence(t, '2026-09-01')).toBeNull()
+  })
+
+  it('다른 날로 옮긴 회차는 완료 후에도 그 자리에 남는다', () => {
+    // 월요일 회차를 화요일로 옮기고 완료하면, 게이트가 dueDate(월)만 허용해
+    // 화요일 블록이 기록에서 통째로 사라졌다.
+    const t: Task = {
+      ...baseTask,
+      recurringPattern: 'weekly:1',
+      dueDate: '2026-08-10',
+      completed: true,
+      completedAt: '2026-08-11T15:00:00',
+      scheduledOverrides: {
+        '2026-08-10': null,
+        '2026-08-11': { start: '2026-08-11T14:00:00', end: '2026-08-11T15:00:00' }
+      }
+    }
+    expect(getScheduledForOccurrence(t, '2026-08-11')).toEqual({
+      start: '2026-08-11T14:00:00',
+      end: '2026-08-11T15:00:00'
+    })
+    expect(getScheduledForOccurrence(t, '2026-08-10')).toBeNull() // 옮겼으니 원래 자리는 비운다
+    expect(getScheduledForOccurrence(t, '2026-08-17')).toBeNull() // 미래는 새 인스턴스 몫
+  })
+})

@@ -474,7 +474,8 @@ export const useStore = create<Store>((set, get) => ({
         isRecurring: opts.isRecurring || false,
         recurringPattern: opts.recurringPattern || null,
         scheduledStart: opts.scheduledStart || null,
-        scheduledEnd: opts.scheduledEnd || null
+        scheduledEnd: opts.scheduledEnd || null,
+        scheduledOverrides: opts.scheduledOverrides || null
       }
     })
 
@@ -573,7 +574,16 @@ export const useStore = create<Store>((set, get) => ({
     if (newCompleted) {
       // 반복 task: 완료 시 다음 인스턴스 생성 (중복 방지·알림 오프셋은 헬퍼가 처리)
       const spawn = nextRecurrenceSpawn(task, get().tasks, todayString())
-      if (spawn) get().addTask(spawn.title, spawn)
+      if (spawn) {
+        // 넘긴 미래 회차는 완료본에서 뺀다 — 양쪽에 남으면 같은 날짜를 두 인스턴스가
+        // 주장한다(완료본은 오버라이드가 있는 날을 자기 회차로 인정하므로 실제로 겹친다).
+        if (spawn.scheduledOverrides) {
+          const handed = new Set(Object.keys(spawn.scheduledOverrides))
+          const left = Object.entries(task.scheduledOverrides ?? {}).filter(([d]) => !handed.has(d))
+          get().updateTask({ id, scheduledOverrides: left.length > 0 ? Object.fromEntries(left) : null })
+        }
+        get().addTask(spawn.title, spawn)
+      }
     }
   },
   removeTask: async (id) => {
