@@ -1,11 +1,14 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
+import { CalendarOff } from 'lucide-react'
 import type { Task } from '../../types'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { snapTo15Min, toLocalIsoMinute, MIN_BLOCK_MS } from '../../utils/scheduledTime'
 import { toDateString } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
+import { ContextMenuItem } from '@/components/ui/context-menu'
+import { TaskContextMenu } from '../tasks/TaskContextMenu'
 
 interface Props {
   task: Task
@@ -29,7 +32,6 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
   const { t } = useTranslation()
   const updateTask = useStore((s) => s.updateTask)
   const elRef = useRef<HTMLDivElement>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const resizeAbortRef = useRef<AbortController | null>(null)
 
@@ -107,74 +109,49 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
     document.addEventListener('mouseup', onUp, { signal: ac.signal })
   }
 
-  // Context menu
-  const onContextMenu = (e: React.MouseEvent): void => {
-    e.preventDefault()
-    setMenuOpen(true)
-  }
-
-  const unschedule = (): void => {
-    // 시리즈 배정 해제. 회차 오버라이드 정리는 스토어의 불변식이 맡는다.
-    void updateTask({ id: task.id, scheduledStart: null, scheduledEnd: null })
-    setMenuOpen(false)
-  }
+  // 시리즈 배정 해제. 회차 오버라이드 정리는 스토어의 불변식이 맡는다.
+  const unschedule = (): void => void updateTask({ id: task.id, scheduledStart: null, scheduledEnd: null })
 
   const completedStripe = task.completed ? 'bg-stripes opacity-60' : ''
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: 드래그 블록 — drag/contextMenu 인터랙션, button 전환 불가
-    <div
-      ref={elRef}
-      draggable
-      onDragStart={onDragStart}
-      onContextMenu={onContextMenu}
-      style={{
-        position: 'absolute',
-        top: `${topPx}px`,
-        left: `${leftPct}%`,
-        width: `${widthPct}%`,
-        ...(isResizing ? {} : { height: `${heightPx}px` })
-      }}
-      className={`rounded-md border-l-4 px-2 py-1 text-xs overflow-hidden cursor-grab select-none ${
-        isDark ? 'bg-blue-500/20 border-l-blue-400 text-gray-100' : 'bg-blue-100 border-l-blue-400 text-gray-800'
-      } ${completedStripe}`}
+    <TaskContextMenu
+      task={task}
+      extra={
+        <ContextMenuItem onSelect={unschedule} className="gap-2 text-sm">
+          <CalendarOff size={14} />
+          {t('calendar.unschedule')}
+        </ContextMenuItem>
+      }
     >
-      <div className="font-medium truncate">{task.title}</div>
-      <div className="text-[10px] opacity-70">
-        {start.getHours()}:{String(start.getMinutes()).padStart(2, '0')}–{end.getHours()}:
-        {String(end.getMinutes()).padStart(2, '0')}
-      </div>
-      {/* Resize handle (bottom 6px) */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 크기 조정 핸들, 마우스 드래그 전용 */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: 드래그 블록 — drag 인터랙션, button 전환 불가 */}
       <div
-        onMouseDown={onResizeStart}
-        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '6px', cursor: 'ns-resize' }}
-      />
-      {menuOpen && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: 컨텍스트 메뉴 컨테이너 — 중첩 button이 키보드 접근성 제공
-        <div
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          className={`absolute right-1 top-1 rounded shadow-md z-10 ${
-            isDark ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'
-          }`}
-        >
-          <button
-            type="button"
-            className="px-3 py-1 text-xs hover:bg-gray-500/20 block w-full text-left"
-            onClick={unschedule}
-          >
-            {t('calendar.unschedule')}
-          </button>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs hover:bg-gray-500/20 block w-full text-left"
-            onClick={() => setMenuOpen(false)}
-          >
-            {t('common.cancel')}
-          </button>
+        ref={elRef}
+        draggable
+        onDragStart={onDragStart}
+        style={{
+          position: 'absolute',
+          top: `${topPx}px`,
+          left: `${leftPct}%`,
+          width: `${widthPct}%`,
+          ...(isResizing ? {} : { height: `${heightPx}px` })
+        }}
+        className={`rounded-md border-l-4 px-2 py-1 text-xs overflow-hidden cursor-grab select-none ${
+          isDark ? 'bg-blue-500/20 border-l-blue-400 text-gray-100' : 'bg-blue-100 border-l-blue-400 text-gray-800'
+        } ${completedStripe}`}
+      >
+        <div className="font-medium truncate">{task.title}</div>
+        <div className="text-[10px] opacity-70">
+          {start.getHours()}:{String(start.getMinutes()).padStart(2, '0')}–{end.getHours()}:
+          {String(end.getMinutes()).padStart(2, '0')}
         </div>
-      )}
-    </div>
+        {/* Resize handle (bottom 6px) */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: 크기 조정 핸들, 마우스 드래그 전용 */}
+        <div
+          onMouseDown={onResizeStart}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '6px', cursor: 'ns-resize' }}
+        />
+      </div>
+    </TaskContextMenu>
   )
 }

@@ -33,6 +33,8 @@ const baseTask: Task = {
   completed: false,
   priority: 'none',
   dueDate: null,
+  startDate: null,
+  pinned: false,
   dueTime: null,
   reminderAt: null,
   listId: 'inbox',

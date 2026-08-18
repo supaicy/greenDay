@@ -97,3 +97,31 @@ describe('validateTaskInput — scheduledOverrides 모양', () => {
     expect(() => validateTaskInput({ id: 't1', title: 'x', scheduledOverrides: polluted })).toThrow()
   })
 })
+
+/**
+ * startDate·pinned는 렌더러가 새로 보내는 필드다. 이 경계를 통과하면 그대로
+ * 디스크에 남으므로, 모양 검사는 렌더러가 아니라 여기 있어야 한다.
+ */
+describe('validateTaskUpdate — 기간·고정', () => {
+  it('YYYY-MM-DD가 아닌 startDate는 거부한다', () => {
+    expect(() => validateTaskUpdate({ id: 't1', startDate: '2026/08/20' })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', startDate: '오늘' })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', startDate: 20260820 })).toThrow()
+  })
+
+  it('정상 startDate와 null은 통과시킨다', () => {
+    expect(validateTaskUpdate({ id: 't1', startDate: '2026-08-20' })).toBeTruthy()
+    expect(validateTaskUpdate({ id: 't1', startDate: null })).toBeTruthy()
+  })
+
+  it('pinned는 불리언만 받는다', () => {
+    expect(() => validateTaskUpdate({ id: 't1', pinned: 'yes' })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', pinned: 1 })).toThrow()
+    expect(validateTaskUpdate({ id: 't1', pinned: true })).toBeTruthy()
+  })
+
+  it('생성 경로도 같은 규칙을 받는다', () => {
+    expect(() => validateTaskInput({ id: 't1', title: 'x', startDate: 'nope' })).toThrow()
+    expect(() => validateTaskInput({ id: 't1', title: 'x', pinned: 'nope' })).toThrow()
+  })
+})

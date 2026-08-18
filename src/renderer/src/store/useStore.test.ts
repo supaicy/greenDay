@@ -515,3 +515,127 @@ describe('완료 시 미래 회차 오버라이드 인계', () => {
     expect(spawned?.scheduledOverrides ?? null).toBeNull()
   })
 })
+
+describe('duplicateTask', () => {
+  it('복제본은 원본 바로 아래에 온다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'a', sortOrder: 1 }), task({ id: 'b', sortOrder: 2 }), task({ id: 'c', sortOrder: 3 })]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    const ids = useStore.getState().tasks.map((t) => t.id)
+    // 맨 끝에 붙으면 방금 무슨 일이 일어났는지 화면에서 보이지 않는다.
+    expect(ids[0]).toBe('a')
+    expect(ids[1]).not.toBe('b')
+    expect(ids.slice(2)).toEqual(['b', 'c'])
+  })
+
+  it('내용은 그대로, 완료 상태는 물려받지 않는다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'a',
+          title: '보고서',
+          description: '메모',
+          priority: 'high',
+          tags: ['업무'],
+          dueDate: '2026-08-20',
+          completed: true,
+          completedAt: '2026-08-19T00:00:00.000Z'
+        })
+      ]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    const copy = useStore.getState().tasks.find((t) => t.id !== 'a')
+    expect(copy).toMatchObject({
+      title: '보고서',
+      description: '메모',
+      priority: 'high',
+      tags: ['업무'],
+      dueDate: '2026-08-20',
+      completed: false,
+      completedAt: null
+    })
+  })
+
+  it('시간블록은 복제하지 않는다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'a',
+          scheduledStart: '2026-08-20T09:00:00',
+          scheduledEnd: '2026-08-20T10:00:00',
+          scheduledOverrides: { '2026-08-21': null }
+        })
+      ]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    // 한 시간대에 같은 일이 두 개 겹치는 것은 복제가 아니라 사고다.
+    const copy = useStore.getState().tasks.find((t) => t.id !== 'a')
+    expect(copy?.scheduledStart).toBeNull()
+    expect(copy?.scheduledEnd).toBeNull()
+    expect(copy?.scheduledOverrides ?? null).toBeNull()
+  })
+
+  it('고정은 물려받지 않는다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', pinned: true })] })
+    await useStore.getState().duplicateTask('a')
+
+    expect(useStore.getState().tasks.find((t) => t.id !== 'a')?.pinned).toBe(false)
+  })
+
+  it('하위작업도 함께 복제되어 새 부모를 가리킨다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'a' }), task({ id: 's1', title: '1단계', parentId: 'a' }), task({ id: 's2', parentId: 'a' })]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    const tasks = useStore.getState().tasks
+    const copy = tasks.find((t) => t.id !== 'a' && !t.parentId)
+    const copiedSubs = tasks.filter((t) => t.parentId === copy?.id)
+    expect(copiedSubs).toHaveLength(2)
+    // 원본의 하위작업은 그대로 남는다
+    expect(tasks.filter((t) => t.parentId === 'a')).toHaveLength(2)
+    expect(copiedSubs.map((t) => t.id)).not.toContain('s1')
+  })
+
+  it('없는 id는 아무 일도 하지 않는다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a' })] })
+    await useStore.getState().duplicateTask('nope')
+    expect(useStore.getState().tasks).toHaveLength(1)
+  })
+})
+
+describe('updateTask — 기간(startDate) 불변식', () => {
+  it('시작일이 마감일보다 뒤면 저장하지 않는다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', dueDate: '2026-08-20', startDate: '2026-08-18' })] })
+    await useStore.getState().updateTask({ id: 'a', startDate: '2026-08-25' })
+
+    // 거꾸로 된 기간은 화면에서 음수 길이의 막대가 된다.
+    expect(useStore.getState().tasks[0].startDate).toBe('2026-08-18')
+  })
+
+  it('시작일과 마감일이 같은 하루짜리 기간은 허용한다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', dueDate: '2026-08-20' })] })
+    await useStore.getState().updateTask({ id: 'a', startDate: '2026-08-20' })
+    expect(useStore.getState().tasks[0].startDate).toBe('2026-08-20')
+  })
+
+  it('마감일을 지우면 시작일도 함께 지운다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', dueDate: '2026-08-20', startDate: '2026-08-18' })] })
+    await useStore.getState().updateTask({ id: 'a', dueDate: null })
+
+    // 끝이 없으면 기간이 아니다 — 시작일만 남으면 어디에도 그릴 수 없다.
+    expect(useStore.getState().tasks[0].startDate).toBeNull()
+  })
+
+  it('마감일을 앞으로 당겨 시작일보다 빨라지면 시작일을 버린다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', dueDate: '2026-08-20', startDate: '2026-08-18' })] })
+    await useStore.getState().updateTask({ id: 'a', dueDate: '2026-08-15' })
+
+    expect(useStore.getState().tasks[0].startDate).toBeNull()
+    expect(useStore.getState().tasks[0].dueDate).toBe('2026-08-15')
+  })
+})

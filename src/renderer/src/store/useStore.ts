@@ -105,6 +105,8 @@ interface Store {
   updateTask: (task: Partial<Task> & { id: string }) => Promise<void>
   toggleTask: (id: string) => Promise<void>
   removeTask: (id: string) => Promise<void>
+  /** 할일을 복제해 원본 바로 아래에 놓는다(하위작업 포함). */
+  duplicateTask: (id: string) => Promise<void>
   restoreTask: (id: string) => Promise<void>
   permanentDeleteTask: (id: string) => Promise<void>
   emptyTrash: () => Promise<void>
@@ -209,7 +211,9 @@ function mapTask(row: Record<string, unknown>): Task {
     priority: (row.priority as Priority) || 'none',
     dueDate: (row.due_date as string) || null,
     dueTime: (row.due_time as string) || null,
+    startDate: (row.start_date as string) || null,
     reminderAt: (row.reminder_at as string) || null,
+    pinned: Boolean(row.pinned),
     listId: (row.list_id as string) || 'inbox',
     parentId: (row.parent_id as string) || null,
     tags: safeParseJson<string[]>(row.tags as string, []),
@@ -462,7 +466,9 @@ export const useStore = create<Store>((set, get) => ({
         priority: opts.priority || 'none',
         dueDate: finalDueDate,
         dueTime: opts.dueTime || null,
+        startDate: opts.startDate || null,
         reminderAt: opts.reminderAt || null,
+        pinned: opts.pinned || false,
         listId: targetList,
         parentId: opts.parentId || null,
         tags: finalTags,
@@ -507,6 +513,28 @@ export const useStore = create<Store>((set, get) => ({
           return
         }
       }
+    }
+
+    // 기간(startDate~dueDate)의 불변식. dueDate가 종료일이므로 둘은 한 쌍이다.
+    // 여기서 한 번에 지키지 않으면 호출처마다(픽커·⋯메뉴·컨텍스트 메뉴·AI 액션)
+    // 같은 검사를 되풀이해야 하고, 하나만 빠져도 거꾸로 된 기간이 저장된다.
+    if ('startDate' in task || 'dueDate' in task) {
+      const current = get().tasks.find((t) => t.id === task.id)
+      if (!current) return
+      const nextStart = 'startDate' in task ? (task.startDate ?? null) : current.startDate
+      const nextDue = 'dueDate' in task ? (task.dueDate ?? null) : current.dueDate
+      if (nextStart && nextDue && nextStart > nextDue) {
+        // 시작일을 직접 뒤로 밀었다면 그건 거부한다(사용자가 방금 지정한 값이 틀렸다).
+        if ('startDate' in task && task.startDate) {
+          console.warn('[updateTask] rejected inverted date range', { nextStart, nextDue })
+          return
+        }
+        // 마감일을 앞으로 당겨서 뒤집힌 경우라면, 옮긴 마감일이 사용자의 의도다.
+        // 남은 시작일은 의미를 잃었으므로 버린다.
+        task = { ...task, startDate: null }
+      }
+      // 끝이 없으면 기간이 아니다.
+      if (!nextDue && nextStart) task = { ...task, startDate: null }
     }
 
     // scheduledOverrides는 반복 시리즈에 딸린 회차 예외다. 시리즈의 시간블록이
@@ -610,6 +638,47 @@ export const useStore = create<Store>((set, get) => ({
       }
     })
     window.api.deleteTask(id)
+  },
+  duplicateTask: async (id) => {
+    const all = get().tasks
+    const src = all.find((t) => t.id === id)
+    if (!src) return
+    const now = new Date().toISOString()
+
+    // 원본과 다음 항목 사이의 값을 준다 — 다른 행의 sortOrder를 건드리지 않고도
+    // 원본 바로 아래에 놓인다. 같은 자리에 계속 복제하면 간격이 반씩 줄지만,
+    // 드래그 한 번이면 reorderTasks가 정수 슬롯으로 되돌린다.
+    const after = all
+      .filter((t) => t.listId === src.listId && !t.parentId && t.sortOrder > src.sortOrder)
+      .reduce((min, t) => Math.min(min, t.sortOrder), Number.POSITIVE_INFINITY)
+    const sortOrder = Number.isFinite(after) ? (src.sortOrder + after) / 2 : src.sortOrder + 1
+
+    // 복제되지 않는 것들: 완료 이력은 이 할일의 것이 아니고, 시간블록은 한 자리에
+    // 둘이 겹치게 만들며, 고정은 "이것 하나를 위에 둔다"는 뜻이라 복제가 무의미하다.
+    const fresh = <T extends Task>(t: T, over: Partial<Task>): Task => ({
+      ...t,
+      id: uuid(),
+      completed: false,
+      completedAt: null,
+      deletedAt: null,
+      pinned: false,
+      scheduledStart: null,
+      scheduledEnd: null,
+      scheduledOverrides: null,
+      createdAt: now,
+      ...over
+    })
+
+    const copy = fresh(src, { sortOrder })
+    const subtasks = all.filter((t) => t.parentId === id).map((t) => fresh(t, { parentId: copy.id }))
+
+    set((s) => {
+      const at = s.tasks.findIndex((t) => t.id === id)
+      const next = [...s.tasks]
+      next.splice(at + 1, 0, copy)
+      return { tasks: [...next, ...subtasks] }
+    })
+    for (const t of [copy, ...subtasks]) window.api.createTask(t)
   },
   restoreTask: async (id) => {
     const task = get().trashTasks.find((t) => t.id === id)

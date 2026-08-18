@@ -135,7 +135,10 @@
     "moveToList": "Move to another list",
     "copyTitle": "Copy title",
     "count_one": "{{count}} task",
-    "count_other": "{{count}} tasks"
+    "count_other": "{{count}} tasks",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "duplicate": "Duplicate"
   },
   "detail": {
     "addAttachment": "Add file",
@@ -159,7 +162,11 @@
     "subtasks": "Subtasks {{done}}/{{total}}",
     "tagsLabel": "Tags",
     "tagsPlaceholder": "Tags…",
-    "uncomplete": "Mark as not done"
+    "uncomplete": "Mark as not done",
+    "setDateRange": "Set date range",
+    "dateRangeLabel": "Date range",
+    "startDateLabel": "Start",
+    "endDateLabel": "Due"
   },
   "batch": {
     "selectAll": "Select all",

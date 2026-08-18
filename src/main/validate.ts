@@ -12,7 +12,24 @@ export function validateTaskInput(input: unknown): Record<string, unknown> {
   }
   // 생성 경로도 같은 검사를 받는다 — createTask가 이 값을 그대로 직렬화한다.
   if ('scheduledOverrides' in obj) validateScheduledOverrides(obj.scheduledOverrides)
+  validateRangeAndPin(obj)
   return obj
+}
+
+/**
+ * 기간의 시작일과 고정 플래그. 렌더러에서 이미 불변식을 지키지만, 이 경계를
+ * 통과한 값은 그대로 디스크에 남으므로 모양은 여기서도 확인한다.
+ * (앞뒤 순서 검사는 하지 않는다 — 부분 페이로드라 상대편 값을 여기서 알 수 없다.)
+ */
+function validateRangeAndPin(obj: Record<string, unknown>): void {
+  if ('startDate' in obj && obj.startDate !== null) {
+    if (typeof obj.startDate !== 'string' || !ISO_DATE.test(obj.startDate)) {
+      throw new Error('Invalid task payload')
+    }
+  }
+  if ('pinned' in obj && typeof obj.pinned !== 'boolean') {
+    throw new Error('Invalid task payload')
+  }
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -53,5 +70,6 @@ export function validateTaskUpdate(input: unknown): Record<string, unknown> {
     throw new Error('Invalid task payload')
   }
   if ('scheduledOverrides' in obj) validateScheduledOverrides(obj.scheduledOverrides)
+  validateRangeAndPin(obj)
   return obj
 }

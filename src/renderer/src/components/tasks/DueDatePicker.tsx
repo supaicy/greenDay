@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react'
-import { X, Bell, Repeat, ChevronRight } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { X, Bell, Repeat, CalendarRange, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -35,27 +35,43 @@ export function nextMonday(today: string): string {
 export function DueDatePicker({
   dueDate,
   dueTime,
+  startDate,
   reminderAt,
   recurringPattern,
   isRecurring,
   onChange,
+  onStartDateChange,
   onReminderChange,
   onRecurringChange,
+  openRangeSignal,
   trigger
 }: {
   dueDate: string | null
   dueTime: string | null
+  startDate: string | null
   reminderAt: string | null
   recurringPattern: string | null
   isRecurring: boolean
   onChange: (next: { dueDate: string | null; dueTime: string | null }) => void
+  onStartDateChange: (startDate: string | null) => void
   onReminderChange: (reminderAt: string | null) => void
   onRecurringChange: (pattern: string | null) => void
+  /** ⋯ 메뉴의 '기간 설정'에서 값이 바뀌면 팝오버를 기간 모드로 연다. */
+  openRangeSignal?: number
   trigger: ReactNode
 }) {
   const { t } = useTranslation()
   const isDark = useStore((s) => s.theme) === 'dark'
   const [open, setOpen] = useState(false)
+  // 시작일이 이미 있으면 기간 모드다. 없을 때 '기간' 행을 눌러 켜는 것이 이 상태.
+  const [rangeArmed, setRangeArmed] = useState(false)
+  const rangeMode = rangeArmed || startDate != null
+
+  useEffect(() => {
+    if (!openRangeSignal) return
+    setRangeArmed(true)
+    setOpen(true)
+  }, [openRangeSignal])
 
   const today = todayString()
   const quick: { labelKey: string; date: string }[] = [
@@ -81,7 +97,13 @@ export function DueDatePicker({
   }`
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setRangeArmed(false)
+      }}
+    >
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="w-[268px] p-3 space-y-3">
         <div className="flex flex-wrap gap-1.5">
@@ -100,11 +122,34 @@ export function DueDatePicker({
           ))}
         </div>
 
+        {rangeMode && (
+          <div className="flex items-center gap-2">
+            <span className={`w-8 shrink-0 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              {t('detail.startDateLabel')}
+            </span>
+            <input
+              type="date"
+              aria-label={t('detail.startDateLabel')}
+              value={startDate ?? ''}
+              // 거꾸로 된 기간은 스토어가 거부하지만, 달력에서 아예 고를 수 없는 편이 낫다.
+              max={dueDate ?? undefined}
+              onChange={(e) => onStartDateChange(e.target.value || null)}
+              className={`flex-1 ${fieldCls}`}
+            />
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
+          {rangeMode && (
+            <span className={`w-8 shrink-0 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+              {t('detail.endDateLabel')}
+            </span>
+          )}
           <input
             type="date"
             aria-label={t('task.dueDate')}
             value={dueDate ?? ''}
+            min={rangeMode ? (startDate ?? undefined) : undefined}
             onChange={(e) => onChange({ dueDate: e.target.value || null, dueTime })}
             className={`flex-1 ${fieldCls}`}
           />
@@ -121,6 +166,25 @@ export function DueDatePicker({
             기한과 떨어져 의미 그룹이 깨지고 상단바가 붐빈다. 각 행은 기존
             픽커를 그대로 중첩해 연다(기능 손실 없음). */}
         <div className={`border-t pt-2 ${isDark ? 'border-surface-line' : 'border-gray-200'}`}>
+          <button
+            type="button"
+            onClick={() => {
+              // 켜져 있으면 끈다 — 시작일을 지우는 것이 곧 '기간 아님'이다.
+              if (rangeMode) {
+                onStartDateChange(null)
+                setRangeArmed(false)
+              } else {
+                setRangeArmed(true)
+              }
+            }}
+            className={rowCls}
+          >
+            <span className="flex items-center gap-2">
+              <CalendarRange size={13} />
+              {t('detail.dateRangeLabel')}
+            </span>
+            <span className="text-gray-400">{startDate ?? t('common.none')}</span>
+          </button>
           <ReminderPicker
             dueDate={dueDate}
             value={reminderAt}

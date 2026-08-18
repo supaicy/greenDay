@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ListPlus, Tag, Paperclip, Timer, Copy, Trash2 } from 'lucide-react'
+import { CalendarRange, ListPlus, Paperclip, Tag, Timer } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { usePomodoroStore } from '../../store/usePomodoroStore'
@@ -10,32 +10,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { DROPDOWN_KIT, TaskActionItems } from './TaskActionItems'
+import { useSharedTaskActions } from './taskActions'
+import type { Task } from '../../types'
 
 /**
  * 상세 패널 하단의 ⋯ 메뉴. 자주 쓰지 않는 동작을 여기로 모아 본문(메모)이
  * 패널의 주인공이 되게 한다 — 전에는 하위작업·첨부 버튼이 늘 바닥을 차지했다.
- * 이 앱에 실제로 있는 기능만 넣는다.
+ *
+ * 앞쪽은 편집기가 필요한 동작(이 패널에만 있다), 뒤쪽은 우클릭 메뉴와 공유하는
+ * 즉시 동작이다(taskActions.ts).
  */
 export function TaskMoreMenu({
-  taskId,
-  title,
+  task,
   onAddSubtask,
   onAddTag,
   onAddAttachment,
+  onSetDateRange,
   trigger
 }: {
-  taskId: string
-  title: string
+  task: Task
   onAddSubtask: () => void
   onAddTag: () => void
   onAddAttachment: () => void
+  onSetDateRange: () => void
   trigger: ReactNode
 }) {
   const { t } = useTranslation()
-  const removeTask = useStore((s) => s.removeTask)
   const setViewType = useStore((s) => s.setViewType)
   const toggleRun = usePomodoroStore((s) => s.toggleRun)
   const running = usePomodoroStore((s) => s.running)
+  const shared = useSharedTaskActions(task)
 
   return (
     <DropdownMenu>
@@ -53,6 +58,10 @@ export function TaskMoreMenu({
           <Paperclip size={14} />
           {t('detail.addAttachment')}
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onSetDateRange} className="gap-2 text-sm">
+          <CalendarRange size={14} />
+          {t('detail.setDateRange')}
+        </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
             // 포모도로 화면으로 옮기고 타이머를 시작한다. 이미 돌고 있으면 화면만 옮긴다.
@@ -66,18 +75,7 @@ export function TaskMoreMenu({
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
-
-        <DropdownMenuItem
-          onSelect={() => void navigator.clipboard.writeText(title)}
-          className="gap-2 text-sm"
-        >
-          <Copy size={14} />
-          {t('task.copyTitle')}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => removeTask(taskId)} className="gap-2 text-sm text-red-400">
-          <Trash2 size={14} />
-          {t('common.delete')}
-        </DropdownMenuItem>
+        <TaskActionItems actions={shared} kit={DROPDOWN_KIT} task={task} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

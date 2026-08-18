@@ -135,7 +135,10 @@
     "moveToList": "다른 리스트로 이동",
     "copyTitle": "제목 복사",
     "count_one": "{{count}}개",
-    "count_other": "{{count}}개"
+    "count_other": "{{count}}개",
+    "pin": "고정",
+    "unpin": "고정 해제",
+    "duplicate": "복제"
   },
   "detail": {
     "addAttachment": "파일 추가",
@@ -159,7 +162,11 @@
     "subtasks": "하위 작업 {{done}}/{{total}}",
     "tagsLabel": "태그",
     "tagsPlaceholder": "태그...",
-    "uncomplete": "완료 취소"
+    "uncomplete": "완료 취소",
+    "setDateRange": "기간 설정",
+    "dateRangeLabel": "기간",
+    "startDateLabel": "시작",
+    "endDateLabel": "마감"
   },
   "batch": {
     "selected": "{{n}}개 선택",

@@ -77,6 +77,8 @@ export function TaskDetail() {
   const [showSubtasks, setShowSubtasks] = useState(false)
   // '태그' 항목을 누르면 TagPicker 팝오버를 연다(값이 바뀌는 것만으로 신호).
   const [tagSignal, setTagSignal] = useState(0)
+  // '기간 설정'도 같은 방식으로 기한 팝오버를 기간 모드로 연다.
+  const [rangeSignal, setRangeSignal] = useState(0)
   // 드래그 중 라이브 폭(px). null이면 저장값 사용. mouseup에서만 persist.
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   // 창 너비 추적 — 변할 때 clamp가 재계산되도록. persist는 하지 않는다.
@@ -179,6 +181,11 @@ export function TaskDetail() {
   const width = dragWidth ?? clampDetailWidth(detailWidth ?? DEFAULT_DETAIL_WIDTH, windowWidth, showAiChat)
   const priorityColor = PRIORITY_COLOR[task.priority]
 
+  // 기간이면 시작~마감으로 읽힌다. 값이 하나도 없으면 '마감일 없음'.
+  const dueLabel = dueDate || dueTime
+    ? `${task.startDate ? `${task.startDate} ~ ` : ''}${dueDate || ''}${dueTime ? ` ${dueTime}` : ''}`.trim()
+    : t('detail.noDueDate')
+
   // 좌측 경계선 드래그로 폭 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist.
   // 패널 우측 경계는 고정(창 우측에 핀)이므로 mousedown 시점 값을 그대로 사용.
   const startResize = (e: React.MouseEvent) => {
@@ -260,6 +267,7 @@ export function TaskDetail() {
         <DueDatePicker
           dueDate={dueDate || null}
           dueTime={dueTime || null}
+          startDate={task.startDate}
           reminderAt={task.reminderAt}
           recurringPattern={task.recurringPattern}
           isRecurring={task.isRecurring}
@@ -268,12 +276,14 @@ export function TaskDetail() {
             setDueTime(next.dueTime ?? '')
             save({ dueDate: next.dueDate, dueTime: next.dueTime })
           }}
+          onStartDateChange={(v) => save({ startDate: v })}
           onReminderChange={(v) => save({ reminderAt: v })}
           onRecurringChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
+          openRangeSignal={rangeSignal}
           trigger={
             <button type="button" className={ctlCls(!!dueDate || !!dueTime)}>
               <CalendarDays size={14} />
-              {dueDate || dueTime ? `${dueDate || ''}${dueTime ? ` ${dueTime}` : ''}`.trim() : t('detail.noDueDate')}
+              {dueLabel}
             </button>
           }
         />
@@ -392,10 +402,10 @@ export function TaskDetail() {
             <X size={16} />
           </button>
           <TaskMoreMenu
-            taskId={task.id}
-            title={task.title}
+            task={task}
             onAddSubtask={() => setShowSubtasks(true)}
             onAddTag={() => setTagSignal((n) => n + 1)}
+            onSetDateRange={() => setRangeSignal((n) => n + 1)}
             onAddAttachment={async () => {
               const files = await pickAttachment()
               if (files?.length) save({ attachments: [...task.attachments, ...files.map((f) => `${f.name}|${f.path}`)] })

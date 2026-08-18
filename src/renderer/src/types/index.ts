@@ -8,7 +8,14 @@ export interface Task {
   priority: Priority
   dueDate: string | null
   dueTime: string | null
+  /**
+   * 기간의 시작일(YYYY-MM-DD). dueDate가 종료일 역할을 하므로 startDate만으로는
+   * 기간이 성립하지 않는다 — 둘 다 있을 때만 "8/18 ~ 8/20"이 된다.
+   */
+  startDate: string | null
   reminderAt: string | null
+  /** 목록 맨 위에 고정. 어떤 정렬 기준보다 앞선다(utils/taskOrder.ts). */
+  pinned: boolean
   listId: string
   parentId: string | null
   tags: string[]
@@ -129,6 +136,8 @@ export type { AiConfig } from '../../../shared/ai-config'
 export interface AddTaskOptions {
   listId?: string
   dueDate?: string | null
+  startDate?: string | null
+  pinned?: boolean
   priority?: Priority
   parentId?: string | null
   dueTime?: string | null

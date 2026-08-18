@@ -9,10 +9,11 @@
  */
 
 import '@testing-library/jest-dom/vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect, useState } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ContextMenuItem } from '@/components/ui/context-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
 import { TagPicker } from './TagPicker'
+import { TaskContextMenu } from './TaskContextMenu'
 import { TaskMoreMenu } from './TaskMoreMenu'
 import { QuickAdd } from '../common/QuickAdd'
 
@@ -491,11 +493,11 @@ describe('TaskMoreMenu', () => {
     const user = userEvent.setup()
     render(
       <TaskMoreMenu
-        taskId="task-1"
-        title="제목"
+        task={menuTask}
         onAddSubtask={() => {}}
         onAddTag={() => {}}
         onAddAttachment={() => {}}
+        onSetDateRange={() => {}}
         trigger={<button type="button">더 보기</button>}
       />
     )
@@ -507,7 +509,11 @@ describe('TaskMoreMenu', () => {
       '하위 작업 추가',
       '태그',
       '파일 추가',
+      '기간 설정',
       '포커스 시작',
+      '고정',
+      '복제',
+      '다른 리스트로 이동',
       '제목 복사',
       '삭제'
     ])
@@ -518,11 +524,11 @@ describe('TaskMoreMenu', () => {
     const onAddSubtask = vi.fn()
     render(
       <TaskMoreMenu
-        taskId="task-1"
-        title="제목"
+        task={menuTask}
         onAddSubtask={onAddSubtask}
         onAddTag={() => {}}
         onAddAttachment={() => {}}
+        onSetDateRange={() => {}}
         trigger={<button type="button">더 보기</button>}
       />
     )
@@ -539,11 +545,11 @@ describe('TaskMoreMenu', () => {
     useStore.setState({ removeTask })
     render(
       <TaskMoreMenu
-        taskId="task-1"
-        title="제목"
+        task={menuTask}
         onAddSubtask={() => {}}
         onAddTag={() => {}}
         onAddAttachment={() => {}}
+        onSetDateRange={() => {}}
         trigger={<button type="button">더 보기</button>}
       />
     )
@@ -559,10 +565,12 @@ describe('DueDatePicker — 접힌 알림·반복', () => {
   const props = {
     dueDate: null,
     dueTime: null,
+    startDate: null,
     reminderAt: null,
     recurringPattern: null,
     isRecurring: false,
     onChange: () => {},
+    onStartDateChange: () => {},
     onReminderChange: () => {},
     onRecurringChange: () => {}
   }
@@ -623,5 +631,145 @@ describe('RecurringPicker — 버린 초안', () => {
     await user.click(await screen.findByRole('button', { name: '적용' }))
 
     expect(onChange).toHaveBeenCalledWith('daily')
+  })
+})
+
+/**
+ * ⋯ 메뉴와 우클릭 메뉴는 겹치는 항목을 손으로 두 번 적고 있었다 — 한쪽만
+ * 고쳐지면 같은 할일에 대해 메뉴마다 다른 말을 한다. 공유 정의를 두고,
+ * 두 메뉴가 정말 같은 것을 보여주는지 여기서 붙잡는다.
+ */
+const menuTask = {
+  id: 'task-1',
+  title: '보고서',
+  pinned: false,
+  listId: 'inbox',
+  completed: false
+} as never
+
+function renderContextMenu(over: Record<string, unknown> = {}): void {
+  render(
+    <TaskContextMenu task={{ ...(menuTask as object), ...over } as never}>
+      <div>행</div>
+    </TaskContextMenu>
+  )
+}
+
+async function openContextMenu(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.pointer({ keys: '[MouseRight]', target: screen.getByText('행') })
+  await screen.findByRole('menu')
+}
+
+describe('공유 할일 동작', () => {
+  beforeEach(() => {
+    useStore.setState({
+      lists: [
+        { id: 'inbox', name: '기본함', color: '#000' },
+        { id: 'work', name: '업무', color: '#111' }
+      ] as never
+    })
+  })
+
+  it('두 메뉴가 같은 공유 항목을 같은 순서로 보여준다', async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(
+      <TaskMoreMenu
+        task={menuTask}
+        onAddSubtask={() => {}}
+        onAddTag={() => {}}
+        onAddAttachment={() => {}}
+        onSetDateRange={() => {}}
+        trigger={<button type="button">더 보기</button>}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: '더 보기' }))
+    const more = (await screen.findAllByRole('menuitem')).map((i) => i.textContent)
+    unmount()
+
+    renderContextMenu()
+    await openContextMenu(user)
+    const ctx = screen.getAllByRole('menuitem').map((i) => i.textContent)
+
+    const shared = ['고정', '복제', '다른 리스트로 이동', '제목 복사', '삭제']
+    expect(more.filter((x) => shared.includes(x as string))).toEqual(shared)
+    expect(ctx.filter((x) => shared.includes(x as string))).toEqual(shared)
+  })
+
+  it('우클릭 메뉴는 즉시 끝나는 동작만 담는다', async () => {
+    const user = userEvent.setup()
+    renderContextMenu()
+    await openContextMenu(user)
+
+    // 기간·태그·첨부·하위작업은 편집기가 필요하다 — 목록 행에는 열 자리가 없다.
+    for (const editorAction of ['기간 설정', '태그', '파일 추가', '하위 작업 추가']) {
+      expect(screen.queryByRole('menuitem', { name: editorAction })).toBeNull()
+    }
+    expect(screen.getByRole('menuitem', { name: '완료로 변경' })).toBeInTheDocument()
+  })
+
+  it('호출처가 자기만 아는 항목을 끼워 넣을 수 있다', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    // 캘린더 블록의 '배정 해제'가 이 자리를 쓴다 — 전에는 그 메뉴가 별도의
+    // 손수 만든 div였고, 바깥을 클릭해도 닫히지 않았다.
+    render(
+      <TaskContextMenu task={menuTask} extra={<ContextMenuItem onSelect={onSelect}>배정 해제</ContextMenuItem>}>
+        <div>행</div>
+      </TaskContextMenu>
+    )
+    await openContextMenu(user)
+
+    const items = screen.getAllByRole('menuitem').map((i) => i.textContent)
+    expect(items.slice(0, 2)).toEqual(['완료로 변경', '배정 해제'])
+    await user.click(screen.getByRole('menuitem', { name: '배정 해제' }))
+    expect(onSelect).toHaveBeenCalled()
+  })
+
+  it('고정을 누르면 그 할일을 고정한다', async () => {
+    const user = userEvent.setup()
+    const updateTask = vi.fn()
+    useStore.setState({ updateTask })
+    renderContextMenu()
+    await openContextMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: '고정' }))
+
+    expect(updateTask).toHaveBeenCalledWith({ id: 'task-1', pinned: true })
+  })
+
+  it('이미 고정된 할일은 해제로 뒤집힌다', async () => {
+    const user = userEvent.setup()
+    const updateTask = vi.fn()
+    useStore.setState({ updateTask })
+    renderContextMenu({ pinned: true })
+    await openContextMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: '고정 해제' }))
+
+    expect(updateTask).toHaveBeenCalledWith({ id: 'task-1', pinned: false })
+  })
+
+  it('복제를 누르면 복제한다', async () => {
+    const user = userEvent.setup()
+    const duplicateTask = vi.fn()
+    useStore.setState({ duplicateTask })
+    renderContextMenu()
+    await openContextMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: '복제' }))
+
+    expect(duplicateTask).toHaveBeenCalledWith('task-1')
+  })
+
+  it('이동 하위메뉴에서 목록을 고르면 그 목록으로 옮긴다', async () => {
+    const user = userEvent.setup()
+    const updateTask = vi.fn()
+    useStore.setState({ updateTask })
+    renderContextMenu()
+    await openContextMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: '다른 리스트로 이동' }))
+    // 여기만 fireEvent다. jsdom엔 레이아웃이 없어서, userEvent가 포인터를
+    // 하위메뉴 항목으로 옮기는 순간 Radix의 hover 의도 판정이 메뉴를 닫는다
+    // (실제 브라우저에서는 포인터가 내용 위에 있어 열린 채로 남는다).
+    fireEvent.click(await screen.findByRole('menuitem', { name: '업무' }))
+
+    expect(updateTask).toHaveBeenCalledWith({ id: 'task-1', listId: 'work' })
   })
 })

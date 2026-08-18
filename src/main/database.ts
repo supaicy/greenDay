@@ -141,6 +141,8 @@ export function initDatabase(): void {
     if (t.scheduled_start === undefined) t.scheduled_start = null
     if (t.scheduled_end === undefined) t.scheduled_end = null
     if (t.scheduled_overrides === undefined) t.scheduled_overrides = null
+    if (t.start_date === undefined) t.start_date = null
+    if (t.pinned === undefined) t.pinned = 0
     normalizeLegacyWeeklyPattern(t)
   })
   data.lists.forEach((l) => {
@@ -261,7 +263,9 @@ export function createTask(task: Record<string, unknown>): void {
     priority: task.priority || 'none',
     due_date: task.dueDate || null,
     due_time: task.dueTime || null,
+    start_date: task.startDate || null,
     reminder_at: task.reminderAt || null,
+    pinned: task.pinned ? 1 : 0,
     list_id: task.listId || 'inbox',
     parent_id: task.parentId || null,
     tags: JSON.stringify(task.tags || []),
@@ -278,6 +282,9 @@ export function createTask(task: Record<string, unknown>): void {
   })
   save()
 }
+/** JSON 저장소는 0/1로 적는다 — 불리언으로 새면 옛 레코드와 모양이 갈린다. */
+const BOOLEAN_FIELDS = new Set(['isRecurring', 'pinned'])
+
 export function updateTask(task: Record<string, unknown>): void {
   const existing = data.tasks.find((t) => t.id === task.id)
   if (!existing) return
@@ -287,7 +294,9 @@ export function updateTask(task: Record<string, unknown>): void {
     priority: 'priority',
     dueDate: 'due_date',
     dueTime: 'due_time',
+    startDate: 'start_date',
     reminderAt: 'reminder_at',
+    pinned: 'pinned',
     listId: 'list_id',
     parentId: 'parent_id',
     isRecurring: 'is_recurring',
@@ -307,7 +316,7 @@ export function updateTask(task: Record<string, unknown>): void {
 
   for (const [key, col] of Object.entries(fields)) {
     if (task[key] !== undefined) {
-      existing[col] = key === 'isRecurring' ? (task[key] ? 1 : 0) : task[key]
+      existing[col] = BOOLEAN_FIELDS.has(key) ? (task[key] ? 1 : 0) : task[key]
     }
   }
   for (const [col, value] of Object.entries(serialized)) existing[col] = value

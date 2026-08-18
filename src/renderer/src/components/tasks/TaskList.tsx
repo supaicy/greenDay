@@ -11,7 +11,8 @@ import { useTranslation } from 'react-i18next'
 import { SMART_LIST_PREDICATES, isTopLevel, tagFromListId } from '../../utils/smartLists'
 import { DND_MIME } from '../../utils/dnd'
 import { matchesSearch } from '../../utils/search'
-import type { Task, SortBy, SortDir } from '../../types'
+import { orderTasks } from '../../utils/taskOrder'
+import type { Task } from '../../types'
 
 const SMART_LIST_IDS = ['all', 'today', 'tomorrow', 'next7days', 'inbox', 'summary', 'completed', 'trash']
 
@@ -22,31 +23,6 @@ const SUMMARY_GROUPS: { key: string; labelKey: string; match: (dueDate: string |
   { key: 'tomorrow', labelKey: 'task.groupTomorrow', match: isDueTomorrow },
   { key: 'upcoming', labelKey: 'task.groupUpcoming', match: isDueInNext7Days }
 ]
-
-function sortTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
-  if (sortBy === 'default') return tasks
-  const dir = sortDir === 'asc' ? 1 : -1
-  return [...tasks].sort((a, b) => {
-    switch (sortBy) {
-      case 'dueDate': {
-        if (!a.dueDate && !b.dueDate) return 0
-        if (!a.dueDate) return 1
-        if (!b.dueDate) return -1
-        return a.dueDate.localeCompare(b.dueDate) * dir
-      }
-      case 'priority': {
-        const p = { high: 3, medium: 2, low: 1, none: 0 }
-        return (p[b.priority] - p[a.priority]) * dir
-      }
-      case 'title':
-        return a.title.localeCompare(b.title, 'ko') * dir
-      case 'createdAt':
-        return (new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) * dir
-      default:
-        return 0
-    }
-  })
-}
 
 export function TaskListView() {
   const { t } = useTranslation()
@@ -109,7 +85,7 @@ export function TaskListView() {
     }
     result = result.filter(isTopLevel)
     if (searchQuery) result = result.filter((t) => matchesSearch(t, searchQuery))
-    return sortTasks(result, sortBy, sortDir)
+    return orderTasks(result, sortBy, sortDir)
   }, [tasks, selectedListId, searchQuery, sortBy, sortDir])
 
   const incompleteTasks = filteredTasks.filter((t) => !t.completed)
@@ -172,12 +148,14 @@ export function TaskListView() {
         className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}
       >
         {/* 상세 패널을 넓히면 이 칸이 좁아진다. 예전엔 제목만 줄어들 수 있어서
-            '전체'가 '전/체' 두 줄로 깨졌다 — 폭이 모자라면 검색창이 먼저 양보하고
-            (6rem까지), 그래도 모자랄 때만 제목을 잘라 보인다. */}
+            '전체'가 '전/체' 두 줄로 깨졌고, 둘 다 똑같이 줄이니 이번엔 '전…'이
+            됐다 — flex는 기본 폭에 비례해 줄이기 때문에 두 글자 제목에서는 그
+            1px이 전부다. 오른쪽 묶음의 축소 계수를 크게 줘서 검색창이 먼저
+            6rem까지 다 양보하고, 그러고도 모자랄 때만 제목이 줄어들게 한다. */}
         <h1 className={`min-w-0 truncate text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
           {listName}
         </h1>
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2 [flex-shrink:200]">
           <div className="relative w-48 min-w-[6rem]">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input

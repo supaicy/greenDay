@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect, memo } from 'react'
-import { Circle, CheckCircle2, Flag, Calendar, Trash2, Copy, ArrowRight, Square, CheckSquare2 } from 'lucide-react'
+import { memo } from 'react'
+import { Circle, CheckCircle2, Flag, Calendar, Pin, Square, CheckSquare2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { formatDueDate, isOverdue } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
+import { TaskContextMenu } from './TaskContextMenu'
 import type { Task } from '../../types'
 
 const PRIORITY_COLORS = {
@@ -45,9 +46,6 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
   const toggleTask = useStore((s) => s.toggleTask)
   const selectTask = useStore((s) => s.selectTask)
   const selectedTaskId = useStore((s) => s.selectedTaskId)
-  const removeTask = useStore((s) => s.removeTask)
-  const lists = useStore((s) => s.lists)
-  const updateTask = useStore((s) => s.updateTask)
   const theme = useStore((s) => s.theme)
   const batchMode = useStore((s) => s.batchMode)
   const batchSelectedIds = useStore((s) => s.batchSelectedIds)
@@ -56,33 +54,13 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
   const setDragTaskId = useStore((s) => s.setDragTaskId)
 
   const overdue = isOverdue(task.dueDate) && !task.completed
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
-  const [showMoveMenu, setShowMoveMenu] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const isDark = theme === 'dark'
   const isBatchSelected = batchSelectedIds.includes(task.id)
-
-  useEffect(() => {
-    const handleClick = () => {
-      setContextMenu(null)
-      setShowMoveMenu(false)
-    }
-    if (contextMenu) {
-      document.addEventListener('click', handleClick)
-      return () => document.removeEventListener('click', handleClick)
-    }
-  }, [contextMenu])
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY })
-  }
 
   const { total: subtaskCount, completed: completedSubtasks } = useSubtaskCount(task.id)
 
   return (
-    <>
+    <TaskContextMenu task={task}>
       {/* biome-ignore lint/a11y/useSemanticElements: 드래그/컨텍스트메뉴/중첩 button 포함으로 <button> 전환 불가 */}
       <div
         role="button"
@@ -94,7 +72,6 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
             batchMode ? toggleBatchSelect(task.id) : selectTask(task.id)
           }
         }}
-        onContextMenu={handleContextMenu}
         draggable={!batchMode}
         onDragStart={(e) => {
           setDragTaskId(task.id)
@@ -177,6 +154,8 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
                 className={`flex items-center gap-1 text-xs ${overdue ? 'text-red-400' : isDark ? 'text-gray-500' : 'text-gray-400'}`}
               >
                 <Calendar size={12} />
+                {/* 기간이면 시작~종료로 읽힌다. 종료일만 보이면 언제부터인지 알 수 없다. */}
+                {task.startDate ? `${formatDueDate(task.startDate)} ~ ` : ''}
                 {formatDueDate(task.dueDate)}
                 {task.dueTime ? ` ${task.dueTime}` : ''}
               </span>
@@ -185,6 +164,11 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
               <span className={`flex items-center gap-1 text-xs ${PRIORITY_COLORS[task.priority]}`}>
                 <Flag size={12} />
                 {t(`priority.${task.priority}`)}
+              </span>
+            )}
+            {task.pinned && (
+              <span className="flex items-center gap-1 text-xs text-primary-400" title={t('task.pin')}>
+                <Pin size={12} />
               </span>
             )}
             {task.isRecurring && <span className="text-xs text-purple-400">🔄 {t('task.recurring')}</span>}
@@ -210,91 +194,6 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
         </div>
       </div>
 
-      {/* 우클릭 컨텍스트 메뉴 */}
-      {contextMenu && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: 컨텍스트 메뉴 컨테이너 — 중첩 button이 키보드 접근성 제공
-        // biome-ignore lint/a11y/useKeyWithClickEvents: 컨텍스트 메뉴 컨테이너 — 중첩 button이 키보드 접근성 제공
-        <div
-          ref={menuRef}
-          className={`fixed z-[100] rounded-lg shadow-2xl py-1 min-w-[180px] border ${isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'}`}
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              toggleTask(task.id)
-              setContextMenu(null)
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
-          >
-            <CheckCircle2 size={15} />
-            {task.completed ? t('task.markIncomplete') : t('task.markComplete')}
-          </button>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowMoveMenu(!showMoveMenu)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
-            >
-              <ArrowRight size={15} />
-              {t('task.moveToList')}
-            </button>
-            {showMoveMenu && (
-              <div
-                className={`absolute left-full top-0 ml-1 rounded-lg shadow-2xl py-1 min-w-[140px] border ${isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'}`}
-              >
-                {lists.map((list) => (
-                  <button
-                    type="button"
-                    key={list.id}
-                    onClick={() => {
-                      updateTask({ id: task.id, listId: list.id })
-                      setContextMenu(null)
-                    }}
-                    className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${
-                      task.listId === list.id
-                        ? 'text-primary-400 font-medium'
-                        : isDark
-                          ? 'text-gray-200 hover:bg-gray-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: list.color }} />
-                    {list.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(task.title)
-              setContextMenu(null)
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
-          >
-            <Copy size={15} />
-            {t('task.copyTitle')}
-          </button>
-          <div className={`my-1 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`} />
-          <button
-            type="button"
-            onClick={() => {
-              removeTask(task.id)
-              setContextMenu(null)
-            }}
-            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
-          >
-            <Trash2 size={15} />
-            {t('common.delete')}
-          </button>
-        </div>
-      )}
-    </>
+    </TaskContextMenu>
   )
 })
