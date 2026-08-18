@@ -9,7 +9,7 @@
 /** 이 제품의 접두사. 서버 `products.key_prefix`와 같은 값이며 출시 후 바뀌지 않는다. */
 export const KEY_PREFIX = 'GREENDAY'
 
-const KEY_RE = /^GREENDAY(-[ABCDEFGHJKMNPQRSTVWXYZ23456789]{4}){4}$/
+const KEY_RE = new RegExp(`^${KEY_PREFIX}(-[ABCDEFGHJKMNPQRSTVWXYZ23456789]{4}){4}$`)
 
 export function normalizeKey(raw: string): string {
   return raw.trim().toUpperCase()

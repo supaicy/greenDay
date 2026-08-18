@@ -7,6 +7,7 @@ import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
 import { setUiLanguage, uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
+import { applyAppMenu } from './app-menu'
 import { disposeLicensing, initLicensing } from './licensing/service'
 import { handleGoogleCallback } from './google-auth-flow'
 import { APP_BUNDLE_ID, isAppScheme, findAppSchemeArg } from '../shared/app-id'
@@ -111,6 +112,8 @@ function bootstrap(): void {
     }
 
     initDatabase()
+    // 출하 빌드에서 개발자 도구 메뉴 항목을 뺀다 (app-menu.ts).
+    applyAppMenu(is.dev)
     // 창을 만들기 전에 — 렌더러가 뜨자마자 라이선스 상태를 묻는다.
     initLicensing()
     setupIpcHandlers()

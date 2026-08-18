@@ -64,7 +64,7 @@ function readRaw(filePath: string): unknown {
  * 조용히 이상해진다 — 그 조용함이 여기서는 곧 만료되지 않는 상태다.
  */
 function parseRecord(raw: unknown): LicenseRecord {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ...EMPTY_RECORD }
+  if (typeof raw !== 'object' || raw === null) return { ...EMPTY_RECORD }
   const o = raw as Record<string, unknown>
   return {
     key: typeof o.key === 'string' ? o.key : null,

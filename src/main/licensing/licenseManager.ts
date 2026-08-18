@@ -19,7 +19,6 @@ import { isServerRefusal, type LicenseClient } from './licenseClient'
 import type { LicenseRecord, LicenseStore } from './licenseStore'
 import type { ActivateFailure, DeactivateFailure, LicenseStatus } from '../../shared/license'
 import {
-  credibleLastSeen,
   effectiveNow,
   GRACE_DURATION_MS,
   isTrialOpen,
@@ -77,7 +76,6 @@ export interface LicenseManager {
   activate(rawKey: string): Promise<ActivateFailure | null>
   deactivate(): Promise<DeactivateFailure | null>
   revalidateIfNeeded(): Promise<void>
-  refreshTrial(): void
   dispose(): void
 }
 
@@ -95,16 +93,35 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   /** 기기 id는 필요한 순간에만 읽는다 — deps.device의 주석 참고. */
   const deviceId = (): string | null => deps.device()
   let cancelTimer: (() => void) | null = null
+  /** 이 프로세스가 도출한 트라이얼 시작. 한 번 정해지면 안 움직인다 — resolveTrialStart 참고. */
+  let trialStartedAt: number | null = null
 
   // ── 시계 ───────────────────────────────────────────────────────────────────
 
   /**
    * 이 앱이 정당화할 수 있는 가장 나중 시각. 모든 만료 비교가 이걸 읽는다.
-   * 시스템 시계를 되돌리는 것이 로컬 만료에 대한 한 줄짜리 공격이다.
+   *
+   * 래칫을 **조건 없이** 쓴다. 한때 "시스템 시계보다 30일 넘게 앞선 lastSeen은
+   * 못 믿는다"고 버렸는데, 그건 두 방향으로 틀렸다.
+   *
+   *   1. **시계를 30일 넘게 되돌리면 정확히 그 조건이 만들어진다.** 되돌리기를
+   *      막으려던 장치가 되돌리기로 무력화되고, 만료돼 유예 중이던 토큰이
+   *      다시 유효해진다. 리뷰에서 60일 되돌리기로 실증했다.
+   *   2. 임계값을 아무리 키워도 2단계로 게임된다 — 시계를 임계값 너머로 올려
+   *      한 번 실행해 래칫을 부풀리면, 그 임계값이 래칫을 영구히 버려 준다.
+   *      상대 임계값으로는 닫을 수 없는 구멍이다.
+   *
+   * 그래서 낮추는 길은 하나만 남긴다: `anchorClockToServerTime`. 서버가 방금
+   * 서명한 토큰만이 진짜 시각의 증거다. 시계가 미래로 튄 뒤의 회복 경로는
+   *   - 유료 사용자: 온라인에서 재활성화 (서버가 바닥을 내려 준다)
+   *   - 트라이얼 사용자: 설정 폴더 삭제 — 이미 문서화된, 받아들인 리셋 경로다
+   * 둘 다 있다. 없는 회복 경로를 위해 우회를 열어 두는 것보다 낫다.
+   *
+   * (참고: 메인보드 배터리가 죽는 흔한 고장은 시계를 **과거로** 되돌린다.
+   * 그 경우 래칫이 진짜 시각을 들고 있어 오히려 정상 동작한다.)
    */
   function clockSafeNow(): number {
-    const system = deps.now()
-    return effectiveNow(system, credibleLastSeen(record.lastSeenMs, system))
+    return effectiveNow(deps.now(), record.lastSeenMs)
   }
 
   function touchClock(): void {
@@ -237,21 +254,32 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 고정해 준다.
    */
   function resolveTrialStart(): number {
+    // **프로세스당 한 번만 도출한다.** 이게 없으면 위 문단의 근거가 성립하지
+    // 않는다: 되쓰지 않은 미래 시작일은 마감 타이머가 깰 때마다 다시 "지금"으로
+    // 보정되고, 그때마다 창이 새로 열려 **재시작 없이 영원히 미끄러진다.**
+    // 리뷰에서 400일을 시뮬레이션해 실증했다. 한 번만 도출하면 조작한 사람이
+    // 얻는 것이 실제로 실행당 창 하나가 되어, 설정을 지워 얻는 것과 같아진다.
+    if (trialStartedAt !== null) return trialStartedAt
+
     const systemNow = deps.now()
     const recorded = record.trialStartMs
     if (recorded === null) {
-      const startedAt = clockSafeNow()
-      record.trialStartMs = startedAt
+      trialStartedAt = clockSafeNow()
+      record.trialStartMs = trialStartedAt
       persist()
-      return startedAt
+      return trialStartedAt
     }
     // 과거로 당긴 시작일은 트라이얼을 일찍 끝낼 뿐이라 바닥이 필요 없다.
-    if (recorded <= systemNow) return recorded
+    if (recorded <= systemNow) {
+      trialStartedAt = recorded
+      return trialStartedAt
+    }
     if (recorded - systemNow <= TRIAL_DURATION_MS) {
       record.trialStartMs = systemNow
       persist()
     }
-    return systemNow
+    trialStartedAt = systemNow
+    return trialStartedAt
   }
 
   // ── 마감 타이머 ────────────────────────────────────────────────────────────
@@ -430,16 +458,6 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     settle()
   }
 
-  /**
-   * 트라이얼의 위치를 다시 계산한다. 유료 기능에 손을 뻗는 순간 부르면 되고,
-   * 그 순간이 화면과 게이트가 어긋나 있으면 보이는 순간이다.
-   */
-  function refreshTrial(): void {
-    if (!deps.enforced) return
-    if (state.status === 'licensed' || state.status === 'grace') return
-    apply(evaluateTrial())
-  }
-
   function allowsPaidFeatures(): boolean {
     if (!deps.enforced) return true
     // 허용 상태는 저마다 자기 마감과 **지금** 비교된다. `state`는 실행 시점과
@@ -471,7 +489,6 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     activate,
     deactivate,
     revalidateIfNeeded,
-    refreshTrial,
     dispose: cancelClose
   }
 }

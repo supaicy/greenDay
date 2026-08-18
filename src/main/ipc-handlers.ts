@@ -23,6 +23,7 @@ import { runGoogleSync } from './google-sync'
 import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
 import { licensing, publicLicenseState, purchaseUrl, recoverUrl } from './licensing/service'
+import { isChannelLocked, LICENSE_REQUIRED } from './licensing/freeChannels'
 import { PURCHASE_SOURCES, type PurchaseSource } from '../shared/license'
 import { toLocalDateString } from '../shared/date'
 
@@ -36,6 +37,26 @@ function csvCell(value: unknown): string {
   const escaped = s.replace(/"/g, '""')
   const safe = /^[=+\-@\t\r\n]/.test(escaped) ? `'${escaped}` : escaped
   return `"${safe}"`
+}
+
+/**
+ * IPC 핸들러를 등록하되, 유료 채널이면 **메인 프로세스에서** 라이선스를 확인한다.
+ *
+ * 잠금 화면만으로는 게이트가 아니다. 렌더러 다이얼로그는 지울 수 있고, 프로덕션
+ * 빌드에도 DevTools가 열리며, `window.api.*`는 그대로 호출된다 — "앱의 JS를
+ * 고친다"보다 **싼** 우회다. 신뢰 경계 안쪽에서 한 번 더 물어야 다이얼로그를
+ * 지우는 것이 아무 이득도 못 준다.
+ *
+ * 무엇이 무료인지는 `licensing/freeChannels.ts`의 허용 목록이 정한다. 여기 없는
+ * 채널은 기본이 유료다 — 새 기능을 만들며 잊으면 잠기지, 새어 나가지 않는다.
+ */
+function handle(channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (isChannelLocked(channel, licensing()?.allowsPaidFeatures() ?? null)) {
+      throw new Error(LICENSE_REQUIRED)
+    }
+    return listener(event, ...args)
+  })
 }
 
 /** 렌더러가 준 문자열이 그대로 URL에 들어가지 않게 한다. */
@@ -56,70 +77,70 @@ async function safeOpenExternal(url: string): Promise<void> {
 export function setupIpcHandlers(): void {
   // App meta — 이 빌드가 무엇을 할 수 있는지. 렌더러는 process.mas 같은 사실이 아니라
   // "자체 업데이트를 하는가" 같은 결론만 받는다 (shared/capabilities.ts).
-  ipcMain.handle('app:capabilities', () => currentCapabilities())
+  handle('app:capabilities', () => currentCapabilities())
 
   // License — 키와 토큰은 메인에만 있다. 렌더러는 "지금 유료 기능을 써도 되는가"와
   // 화면 문구에 필요한 것만 받는다 (licensing/service.ts의 PublicLicenseState).
-  ipcMain.handle('license:state', () => publicLicenseState())
-  ipcMain.handle('license:activate', async (_, key: unknown) => {
+  handle('license:state', () => publicLicenseState())
+  handle('license:activate', async (_, key: unknown) => {
     const manager = licensing()
     // 초기화에 실패한 빌드다. 여기서 성공이라고 답하면 아무 일도 안 일어난 채
     // 사용자는 활성화됐다고 믿는다.
     if (!manager) return 'network'
     return manager.activate(typeof key === 'string' ? key : '')
   })
-  ipcMain.handle('license:deactivate', async () => {
+  handle('license:deactivate', async () => {
     const manager = licensing()
     if (!manager) return 'network'
     return manager.deactivate()
   })
-  ipcMain.handle('license:purchase', (_, source: unknown) => safeOpenExternal(purchaseUrl(asPurchaseSource(source))))
-  ipcMain.handle('license:recover', () => safeOpenExternal(recoverUrl()))
+  handle('license:purchase', (_, source: unknown) => safeOpenExternal(purchaseUrl(asPurchaseSource(source))))
+  handle('license:recover', () => safeOpenExternal(recoverUrl()))
 
   // Folders
-  ipcMain.handle('get-folders', () => db.getFolders())
-  ipcMain.handle('create-folder', (_, id, name) => db.createFolder(id, name))
-  ipcMain.handle('update-folder', (_, id, name, collapsed) => db.updateFolder(id, name, collapsed))
-  ipcMain.handle('delete-folder', (_, id) => db.deleteFolder(id))
+  handle('get-folders', () => db.getFolders())
+  handle('create-folder', (_, id, name) => db.createFolder(id, name))
+  handle('update-folder', (_, id, name, collapsed) => db.updateFolder(id, name, collapsed))
+  handle('delete-folder', (_, id) => db.deleteFolder(id))
 
   // Lists
-  ipcMain.handle('get-lists', () => db.getLists())
-  ipcMain.handle('create-list', (_, id, name, color, icon, folderId) => db.createList(id, name, color, icon, folderId))
-  ipcMain.handle('update-list', (_, id, updates) => db.updateList(id, updates))
-  ipcMain.handle('delete-list', (_, id) => db.deleteList(id))
+  handle('get-lists', () => db.getLists())
+  handle('create-list', (_, id, name, color, icon, folderId) => db.createList(id, name, color, icon, folderId))
+  handle('update-list', (_, id, updates) => db.updateList(id, updates))
+  handle('delete-list', (_, id) => db.deleteList(id))
 
   // Tasks
-  ipcMain.handle('get-tasks', () => db.getTasks())
-  ipcMain.handle('get-trash-tasks', () => db.getTrashTasks())
-  ipcMain.handle('create-task', (_, task) => db.createTask(validateTaskInput(task)))
-  ipcMain.handle('update-task', (_, task) => db.updateTask(validateTaskUpdate(task)))
-  ipcMain.handle('delete-task', (_, id) => db.deleteTask(id))
-  ipcMain.handle('restore-task', (_, id) => db.restoreTask(id))
-  ipcMain.handle('permanent-delete-task', (_, id) => db.permanentDeleteTask(id))
-  ipcMain.handle('empty-trash', () => db.emptyTrash())
-  ipcMain.handle('reorder-tasks', (_, ids) => db.reorderTasks(ids))
-  ipcMain.handle('batch-update-tasks', (_, ids, updates) => db.batchUpdateTasks(ids, updates))
+  handle('get-tasks', () => db.getTasks())
+  handle('get-trash-tasks', () => db.getTrashTasks())
+  handle('create-task', (_, task) => db.createTask(validateTaskInput(task)))
+  handle('update-task', (_, task) => db.updateTask(validateTaskUpdate(task)))
+  handle('delete-task', (_, id) => db.deleteTask(id))
+  handle('restore-task', (_, id) => db.restoreTask(id))
+  handle('permanent-delete-task', (_, id) => db.permanentDeleteTask(id))
+  handle('empty-trash', () => db.emptyTrash())
+  handle('reorder-tasks', (_, ids) => db.reorderTasks(ids))
+  handle('batch-update-tasks', (_, ids, updates) => db.batchUpdateTasks(ids, updates))
 
   // Habits
-  ipcMain.handle('get-habits', () => db.getHabits())
-  ipcMain.handle('create-habit', (_, id, name, color, frequency, targetDays) =>
+  handle('get-habits', () => db.getHabits())
+  handle('create-habit', (_, id, name, color, frequency, targetDays) =>
     db.createHabit(id, name, color, frequency, targetDays)
   )
-  ipcMain.handle('delete-habit', (_, id) => db.deleteHabit(id))
-  ipcMain.handle('get-habit-logs', () => db.getHabitLogs())
-  ipcMain.handle('toggle-habit-log', (_, id, habitId, date) => db.toggleHabitLog(id, habitId, date))
+  handle('delete-habit', (_, id) => db.deleteHabit(id))
+  handle('get-habit-logs', () => db.getHabitLogs())
+  handle('toggle-habit-log', (_, id, habitId, date) => db.toggleHabitLog(id, habitId, date))
 
   // Pomodoro
-  ipcMain.handle('get-pomodoro-sessions', () => db.getPomodoroSessions())
-  ipcMain.handle('save-pomodoro-session', (_, session) => db.savePomodoroSession(session))
+  handle('get-pomodoro-sessions', () => db.getPomodoroSessions())
+  handle('save-pomodoro-session', (_, session) => db.savePomodoroSession(session))
 
   // Score
-  ipcMain.handle('get-score', () => db.getScore())
-  ipcMain.handle('add-score-event', (_, event) => db.addScoreEvent(event))
-  ipcMain.handle('add-score-events', (_, events) => db.addScoreEvents(events))
+  handle('get-score', () => db.getScore())
+  handle('add-score-event', (_, event) => db.addScoreEvent(event))
+  handle('add-score-events', (_, events) => db.addScoreEvents(events))
 
   // Attachments
-  ipcMain.handle('pick-attachment', async () => {
+  handle('pick-attachment', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       filters: [
@@ -138,10 +159,10 @@ export function setupIpcHandlers(): void {
     return attachments
   })
   // 첨부파일 열기: 시스템 기본 앱으로 파일 경로를 엶
-  ipcMain.handle('open-attachment', (_, filePath: string) => shell.openPath(String(filePath)))
+  handle('open-attachment', (_, filePath: string) => shell.openPath(String(filePath)))
 
   // Export
-  ipcMain.handle('export-data', async () => {
+  handle('export-data', async () => {
     // 파일명은 로컬 날짜 — UTC면 새벽에 하루 전 날짜가 박힌다.
     const today = toLocalDateString(new Date())
     const result = await dialog.showSaveDialog({
@@ -190,10 +211,10 @@ export function setupIpcHandlers(): void {
   // Notifications — 리마인더가 조용히 사라지지 않도록 렌더러가 권한 상태를 물어볼 수 있게 한다.
   // macOS는 앱이 처음 알림을 띄울 때 권한을 묻고, 그 첫 알림은 보통 사라진다(2026-08-05 검증).
   // 'unsupported'면 시스템이 알림 자체를 못 띄우는 상태다.
-  ipcMain.handle('app:notification-permission', () => (Notification.isSupported() ? 'supported' : 'unsupported'))
+  handle('app:notification-permission', () => (Notification.isSupported() ? 'supported' : 'unsupported'))
 
   // 권한 프롬프트를 사용자가 원하는 시점에 띄우기 위한 조용한 알림.
-  ipcMain.handle('app:request-notification-permission', () => {
+  handle('app:request-notification-permission', () => {
     if (!Notification.isSupported()) return false
     const strings = uiStrings()
     new Notification({ title: strings.permProbeTitle, body: strings.permProbeBody }).show()
@@ -201,23 +222,23 @@ export function setupIpcHandlers(): void {
   })
 
   // macOS 알림 설정 화면 열기 — 차단 상태를 사용자가 직접 풀 수 있는 유일한 경로다.
-  ipcMain.handle('app:open-notification-settings', () =>
+  handle('app:open-notification-settings', () =>
     shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings.extension')
   )
 
   // 외부 링크 열기
-  ipcMain.handle('open-external', (_, url: string) => {
+  handle('open-external', (_, url: string) => {
     safeOpenExternal(url)
   })
 
   // AI
-  ipcMain.handle('ai:check-connection', () => ai.checkConnection())
-  ipcMain.handle('ai:warmup', () => ai.warmupModel())
-  ipcMain.handle('ai:get-config', () => ai.getAiConfig())
-  ipcMain.handle('ai:set-config', (_, updates) => ai.setAiConfig(updates))
-  ipcMain.handle('ai:create-task', (_, input, tasks) => ai.createTaskFromNL(input, tasks))
-  ipcMain.handle('ai:interpret-action', (_, message, tasks) => ai.interpretTaskAction(message, tasks))
-  ipcMain.handle('ai:stream-chat', (event, message, tasks, history) => {
+  handle('ai:check-connection', () => ai.checkConnection())
+  handle('ai:warmup', () => ai.warmupModel())
+  handle('ai:get-config', () => ai.getAiConfig())
+  handle('ai:set-config', (_, updates) => ai.setAiConfig(updates))
+  handle('ai:create-task', (_, input, tasks) => ai.createTaskFromNL(input, tasks))
+  handle('ai:interpret-action', (_, message, tasks) => ai.interpretTaskAction(message, tasks))
+  handle('ai:stream-chat', (event, message, tasks, history) => {
     const sender = event.sender
     ai.streamChat(
       message,
@@ -234,9 +255,9 @@ export function setupIpcHandlers(): void {
       }
     )
   })
-  ipcMain.handle('ai:get-history', () => db.getChatHistory())
-  ipcMain.handle('ai:save-history', (_, messages) => db.saveChatHistory(messages))
-  ipcMain.handle('ai:pull-model', (event, model) => {
+  handle('ai:get-history', () => db.getChatHistory())
+  handle('ai:save-history', (_, messages) => db.saveChatHistory(messages))
+  handle('ai:pull-model', (event, model) => {
     const sender = event.sender
     ai.pullModel(
       String(model ?? ''),
@@ -263,9 +284,9 @@ export function setupIpcHandlers(): void {
   const describeError = (error: unknown): string =>
     error instanceof CalDavError ? error.message : '알 수 없는 오류가 발생했습니다.'
 
-  ipcMain.handle('calendar:get-config', () => toPublicConfig(loadCalendarConfig()))
+  handle('calendar:get-config', () => toPublicConfig(loadCalendarConfig()))
 
-  ipcMain.handle(
+  handle(
     'calendar:save-credentials',
     (_, input: { serverUrl?: string; username?: string; password?: string }) => {
       const config = loadCalendarConfig()
@@ -283,7 +304,7 @@ export function setupIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle('calendar:test-connection', async () => {
+  handle('calendar:test-connection', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password) {
       return { ok: false, message: '계정과 앱 암호를 먼저 입력하세요.', calendars: [] }
@@ -305,7 +326,7 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('calendar:select', (_, url: string, name: string) => {
+  handle('calendar:select', (_, url: string, name: string) => {
     const config = loadCalendarConfig()
     // 다른 캘린더로 옮기면 이전 캘린더의 동기화 상태는 의미가 없다. 남겨 두면 새
     // 캘린더에서 존재하지 않는 리소스를 갱신하려다 매번 실패한다.
@@ -321,7 +342,7 @@ export function setupIpcHandlers(): void {
     return toPublicConfig(next)
   })
 
-  ipcMain.handle('calendar:sync-now', async () => {
+  handle('calendar:sync-now', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password || !config.calendarUrl) {
       return { ok: false, message: '연동 설정을 먼저 마치세요.', result: null }
@@ -353,7 +374,7 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('calendar:disconnect', () => {
+  handle('calendar:disconnect', () => {
     // 자격증명과 동기화 상태를 모두 버린다. 서버의 일정은 건드리지 않는다 —
     // 연동 해제가 사용자의 캘린더를 비우는 동작이면 되돌릴 방법이 없다.
     storeCalendarConfig({ ...DEFAULT_CONFIG })
@@ -400,12 +421,12 @@ export function setupIpcHandlers(): void {
     }
   }
 
-  ipcMain.handle('google:get-config', () => ({
+  handle('google:get-config', () => ({
     ...toPublicGoogleConfig(loadGoogle()),
     clientIdConfigured: Boolean(resolveClientId())
   }))
 
-  ipcMain.handle('google:connect', async () => {
+  handle('google:connect', async () => {
     const clientId = resolveClientId()
     if (!clientId) {
       return {
@@ -425,7 +446,7 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('google:list-calendars', async () => {
+  handle('google:list-calendars', async () => {
     try {
       const config = await ensureGoogleToken(loadGoogle())
       const client = new GoogleCalendarClient(config.tokens?.accessToken ?? '', (u, i) => fetch(u, i))
@@ -437,7 +458,7 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('google:select', (_, id: string, name: string) => {
+  handle('google:select', (_, id: string, name: string) => {
     const config = loadGoogle()
     // 캘린더를 바꾸면 이전 동기화 상태는 다른 캘린더의 것이라 쓸 수 없다.
     const changed = config.calendarId !== id
@@ -452,7 +473,7 @@ export function setupIpcHandlers(): void {
     return toPublicGoogleConfig(next)
   })
 
-  ipcMain.handle('google:sync-now', async () => {
+  handle('google:sync-now', async () => {
     const loaded = loadGoogle()
     if (!loaded.tokens || !loaded.calendarId) {
       return { ok: false, message: '구글 계정과 캘린더를 먼저 선택하세요.', result: null }
@@ -480,7 +501,7 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('google:disconnect', async () => {
+  handle('google:disconnect', async () => {
     const config = loadGoogle()
     // 서버 쪽 권한까지 회수한다. 실패해도 로컬 토큰은 반드시 지운다.
     if (config.tokens?.refreshToken || config.tokens?.accessToken) {
@@ -491,7 +512,7 @@ export function setupIpcHandlers(): void {
   })
 
   // Quick add (global shortcut)
-  ipcMain.handle('register-global-shortcut', () => {
+  handle('register-global-shortcut', () => {
     // MAS 샌드박스에서는 시스템 전역 단축키를 등록할 수 없어 조용히 실패 → no-op
     if (!currentCapabilities().hasGlobalShortcuts) return false
     try {

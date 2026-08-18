@@ -138,7 +138,7 @@ function classify(status: number, text: string): ClientError {
 function decode(text: string): Record<string, unknown> | null {
   try {
     const parsed: unknown = JSON.parse(text)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+    if (typeof parsed !== 'object' || parsed === null) return null
     return parsed as Record<string, unknown>
   } catch {
     return null

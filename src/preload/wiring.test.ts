@@ -22,6 +22,15 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
+/**
+ * 채널을 등록하는 두 형태를 모두 잡는다.
+ *
+ * `ipc-handlers.ts`는 `ipcMain.handle`을 직접 부르지 않고 라이선스 게이트를 끼운
+ * 로컬 `handle()` 래퍼를 쓴다(licensing/freeChannels.ts). `ipcMain.handle`만 찾으면
+ * 그 파일의 채널 60여 개가 통째로 안 보이고, 이 파일의 검사가 전부 공짜로 통과한다.
+ */
+const CHANNEL_RE = /(?:ipcMain\.)?\bhandle\(\s*['"]([^'"]+)['"]/g
+
 const mainSource = walk(path.join(ROOT, 'main'))
   .map((f) => readFileSync(f, 'utf-8'))
   .join('\n')
@@ -32,7 +41,7 @@ const rendererSource = walk(path.join(ROOT, 'renderer'))
 
 describe('IPC wiring', () => {
   it('exposes every main-process channel through preload', () => {
-    const channels = [...mainSource.matchAll(/ipcMain\.handle\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1])
+    const channels = [...mainSource.matchAll(CHANNEL_RE)].map((m) => m[1])
     expect(channels.length).toBeGreaterThan(20) // 정규식이 조용히 0건이 되는 걸 막는 하한
 
     const orphans = channels.filter((c) => !PRELOAD.includes(`'${c}'`))
@@ -41,7 +50,7 @@ describe('IPC wiring', () => {
 
   it('has a main handler for every channel preload invokes', () => {
     // 이 방향이 런타임에 터진다 — 핸들러를 지우면 'No handler registered for X'.
-    const handled = new Set([...mainSource.matchAll(/ipcMain\.handle\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]))
+    const handled = new Set([...mainSource.matchAll(CHANNEL_RE)].map((m) => m[1]))
     const invoked = [...PRELOAD.matchAll(/invoke\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1])
     expect(invoked.length).toBeGreaterThan(20)
 

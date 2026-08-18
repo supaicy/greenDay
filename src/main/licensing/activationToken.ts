@@ -121,7 +121,7 @@ function parsePayload(body: Buffer): TokenPayload | null {
   } catch {
     return null
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+  if (typeof parsed !== 'object' || parsed === null) return null
 
   const o = parsed as Record<string, unknown>
   if (typeof o.lic !== 'string' || typeof o.dev !== 'string') return null

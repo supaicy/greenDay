@@ -41,27 +41,10 @@ export function effectiveNow(systemMs: number, lastSeenMs: number): number {
  * 방어가 아니라 중복이고, 중복은 "여기서 뭔가를 지키고 있다"는 잘못된 인상을 준다.
  *
  * `lastSeen`을 미래로 조작하는 공격은 여기서 막히지 않는다 — 그건 창을 **일찍**
- * 닫을 뿐이고, 그 방향의 진짜 위험(멀쩡한 사용자가 벽돌이 되는 것)은
- * `credibleLastSeen`이 맡는다. 시작일을 미래로 조작하는 공격은 상태 기계가
- * 시작일을 시스템 시계에 클램프해서 막는다.
+ * 닫을 뿐이라 조작한 사람에게 이득이 없다. 시작일을 미래로 조작하는 공격은
+ * 상태 기계가 시작일을 시스템 시계에 클램프하고, 그 결과를 프로세스당 한 번만
+ * 도출해서 막는다(licenseManager.ts resolveTrialStart).
  */
 export function isTrialOpen(startedAtMs: number, effectiveMs: number): boolean {
   return effectiveMs < trialEndsAt(startedAtMs)
-}
-
-/**
- * 기록된 `lastSeen`, 단 시스템 시계보다 너무 앞서 있으면 버린다.
- *
- * 이 값은 래칫이라 올라가기만 하고, 모든 권한 판정이 이걸 바닥으로 읽는다.
- * 상한이 없으면 한 번 미래로 튄 것이 영구히 고정된다 — 죽은 메인보드 배터리,
- * 망가진 NTP 서버, 복원된 VM 스냅샷, 날짜를 한 번 앞으로 돌린 사용자. 그 뒤로는
- * 모든 토큰이 만료로 읽히고, 유예도 안 열리고, 키를 새로 사도 소용없다. 갓 발급된
- * 토큰조차 같은 부풀려진 시계로 검증되기 때문이다. 앱 안에서 빠져나올 방법이 없다.
- *
- * 유예 기간보다 더 앞선 값은 이 앱이 정당하게 본 시계가 아니라 사고다. 거기서
- * 시스템 시계를 택하는 대가는 기껏해야 설정을 지우면 어차피 얻는 창 하나이고,
- * 그 대신 벽돌이 된 유료 설치와 멀쩡한 설치의 차이가 걸려 있다.
- */
-export function credibleLastSeen(recordedMs: number, systemMs: number): number {
-  return recordedMs > systemMs + GRACE_DURATION_MS ? 0 : recordedMs
 }

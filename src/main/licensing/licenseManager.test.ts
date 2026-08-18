@@ -137,8 +137,9 @@ describe('결함 1 — 권한은 서명에서만 나온다', () => {
     const h = harness({ record: { key: KEY, token: 'anything-at-all' } })
     expect(h.manager.getState().status).toBe('trial')
     expect(h.manager.allowsPaidFeatures()).toBe(true) // 트라이얼이라 열려 있는 것이지 토큰 때문이 아니다
+    // 트라이얼 마감에 걸린 타이머가 실제로 상태를 닫는 경로다.
     h.setNow(NOW + 40 * DAY)
-    h.manager.refreshTrial()
+    h.fireDueTimers()
     expect(h.manager.getState().status).toBe('trialExpired')
     expect(h.manager.allowsPaidFeatures()).toBe(false)
   })
@@ -204,13 +205,19 @@ describe('결함 2 — 유예는 토큰의 exp에서만 계산된다', () => {
   it('lastSeen을 미래로 써넣어도 유예가 늘어나지 않는다', () => {
     // 예전 설계는 "마지막으로 확인한 시각" 타임스탬프를 신뢰했다. 그 값은 그것이
     // 보증하려는 토큰과 똑같이 위조 가능해서, 구멍을 막은 게 아니라 옮겼을 뿐이다.
+    // 지금은 부풀린 값이 유예를 늘리는 게 아니라 **앞당겨 닫는다** — 어느
+    // 방향이든 조작한 사람이 얻는 것은 없다.
     const expMs = NOW - DAY
     const h = harness({
-      record: { key: KEY, token: token({ expMs }), lastSeenMs: NOW + 100 * 365 * DAY }
+      record: {
+        key: KEY,
+        token: token({ expMs }),
+        lastSeenMs: NOW + 100 * 365 * DAY,
+        trialStartMs: NOW - 40 * DAY
+      }
     })
-    const state = h.manager.getState()
-    expect(state.status).toBe('grace')
-    if (state.status === 'grace') expect(state.untilMs).toBe(expMs + GRACE_DURATION_MS)
+    expect(h.manager.getState().status).toBe('trialExpired')
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
   })
 })
 
@@ -285,8 +292,8 @@ describe('결함 4 — 단조 시계로 "마감이 실제로 지났다"를 기�
     // 이제 활성화 시점으로 시계를 되돌린다. 이걸 믿으면 만료된 토큰이 다시
     // 유효해지고, 같은 거짓말로 30일짜리 창이 또 열린다.
     h.setNow(NOW)
-    h.manager.refreshTrial()
     expect(h.manager.getState().status).toBe('grace')
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
     expect(h.record.lastSeenMs).toBeGreaterThanOrEqual(expMs)
   })
 
@@ -562,12 +569,13 @@ describe('enforcement가 꺼져 있으면', () => {
     expect(h.manager.allowsPaidFeatures()).toBe(true)
   })
 
-  it('트라이얼 시작일을 기록조차 하지 않는다', () => {
+  it('트라이얼 시작일을 기록조차 하지 않는다', async () => {
     // 이게 무료 기간을 정직하게 만든다 — 지금 쓰는 사람들의 30일이 살 것도 없는
     // 상태에서 타들어가면 안 된다. 켜는 날 모두가 온전한 창을 받는다.
     const h = harness({ enforced: false })
     expect(h.record.trialStartMs).toBeNull()
-    h.manager.refreshTrial()
+    // 실행마다 도는 경로를 한 바퀴 더 돌려도 여전히 아무것도 안 쓴다.
+    await h.manager.revalidateIfNeeded()
     expect(h.record.trialStartMs).toBeNull()
   })
 
