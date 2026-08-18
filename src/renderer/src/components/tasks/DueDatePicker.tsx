@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, Bell, Repeat, CalendarRange, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
@@ -66,6 +66,9 @@ export function DueDatePicker({
   // 시작일이 이미 있으면 기간 모드다. 없을 때 '기간' 행을 눌러 켜는 것이 이 상태.
   const [rangeArmed, setRangeArmed] = useState(false)
   const rangeMode = rangeArmed || startDate != null
+  // 기간을 켜며 우리가 대신 잡아준 마감일. 끌 때 같이 치우려고 기억한다 —
+  // 시작일만 지우면 사용자가 고른 적 없는 마감일이 남는다.
+  const autoDue = useRef<string | null>(null)
 
   useEffect(() => {
     if (!autoOpenRangeSignal) return
@@ -132,7 +135,17 @@ export function DueDatePicker({
               value={startDate ?? ''}
               // 거꾸로 된 기간은 스토어가 거부하지만, 달력에서 아예 고를 수 없는 편이 낫다.
               max={dueDate ?? undefined}
-              onChange={(e) => onStartDateChange(e.target.value || null)}
+              onChange={(e) => {
+                const next = e.target.value || null
+                // 끝이 없으면 기간이 아니라서 스토어가 시작일을 즉시 버린다.
+                // 화면에선 시작 칸이 위에 있으니 그 순서로 넣는 게 자연스럽다 —
+                // 그날을 마감일로도 잡아 하루짜리로 시작하고, 끝만 늘리면 된다.
+                if (next && !dueDate) {
+                  autoDue.current = next
+                  onChange({ dueDate: next, dueTime })
+                }
+                onStartDateChange(next)
+              }}
               className={`flex-1 ${fieldCls}`}
             />
           </div>
@@ -170,6 +183,10 @@ export function DueDatePicker({
               if (rangeMode) {
                 // 켜기만 하고 날짜를 안 골랐다면 지울 것이 없다 — 헛저장을 만들지 않는다.
                 if (startDate) onStartDateChange(null)
+                if (autoDue.current && autoDue.current === dueDate) {
+                  onChange({ dueDate: null, dueTime })
+                  autoDue.current = null
+                }
                 setRangeArmed(false)
               } else {
                 setRangeArmed(true)

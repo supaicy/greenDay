@@ -322,6 +322,21 @@ export function normalizeDateRange(
   }
 }
 
+/**
+ * IPC 영속화 호출을 감싼다. main의 검증이 거부하면 ipcMain.handle이 reject하는데,
+ * 아무도 await하지 않아 unhandled rejection으로 사라졌다 — 화면에는 반영된 변경이
+ * 디스크에는 없고, 재시작해야 그 사실이 드러난다. 최소한 진단은 남긴다.
+ * (사용자에게 보이는 실패 표면은 TODOS의 '조용한 실패' 항목.)
+ */
+function persist(what: string, run: () => unknown): void {
+  try {
+    const r = run()
+    if (r instanceof Promise) r.catch((e) => console.error(`[persist] ${what} 실패`, e))
+  } catch (e) {
+    console.error(`[persist] ${what} 실패`, e)
+  }
+}
+
 /** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
 function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
   if (!s) return fallback
@@ -519,7 +534,7 @@ export const useStore = create<Store>((set, get) => ({
     // 방금 만든 Task를 그대로 넘긴다. 필드를 손으로 다시 나열하면 IPC 경계가
     // Record<string, unknown>이라 타입이 안 잡히고, Task에 필드가 늘 때 조용히
     // 빠진다. main의 createTask는 이름으로 읽고 나머지는 무시한다.
-    for (const t of newTasks) window.api.createTask(t)
+    for (const t of newTasks) persist('createTask', () => window.api.createTask(t))
   },
   updateTask: async (task) => {
     // 같은 태스크를 네 번 찾고 있었다 — 한 번 찾아 모든 가드가 나눠 쓴다.
@@ -549,8 +564,9 @@ export const useStore = create<Store>((set, get) => ({
     // 기간은 생성 경로와 같은 규칙을 쓴다(normalizeDateRange). 잘못된 값이면
     // startDate만 떨어져 나가고, 같이 실려 온 dueTime 같은 필드는 살아남는다 —
     // 예전에는 patch 전체를 버려서 무관한 수정까지 조용히 사라졌다.
-    if ('startDate' in patch || 'dueDate' in patch) {
-      if (!current) return
+    // current가 없어도(휴지통·로딩 경합) 쓰기는 통과시킨다 — main은 자기
+    // 저장소에서 그 행을 찾는다. 비교할 저장값이 없으니 보정만 건너뛴다.
+    if (current && ('startDate' in patch || 'dueDate' in patch)) {
       // 마감일만 옮기는 조작(캘린더 드래그·'오늘로' 단축키·AI 재예약)은 기간을
       // 통째로 옮기려는 뜻이다. 길이를 지킨 채 따라가지 않으면, 사흘짜리 일이
       // 드래그 한 번에 경고도 없이 하루짜리가 된다.
@@ -599,7 +615,7 @@ export const useStore = create<Store>((set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((t) => (t.id === patch.id ? { ...t, ...patch } : t))
     }))
-    window.api.updateTask(patch)
+    persist('updateTask', () => window.api.updateTask(patch))
   },
   toggleTask: async (id) => {
     const task = get().tasks.find((t) => t.id === id)
@@ -679,11 +695,14 @@ export const useStore = create<Store>((set, get) => ({
     // 같은 자리에 계속 복제하면 간격이 반씩 줄어 결국 중간값이 원본과 같아진다.
     // 그때는 같은 슬롯을 만드는 대신 맨 뒤로 보낸다 — 자리는 아쉬워도 순서는 정해진다.
     const mid = (src.sortOrder + after) / 2
-    const maxOrder = all.reduce((m, t) => (t.listId === src.listId ? Math.max(m, t.sortOrder) : m), 0)
+    // 간격 탐색과 같은 기준이어야 한다 — 하위작업을 세면 복제본이 목록 밖으로 밀려난다.
+    const maxOrder = all.reduce((m, t) => (t.listId === src.listId && !t.parentId ? Math.max(m, t.sortOrder) : m), 0)
     const sortOrder = Number.isFinite(after) && mid > src.sortOrder && mid < after ? mid : maxOrder + 1
 
     // 복제되지 않는 것들: 완료 이력은 이 할일의 것이 아니고, 시간블록은 한 자리에
     // 둘이 겹치게 만들며, 고정은 "이것 하나를 위에 둔다"는 뜻이라 복제가 무의미하다.
+    // 반복도 뗀다 — 시리즈 키가 (패턴·제목·마감일)이라 복제본이 원본과 같은 키를
+    // 갖고, 둘 다 완료하면 다음 회차가 하나만 생겨 나머지 시리즈가 말없이 끝난다.
     const fresh = (t: Task, over: Partial<Task>): Task => ({
       ...t,
       id: uuid(),
@@ -691,6 +710,8 @@ export const useStore = create<Store>((set, get) => ({
       completedAt: null,
       deletedAt: null,
       pinned: false,
+      isRecurring: false,
+      recurringPattern: null,
       scheduledStart: null,
       scheduledEnd: null,
       scheduledOverrides: null,
@@ -705,7 +726,7 @@ export const useStore = create<Store>((set, get) => ({
       const at = s.tasks.findIndex((t) => t.id === id)
       return { tasks: [...s.tasks.slice(0, at + 1), copy, ...s.tasks.slice(at + 1), ...subtasks] }
     })
-    for (const t of [copy, ...subtasks]) window.api.createTask(t)
+    for (const t of [copy, ...subtasks]) persist('createTask', () => window.api.createTask(t))
   },
   restoreTask: async (id) => {
     const task = get().trashTasks.find((t) => t.id === id)

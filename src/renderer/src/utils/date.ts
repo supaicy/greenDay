@@ -34,6 +34,21 @@ export function formatDueDate(dateStr: string | null): string {
   return format(date, i18n.t('date.monthDay'), { locale: dfLocale() })
 }
 
+/**
+ * 목록·상세가 함께 쓰는 기한 라벨.
+ *
+ * 기간이면 양끝을 절대 날짜로 찍는다 — formatDueDate를 두 번 쓰면 '오늘 ~ 오늘',
+ * '어제 ~ 내일' 같은 기준점 없는 상대어 쌍이 나와 언제인지 알 수 없다.
+ * 기간이 아니면 예전 표기(오늘·내일·요일)를 그대로 쓴다.
+ */
+export function formatDateRange(startDate: string | null, dueDate: string | null, dueTime: string | null): string {
+  if (!dueDate) return ''
+  const time = dueTime ? ` ${dueTime}` : ''
+  if (!startDate) return `${formatDueDate(dueDate)}${time}`
+  const abs = (d: string): string => format(new Date(d), i18n.t('date.monthDay'), { locale: dfLocale() })
+  return `${abs(startDate)} ~ ${abs(dueDate)}${time}`
+}
+
 export function isOverdue(dateStr: string | null): boolean {
   if (!dateStr) return false
   return isBefore(new Date(dateStr), startOfDay(new Date()))

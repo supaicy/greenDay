@@ -24,15 +24,19 @@ Key routing rules:
 
 메뉴·다이얼로그·팝오버는 전부 **Radix(shadcn/ui)**다. `components/ui/`에 벤더링돼
 있고 GreenDay 색을 CSS 변수로 매핑했다 — 디자인은 바뀌지 않았고 동작만 바뀌었다.
-직접 `<div>`로 드롭다운을 새로 만들지 말 것. 남은 수제는 우클릭 컨텍스트 메뉴
-2곳(TaskItem·TimeBlock)뿐 — TODOS 참고.
+직접 `<div>`로 드롭다운을 새로 만들지 말 것. 우클릭 메뉴도 Radix다
+(`ui/context-menu.tsx` + `tasks/TaskContextMenu.tsx`) — TaskItem과 캘린더
+TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 있고 ⋯ 메뉴와
+공유한다: 한쪽만 고치면 같은 할일에 대해 메뉴마다 다른 말을 한다.
 
 - **트리거는 호출처가 prop으로 준다.** 컴포넌트가 자기 버튼을 그리지 않는다.
   전에는 호출처가 `{show && <Menu/>}`로 mount하고 Menu가 버튼을 또 그려서
   두 번 눌러야 열렸다. `show*` 플래그로 오버레이를 감싸지 말 것 — Radix가
   열림 상태를 갖고, 닫을 때 트리거로 포커스를 돌려줘야 한다.
-- **z 순서**: 오버레이 110 / 콘텐츠 111. 앱 요소가 90(UndoToast)·100(TaskItem
-  컨텍스트 메뉴)을 쓰므로, 기본값 50이면 토스트가 모달 위에 뜬다.
+- **z 순서**: 오버레이 110 / 콘텐츠 111. 앱 요소가 90(UndoToast)을 쓰므로,
+  기본값 50이면 토스트가 모달 위에 뜬다. 컨텍스트 메뉴도 같은 111을 쓴다.
+- **`{...props}`는 `onClick`보다 먼저 펼칠 것.** 뒤에 두면 호출처가 `onClick`을
+  주는 순간 프리미티브의 전파 차단이 통째로 덮여 조용히 사라진다.
 - **Escape**: `useKeyboardShortcuts`가 `e.defaultPrevented`면 즉시 반환한다.
   Radix는 캡처 단계에서 먼저 닫고 preventDefault만 걸 뿐 전파를 막지 않는다.
   이 가드가 없으면 Escape 한 번이 오버레이와 선택을 함께 지운다.

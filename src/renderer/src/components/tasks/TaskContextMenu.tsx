@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { CheckCircle2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
@@ -17,8 +17,11 @@ import type { Task } from '../../types'
  * 직접 달고, 하위메뉴는 절대 위치로 붙이고, 화면 밖으로 나가도 그대로 잘렸다.
  * Radix로 옮기면서 그 셋 다 프리미티브가 맡는다.
  *
- * 내용은 열렸을 때만 만든다. 이 컴포넌트는 할일 행마다 하나씩 있어서, 닫힌
- * 메뉴의 항목까지 매 렌더에 그려두면 목록 길이만큼 헛일이 곱해진다.
+ * 내용을 `{open && ...}`로 감싸지 않는다(CLAUDE.md '오버레이 규칙'). Radix가
+ * 열림 상태를 갖고 Presence로 DOM 마운트를 이미 막는다 — 바깥에서 언마운트하면
+ * data-state="closed" 프레임이 없어 닫힘 애니메이션이 죽고, 트리거로 포커스를
+ * 돌려주는 것도 언마운트 순서에 딸려간다. 행마다 React 엘리먼트를 만드는 비용은
+ * 남지만, 그건 포커스 정확성과 바꿀 것이 못 된다.
  */
 export function TaskContextMenu({
   task,
@@ -30,30 +33,22 @@ export function TaskContextMenu({
   extra?: ReactNode
   children: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <ContextMenu onOpenChange={setOpen}>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      {open && <TaskContextMenuContent task={task} extra={extra} />}
-    </ContextMenu>
-  )
-}
-
-function TaskContextMenuContent({ task, extra }: { task: Task; extra?: ReactNode }): React.JSX.Element {
   const { t } = useTranslation()
   const toggleTask = useStore((s) => s.toggleTask)
 
   return (
-    <ContextMenuContent className="min-w-[184px]">
-      {/* '완료로 변경'은 행에서만 의미가 있다 — 상세 패널에는 상단바에 동그라미가 이미 있다. */}
-      <ContextMenuItem onSelect={() => void toggleTask(task.id)} className="gap-2 text-sm">
-        <CheckCircle2 size={14} />
-        {task.completed ? t('task.markIncomplete') : t('task.markComplete')}
-      </ContextMenuItem>
-      {extra}
-      <ContextMenuSeparator />
-      <TaskActionItems kit={CONTEXT_KIT} task={task} />
-    </ContextMenuContent>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[184px]">
+        {/* '완료로 변경'은 행에서만 의미가 있다 — 상세 패널에는 상단바에 동그라미가 이미 있다. */}
+        <ContextMenuItem onSelect={() => void toggleTask(task.id)} className="gap-2 text-sm">
+          <CheckCircle2 size={14} />
+          {task.completed ? t('task.markIncomplete') : t('task.markComplete')}
+        </ContextMenuItem>
+        {extra}
+        <ContextMenuSeparator />
+        <TaskActionItems kit={CONTEXT_KIT} task={task} />
+      </ContextMenuContent>
+    </ContextMenu>
   )
 }

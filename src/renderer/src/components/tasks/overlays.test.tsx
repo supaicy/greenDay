@@ -691,6 +691,36 @@ describe('DueDatePicker — 접힌 알림·반복', () => {
     expect(onStartDateChange).toHaveBeenCalledWith(null)
   })
 
+  it('기간을 켜며 자동으로 잡힌 마감일은 끌 때 같이 사라진다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const onStartDateChange = vi.fn()
+    const trigger = <button type="button">기한</button>
+    // 기한 없는 할일에서 '기간 설정' → 시작일을 고르면 그날이 마감일로도 잡힌다.
+    const { rerender } = render(
+      <DueDatePicker {...props} autoOpenRangeSignal={1} onChange={onChange} onStartDateChange={onStartDateChange} trigger={trigger} />
+    )
+    fireEvent.change(await screen.findByLabelText('시작'), { target: { value: '2026-08-18' } })
+    expect(onChange).toHaveBeenCalledWith({ dueDate: '2026-08-18', dueTime: null })
+
+    // 마음이 바뀌어 기간을 끄면, 사용자가 고른 적 없는 마감일만 남으면 안 된다.
+    rerender(
+      <DueDatePicker
+        {...props}
+        autoOpenRangeSignal={1}
+        startDate="2026-08-18"
+        dueDate="2026-08-18"
+        onChange={onChange}
+        onStartDateChange={onStartDateChange}
+        trigger={trigger}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: /기간/ }))
+
+    expect(onStartDateChange).toHaveBeenCalledWith(null)
+    expect(onChange).toHaveBeenLastCalledWith({ dueDate: null, dueTime: null })
+  })
+
   it('고른 적 없는 기간을 끌 때는 헛저장하지 않는다', async () => {
     const user = userEvent.setup()
     const onStartDateChange = vi.fn()

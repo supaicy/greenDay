@@ -736,3 +736,52 @@ describe('duplicateTask — 중간값이 소진될 때', () => {
     expect(new Set(orders).size).toBe(orders.length)
   })
 })
+
+describe('duplicateTask — 반복은 물려받지 않는다', () => {
+  it('복제본은 일회성이 된다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'a', title: '약 먹기', isRecurring: true, recurringPattern: 'daily', dueDate: '2026-08-19' })]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    // 시리즈 키는 (패턴, 제목, 마감일)이라 복제본이 원본과 같은 키를 갖는다.
+    // 둘 다 완료하면 다음 회차는 하나만 생기고, 나머지 시리즈는 말없이 끝난다.
+    const copy = useStore.getState().tasks.find((t) => t.id !== 'a')
+    expect(copy?.isRecurring).toBe(false)
+    expect(copy?.recurringPattern).toBeNull()
+  })
+})
+
+describe('updateTask — 렌더러 배열에 없는 할일', () => {
+  it('기한을 고쳐도 저장을 포기하지 않는다', async () => {
+    const apiUpdate = vi.fn()
+    ;(window as unknown as { api: Record<string, unknown> }).api = {
+      ...(window as unknown as { api: Record<string, unknown> }).api,
+      updateTask: apiUpdate
+    }
+    useStore.setState({ tasks: [] })
+    await useStore.getState().updateTask({ id: 'missing', dueDate: '2026-08-20' })
+
+    // main은 자기 저장소에서 그 행을 찾아 쓴다. 렌더러 배열에 잠깐 없다고
+    // (휴지통·로딩 경합) 조용히 버리면 사용자의 수정이 사라진다.
+    expect(apiUpdate).toHaveBeenCalledWith(expect.objectContaining({ id: 'missing', dueDate: '2026-08-20' }))
+  })
+})
+
+describe('duplicateTask — 하위작업이 섞인 리스트', () => {
+  it('하위작업의 sortOrder가 복제본을 목록 밖으로 밀어내지 않는다', async () => {
+    useStore.setState({
+      tasks: [
+        task({ id: 'a', sortOrder: 1 }),
+        task({ id: 'b', sortOrder: 2 }),
+        task({ id: 's', sortOrder: 40, parentId: 'a' })
+      ]
+    })
+    await useStore.getState().duplicateTask('b')
+
+    // 간격 탐색은 하위작업을 건너뛰는데 맨 뒤 계산은 세고 있었다 —
+    // 재시작하면 복제본이 38칸 뒤에 나타났다.
+    const copy = useStore.getState().tasks.find((t) => !t.parentId && !['a', 'b'].includes(t.id))
+    expect(copy?.sortOrder).toBe(3)
+  })
+})

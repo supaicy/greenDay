@@ -316,6 +316,33 @@ describe('createTask — sortOrder와 새 컬럼', () => {
     expect(row('old')?.pinned).toBe(0)
   })
 
+  it('달력에 없는 날짜는 로드 때 비운다', async () => {
+    // IPC 검증이 생기기 전 빌드나 손으로 고친 JSON에는 '2026-02-30' 같은 값이
+    // 남아 있을 수 있다. 그대로 두면 그 할일을 복제·수정하는 순간 검증이
+    // 거부하고, 렌더러는 아무도 그 거부를 받지 않아 조용히 유실된다.
+    const broken = {
+      id: 'bad',
+      title: '깨진 날짜',
+      list_id: 'inbox',
+      sort_order: 1,
+      created_at: '2026-01-01T00:00:00.000Z',
+      due_date: '2026-02-30',
+      start_date: null,
+      pinned: 0
+    }
+    writeFileSync(join(tmp, 'ticktick-data.json'), JSON.stringify({ tasks: [broken], lists: [] }), 'utf-8')
+    vi.resetModules()
+    const dir = tmp
+    vi.doMock('electron', () => ({
+      app: { getPath: () => dir, on: () => {} },
+      safeStorage: { isEncryptionAvailable: () => false }
+    }))
+    db = await import('./database')
+    db.initDatabase()
+
+    expect(row('bad')?.due_date).toBeNull()
+  })
+
   it('구버전으로 내려가 마감일을 지운 흔적(끝 없는 시작일)을 로드 때 정리한다', async () => {
     const orphan = {
       id: 'orphan',

@@ -7,8 +7,7 @@ import {
   eventUid,
   eventHref,
   type TaskRow,
-  type SyncState
-} from './sync'
+  type SyncState, localToIso } from './sync'
 
 const CALENDAR = 'https://caldav.icloud.com/998877/calendars/home/'
 
@@ -267,6 +266,15 @@ describe('taskToEvent — 기간', () => {
   it('시작일과 마감일이 같으면 하루짜리다', () => {
     const ev = taskToEvent({ id: 't', title: 'x', start_date: '2026-08-20', due_date: '2026-08-20' })
     expect(ev).toMatchObject({ start: '2026-08-20', end: '2026-08-21', allDay: true })
+  })
+
+  it('기간에 마감 시각이 붙어도 기간이 사라지지 않는다', () => {
+    // 시각 분기가 먼저라 8/18~8/20 할일이 8/20 09:00의 60분짜리로 쪼그라들었다.
+    // 마감 시각은 기한 픽커의 1급 컨트롤이라 기간과 같이 쓰이는 게 보통이다.
+    const ev = taskToEvent({ id: 't', title: '스프린트', start_date: '2026-08-18', due_date: '2026-08-20', due_time: '09:00' })
+    expect(ev?.allDay).toBe(false)
+    expect(ev?.start).toBe(localToIso('2026-08-18', '09:00'))
+    expect(ev?.end).toBe(localToIso('2026-08-20', '09:00'))
   })
 
   it('시간블록이 있으면 기간보다 시간블록이 이긴다', () => {

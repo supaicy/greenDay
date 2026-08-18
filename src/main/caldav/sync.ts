@@ -74,7 +74,7 @@ function addDays(yyyyMmDd: string, days: number): string {
 }
 
 /** 로컬 날짜+시각을 UTC ISO로. 'YYYY-MM-DD' + 'HH:MM' */
-function localToIso(date: string, time: string): string {
+export function localToIso(date: string, time: string): string {
   const [y, m, d] = date.split('-').map(Number)
   const [hh, mm] = time.split(':').map(Number)
   return new Date(y, m - 1, d, hh, mm, 0, 0).toISOString()
@@ -110,11 +110,16 @@ export function taskToEvent(task: TaskRow, sequence = 0): CalendarEvent | null {
   }
 
   if (task.due_date && task.due_time) {
-    const start = localToIso(task.due_date, task.due_time)
+    // 기간이 붙어 있으면 그 기간을 시각으로 잇는다. 여기서 마감일 하나만 보면
+    // 8/18~8/20 할일이 8/20의 60분짜리로 쪼그라들어, 기간을 넣은 의미가 사라진다.
+    const ranged = task.start_date && task.start_date < task.due_date ? task.start_date : null
+    const start = localToIso(ranged ?? task.due_date, task.due_time)
     return {
       ...base,
       start,
-      end: new Date(new Date(start).getTime() + DEFAULT_DURATION_MIN * 60_000).toISOString(),
+      end: ranged
+        ? localToIso(task.due_date, task.due_time)
+        : new Date(new Date(start).getTime() + DEFAULT_DURATION_MIN * 60_000).toISOString(),
       allDay: false
     }
   }

@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ComponentType, ReactNode } from 'react'
+import type { ComponentPropsWithoutRef, ComponentType } from 'react'
 import { ArrowRight, Copy, CopyPlus, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
@@ -18,10 +18,14 @@ import {
 } from '@/components/ui/context-menu'
 import type { Task } from '../../types'
 
-// 프리미티브에서 직접 파생한다. 손으로 3개 키만 적어두면 disabled·asChild·ref가
-// 조용히 사라져, 첫 번째로 필요한 순간 이 파일이 아니라 타입 선언을 고쳐야 한다.
+// 각 프리미티브에서 '그 프리미티브의' prop을 파생한다. 하나로 뭉뜽그리면
+// disabled·asChild·sideOffset 같은 것이 조용히 사라져, 처음 필요한 순간
+// 이 파일이 아니라 타입 선언부터 고쳐야 한다.
 type ItemProps = ComponentPropsWithoutRef<typeof DropdownMenuItem>
-type WrapProps = ComponentPropsWithoutRef<typeof DropdownMenuSeparator>
+type SeparatorProps = ComponentPropsWithoutRef<typeof DropdownMenuSeparator>
+type SubProps = ComponentPropsWithoutRef<typeof DropdownMenuSub>
+type SubTriggerProps = ComponentPropsWithoutRef<typeof DropdownMenuSubTrigger>
+type SubContentProps = ComponentPropsWithoutRef<typeof DropdownMenuSubContent>
 
 /**
  * 같은 항목을 드롭다운으로도 컨텍스트 메뉴로도 그리기 위한 프리미티브 묶음.
@@ -29,10 +33,10 @@ type WrapProps = ComponentPropsWithoutRef<typeof DropdownMenuSeparator>
  */
 export type MenuKit = {
   Item: ComponentType<ItemProps>
-  Separator: ComponentType<WrapProps>
-  Sub: ComponentType<{ children?: ReactNode }>
-  SubTrigger: ComponentType<WrapProps>
-  SubContent: ComponentType<WrapProps>
+  Separator: ComponentType<SeparatorProps>
+  Sub: ComponentType<SubProps>
+  SubTrigger: ComponentType<SubTriggerProps>
+  SubContent: ComponentType<SubContentProps>
 }
 
 export const DROPDOWN_KIT: MenuKit = {

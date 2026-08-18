@@ -2,7 +2,7 @@ import { memo } from 'react'
 import { Circle, CheckCircle2, Flag, Calendar, Pin, Square, CheckSquare2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { formatDueDate, isOverdue } from '../../utils/date'
+import { formatDateRange, isOverdue } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
 import { TaskContextMenu } from './TaskContextMenu'
 import type { Task } from '../../types'
@@ -154,10 +154,7 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
                 className={`flex items-center gap-1 text-xs ${overdue ? 'text-red-400' : isDark ? 'text-gray-500' : 'text-gray-400'}`}
               >
                 <Calendar size={12} />
-                {/* 기간이면 시작~종료로 읽힌다. 종료일만 보이면 언제부터인지 알 수 없다. */}
-                {task.startDate ? `${formatDueDate(task.startDate)} ~ ` : ''}
-                {formatDueDate(task.dueDate)}
-                {task.dueTime ? ` ${task.dueTime}` : ''}
+                {formatDateRange(task.startDate, task.dueDate, task.dueTime)}
               </span>
             )}
             {task.priority !== 'none' && (

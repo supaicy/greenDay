@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { format, addDays } from 'date-fns'
-import { isOverdue, isDueToday, isDueInNext7Days, msUntilNextLocalMidnight } from './date'
+import { isOverdue, isDueToday, isDueInNext7Days, msUntilNextLocalMidnight, formatDateRange, formatDueDate, todayString } from './date'
 
 // Regression: ISSUE-001 — "다음 7일" sidebar badge counted overdue tasks that
 // the list view (which uses isDueInNext7Days) correctly hid, so the badge showed
@@ -59,5 +59,38 @@ describe('msUntilNextLocalMidnight', () => {
 
   it('lands strictly in the next day at millisecond edges', () => {
     expect(msUntilNextLocalMidnight(new Date(2026, 7, 15, 23, 59, 59, 999))).toBe(1)
+  })
+})
+
+/**
+ * 기간 라벨. 두 끝을 각각 formatDueDate에 넣으면 '오늘 ~ 오늘', '어제 ~ 내일'처럼
+ * 기준점 없는 상대어 쌍이 나온다 — 목록에서 그 할일이 언제인지 알 수 없다.
+ * 상세 패널은 같은 값을 ISO로 찍고 있어 화면마다 다르게 읽히기도 했다.
+ */
+describe('formatDateRange', () => {
+  it('기간이 없으면 마감일만, 기존 표기 그대로', () => {
+    expect(formatDateRange(null, todayString(), null)).toBe(formatDueDate(todayString()))
+  })
+
+  it('기간이면 양끝을 절대 날짜로 찍는다', () => {
+    const label = formatDateRange('2026-08-18', '2026-08-20', null)
+    expect(label).toContain('~')
+    // 상대어는 기준점이 없어 기간에서는 읽히지 않는다.
+    expect(label).not.toContain('오늘')
+    expect(label).not.toContain('어제')
+  })
+
+  it('하루짜리 기간도 양끝을 그대로 보여준다', () => {
+    const label = formatDateRange('2026-08-20', '2026-08-20', null)
+    expect(label.split('~')).toHaveLength(2)
+  })
+
+  it('시각이 있으면 뒤에 붙는다', () => {
+    expect(formatDateRange('2026-08-18', '2026-08-20', '09:30')).toMatch(/09:30$/)
+    expect(formatDateRange(null, '2026-08-20', '09:30')).toMatch(/09:30$/)
+  })
+
+  it('마감일이 없으면 빈 문자열', () => {
+    expect(formatDateRange('2026-08-18', null, null)).toBe('')
   })
 })

@@ -12,6 +12,7 @@ import { TagPicker } from './TagPicker'
 import { TaskMoreMenu } from './TaskMoreMenu'
 import { AttachmentList } from './AttachmentList'
 import { PRIORITY_COLOR } from '../../utils/priority'
+import { formatDateRange } from '../../utils/date'
 import { clampDetailWidth } from '../../store/detailWidth'
 import {
   DropdownMenu,
@@ -181,10 +182,9 @@ export function TaskDetail() {
   const width = dragWidth ?? clampDetailWidth(detailWidth ?? DEFAULT_DETAIL_WIDTH, windowWidth, showAiChat)
   const priorityColor = PRIORITY_COLOR[task.priority]
 
-  // 기간이면 시작~마감으로 읽힌다. 값이 하나도 없으면 '마감일 없음'.
-  const dueLabel = dueDate || dueTime
-    ? `${task.startDate ? `${task.startDate} ~ ` : ''}${dueDate || ''}${dueTime ? ` ${dueTime}` : ''}`.trim()
-    : t('detail.noDueDate')
+  // 목록 행과 같은 헬퍼를 쓴다 — 같은 할일이 화면마다 다르게 읽히면 안 된다.
+  const dueLabel =
+    formatDateRange(task.startDate, dueDate || null, dueTime || null) || t('detail.noDueDate')
 
   // 좌측 경계선 드래그로 폭 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist.
   // 패널 우측 경계는 고정(창 우측에 핀)이므로 mousedown 시점 값을 그대로 사용.
@@ -276,18 +276,7 @@ export function TaskDetail() {
             setDueTime(next.dueTime ?? '')
             save({ dueDate: next.dueDate, dueTime: next.dueTime })
           }}
-          onStartDateChange={(v) => {
-            // 기한이 없는 상태에서 시작일부터 고르면, 스토어의 불변식이 그 값을
-            // 즉시 버린다(끝이 없으면 기간이 아니다). 화면에서는 시작 칸이 위에
-            // 있으니 그 순서로 입력하는 게 자연스럽다 — 그날을 마감일로도 잡아
-            // 하루짜리 기간으로 시작하고, 사용자는 끝을 늘리기만 하면 된다.
-            if (v && !dueDate) {
-              setDueDate(v)
-              save({ startDate: v, dueDate: v })
-            } else {
-              save({ startDate: v })
-            }
-          }}
+          onStartDateChange={(v) => save({ startDate: v })}
           onReminderChange={(v) => save({ reminderAt: v })}
           onRecurringChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
           autoOpenRangeSignal={rangeSignal}

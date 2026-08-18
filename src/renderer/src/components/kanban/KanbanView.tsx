@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore'
 import { useToday } from '../../hooks/useToday'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, GripVertical, Calendar } from 'lucide-react'
-import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
+import { PRIORITY_COLOR, byPinned, byPinnedThenPriority } from '../../utils/priority'
 import { isTopLevel } from '../../utils/smartLists'
 
 interface ColumnDef {
@@ -58,7 +58,11 @@ export function KanbanView(): React.ReactElement {
 
     todo.sort(byPinnedThenPriority)
     inProgress.sort(byPinnedThenPriority)
+    // 완료 열만 빠지면 고정한 할일이 완료되는 순간 아무 데나 떨어진다 —
+    // '고정은 어떤 정렬 기준보다 앞선다'는 규칙은 여기에도 적용된다.
     done.sort((a, b) => {
+      const pin = byPinned(a, b)
+      if (pin !== 0) return pin
       // 완료된 것은 최근 완료 순
       if (a.completedAt && b.completedAt) return b.completedAt.localeCompare(a.completedAt)
       return 0

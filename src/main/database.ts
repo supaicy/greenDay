@@ -109,6 +109,18 @@ function load(): DbData {
  * — 그대로 두면 업그레이드한 사용자의 시리즈가 아무 신호 없이 끝난다.
  * 마감일이 있으면 그 요일로 복구하고, 없으면 반복을 꺼서 화면에 드러낸다.
  */
+/**
+ * 진짜 달력에 있는 날짜인가. validate.ts와 같은 판정을 로드 경로에도 둔다 —
+ * IPC 검증이 생기기 전 빌드나 손으로 고친 JSON에 '2026-02-30' 같은 값이 남아
+ * 있으면, 그 할일을 복제·수정하는 순간 검증이 거부하고 렌더러는 그 거부를
+ * 아무도 받지 않아 사용자의 조작이 조용히 사라진다.
+ */
+function isRealIsoDate(value: unknown): boolean {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const d = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value
+}
+
 function normalizeLegacyWeeklyPattern(t: Record<string, unknown>): void {
   if (t.recurring_pattern !== 'weekly:') return
   const due = typeof t.due_date === 'string' ? t.due_date : null
@@ -143,6 +155,9 @@ export function initDatabase(): void {
     if (t.scheduled_overrides === undefined) t.scheduled_overrides = null
     if (t.start_date === undefined) t.start_date = null
     if (t.pinned === undefined) t.pinned = 0
+    for (const key of ['due_date', 'start_date']) {
+      if (t[key] != null && !isRealIsoDate(t[key])) t[key] = null
+    }
     // 기간의 불변식은 렌더러가 지키지만, 구버전으로 내려가 마감일을 지우면
     // 그 빌드의 updateTask는 start_date를 모르므로 끝 없는 시작일이 남는다.
     // 다시 올라와도 그 행을 건드리기 전에는 아무도 고치지 않으므로, 읽는 자리에서 정리한다.
