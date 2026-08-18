@@ -193,7 +193,6 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
           </div>
         </div>
       </div>
-
     </TaskContextMenu>
   )
 })

@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey, capEvents } from './database'
+import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey, capEvents, initDatabase, createTask, getTasks } from './database'
+
+// initDatabase는 app.getPath('userData')만 쓴다 — 임시 디렉터리를 물려 실제 저장소를 흉내낸다.
+const mocked = vi.hoisted(() => ({ userData: '' }))
+vi.mock('electron', () => ({
+  app: { getPath: () => mocked.userData },
+  safeStorage: { isEncryptionAvailable: () => false }
+}))
 
 let tmp: string
 
@@ -231,5 +238,33 @@ describe('구버전 weekly: 패턴 정규화', () => {
       { id: 'ok', title: '정상', list_id: 'inbox', sort_order: 1, is_recurring: 1, recurring_pattern: 'weekly:1,3', due_date: '2026-08-10' }
     ])
     expect(rows.find((t) => t.id === 'ok')?.recurring_pattern).toBe('weekly:1,3')
+  })
+})
+
+
+/**
+ * 렌더러는 새 할일의 sortOrder를 스스로 정한다(복제는 원본과 다음 항목의
+ * 중간값). main이 그 값을 버리고 maxOrder+1로 다시 매기면, 화면에서는 원본
+ * 바로 아래 있던 복제본이 재시작 후 목록 맨 끝으로 튄다.
+ */
+describe('createTask — sortOrder', () => {
+  it('렌더러가 정한 sortOrder를 그대로 적는다', () => {
+    mocked.userData = tmp
+    initDatabase()
+    createTask({ id: 'a', title: 'A', listId: 'inbox', sortOrder: 1 })
+    createTask({ id: 'b', title: 'B', listId: 'inbox', sortOrder: 2 })
+    createTask({ id: 'copy', title: 'A', listId: 'inbox', sortOrder: 1.5 })
+
+    // getTasks는 sort_order로 정렬한다 = 재시작 후 사용자가 보는 순서.
+    expect((getTasks() as { id: string }[]).map((t) => t.id)).toEqual(['a', 'copy', 'b'])
+  })
+
+  it('sortOrder를 주지 않으면 그 리스트의 맨 뒤에 붙인다', () => {
+    mocked.userData = tmp
+    initDatabase()
+    createTask({ id: 'a', title: 'A', listId: 'inbox', sortOrder: 5 })
+    createTask({ id: 'b', title: 'B', listId: 'inbox' })
+
+    expect((getTasks() as { id: string }[]).map((t) => t.id)).toEqual(['a', 'b'])
   })
 })

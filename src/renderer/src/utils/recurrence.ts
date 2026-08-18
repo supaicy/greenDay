@@ -265,6 +265,10 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, n
     title: task.title,
     listId: task.listId,
     dueDate: next,
+    // 기간은 길이를 지킨 채 통째로 옮긴다 — 시작일만 두고 오면 다음 회차가
+    // 하루짜리로 쪼그라들고, 완료된 회차는 화면에서 가려져 흔적도 없다.
+    startDate:
+      task.startDate && task.dueDate ? shiftIsoByDays(next, -daysBetween(task.startDate, task.dueDate)) : null,
     dueTime: task.dueTime ?? undefined,
     priority: task.priority,
     isRecurring: true,

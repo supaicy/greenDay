@@ -244,3 +244,28 @@ describe('시간대 처리', () => {
     expect(local.getDate()).toBe(3)
   })
 })
+
+describe('taskToEvent — 기간', () => {
+  it('기간이 있으면 시작일부터 마감일까지 걸치는 종일 일정이 된다', () => {
+    const ev = taskToEvent({ id: 't', title: '스프린트', start_date: '2026-08-18', due_date: '2026-08-20' })
+    // DTEND는 배타적이라 마지막 날 다음 날을 넣는다.
+    expect(ev).toMatchObject({ start: '2026-08-18', end: '2026-08-21', allDay: true })
+  })
+
+  it('기간이 없으면 예전처럼 하루짜리다', () => {
+    const ev = taskToEvent({ id: 't', title: '보고서', due_date: '2026-08-20' })
+    expect(ev).toMatchObject({ start: '2026-08-20', end: '2026-08-21', allDay: true })
+  })
+
+  it('시간블록이 있으면 기간보다 시간블록이 이긴다', () => {
+    const ev = taskToEvent({
+      id: 't',
+      title: '회의',
+      start_date: '2026-08-18',
+      due_date: '2026-08-20',
+      scheduled_start: '2026-08-19T09:00:00',
+      scheduled_end: '2026-08-19T10:00:00'
+    })
+    expect(ev?.allDay).toBe(false)
+  })
+})

@@ -135,10 +135,19 @@ export function setupIpcHandlers(): void {
       // 읽는 목록이다. 삭제 여부 열이 없는데 휴지통 항목을 섞으면 살아있는 할일과
       // 구분할 수 없어 잘못된 목록이 된다 — CSV에서는 제외한다.
       const tasks = ((parsed.tasks || []) as Record<string, unknown>[]).filter((t) => !t.deleted_at)
-      const header = 'Title,Description,Priority,DueDate,List,Completed,CreatedAt\n'
+      const header = 'Title,Description,Priority,StartDate,DueDate,List,Completed,CreatedAt\n'
       const rows = tasks
         .map((t: Record<string, unknown>) =>
-          [t.title, t.description, t.priority, t.due_date || '', t.list_id, t.completed ? 'Yes' : 'No', t.created_at]
+          [
+            t.title,
+            t.description,
+            t.priority,
+            t.start_date || '',
+            t.due_date || '',
+            t.list_id,
+            t.completed ? 'Yes' : 'No',
+            t.created_at
+          ]
             .map(csvCell)
             .join(',')
         )

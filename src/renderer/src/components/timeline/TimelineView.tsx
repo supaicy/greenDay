@@ -6,7 +6,7 @@ import { useToday } from '../../hooks/useToday'
 import { shiftIsoByDays } from '../../utils/recurrence'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Clock, AlertTriangle } from 'lucide-react'
-import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
 import { isActiveTopLevel } from '../../utils/smartLists'
 
 interface TimelineGroup {
@@ -63,7 +63,7 @@ export function TimelineView(): React.ReactElement {
     }
 
     // 각 그룹 우선순위 순 정렬
-    for (const group of [overdue, today, tomorrowTasks, thisWeek, later, noDueDate]) group.sort(byPriority)
+    for (const group of [overdue, today, tomorrowTasks, thisWeek, later, noDueDate]) group.sort(byPinnedThenPriority)
 
     const result: TimelineGroup[] = []
 

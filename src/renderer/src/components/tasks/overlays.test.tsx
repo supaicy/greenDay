@@ -221,6 +221,23 @@ describe('ui 프리미티브 — 프로젝트 규칙', () => {
     expect(menu.className).not.toContain('z-50')
   })
 
+  it('컨텍스트 메뉴도 같은 z 규칙을 따른다', async () => {
+    const user = userEvent.setup()
+    useStore.setState({ lists: [] as never })
+    render(
+      <TaskContextMenu task={menuTask}>
+        <div>행</div>
+      </TaskContextMenu>
+    )
+    await user.pointer({ keys: '[MouseRight]', target: screen.getByText('행') })
+
+    // 프리미티브를 하나 더 벤더링할 때 z-50이 딸려 오는 것이 이 저장소의
+    // 반복된 실수다. 드롭다운만 검사하면 새 메뉴가 조용히 어긋난다.
+    const menu = await screen.findByRole('menu')
+    expect(menu.className).toContain('z-overlayContent')
+    expect(menu.className).not.toContain('z-50')
+  })
+
   it('다이얼로그의 모서리 지정을 호출처가 이길 수 있다', async () => {
     render(
       <Dialog open>

@@ -15,6 +15,7 @@ export interface TaskRow {
   completed?: unknown
   due_date?: string | null
   due_time?: string | null
+  start_date?: string | null
   scheduled_start?: string | null
   scheduled_end?: string | null
   deleted_at?: string | null
@@ -120,7 +121,10 @@ export function taskToEvent(task: TaskRow, sequence = 0): CalendarEvent | null {
 
   if (task.due_date) {
     // 종일 일정의 DTEND는 배타적이다 — 하루짜리면 다음 날을 넣어야 한다.
-    return { ...base, start: task.due_date, end: addDays(task.due_date, 1), allDay: true }
+    // 기간이 있으면 시작일부터 걸친다. 마감일만 보내면 8/18~8/20 할일이
+    // 캘린더에 8/20 하루로 올라가, 동기화한 쪽에서는 기간이 없던 일이 된다.
+    const start = task.start_date && task.start_date <= task.due_date ? task.start_date : task.due_date
+    return { ...base, start, end: addDays(task.due_date, 1), allDay: true }
   }
 
   return null

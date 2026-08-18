@@ -1,5 +1,5 @@
 import type { SmartList, Task } from '../types'
-import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue } from './date'
+import { isDueToday, isDueTomorrow, isDueInNext7Days, isOverdue, todayString } from './date'
 
 // selectedListId 값 중 '실제 리스트 컨테이너가 아닌' 스마트 리스트 집합.
 // 태스크의 listId 는 이 중 어떤 값도 되지 않는다 → 이 뷰에서 새 태스크를 만들면
@@ -47,11 +47,22 @@ export function isActiveTopLevel(t: Task): boolean {
   return !t.completed && !t.deletedAt && isTopLevel(t)
 }
 
+/**
+ * 기간(startDate~dueDate)이 오늘을 품고 있는가. 기간은 하루가 아니라 구간이라,
+ * 마감일만 보면 8/18~8/20 할일이 8/19에는 어느 화면에도 없다 — 정작 진행 중인
+ * 그날 보이지 않는다. 기간이 없는 할일에는 영향이 없다.
+ */
+function isRangeInProgress(t: Task): boolean {
+  if (!t.startDate || !t.dueDate) return false
+  const today = todayString()
+  return t.startDate <= today && today <= t.dueDate
+}
+
 // 마감일 기반 스마트 리스트의 '미완료 태스크' 판별식 단일 출처.
 // 뷰 필터(TaskList)와 사이드바 뱃지 카운트가 반드시 같은 식을 쓰도록 공유한다.
 type DateSmartList = 'today' | 'tomorrow' | 'next7days' | 'summary'
 export const SMART_LIST_PREDICATES: Record<DateSmartList, (t: Task) => boolean> = {
-  today: (t) => isActiveTopLevel(t) && (isDueToday(t.dueDate) || isOverdue(t.dueDate)),
+  today: (t) => isActiveTopLevel(t) && (isDueToday(t.dueDate) || isOverdue(t.dueDate) || isRangeInProgress(t)),
   tomorrow: (t) => isActiveTopLevel(t) && isDueTomorrow(t.dueDate),
   next7days: (t) => isActiveTopLevel(t) && isDueInNext7Days(t.dueDate),
   summary: (t) => isActiveTopLevel(t) && (isOverdue(t.dueDate) || isDueInNext7Days(t.dueDate))

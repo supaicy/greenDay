@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { orderTasks } from './taskOrder'
+import { orderTasks, reorderWithinPinGroup } from './taskOrder'
 import type { Task } from '../types'
 
 const task = (over: Partial<Task>): Task =>
@@ -90,5 +90,40 @@ describe('orderTasks — 고정', () => {
   it('고정한 것이 없으면 배열을 그대로 돌려준다', () => {
     const list = [task({ id: 'a' }), task({ id: 'b' })]
     expect(ids(orderTasks(list, 'default', 'asc'))).toEqual(['a', 'b'])
+  })
+})
+
+describe('reorderWithinPinGroup', () => {
+  const list = [
+    task({ id: 'p1', pinned: true }),
+    task({ id: 'p2', pinned: true }),
+    task({ id: 'a' }),
+    task({ id: 'b' }),
+    task({ id: 'c' })
+  ]
+
+  it('같은 묶음 안에서는 자리를 바꾼다', () => {
+    expect(reorderWithinPinGroup(list, 'c', 'a')).toEqual(['c', 'a', 'b'])
+  })
+
+  it('고정된 것끼리도 바꿀 수 있다', () => {
+    expect(reorderWithinPinGroup(list, 'p2', 'p1')).toEqual(['p2', 'p1'])
+  })
+
+  it('고정 경계를 넘는 드롭은 거절한다', () => {
+    // 화면 순서를 그대로 넘기면 applyReorder가 고정이 만든 배치를 sortOrder에
+    // 구워버려, 고정을 풀어도 그 항목이 맨 위에 남는다.
+    expect(reorderWithinPinGroup(list, 'a', 'p1')).toBeNull()
+    expect(reorderWithinPinGroup(list, 'p1', 'a')).toBeNull()
+  })
+
+  it('제자리 드롭과 모르는 id는 거절한다', () => {
+    expect(reorderWithinPinGroup(list, 'a', 'a')).toBeNull()
+    expect(reorderWithinPinGroup(list, 'a', 'nope')).toBeNull()
+  })
+
+  it('고정이 없으면 보이는 목록 전체가 대상이다', () => {
+    const plain = [task({ id: 'a' }), task({ id: 'b' }), task({ id: 'c' })]
+    expect(reorderWithinPinGroup(plain, 'a', 'c')).toEqual(['b', 'c', 'a'])
   })
 })

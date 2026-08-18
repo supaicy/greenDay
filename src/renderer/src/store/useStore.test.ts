@@ -17,7 +17,9 @@ const task = (over: Partial<Task>): Task =>
     priority: 'none',
     dueDate: null,
     dueTime: null,
+    startDate: null,
     reminderAt: null,
+    pinned: false,
     listId: 'inbox',
     parentId: null,
     tags: [],
@@ -637,5 +639,33 @@ describe('updateTask — 기간(startDate) 불변식', () => {
 
     expect(useStore.getState().tasks[0].startDate).toBeNull()
     expect(useStore.getState().tasks[0].dueDate).toBe('2026-08-15')
+  })
+})
+
+describe('기간 불변식 — 생성 경로와 함께 실린 필드', () => {
+  it('거꾸로 된 시작일은 그 필드만 무시하고 같이 온 수정은 살린다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', dueDate: '2026-08-20', startDate: '2026-08-18' })] })
+    await useStore.getState().updateTask({ id: 'a', startDate: '2026-08-25', dueTime: '09:30' })
+
+    const t = useStore.getState().tasks[0]
+    expect(t.startDate).toBe('2026-08-18')
+    // 예전에는 패치 전체를 버려서, 같은 저장에 실린 무관한 수정까지 사라졌다.
+    expect(t.dueTime).toBe('09:30')
+  })
+
+  it('추가할 때도 같은 규칙을 거친다 — 끝 없는 시작일은 만들지 않는다', async () => {
+    useStore.setState({ tasks: [], selectedListId: 'inbox' })
+    await useStore.getState().addTask('기간만 있는 할일', { startDate: '2026-08-18' })
+
+    expect(useStore.getState().tasks[0].startDate).toBeNull()
+  })
+
+  it('추가할 때 거꾸로 된 기간도 만들지 않는다', async () => {
+    useStore.setState({ tasks: [], selectedListId: 'inbox' })
+    await useStore.getState().addTask('회고', { dueDate: '2026-08-18', startDate: '2026-08-25' })
+
+    const t = useStore.getState().tasks[0]
+    expect(t.startDate).toBeNull()
+    expect(t.dueDate).toBe('2026-08-18')
   })
 })

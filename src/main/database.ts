@@ -252,9 +252,13 @@ export function getTrashTasks(): unknown[] {
   return data.tasks.filter((t) => t.deleted_at)
 }
 export function createTask(task: Record<string, unknown>): void {
+  // 렌더러가 자리를 정했으면 그 자리를 쓴다. 여기서 maxOrder+1로 다시 매기면
+  // '복제본은 원본 바로 아래'처럼 렌더러가 계산한 중간값이 버려져, 화면에서는
+  // 제자리에 있던 항목이 재시작 후 목록 맨 끝으로 튄다.
   const maxOrder = data.tasks
     .filter((t) => t.list_id === task.listId && !t.deleted_at)
     .reduce((m, t) => Math.max(m, (t.sort_order as number) || 0), 0)
+  const sortOrder = typeof task.sortOrder === 'number' ? task.sortOrder : maxOrder + 1
   data.tasks.push({
     id: task.id,
     title: task.title,
@@ -273,7 +277,7 @@ export function createTask(task: Record<string, unknown>): void {
     created_at: new Date().toISOString(),
     completed_at: null,
     deleted_at: null,
-    sort_order: maxOrder + 1,
+    sort_order: sortOrder,
     is_recurring: task.isRecurring ? 1 : 0,
     recurring_pattern: task.recurringPattern || null,
     scheduled_start: task.scheduledStart || null,

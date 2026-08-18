@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore'
 import { useToday } from '../../hooks/useToday'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, GripVertical, Calendar } from 'lucide-react'
-import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
 import { isTopLevel } from '../../utils/smartLists'
 
 interface ColumnDef {
@@ -47,16 +47,17 @@ export function KanbanView(): React.ReactElement {
     for (const task of boardTasks) {
       if (task.completed) {
         done.push(task)
-      } else if (task.dueDate && task.dueDate <= todayStr) {
-        // 오늘 또는 과거 마감일 = 진행 중
+      } else if ((task.dueDate && task.dueDate <= todayStr) || (task.startDate && task.startDate <= todayStr)) {
+        // 오늘 또는 과거 마감일 = 진행 중. 기간이 이미 시작됐다면 마감이 아직
+        // 남았어도 진행 중이다 — 그게 기간을 지정한 이유다.
         inProgress.push(task)
       } else {
         todo.push(task)
       }
     }
 
-    todo.sort(byPriority)
-    inProgress.sort(byPriority)
+    todo.sort(byPinnedThenPriority)
+    inProgress.sort(byPinnedThenPriority)
     done.sort((a, b) => {
       // 완료된 것은 최근 완료 순
       if (a.completedAt && b.completedAt) return b.completedAt.localeCompare(a.completedAt)

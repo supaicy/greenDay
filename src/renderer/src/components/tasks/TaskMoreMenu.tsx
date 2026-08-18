@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { DROPDOWN_KIT, TaskActionItems } from './TaskActionItems'
-import { useSharedTaskActions } from './taskActions'
 import type { Task } from '../../types'
 
 /**
@@ -40,7 +39,6 @@ export function TaskMoreMenu({
   const setViewType = useStore((s) => s.setViewType)
   const toggleRun = usePomodoroStore((s) => s.toggleRun)
   const running = usePomodoroStore((s) => s.running)
-  const shared = useSharedTaskActions(task)
 
   return (
     <DropdownMenu>
@@ -75,7 +73,7 @@ export function TaskMoreMenu({
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
-        <TaskActionItems actions={shared} kit={DROPDOWN_KIT} task={task} />
+        <TaskActionItems kit={DROPDOWN_KIT} task={task} />
       </DropdownMenuContent>
     </DropdownMenu>
   )

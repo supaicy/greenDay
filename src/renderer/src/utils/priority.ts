@@ -50,3 +50,15 @@ const PRIORITY_ORDER: Record<Priority, number> = {
 export function byPriority(a: { priority: Priority }, b: { priority: Priority }): number {
   return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
 }
+
+/**
+ * 고정 먼저, 그 다음 우선순위. 할일 목록을 그리는 화면은 전부 이것을 쓴다 —
+ * 고정을 우선순위에 맡기면 '높음' 하나만 생겨도 고정한 것이 아래로 밀려,
+ * 고정이라는 말이 무의미해진다. (목록 뷰의 다른 정렬 기준은 utils/taskOrder.ts)
+ */
+export function byPinnedThenPriority(
+  a: { priority: Priority; pinned?: boolean },
+  b: { priority: Priority; pinned?: boolean }
+): number {
+  return Number(!!b.pinned) - Number(!!a.pinned) || byPriority(a, b)
+}

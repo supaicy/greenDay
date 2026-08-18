@@ -92,6 +92,7 @@ export function DueDatePicker({
   const rowCls = `flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[13px] transition-colors ${
     isDark ? 'text-gray-200 hover:bg-surface-sunken' : 'text-gray-700 hover:bg-gray-100'
   }`
+  const labelCls = `w-8 shrink-0 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`
   const fieldCls = `h-8 text-[13px] rounded-md px-2 outline-none border ${
     isDark ? 'bg-surface-sunken text-gray-100 border-surface-line' : 'bg-white text-gray-700 border-gray-300'
   }`
@@ -124,9 +125,7 @@ export function DueDatePicker({
 
         {rangeMode && (
           <div className="flex items-center gap-2">
-            <span className={`w-8 shrink-0 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {t('detail.startDateLabel')}
-            </span>
+            <span className={labelCls}>{t('detail.startDateLabel')}</span>
             <input
               type="date"
               aria-label={t('detail.startDateLabel')}
@@ -141,9 +140,7 @@ export function DueDatePicker({
 
         <div className="flex items-center gap-2">
           {rangeMode && (
-            <span className={`w-8 shrink-0 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              {t('detail.endDateLabel')}
-            </span>
+            <span className={labelCls}>{t('detail.endDateLabel')}</span>
           )}
           <input
             type="date"
@@ -171,7 +168,8 @@ export function DueDatePicker({
             onClick={() => {
               // 켜져 있으면 끈다 — 시작일을 지우는 것이 곧 '기간 아님'이다.
               if (rangeMode) {
-                onStartDateChange(null)
+                // 켜기만 하고 날짜를 안 골랐다면 지울 것이 없다 — 헛저장을 만들지 않는다.
+                if (startDate) onStartDateChange(null)
                 setRangeArmed(false)
               } else {
                 setRangeArmed(true)

@@ -297,6 +297,31 @@ export function applyReorder(tasks: Task[], ids: string[]): Task[] {
     .sort((a, b) => a.sortOrder - b.sortOrder)
 }
 
+/**
+ * 기간(startDate~dueDate)의 불변식을 한 자리에서 지킨다. dueDate가 종료일이라
+ * 둘은 한 쌍이다 — 생성이든 수정이든 같은 규칙을 거쳐야, 한쪽 경로만 열려
+ * 거꾸로 된 기간이나 끝 없는 시작일이 디스크에 남는 일이 없다.
+ *
+ * `next`는 이 변경이 적용된 뒤의 값(수정 경로는 저장값과 합친 것). 규칙에
+ * 어긋나면 startDate만 떨어뜨린다 — 같이 실려 온 다른 필드는 사용자의 의도다.
+ */
+export function normalizeDateRange(
+  patch: { startDate?: string | null },
+  next: { startDate: string | null; dueDate: string | null }
+): void {
+  // 끝이 없으면 기간이 아니다. 거꾸로면 그릴 수 없다.
+  if (!next.startDate) return
+  if (next.dueDate && next.startDate <= next.dueDate) return
+
+  if (patch.startDate) {
+    // 사용자가 방금 지정한 시작일이 틀렸다 — 그 필드만 무시하고 저장값을 지킨다.
+    delete patch.startDate
+  } else {
+    // 마감일이 옮겨지거나 지워지면서 남아 있던 시작일이 의미를 잃었다.
+    patch.startDate = null
+  }
+}
+
 /** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
 function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
   if (!s) return fallback
@@ -458,6 +483,9 @@ export const useStore = create<Store>((set, get) => ({
       const sortOrder = (maxOrderByList.get(targetList) ?? 0) + 1
       maxOrderByList.set(targetList, sortOrder)
 
+      const range = { startDate: opts.startDate ?? null, dueDate: finalDueDate }
+      normalizeDateRange(range, range)
+
       return {
         id: uuid(),
         title,
@@ -466,7 +494,7 @@ export const useStore = create<Store>((set, get) => ({
         priority: opts.priority || 'none',
         dueDate: finalDueDate,
         dueTime: opts.dueTime || null,
-        startDate: opts.startDate || null,
+        startDate: range.startDate ?? null,
         reminderAt: opts.reminderAt || null,
         pinned: opts.pinned || false,
         listId: targetList,
@@ -494,9 +522,11 @@ export const useStore = create<Store>((set, get) => ({
     for (const t of newTasks) window.api.createTask(t)
   },
   updateTask: async (task) => {
+    // 같은 태스크를 네 번 찾고 있었다 — 한 번 찾아 모든 가드가 나눠 쓴다.
+    const current = get().tasks.find((t) => t.id === task.id)
+
     // Invariant guard: if the caller is changing scheduledStart/End, ensure the pair is valid
     if ('scheduledStart' in task || 'scheduledEnd' in task) {
-      const current = get().tasks.find((t) => t.id === task.id)
       if (!current) return
       const nextStart = 'scheduledStart' in task ? (task.scheduledStart ?? null) : current.scheduledStart
       const nextEnd = 'scheduledEnd' in task ? (task.scheduledEnd ?? null) : current.scheduledEnd
@@ -515,35 +545,23 @@ export const useStore = create<Store>((set, get) => ({
       }
     }
 
-    // 기간(startDate~dueDate)의 불변식. dueDate가 종료일이므로 둘은 한 쌍이다.
-    // 여기서 한 번에 지키지 않으면 호출처마다(픽커·⋯메뉴·컨텍스트 메뉴·AI 액션)
-    // 같은 검사를 되풀이해야 하고, 하나만 빠져도 거꾸로 된 기간이 저장된다.
-    if ('startDate' in task || 'dueDate' in task) {
-      const current = get().tasks.find((t) => t.id === task.id)
+    const patch = { ...task }
+    // 기간은 생성 경로와 같은 규칙을 쓴다(normalizeDateRange). 잘못된 값이면
+    // startDate만 떨어져 나가고, 같이 실려 온 dueTime 같은 필드는 살아남는다 —
+    // 예전에는 patch 전체를 버려서 무관한 수정까지 조용히 사라졌다.
+    if ('startDate' in patch || 'dueDate' in patch) {
       if (!current) return
-      const nextStart = 'startDate' in task ? (task.startDate ?? null) : current.startDate
-      const nextDue = 'dueDate' in task ? (task.dueDate ?? null) : current.dueDate
-      if (nextStart && nextDue && nextStart > nextDue) {
-        // 시작일을 직접 뒤로 밀었다면 그건 거부한다(사용자가 방금 지정한 값이 틀렸다).
-        if ('startDate' in task && task.startDate) {
-          console.warn('[updateTask] rejected inverted date range', { nextStart, nextDue })
-          return
-        }
-        // 마감일을 앞으로 당겨서 뒤집힌 경우라면, 옮긴 마감일이 사용자의 의도다.
-        // 남은 시작일은 의미를 잃었으므로 버린다.
-        task = { ...task, startDate: null }
-      }
-      // 끝이 없으면 기간이 아니다.
-      if (!nextDue && nextStart) task = { ...task, startDate: null }
+      normalizeDateRange(patch, {
+        startDate: 'startDate' in patch ? (patch.startDate ?? null) : current.startDate,
+        dueDate: 'dueDate' in patch ? (patch.dueDate ?? null) : current.dueDate
+      })
     }
 
     // scheduledOverrides는 반복 시리즈에 딸린 회차 예외다. 시리즈의 시간블록이
     // 사라지거나 반복 자체가 끝나거나 패턴이 바뀌면 과거 발생일 기준의 예외는
     // 의미가 없다 — 남기면 유령 블록이 된다. 규칙을 여기서 한 번에 지킨다:
     // 예전에는 호출처마다 손으로 지웠고, 레일 드롭 한 곳이 빠져 있었다.
-    const patch = { ...task }
     if (patch.scheduledOverrides === undefined) {
-      const current = get().tasks.find((t) => t.id === task.id)
       const unscheduled = 'scheduledStart' in patch && patch.scheduledStart === null
       const recurrenceOff = patch.isRecurring === false
       const patternChanged =
@@ -561,7 +579,7 @@ export const useStore = create<Store>((set, get) => ({
     // 즉시 버리면 "지난주 운동은 8시였다"는 기록까지 사라지므로, 보존 기간을 둔다.
     if (patch.scheduledOverrides) {
       const cutoff = shiftIsoByDays(todayString(), -OVERRIDE_RETENTION_DAYS)
-      const stored = get().tasks.find((t) => t.id === patch.id)?.scheduledOverrides ?? {}
+      const stored = current?.scheduledOverrides ?? {}
       const kept = Object.entries(patch.scheduledOverrides).filter(([date, pair]) => {
         if (date >= cutoff) return true
         // 오래됐어도 이번에 새로 쓰거나 바꾼 키는 남긴다 — 캘린더를 되짚어가
@@ -648,14 +666,15 @@ export const useStore = create<Store>((set, get) => ({
     // 원본과 다음 항목 사이의 값을 준다 — 다른 행의 sortOrder를 건드리지 않고도
     // 원본 바로 아래에 놓인다. 같은 자리에 계속 복제하면 간격이 반씩 줄지만,
     // 드래그 한 번이면 reorderTasks가 정수 슬롯으로 되돌린다.
-    const after = all
-      .filter((t) => t.listId === src.listId && !t.parentId && t.sortOrder > src.sortOrder)
-      .reduce((min, t) => Math.min(min, t.sortOrder), Number.POSITIVE_INFINITY)
+    let after = Number.POSITIVE_INFINITY
+    for (const t of all) {
+      if (t.listId === src.listId && !t.parentId && t.sortOrder > src.sortOrder) after = Math.min(after, t.sortOrder)
+    }
     const sortOrder = Number.isFinite(after) ? (src.sortOrder + after) / 2 : src.sortOrder + 1
 
     // 복제되지 않는 것들: 완료 이력은 이 할일의 것이 아니고, 시간블록은 한 자리에
     // 둘이 겹치게 만들며, 고정은 "이것 하나를 위에 둔다"는 뜻이라 복제가 무의미하다.
-    const fresh = <T extends Task>(t: T, over: Partial<Task>): Task => ({
+    const fresh = (t: Task, over: Partial<Task>): Task => ({
       ...t,
       id: uuid(),
       completed: false,
@@ -674,9 +693,7 @@ export const useStore = create<Store>((set, get) => ({
 
     set((s) => {
       const at = s.tasks.findIndex((t) => t.id === id)
-      const next = [...s.tasks]
-      next.splice(at + 1, 0, copy)
-      return { tasks: [...next, ...subtasks] }
+      return { tasks: [...s.tasks.slice(0, at + 1), copy, ...s.tasks.slice(at + 1), ...subtasks] }
     })
     for (const t of [copy, ...subtasks]) window.api.createTask(t)
   },

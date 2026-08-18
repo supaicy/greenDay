@@ -6,7 +6,7 @@ import { useToday } from '../../hooks/useToday'
 import { shiftIsoByDays } from '../../utils/recurrence'
 import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Zap, Target, Clock, Coffee } from 'lucide-react'
-import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
 import { isActiveTopLevel } from '../../utils/smartLists'
 
 interface Quadrant {
@@ -61,7 +61,7 @@ export function EisenhowerMatrix(): React.ReactElement {
 
     // 우선순위 + 마감일 순 정렬
     const sortFn = (a: Task, b: Task) => {
-      const pDiff = byPriority(a, b)
+      const pDiff = byPinnedThenPriority(a, b)
       if (pDiff !== 0) return pDiff
       if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate)
       if (a.dueDate) return -1

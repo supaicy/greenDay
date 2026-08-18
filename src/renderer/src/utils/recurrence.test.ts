@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextRecurringDate, shiftIsoByDays, daysBetween } from './recurrence'
+import { nextRecurringDate, shiftIsoByDays, daysBetween, nextRecurrenceSpawn } from './recurrence'
 
 describe('nextRecurringDate', () => {
   // ── daily ──────────────────────────────────────────────
@@ -257,5 +257,57 @@ describe('shiftInstantByDays — 리마인더 이동', () => {
     const at730 = new Date(2026, 0, 31, 7, 30, 0).toISOString()
     const d = new Date(shiftInstantByDays(at730, 30))
     expect([d.getHours(), d.getMinutes()]).toEqual([7, 30])
+  })
+})
+
+describe('nextRecurrenceSpawn — 기간', () => {
+  it('시작일도 다음 회차로 함께 옮긴다', () => {
+    // 기간이 붙은 반복(예: 8/17~8/19 스프린트 회고)을 완료하면, 다음 회차가
+    // 시작일을 잃고 하루짜리가 됐다 — 화면에도 캘린더에도 흔적이 남지 않는다.
+    const spawn = nextRecurrenceSpawn(
+      {
+        title: '주간 회고',
+        listId: 'inbox',
+        dueDate: '2026-08-19',
+        startDate: '2026-08-17',
+        dueTime: null,
+        priority: 'none',
+        tags: [],
+        reminderAt: null,
+        isRecurring: true,
+        recurringPattern: 'weekly:3',
+        scheduledStart: null,
+        scheduledEnd: null,
+        scheduledOverrides: null
+      } as never,
+      [],
+      '2026-08-19'
+    )
+    expect(spawn?.dueDate).toBe('2026-08-26')
+    // 기간의 길이(2일)는 유지된다.
+    expect(spawn?.startDate).toBe('2026-08-24')
+  })
+
+  it('시작일이 없으면 만들지 않는다', () => {
+    const spawn = nextRecurrenceSpawn(
+      {
+        title: '물주기',
+        listId: 'inbox',
+        dueDate: '2026-08-19',
+        startDate: null,
+        dueTime: null,
+        priority: 'none',
+        tags: [],
+        reminderAt: null,
+        isRecurring: true,
+        recurringPattern: 'daily',
+        scheduledStart: null,
+        scheduledEnd: null,
+        scheduledOverrides: null
+      } as never,
+      [],
+      '2026-08-19'
+    )
+    expect(spawn?.startDate ?? null).toBeNull()
   })
 })

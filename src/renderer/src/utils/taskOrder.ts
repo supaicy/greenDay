@@ -1,6 +1,5 @@
+import { byPriority } from './priority'
 import type { SortBy, SortDir, Task } from '../types'
-
-const PRIORITY_RANK = { high: 3, medium: 2, low: 1, none: 0 } as const
 
 /**
  * 목록에 보일 순서를 정한다. 뷰 컴포넌트 안에 있던 정렬을 여기로 옮겼다 —
@@ -9,12 +8,41 @@ const PRIORITY_RANK = { high: 3, medium: 2, low: 1, none: 0 } as const
  *
  * 고정은 정렬 기준보다 항상 앞선다. 고정을 정렬에 맡기면 '높음' 하나만 생겨도
  * 고정한 것이 아래로 밀려, 고정이라는 말이 무의미해진다.
+ * (비교자로 같은 규칙이 필요한 화면은 utils/priority.ts byPinnedThenPriority)
  */
 export function orderTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
-  const sorted = sortBy === 'default' ? tasks : sortByKey(tasks, sortBy, sortDir)
-  if (!sorted.some((t) => t.pinned)) return sorted
-  // 안정 분할 — 고정끼리의 상대 순서는 위 단계가 정한 그대로 둔다.
-  return [...sorted.filter((t) => t.pinned), ...sorted.filter((t) => !t.pinned)]
+  return pinnedFirst(sortBy === 'default' ? tasks : sortByKey(tasks, sortBy, sortDir))
+}
+
+/** 고정을 앞으로 끌어내되, 각 묶음 안의 상대 순서는 그대로 둔다(안정 분할). */
+export function pinnedFirst(tasks: Task[]): Task[] {
+  const pinned: Task[] = []
+  const rest: Task[] = []
+  for (const t of tasks) (t.pinned ? pinned : rest).push(t)
+  return pinned.length > 0 ? [...pinned, ...rest] : tasks
+}
+
+/**
+ * 드래그로 옮길 수 있는 id 목록. 고정 경계는 넘지 않는다.
+ *
+ * 화면 순서를 그대로 넘기면 applyReorder가 그 순서대로 sortOrder를 다시 매겨,
+ * 고정이 만든 배치가 영구히 구워진다 — 고정을 풀어도 그 항목이 맨 위에 남는다.
+ * 드래그하지도 않은 항목의 순서가 조용히 바뀌는 것이라, 같은 묶음 안에서만
+ * 자리를 바꾸게 한다. 넘을 수 없는 드롭이면 null.
+ */
+export function reorderWithinPinGroup(visible: Task[], dragId: string, targetId: string): string[] | null {
+  const from = visible.find((t) => t.id === dragId)
+  const to = visible.find((t) => t.id === targetId)
+  if (!from || !to || dragId === targetId) return null
+  if (!!from.pinned !== !!to.pinned) return null
+
+  const ids = visible.filter((t) => !!t.pinned === !!from.pinned).map((t) => t.id)
+  const fromIdx = ids.indexOf(dragId)
+  const toIdx = ids.indexOf(targetId)
+  if (fromIdx < 0 || toIdx < 0) return null
+  ids.splice(fromIdx, 1)
+  ids.splice(toIdx, 0, dragId)
+  return ids
 }
 
 function sortByKey(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
@@ -30,7 +58,7 @@ function sortByKey(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
         return a.dueDate.localeCompare(b.dueDate) * dir
       }
       case 'priority':
-        return (PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority]) * dir
+        return byPriority(a, b) * dir
       case 'title':
         return a.title.localeCompare(b.title, 'ko') * dir
       case 'createdAt':

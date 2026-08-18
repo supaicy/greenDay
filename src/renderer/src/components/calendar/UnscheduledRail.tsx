@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Flag, Inbox } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { DND_MIME } from '../../utils/dnd'
-import { PRIORITY_COLOR, byPriority } from '../../utils/priority'
+import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
 import { isActiveTopLevel } from '../../utils/smartLists'
 
 /**
@@ -23,7 +23,7 @@ export const UnscheduledRail = memo(function UnscheduledRail({ isDark }: { isDar
   const updateTask = useStore((s) => s.updateTask)
 
   const unscheduled = useMemo(
-    () => tasks.filter((x) => isActiveTopLevel(x) && !x.scheduledStart).sort(byPriority),
+    () => tasks.filter((x) => isActiveTopLevel(x) && !x.scheduledStart).sort(byPinnedThenPriority),
     [tasks]
   )
 

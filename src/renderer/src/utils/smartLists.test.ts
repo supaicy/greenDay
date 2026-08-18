@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { shiftIsoByDays } from './recurrence'
 import {
   isVirtualSmartList,
   isActiveTopLevel,
@@ -106,5 +107,54 @@ describe('date smart lists exclude subtasks and trashed tasks', () => {
     expect(SMART_LIST_PREDICATES.tomorrow(task(tomorrowString(), false, { parentId: 'p' }))).toBe(false)
     expect(SMART_LIST_PREDICATES.next7days(task(tomorrowString(), false, { parentId: 'p' }))).toBe(false)
     expect(SMART_LIST_PREDICATES.summary(task(todayString(), false, { parentId: 'p' }))).toBe(false)
+  })
+})
+
+/**
+ * 기간(startDate~dueDate)은 하루가 아니라 구간이다. 마감일만 보면 8/18~8/20
+ * 할일이 8/19에는 어느 화면에도 없다 — 진행 중인 그날 정작 안 보인다.
+ */
+describe('기간 할일 — 진행 중인 날에도 보인다', () => {
+  const ranged = (over: Partial<Task>): Task =>
+    ({
+      id: 'r',
+      title: '스프린트',
+      description: '',
+      completed: false,
+      priority: 'none',
+      dueTime: null,
+      reminderAt: null,
+      listId: 'inbox',
+      parentId: null,
+      tags: [],
+      createdAt: '2026-08-01T00:00:00.000Z',
+      completedAt: null,
+      deletedAt: null,
+      sortOrder: 0,
+      pinned: false,
+      isRecurring: false,
+      recurringPattern: null,
+      attachments: [],
+      scheduledStart: null,
+      scheduledEnd: null,
+      ...over
+    }) as Task
+
+  it('오늘이 기간 안이면 오늘에 든다', () => {
+    const today = todayString()
+    const t = ranged({ startDate: shiftIsoByDays(today, -2), dueDate: shiftIsoByDays(today, 3) })
+    expect(SMART_LIST_PREDICATES.today(t)).toBe(true)
+  })
+
+  it('기간이 아직 시작 전이면 오늘에 들지 않는다', () => {
+    const today = todayString()
+    const t = ranged({ startDate: shiftIsoByDays(today, 1), dueDate: shiftIsoByDays(today, 3) })
+    expect(SMART_LIST_PREDICATES.today(t)).toBe(false)
+  })
+
+  it('기간이 끝났으면 연체 규칙이 맡는다', () => {
+    const today = todayString()
+    const t = ranged({ startDate: shiftIsoByDays(today, -5), dueDate: shiftIsoByDays(today, -1) })
+    expect(SMART_LIST_PREDICATES.today(t)).toBe(true)
   })
 })

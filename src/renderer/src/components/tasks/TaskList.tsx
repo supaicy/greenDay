@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { SMART_LIST_PREDICATES, isTopLevel, tagFromListId } from '../../utils/smartLists'
 import { DND_MIME } from '../../utils/dnd'
 import { matchesSearch } from '../../utils/search'
-import { orderTasks } from '../../utils/taskOrder'
+import { orderTasks, reorderWithinPinGroup } from '../../utils/taskOrder'
 import type { Task } from '../../types'
 
 const SMART_LIST_IDS = ['all', 'today', 'tomorrow', 'next7days', 'inbox', 'summary', 'completed', 'trash']
@@ -111,13 +111,9 @@ export function TaskListView() {
   const canReorder = sortBy === 'default'
   const handleDrop = useCallback(
     (targetId: string) => {
-      if (!dragTaskId || dragTaskId === targetId) return
-      const ids = filteredTasks.map((t) => t.id)
-      const fromIdx = ids.indexOf(dragTaskId)
-      const toIdx = ids.indexOf(targetId)
-      if (fromIdx < 0 || toIdx < 0) return
-      ids.splice(fromIdx, 1)
-      ids.splice(toIdx, 0, dragTaskId)
+      if (!dragTaskId) return
+      const ids = reorderWithinPinGroup(filteredTasks, dragTaskId, targetId)
+      if (!ids) return
       reorderTasks(ids)
       setDragTaskId(null)
     },

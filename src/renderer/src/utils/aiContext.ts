@@ -5,6 +5,8 @@ export interface AiTaskContext {
   title: string
   dueDate: string | null
   dueTime: string | null
+  /** 기간의 시작일. 없으면 dueDate 하루짜리다. */
+  startDate: string | null
   priority: string
   completed: boolean
   tags: string[]
@@ -17,6 +19,7 @@ function toContext(t: Task): AiTaskContext {
     title: t.title,
     dueDate: t.dueDate,
     dueTime: t.dueTime,
+    startDate: t.startDate,
     priority: t.priority,
     completed: t.completed,
     tags: t.tags
