@@ -53,7 +53,13 @@ function boot(record: Partial<LicenseRecord>, startAt = NOW) {
   const timers: { atMs: number; fire: () => void }[] = []
   const manager = createLicenseManager({
     client: offline,
-    store: { read: () => ({ ...stored }), write: (next) => (Object.assign(stored, next), true) },
+    store: {
+      read: () => ({ ...stored }),
+      write: (next) => {
+        Object.assign(stored, next)
+        return true
+      }
+    },
     publicKey,
     device: () => DEVICE,
     deviceName: null,
@@ -185,7 +191,13 @@ describe('래칫을 조건 없이 믿는 대가', () => {
         ...offline,
         activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + 30 * DAY } })
       },
-      store: { read: () => ({ ...stored }), write: (next) => (Object.assign(stored, next), true) },
+      store: {
+      read: () => ({ ...stored }),
+      write: (next) => {
+        Object.assign(stored, next)
+        return true
+      }
+    },
       publicKey,
       device: () => DEVICE,
       deviceName: null,

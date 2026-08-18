@@ -7,17 +7,23 @@
  */
 
 import { app, BrowserWindow } from 'electron'
+import { currentCapabilities } from '../capabilities'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
-import { importRawPublicKey, PRODUCT_SLUG, PRODUCTION_PUBLIC_KEY_BASE64 } from './activationToken'
+import { importRawPublicKey, PRODUCTION_PUBLIC_KEY_BASE64 } from './activationToken'
 import { createLicenseClient } from './licenseClient'
 import { createLicenseManager, type LicenseManager } from './licenseManager'
 import { createFileStore } from './licenseStore'
 import { resolveDeviceId } from './deviceIdentity'
-import { UNKNOWN_LICENSE_STATE, type PublicLicenseState, type PurchaseSource } from '../../shared/license'
+import {
+  LICENSE_BASE_URL,
+  UNKNOWN_LICENSE_STATE,
+  type PublicLicenseState,
+  type PurchaseSource
+} from '../../shared/license'
 
 export type { PurchaseSource, PublicLicenseState }
 
@@ -33,18 +39,18 @@ export type { PurchaseSource, PublicLicenseState }
 export const IS_ENFORCED = false
 
 /**
- * 서버가 사는 곳. 하나의 상수인 이유는 같은 배포가 양쪽을 다 하기 때문이다 —
- * 워커가 `v1/activate`에 답하고 구매 페이지도 서빙한다. 따로 적으면 워커를 옮길 때
- * 반쪽씩 반대 방향으로 깨진다(활성화가 안 되거나, 구매 링크가 404거나).
+ * 이 빌드가 실제로 잠글 것인가.
+ *
+ * `IS_ENFORCED`만으로는 부족하다. 스토어 빌드에서 켜지면 **Apple로 결제한 사람이
+ * 우리 키가 없다는 이유로 잠기고**, 잠금 화면에는 키 입력 칸과 외부 구매 링크가
+ * 뜬다 — 가이드라인 3.1.1 위반이자 심사 거절 사유다. `needsLicenseKey`가
+ * "직판 채널인가"를 이미 알고 있으니 그걸 그대로 쓴다.
+ *
+ * 한 곳에서 정해야 한다는 것이 핵심이다. 렌더러에서 따로 확인하면 게이트와
+ * 설정 화면이 서로 다른 판단을 하게 된다.
  */
-export const LICENSE_BASE_URL = 'https://pay.begreen.dev'
-
-export function purchaseUrl(source: PurchaseSource): string {
-  return `${LICENSE_BASE_URL}/buy?product=${PRODUCT_SLUG}&src=${source}`
-}
-
-export function recoverUrl(): string {
-  return `${LICENSE_BASE_URL}/recover`
+function enforcementActive(): boolean {
+  return IS_ENFORCED && currentCapabilities().needsLicenseKey
 }
 
 let manager: LicenseManager | null = null
@@ -66,7 +72,7 @@ export function initLicensing(): void {
     publicKey,
     device: currentDeviceId,
     deviceName: safeHostname(),
-    enforced: IS_ENFORCED,
+    enforced: enforcementActive(),
     now: () => Date.now(),
     setTimer: (ms, fn) => {
       const handle = setTimeout(fn, ms)
@@ -93,8 +99,9 @@ export function publicLicenseState(): PublicLicenseState {
     status: state.status,
     untilMs: 'untilMs' in state ? state.untilMs : null,
     allowsPaidFeatures: manager.allowsPaidFeatures(),
-    enforced: IS_ENFORCED,
-    maskedKey: manager.getMaskedKey()
+    enforced: enforcementActive(),
+    maskedKey: manager.getMaskedKey(),
+    deviceName: safeHostname()
   }
 }
 
@@ -115,11 +122,14 @@ export function disposeLicensing(): void {
 // ── 기기 식별 ────────────────────────────────────────────────────────────────
 
 /** 한 번만 읽는다 — 하드웨어 조회는 서브프로세스이고, 결과는 실행 중에 안 바뀐다. */
-let cachedDeviceId: { value: string | null } | null = null
+let cachedDeviceId: string | null = null
 
 function currentDeviceId(): string | null {
-  if (!cachedDeviceId) cachedDeviceId = { value: readDeviceId() }
-  return cachedDeviceId.value
+  // `readDeviceId`는 `fallbackId` 덕에 사실상 항상 문자열을 낸다. 그 드문 null에서
+  // 다음 호출이 다시 시도하는 것은 오히려 맞는 동작이라, "아직 안 읽음"과
+  // "읽었는데 null"을 구분하는 래퍼가 필요 없다.
+  cachedDeviceId ??= readDeviceId()
+  return cachedDeviceId
 }
 
 function readDeviceId(): string | null {

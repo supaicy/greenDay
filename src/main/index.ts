@@ -114,12 +114,17 @@ function bootstrap(): void {
     initDatabase()
     // 출하 빌드에서 개발자 도구 메뉴 항목을 뺀다 (app-menu.ts).
     applyAppMenu(is.dev)
-    // 창을 만들기 전에 — 렌더러가 뜨자마자 라이선스 상태를 묻는다.
-    initLicensing()
     setupIpcHandlers()
 
     ipcMain.handle('set-language', (_, language: unknown) => setUiLanguage(language))
     createWindow()
+
+    // **창을 띄운 뒤에** 초기화한다. 토큰이 있는 설치에서는 여기서 기기 id를
+    // 읽느라 동기 서브프로세스(macOS는 ioreg)가 돌고, 그게 창 생성 앞에 있으면
+    // 유료 사용자만 매 실행 그만큼 늦게 창을 본다. 핸들러는 이미 등록돼 있고
+    // `licensing()`을 호출 시점에 읽으므로 순서가 뒤여도 안전하다 —
+    // 렌더러의 첫 IPC는 페이지 로드 뒤라 이 줄보다 한참 뒤다.
+    initLicensing()
 
     // 리마인더 폴러: 60초마다 도래한 리마인더를 확인하고 시스템 알림 발화.
     // isSupported()는 '플랫폼이 알림을 띄울 수 있는가'만 답한다(사용자 허용 여부는 알 수 없다).

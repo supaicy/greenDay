@@ -277,6 +277,46 @@ iOS      ₩12,000  일회성   ┘  잠긴 기능 0개 · IAP 0개
 ### 후속 판단이 필요한 것
 - **Windows 이식 실비용은 코드가 아니라 인증서·QA·지원이다.** 위 체크리스트 참조.
 
+## 라이선스 — 서버가 필요한 항목 (2026-08-18)
+
+### 기기 목록에서 골라 해제하기 (사장님 결정, 서버 대기)
+
+업계 표준대로 기기 목록을 보여 주고 하나를 골라 해제하는 것으로 정했다.
+**앱 쪽은 절반이 이미 된다** — `POST /v1/deactivate`는 `{key, device}`를 받고
+호출자가 그 기기일 필요가 없으므로, 해시만 알면 남의 슬롯도 풀 수 있다.
+
+빠진 것은 **목록을 받아오는 엔드포인트 하나**뿐이다.
+
+```
+POST /v1/devices  { key }
+  200 → { devices: [{ device, deviceName, activatedAt, lastValidated }] }
+  404 unknown_key | revoked
+```
+
+`bicmac-license/src/admin.ts:145`가 이미
+`SELECT license_key, device_hash, device_name, activated_at, last_validated`를
+읽고 있다. 키로 스코프만 좁히면 된다. 서버는 사장님 몫이라 여기서 멈춘다.
+
+엔드포인트가 생기면 앱 쪽에 할 일:
+- `licenseClient.listDevices(key)` + 응답 모양 검증
+- `LicenseSection`의 "이 기기 해제" 버튼을 목록 + 기기별 해제로 교체
+- 지금 기기를 목록에서 표시(`PublicLicenseState.deviceName`과 대조)
+
+관련: 활성화할 때 `os.hostname()`이 서버로 가고, 목록에서 기기를 구분하는 것이
+그 값의 유일한 용도다. 지금은 활성화 화면에 무엇이 나가는지 적어 두었다
+(`license.deviceNameNotice`).
+
+### 재검증이 프로세스 수명당 한 번뿐 (codex #5)
+
+`initLicensing()`이 시작할 때 한 번만 `revalidateIfNeeded()`를 부른다. 마감
+타이머는 `settle()`만 부르고 `refresh()`는 안 부른다. 결과:
+- 몇 주 켜 둔 앱은 취소·해제를 토큰 만료와 유예가 다 지날 때까지 모른다
+- 시작 시점에 일시적으로 오프라인이면 다시 시도하지 않아, 연결이 돌아와도
+  유예 끝에 정상 구매자가 잠긴다
+
+고치려면 재검증을 주기적으로 걸고(반감기 도달 시) 백오프를 둔 재시도가 필요하다.
+enforcement가 꺼져 있는 동안은 아무도 겪지 않으므로, 켜기 전에 잡는다.
+
 ## /simplify 후속 (2026-08-15) — 동작 변경이라 미룬 항목
 
 리뷰 4개 렌즈가 지적한 것 중 **구조·동작을 바꾸는** 것들. 이번 사이클에서는 순수

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import i18n, { tList } from './index'
+import type { ActivateFailure, DeactivateFailure } from '../../../shared/license'
 import ko from './locales/ko.json'
 import en from './locales/en.json'
 
@@ -152,5 +153,60 @@ describe('조합된 문구', () => {
     const tKo = i18n.getFixedT('ko')
     expect(tKo('task.count', { count: 1 })).toBe('1개')
     expect(tKo('task.count', { count: 3 })).toBe('3개')
+  })
+})
+
+/**
+ * 위의 "소스에서 리터럴로 참조하는 키" 검사는 템플릿 리터럴을 건너뛴다. 라이선스
+ * 실패 문구는 전부 `t(`license.error.${code}`)`로 조회되므로 그 검사에 안 걸린다.
+ *
+ * 빠지면 증상이 최악이다 — 활성화가 실패한 바로 그 순간 사용자가
+ * `license.error.somethingNew`라는 날문자열을 본다.
+ */
+describe('라이선스 실패 코드 문구', () => {
+  // 유니온을 Record 키로 받아, 코드가 늘면 **여기서 타입 에러**가 나게 한다.
+  const ACTIVATE: Record<ActivateFailure, true> = {
+    invalidKey: true,
+    noDevice: true,
+    badToken: true,
+    saveFailed: true,
+    incomplete: true,
+    unknownKey: true,
+    revoked: true,
+    deviceLimit: true,
+    deactivationLimit: true,
+    deviceNotActive: true,
+    malformedKey: true,
+    network: true
+  }
+  const DEACTIVATE: Record<DeactivateFailure, true> = {
+    nothing: true,
+    noDevice: true,
+    deactivationLimit: true,
+    refused: true,
+    network: true
+  }
+
+  const errorTable = (locale: Json): Record<string, unknown> =>
+    (locale.license as Record<string, Record<string, unknown>>).error
+
+  it('모든 실패 코드가 ko·en 양쪽에 문구를 갖는다', () => {
+    const codes = [...new Set([...Object.keys(ACTIVATE), ...Object.keys(DEACTIVATE)])]
+    expect(codes.filter((c) => typeof errorTable(ko as Json)[c] !== 'string')).toEqual([])
+    expect(codes.filter((c) => typeof errorTable(en as Json)[c] !== 'string')).toEqual([])
+  })
+
+  it('쓰지 않는 문구가 남아 있지 않다', () => {
+    // 코드를 지우고 문구만 남으면, 다음 사람이 그 코드가 아직 있다고 믿는다.
+    const codes = new Set([...Object.keys(ACTIVATE), ...Object.keys(DEACTIVATE)])
+    expect(Object.keys(errorTable(ko as Json)).filter((k) => !codes.has(k))).toEqual([])
+  })
+
+  it('성공 문구도 양쪽에 있다', () => {
+    for (const done of ['activated', 'deactivated'] as const) {
+      for (const locale of [ko, en]) {
+        expect(typeof (locale as unknown as Json).license?.[done as never]).toBe('string')
+      }
+    }
   })
 })

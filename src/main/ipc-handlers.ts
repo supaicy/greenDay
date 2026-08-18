@@ -22,9 +22,9 @@ import { startGoogleAuth } from './google-auth-flow'
 import { runGoogleSync } from './google-sync'
 import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
-import { licensing, publicLicenseState, purchaseUrl, recoverUrl } from './licensing/service'
+import { licensing, publicLicenseState } from './licensing/service'
 import { isChannelLocked, LICENSE_REQUIRED } from './licensing/freeChannels'
-import { PURCHASE_SOURCES, type PurchaseSource } from '../shared/license'
+import { asPurchaseSource, purchaseUrl, recoverUrl } from '../shared/license'
 import { toLocalDateString } from '../shared/date'
 
 // 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로
@@ -57,11 +57,6 @@ function handle(channel: string, listener: Parameters<typeof ipcMain.handle>[1])
     }
     return listener(event, ...args)
   })
-}
-
-/** 렌더러가 준 문자열이 그대로 URL에 들어가지 않게 한다. */
-function asPurchaseSource(value: unknown): PurchaseSource {
-  return PURCHASE_SOURCES.find((s) => s === value) ?? 'settings'
 }
 
 async function safeOpenExternal(url: string): Promise<void> {

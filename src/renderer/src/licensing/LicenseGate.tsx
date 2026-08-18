@@ -43,7 +43,7 @@ export function LicenseGate(): React.JSX.Element | null {
   async function activate(): Promise<void> {
     setBusy(true)
     setError(null)
-    const failure = (await window.api.licenseActivate(key)) as ActivateFailure | null
+    const failure = await window.api.licenseActivate(key)
     setBusy(false)
     if (failure) return setError(failure)
     setKey('')

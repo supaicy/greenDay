@@ -14,7 +14,6 @@
 //   deactivationLimit 짧은 기간에 너무 자주 옮겼다. 한 사람이 자기 기기들 사이를
 //                     오가는 것처럼 보이지 않게 되는 지점이지, 키가 나쁘다는 뜻이 아니다.
 //   deviceNotActive   해제하려는 기기가 애초에 활성이 아니었다. 이미 풀렸다는 뜻.
-export type { ClientError } from '../../shared/license'
 import type { ClientError } from '../../shared/license'
 
 /**

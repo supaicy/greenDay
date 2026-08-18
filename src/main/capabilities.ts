@@ -11,7 +11,6 @@ export function currentCapabilities(): Capabilities {
   return capabilitiesFor({
     isDev: is.dev,
     isMas: Boolean(process.mas),
-    isWindowsStore: Boolean(process.windowsStore),
-    platform: process.platform
+    isWindowsStore: Boolean(process.windowsStore)
   })
 }

@@ -13,8 +13,15 @@
 
 import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto'
 
-/** 이 앱이 받아들이는 제품 slug. 서버 `products.slug`와 같고 출시 후 바뀌지 않는다. */
-export const PRODUCT_SLUG = 'greenday'
+/**
+ * 이 앱이 받아들이는 제품 slug — `shared/license.ts`가 원본이다.
+ *
+ * 구매 URL(`?product=`)과 토큰의 `prod` 검사가 **같은 값을 봐야 한다.** 갈리면
+ * 체크아웃은 제품 X를 팔고 앱은 X의 토큰을 거절하는데, 증상은 "결제했는데
+ * 활성화가 안 된다"뿐이다.
+ */
+export { PRODUCT_SLUG } from '../../shared/license'
+import { PRODUCT_SLUG } from '../../shared/license'
 
 /**
  * 프로덕션 ed25519 공개키 — raw 32바이트 base64.

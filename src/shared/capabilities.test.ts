@@ -12,21 +12,19 @@ const facts = (over: Partial<PlatformFacts> = {}): PlatformFacts => ({
   isDev: false,
   isMas: false,
   isWindowsStore: false,
-  platform: 'darwin',
   ...over
 })
 
 describe('canSelfUpdate', () => {
   it('is on for a plain packaged build', () => {
     expect(capabilitiesFor(facts()).canSelfUpdate).toBe(true)
-    expect(capabilitiesFor(facts({ platform: 'win32' })).canSelfUpdate).toBe(true)
   })
 
   // 스토어가 업데이트를 담당한다. 자체 업데이터를 켜면 정책 위반이고
   // 샌드박스에서는 어차피 실패한다.
   it('is off for store builds', () => {
     expect(capabilitiesFor(facts({ isMas: true })).canSelfUpdate).toBe(false)
-    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).canSelfUpdate).toBe(false)
+    expect(capabilitiesFor(facts({ isWindowsStore: true })).canSelfUpdate).toBe(false)
   })
 
   // 개발 빌드가 릴리스를 받아 자기를 덮어쓰면 곤란하다.
@@ -40,7 +38,7 @@ describe('hasGlobalShortcuts', () => {
     expect(capabilitiesFor(facts({ isMas: true })).hasGlobalShortcuts).toBe(false)
     expect(capabilitiesFor(facts()).hasGlobalShortcuts).toBe(true)
     // Microsoft Store는 이 제약이 없다 — MAS 샌드박스만의 문제다.
-    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).hasGlobalShortcuts).toBe(true)
+    expect(capabilitiesFor(facts({ isWindowsStore: true })).hasGlobalShortcuts).toBe(true)
   })
 
   // 개발 중에는 켜져 있어야 QA로 확인할 수 있다.
@@ -52,33 +50,33 @@ describe('hasGlobalShortcuts', () => {
 describe('needsLicenseKey', () => {
   // 판정 기준은 플랫폼이 아니라 판매 채널이다. 예전에는 `platform === 'win32'`로
   // 근사돼 있었는데, 그건 "맥은 App Store로만 판다"는 당시 계획의 흔적이었다.
-  // 지금 macOS는 직접 다운로드와 Homebrew로 나가므로, 그대로 두면 Mac 사용자에게
-  // 키 입력 칸이 영영 보이지 않는다 — 결제는 했는데 넣을 곳이 없다.
-  it('is on for every direct-sale build, whatever the platform', () => {
-    expect(capabilitiesFor(facts({ platform: 'win32' })).needsLicenseKey).toBe(true)
-    expect(capabilitiesFor(facts({ platform: 'darwin' })).needsLicenseKey).toBe(true)
-    expect(capabilitiesFor(facts({ platform: 'linux' })).needsLicenseKey).toBe(true)
+  // 지금 macOS는 직접 다운로드와 Homebrew로 나가므로, 그대로 뒀으면 Mac 구매자에게
+  // 키를 넣을 곳이 없었다. 이제 `PlatformFacts`에 platform 자체가 없어서,
+  // 플랫폼으로 근사하는 것이 **표현 불가능**하다 — 테스트가 아니라 타입이 막는다.
+  it('is on for every direct-sale build', () => {
+    expect(capabilitiesFor(facts()).needsLicenseKey).toBe(true)
+    expect(capabilitiesFor(facts({ isDev: true })).needsLicenseKey).toBe(true)
   })
 
   // 여기가 핵심이다. 스토어 빌드에 키 입력 칸이 남으면
   // Apple 가이드라인 3.1.1(외부 결제 유도) 위반으로 심사에서 거절된다.
   it('is off for every store build — a key field there is a review rejection', () => {
     expect(capabilitiesFor(facts({ isMas: true })).needsLicenseKey).toBe(false)
-    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).needsLicenseKey).toBe(false)
+    expect(capabilitiesFor(facts({ isWindowsStore: true })).needsLicenseKey).toBe(false)
   })
 })
 
 describe('updatesViaStore', () => {
   it('mirrors store builds', () => {
     expect(capabilitiesFor(facts({ isMas: true })).updatesViaStore).toBe(true)
-    expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).updatesViaStore).toBe(true)
+    expect(capabilitiesFor(facts({ isWindowsStore: true })).updatesViaStore).toBe(true)
     expect(capabilitiesFor(facts()).updatesViaStore).toBe(false)
   })
 
   // 스토어 빌드는 "스토어를 통해 업데이트" 안내를 보이고 자체 업데이트는 꺼야 한다.
   // 이 둘이 동시에 켜지면 사용자가 두 경로를 다 보게 된다.
   it('never coexists with canSelfUpdate', () => {
-    for (const f of [facts(), facts({ isMas: true }), facts({ isDev: true }), facts({ platform: 'win32', isWindowsStore: true })]) {
+    for (const f of [facts(), facts({ isMas: true }), facts({ isDev: true }), facts({ isWindowsStore: true })]) {
       const c = capabilitiesFor(f)
       expect(c.updatesViaStore && c.canSelfUpdate).toBe(false)
     }

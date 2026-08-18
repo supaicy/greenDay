@@ -56,7 +56,14 @@ describe('resolveDeviceId — macOS', () => {
     // 맨 이름으로 부르면 `ioreg`라는 스크립트 하나로 기기 해시를 원하는 값으로
     // 만들 수 있고, 토큰의 기기 결속과 서버의 기기 한도가 동시에 무의미해진다.
     const commands: string[] = []
-    resolveDeviceId(probes({ runCommand: (cmd) => (commands.push(cmd), IOREG_OUT) }))
+    resolveDeviceId(
+      probes({
+        runCommand: (cmd) => {
+          commands.push(cmd)
+          return IOREG_OUT
+        }
+      })
+    )
     expect(commands[0]).toBe('/usr/sbin/ioreg')
   })
 
@@ -79,7 +86,15 @@ describe('resolveDeviceId — Windows', () => {
 
   it('절대 경로로 부른다 — CreateProcess는 앱 폴더를 PATH보다 먼저 본다', () => {
     const commands: string[] = []
-    resolveDeviceId(probes({ platform: 'win32', runCommand: (cmd) => (commands.push(cmd), REG_OUT) }))
+    resolveDeviceId(
+      probes({
+        platform: 'win32',
+        runCommand: (cmd) => {
+          commands.push(cmd)
+          return REG_OUT
+        }
+      })
+    )
     expect(commands[0]).toMatch(/[\\/]System32[\\/]reg\.exe$/i)
   })
 })

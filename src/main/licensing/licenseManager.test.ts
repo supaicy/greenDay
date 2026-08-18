@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createLicenseManager, type LicenseManager } from './licenseManager'
+import { createLicenseManager, type LicenseManager, type LicenseState } from './licenseManager'
 import { licenseHash, PRODUCT_SLUG } from './activationToken'
 import { GRACE_DURATION_MS, TRIAL_DURATION_MS } from './trialWindow'
 import type { ClientResult, LicenseClient } from './licenseClient'
@@ -42,6 +42,10 @@ interface Harness {
   calls: string[]
   /** 기기 id를 몇 번 읽었는가. 읽는 데 서브프로세스가 든다. */
   deviceReads: () => number
+  /** 디스크에 몇 번 썼는가. 메인 프로세스의 동기 writeFileSync다. */
+  writes: () => number
+  /** 화면에 알린 상태들. 이게 없으면 렌더러가 마감을 모른다. */
+  changes: LicenseState[]
 }
 
 function harness(
@@ -65,6 +69,8 @@ function harness(
   let current = over.now ?? NOW
   let deviceReads = 0
   const storeWritable = over.storeWritable ?? true
+  let writes = 0
+  const changes: LicenseState[] = []
   const timers: { atMs: number; fire: () => void }[] = []
   const calls: string[] = []
 
@@ -95,6 +101,7 @@ function harness(
     store: {
       read: () => ({ ...record }),
       write: (next) => {
+        writes += 1
         Object.assign(record, next)
         return storeWritable
       }
@@ -107,6 +114,7 @@ function harness(
     deviceName: 'test-machine',
     enforced: over.enforced ?? true,
     now: () => current,
+    onChange: (next) => changes.push(next),
     setTimer: (ms, fn) => {
       const entry = { atMs: current + ms, fire: fn }
       timers.push(entry)
@@ -123,6 +131,8 @@ function harness(
     timers,
     calls,
     deviceReads: () => deviceReads,
+    writes: () => writes,
+    changes,
     setNow: (ms) => {
       current = ms
     },
@@ -592,6 +602,47 @@ describe('시작 비용', () => {
   it('토큰이 있으면 읽는다 — 검증에 필요하다', () => {
     const h = harness({ record: { key: KEY, token: token() } })
     expect(h.deviceReads()).toBeGreaterThan(0)
+  })
+
+  it('트라이얼 평가가 디스크를 한 번만 만진다', () => {
+    // 시계 래칫과 시작일을 각자 쓰면 마이크로초 간격으로 writeFileSync가 두 번
+    // 돈다. 메인 프로세스의 동기 쓰기라 그대로 시작 시간이 된다.
+    const h = harness()
+    expect(h.writes()).toBe(1)
+  })
+
+  it('라이선스 상태로 시작하면 아예 안 쓴다', () => {
+    // 바뀐 것이 없다. 실행할 때마다 쓰면 SSD에 이유 없는 쓰기가 쌓인다.
+    const h = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW } })
+    expect(h.writes()).toBe(0)
+  })
+})
+
+describe('상태가 움직이면 화면에 알린다', () => {
+  it('마감 타이머가 상태를 옮기면 알림이 나간다', () => {
+    // 이 알림이 유일하게 렌더러에 "만료됐다"를 전한다. 없으면 설정 화면이
+    // 만료된 라이선스를 계속 "활성"이라고 말한다 — 데스크톱 앱은 몇 주씩 안 꺼진다.
+    const expMs = NOW + DAY
+    const h = harness({ record: { key: KEY, token: token({ expMs }), trialStartMs: NOW - 40 * DAY } })
+    h.changes.length = 0
+    h.setNow(expMs)
+    h.fireDueTimers()
+    expect(h.changes.map((c) => c.status)).toEqual(['grace'])
+  })
+
+  it('같은 상태를 다시 도출한 것으로는 알리지 않는다', async () => {
+    // 안 그러면 렌더러가 실행마다 아무 의미 없는 갱신을 받고, 구독자 전부가 재렌더된다.
+    const h = harness({ record: { key: KEY, token: token({ iatMs: NOW - DAY, expMs: NOW + 29 * DAY }) } })
+    h.changes.length = 0
+    await h.manager.revalidateIfNeeded()
+    expect(h.changes).toEqual([])
+  })
+
+  it('마감이 실린 상태는 마감까지 함께 전한다', () => {
+    // 화면이 "n일 남음"을 그리려면 이 값이 필요하다.
+    const h = harness({ record: { trialStartMs: NOW } })
+    const trial = h.changes.find((c) => c.status === 'trial')
+    expect(trial && 'untilMs' in trial && trial.untilMs).toBe(NOW + TRIAL_DURATION_MS)
   })
 })
 

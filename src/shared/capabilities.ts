@@ -20,8 +20,6 @@ export interface PlatformFacts {
   isMas: boolean
   /** Microsoft Store(AppX) 빌드인가. Electron의 `process.windowsStore`. */
   isWindowsStore: boolean
-  /** Node의 `process.platform`. */
-  platform: string
 }
 
 export interface Capabilities {

@@ -522,6 +522,7 @@
       "nothing": "There is no license to release on this device.",
       "network": "Could not reach the license server. Try again later.",
       "saveFailed": "Could not save the license on this device. Check disk space and permissions, then try again."
-    }
+    },
+    "deviceNameNotice": "Activating also sends this device name, shown in your device list"
   }
 }

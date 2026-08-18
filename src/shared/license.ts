@@ -33,6 +33,15 @@ export interface PublicLicenseState {
   enforced: boolean
   /** 가린 키(`GREENDAY-••••-••••-••••-G8H9`). 없으면 null. */
   maskedKey: string | null
+  /**
+   * 활성화할 때 서버로 함께 가는 이 기기의 이름(`os.hostname()`).
+   *
+   * 화면에 그대로 보여 주려고 내려보낸다. macOS와 Windows에서는 대개 소유자
+   * 실명이 들어 있고("철수의 MacBook Pro"), 기기 목록에서 골라 해제하려면 그
+   * 이름이 필요하다 — 업계 표준이 그렇게 하는 이유다. 다만 **뭐가 나가는지
+   * 사용자가 모르는 것은 다른 문제**라, 보내기 전에 같은 화면에 적어 둔다.
+   */
+  deviceName: string | null
 }
 
 /** 서버가 답했거나, 답하지 않았거나. */
@@ -62,11 +71,42 @@ export type DeactivateFailure = 'nothing' | 'noDevice' | 'deactivationLimit' | '
 export const PURCHASE_SOURCES = ['settings', 'locked'] as const
 export type PurchaseSource = (typeof PURCHASE_SOURCES)[number]
 
+/**
+ * 서버가 사는 곳. 하나의 상수인 이유는 같은 배포가 양쪽을 다 하기 때문이다 —
+ * 워커가 `v1/activate`에 답하고 구매 페이지도 서빙한다. 따로 적으면 워커를 옮길 때
+ * 반쪽씩 반대 방향으로 깨진다(활성화가 안 되거나, 구매 링크가 404거나).
+ */
+export const LICENSE_BASE_URL = 'https://pay.begreen.dev'
+
+/** 이 앱이 받아들이는 제품 slug. 출시 후 바뀌지 않는다 — 발급된 키가 전부 여기 묶인다. */
+export const PRODUCT_SLUG = 'greenday'
+
+/**
+ * 구매·복구 URL과 그 입력 검증.
+ *
+ * electron을 import하는 파일에 두면 테스트할 수가 없다. `src` 파라미터는 주석대로
+ * "나중에는 알아낼 방법이 없는" 유입 경로 계측인데, 오타가 나도 아무도 모르고
+ * 매출 귀속만 조용히 사라진다. `shared/app-id.ts`가 같은 이유로 순수 함수를 여기 둔다.
+ */
+export function purchaseUrl(source: PurchaseSource): string {
+  return `${LICENSE_BASE_URL}/buy?product=${PRODUCT_SLUG}&src=${source}`
+}
+
+export function recoverUrl(): string {
+  return `${LICENSE_BASE_URL}/recover`
+}
+
+/** 렌더러가 준 문자열이 그대로 URL에 들어가지 않게 한다. */
+export function asPurchaseSource(value: unknown): PurchaseSource {
+  return PURCHASE_SOURCES.find((s) => s === value) ?? 'settings'
+}
+
 /** 아직 메인에서 답이 오기 전 렌더러가 들고 있는 값. 잠그지 않는 쪽으로 기운다. */
 export const UNKNOWN_LICENSE_STATE: PublicLicenseState = {
   status: 'unlicensed',
   untilMs: null,
   allowsPaidFeatures: true,
   enforced: false,
-  maskedKey: null
+  maskedKey: null,
+  deviceName: null
 }

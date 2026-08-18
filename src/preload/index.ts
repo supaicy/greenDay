@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Capabilities } from '../shared/capabilities'
+import type { ActivateFailure, DeactivateFailure, PublicLicenseState } from '../shared/license'
 
 const api = {
   // Folders
@@ -161,17 +162,20 @@ const api = {
   googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
 
   // 라이선스. 키도 토큰도 여기로 넘어오지 않는다 — 상태와 가린 키만 온다.
-  licenseGetState: () => ipcRenderer.invoke('license:state'),
-  licenseActivate: (key: string) => ipcRenderer.invoke('license:activate', key),
-  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
+  // 타입을 preload가 한 번 진다 — 64행의 `capabilities`와 같은 방식이다.
+  // 렌더러 세 곳이 각자 캐스트하면, 실패 코드가 하나 늘어도 셋 다 조용히 통과한다.
+  licenseGetState: () => ipcRenderer.invoke('license:state') as Promise<PublicLicenseState>,
+  licenseActivate: (key: string) =>
+    ipcRenderer.invoke('license:activate', key) as Promise<ActivateFailure | null>,
+  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate') as Promise<DeactivateFailure | null>,
   licenseOpenPurchase: (source: string) => ipcRenderer.invoke('license:purchase', source),
   licenseOpenRecover: () => ipcRenderer.invoke('license:recover'),
 
   // IPC events
-  onLicenseChanged: (callback: (state: unknown) => void) => {
+  onLicenseChanged: (callback: (state: PublicLicenseState) => void) => {
     // 상태는 마감 타이머로도 스스로 움직인다. 이걸 안 들으면 설정 화면이 만료된
     // 라이선스를 계속 "활성"이라고 말한다 — 데스크톱 앱은 몇 주씩 안 꺼진다.
-    const handler = (_: Electron.IpcRendererEvent, state: unknown): void => callback(state)
+    const handler = (_: Electron.IpcRendererEvent, state: PublicLicenseState): void => callback(state)
     ipcRenderer.on('license:changed', handler)
     return () => ipcRenderer.removeListener('license:changed', handler)
   },

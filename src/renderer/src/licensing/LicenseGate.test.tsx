@@ -35,7 +35,8 @@ const LICENSED: PublicLicenseState = {
   untilMs: null,
   allowsPaidFeatures: true,
   enforced: true,
-  maskedKey: 'GREENDAY-••••-••••-••••-G8H9'
+  maskedKey: 'GREENDAY-••••-••••-••••-G8H9',
+  deviceName: 'test-machine'
 }
 
 let exportData: ReturnType<typeof vi.fn>

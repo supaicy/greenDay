@@ -13,7 +13,7 @@
  */
 
 import type { KeyObject } from 'node:crypto'
-import { verifyToken, type TokenPayload } from './activationToken'
+import { verifyToken, type TokenPayload, type VerifyResult } from './activationToken'
 import { looksValidKey, normalizeKey } from './licenseKey'
 import { isServerRefusal, type LicenseClient } from './licenseClient'
 import type { LicenseRecord, LicenseStore } from './licenseStore'
@@ -97,6 +97,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   let disposed = false
   /** 이 프로세스가 도출한 트라이얼 시작. 한 번 정해지면 안 움직인다 — resolveTrialStart 참고. */
   let trialStartedAt: number | null = null
+  /** `resolveTrialStart`가 레코드를 건드렸는가 — 플러시는 `evaluateTrial`이 한 번만 한다. */
+  let trialStartDirty = false
 
   // ── 시계 ───────────────────────────────────────────────────────────────────
 
@@ -126,15 +128,21 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     return effectiveNow(deps.now(), record.lastSeenMs)
   }
 
-  function touchClock(): void {
-    advanceClockFloor(deps.now())
+  function touchClock(): boolean {
+    return advanceClockFloor(deps.now())
   }
 
-  /** 래칫 — 올리기만 한다. */
-  function advanceClockFloor(reachedMs: number): void {
-    if (reachedMs <= record.lastSeenMs) return
+  /**
+   * 래칫 — 올리기만 한다. 올렸으면 true.
+   *
+   * 여기서 바로 쓰지 않는 이유: `evaluateTrial`이 이 뒤에 `trialStartMs`도 건드려서,
+   * 각자 쓰면 마이크로초 간격으로 `writeFileSync`가 두 번 돈다. 더티만 알리고
+   * 플러시는 호출자가 한 번 한다.
+   */
+  function advanceClockFloor(reachedMs: number): boolean {
+    if (reachedMs <= record.lastSeenMs) return false
     record.lastSeenMs = reachedMs
-    persist()
+    return true
   }
 
   /**
@@ -155,17 +163,22 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
 
   // ── 토큰 ───────────────────────────────────────────────────────────────────
 
-  function verifyStored(): VerifiedToken | null {
+  /**
+   * 저장된 토큰을 **한 번만** 검증하고 결과를 그대로 돌려준다.
+   *
+   * 예전에는 성공/실패만 돌려줘서, 바로 뒤의 유예 계산이 `exp` 하나 읽으려고
+   * ed25519 검증을 다시 돌렸다. 유예 상태로 시작하는 실행은 검증이 네 번이었다.
+   */
+  function verifyCurrent(): VerifyResult | null {
     if (!record.token) return null
     const device = deviceId()
     if (!device) return null
-    const result = verifyToken(record.token, {
+    return verifyToken(record.token, {
       publicKey: deps.publicKey,
       device,
       key: record.key,
       nowMs: clockSafeNow()
     })
-    return result.ok ? { payload: result.payload, expiresAtMs: result.expiresAtMs } : null
   }
 
   /**
@@ -184,18 +197,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 검사다(뮤테이션으로 확인했다 — 이 줄을 지워도 토큰의 `dev`가 안 맞아 여전히
    * null이 나온다). 여기 있는 것은 ed25519 검증 한 번을 아끼는 지름길이다.
    */
-  function graceDeadline(): number | null {
-    if (!record.token) return null
-    const device = deviceId()
-    if (!device) return null
-    const result = verifyToken(record.token, {
-      publicKey: deps.publicKey,
-      device,
-      key: record.key,
-      // 되돌린 시계로 보면 만료된 토큰이 유효해 보이고, 그러면 마감이 아예 안 나온다.
-      nowMs: clockSafeNow()
-    })
-    if (result.ok || result.reason !== 'expired') return null
+  function graceDeadlineOf(result: VerifyResult | null): number | null {
+    if (result === null || result.ok || result.reason !== 'expired') return null
     return result.payload.exp * 1000 + GRACE_DURATION_MS
   }
 
@@ -214,12 +217,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
 
   /** 디스크에 있는 것으로부터 상태를 다시 도출하고, 다음 마감을 건다. */
   function settle(): VerifiedToken | null {
-    const token = verifyStored()
-    if (token) {
+    const result = verifyCurrent()
+    if (result?.ok) {
+      const token = { payload: result.payload, expiresAtMs: result.expiresAtMs }
       apply({ status: 'licensed', untilMs: token.expiresAtMs })
       return token
     }
-    const deadline = graceDeadline()
+    const deadline = graceDeadlineOf(result)
     if (deadline !== null && clockSafeNow() < deadline) {
       apply({ status: 'grace', untilMs: deadline })
       return null
@@ -235,8 +239,11 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    */
   function evaluateTrial(): LicenseState {
     if (!deps.enforced) return { status: 'unlicensed' }
-    touchClock()
+    // 두 갱신을 먼저 모으고 디스크는 한 번만 만진다.
+    const dirty = touchClock()
     const startedAt = resolveTrialStart()
+    if (dirty || trialStartDirty) persist()
+    trialStartDirty = false
     return isTrialOpen(startedAt, clockSafeNow())
       ? { status: 'trial', untilMs: trialEndsAt(startedAt) }
       : { status: 'trialExpired' }
@@ -271,7 +278,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     if (recorded === null) {
       trialStartedAt = clockSafeNow()
       record.trialStartMs = trialStartedAt
-      persist()
+      trialStartDirty = true
       return trialStartedAt
     }
     // 과거로 당긴 시작일은 트라이얼을 일찍 끝낼 뿐이라 바닥이 필요 없다.
@@ -281,7 +288,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     }
     if (recorded - systemNow <= TRIAL_DURATION_MS) {
       record.trialStartMs = systemNow
-      persist()
+      trialStartDirty = true
     }
     trialStartedAt = systemNow
     return trialStartedAt
@@ -318,7 +325,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 그만큼의 시간이 실제로 흘렀다. 기록해 두면 되돌리기가 막힌다 —
       // 아니면 활성화 시점으로 되돌린 시계가 만료된 토큰을 다시 유효하게 만들고,
       // 같은 거짓말로 또 한 번의 창이 걸린다.
-      advanceClockFloor(reachedMs)
+      if (advanceClockFloor(reachedMs)) persist()
       settle()
     })
   }
@@ -482,7 +489,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
         // 만료된 라이선스는 절벽이 아니라 같은 토큰이 얻는 유예로 떨어진다.
         // 새벽 3시에 토큰이 만료된 유료 사용자를 앱이 꺼질 때까지 거절하고
         // 트라이얼 만료 안내를 보여주는 것은 정확히 틀린 사람을 벌주는 것이다.
-        const ceiling = graceDeadline()
+        const ceiling = graceDeadlineOf(verifyCurrent())
         return ceiling !== null && clockSafeNow() < ceiling
       }
       case 'grace':

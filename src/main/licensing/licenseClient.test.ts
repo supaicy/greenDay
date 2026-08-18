@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { createLicenseClient, isServerRefusal, type ClientError } from './licenseClient'
+import { createLicenseClient, isServerRefusal } from './licenseClient'
+import type { ClientError } from '../../shared/license'
 
 const KEY = 'GREENDAY-A2B3-C4D5-E6F7-G8H9'
 const DEVICE = 'a'.repeat(64)

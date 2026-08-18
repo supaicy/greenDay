@@ -62,7 +62,8 @@ function normalize(value: unknown): PublicLicenseState {
     untilMs: typeof o.untilMs === 'number' && Number.isFinite(o.untilMs) ? o.untilMs : null,
     allowsPaidFeatures: o.allowsPaidFeatures !== false,
     enforced: o.enforced === true,
-    maskedKey: typeof o.maskedKey === 'string' ? o.maskedKey : null
+    maskedKey: typeof o.maskedKey === 'string' ? o.maskedKey : null,
+    deviceName: typeof o.deviceName === 'string' ? o.deviceName : null
   }
 }
 

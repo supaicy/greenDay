@@ -10,7 +10,13 @@ directories:
 # 런타임에 필요한 건 out/(main·preload·renderer 번들)과 package.json뿐이고,
 # 프로덕션 node_modules는 electron-builder가 알아서 넣는다.
 files:
-  - out/**/*
+  # `out/main|preload|renderer`만 — `out/**/*`로 두면 `tsc --build`가 같은 곳에
+  # 뱉는 `out/src/**`가 통째로 asar에 들어간다. 거기엔 모든 `*.test.js`와
+  # 테스트 전용 헬퍼가 있다. CI는 클린 체크아웃이라 안 걸리고, 로컬에서
+  # typecheck 뒤 package를 돌릴 때만 조용히 실린다.
+  - out/main/**/*
+  - out/preload/**/*
+  - out/renderer/**/*
   - package.json
 mac:
   target:

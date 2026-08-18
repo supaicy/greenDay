@@ -45,7 +45,7 @@ export function LicenseSection({
     setBusy('activate')
     setError(null)
     setDone(null)
-    const failure = (await window.api.licenseActivate(key)) as ActivateFailure | null
+    const failure = await window.api.licenseActivate(key)
     setBusy(null)
     if (failure) return setError(failure)
     setKey('')
@@ -57,7 +57,7 @@ export function LicenseSection({
     setBusy('deactivate')
     setError(null)
     setDone(null)
-    const failure = (await window.api.licenseDeactivate()) as DeactivateFailure | null
+    const failure = await window.api.licenseDeactivate()
     setBusy(null)
     if (failure) return setError(failure)
     setDone('deactivated')
@@ -70,7 +70,7 @@ export function LicenseSection({
   return (
     <div className="space-y-3">
       <p className={`text-sm ${labelText}`}>
-        <StatusLine license={license} isDark={isDark} successText={successText} />
+        <StatusLine license={license} hintText={hintText} successText={successText} />
       </p>
 
       {license.maskedKey && (
@@ -110,6 +110,14 @@ export function LicenseSection({
             </button>
           </div>
         </div>
+      )}
+
+      {license.status !== 'licensed' && license.deviceName && (
+        // 서버로 가는 값을 보내기 전에 같은 화면에 적어 둔다. 기기 목록에서 골라
+        // 해제하려면 이 이름이 필요하지만, 뭐가 나가는지 숨기지는 않는다.
+        <p className={`text-xs ${hintText}`}>
+          {t('license.deviceNameNotice')}: <code>{license.deviceName}</code>
+        </p>
       )}
 
       {error && <p className={`text-xs ${errorText}`}>{t(`license.error.${error}`)}</p>}
@@ -163,11 +171,11 @@ export function LicenseSection({
  */
 function StatusLine({
   license,
-  isDark,
+  hintText,
   successText
 }: {
   license: ReturnType<typeof useLicense>
-  isDark: boolean
+  hintText: string
   successText: string
 }): React.JSX.Element {
   const { t } = useTranslation()
@@ -183,7 +191,7 @@ function StatusLine({
     return (
       <span>
         {t('license.free')}
-        <span className={`block text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        <span className={`block text-xs mt-0.5 ${hintText}`}>
           {t('license.freeDesc')}
         </span>
       </span>
