@@ -52,7 +52,7 @@ export function DueDatePicker({
   reminderAt: string | null
   recurringPattern: string | null
   isRecurring: boolean
-  onChange: (next: { dueDate: string | null; dueTime: string | null }) => void
+  onChange: (next: { dueDate: string | null; dueTime: string | null; startDate?: string | null }) => void
   onStartDateChange: (startDate: string | null) => void
   onReminderChange: (reminderAt: string | null) => void
   onRecurringChange: (pattern: string | null) => void
@@ -160,7 +160,12 @@ export function DueDatePicker({
             aria-label={t('task.dueDate')}
             value={dueDate ?? ''}
             min={rangeMode ? (startDate ?? undefined) : undefined}
-            onChange={(e) => onChange({ dueDate: e.target.value || null, dueTime })}
+            onChange={(e) =>
+              // 기간 모드에서는 '끝을 늘리는' 조작이다. 시작일을 같이 실어
+              // 보내지 않으면 스토어가 '마감일만 옮겼다'로 읽고 기간을 통째로
+              // 끌고 가버린다(캘린더 드래그용 규칙). 의도는 여기서만 알 수 있다.
+              onChange({ dueDate: e.target.value || null, dueTime, ...(rangeMode ? { startDate } : {}) })
+            }
             className={`flex-1 ${fieldCls}`}
           />
           <input

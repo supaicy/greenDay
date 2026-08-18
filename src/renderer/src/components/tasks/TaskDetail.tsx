@@ -274,7 +274,12 @@ export function TaskDetail() {
           onChange={(next) => {
             setDueDate(next.dueDate ?? '')
             setDueTime(next.dueTime ?? '')
-            save({ dueDate: next.dueDate, dueTime: next.dueTime })
+            save({
+              dueDate: next.dueDate,
+              dueTime: next.dueTime,
+              // 픽커가 시작일을 실어 보냈다면 '끝만 고친다'는 뜻이다.
+              ...('startDate' in next ? { startDate: next.startDate } : {})
+            })
           }}
           onStartDateChange={(v) => save({ startDate: v })}
           onReminderChange={(v) => save({ reminderAt: v })}

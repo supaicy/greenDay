@@ -576,6 +576,48 @@ describe('TaskMoreMenu', () => {
     ])
   })
 
+  it('다른 오버레이로 넘기는 항목은 포커스를 트리거로 되돌리지 않는다', async () => {
+    const user = userEvent.setup()
+    render(
+      <TaskMoreMenu
+        task={menuTask}
+        onAddSubtask={() => {}}
+        onAddTag={() => {}}
+        onAddAttachment={() => {}}
+        onSetDateRange={() => {}}
+        trigger={<button type="button">더 보기</button>}
+      />
+    )
+    const trigger = screen.getByRole('button', { name: '더 보기' })
+    await user.click(trigger)
+    await user.click(await screen.findByRole('menuitem', { name: '기간 설정' }))
+
+    // 메뉴가 닫히며 포커스를 트리거로 되돌리면, 그 순간 갓 열린 팝오버가
+    // focus-outside로 스스로 닫힌다(실측: 열렸다가 ~400ms 뒤 사라졌다).
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(trigger).not.toHaveFocus()
+  })
+
+  it('넘기지 않는 항목은 포커스를 트리거로 돌려준다', async () => {
+    const user = userEvent.setup()
+    render(
+      <TaskMoreMenu
+        task={menuTask}
+        onAddSubtask={() => {}}
+        onAddTag={() => {}}
+        onAddAttachment={() => {}}
+        onSetDateRange={() => {}}
+        trigger={<button type="button">더 보기</button>}
+      />
+    )
+    const trigger = screen.getByRole('button', { name: '더 보기' })
+    await user.click(trigger)
+    await user.click(await screen.findByRole('menuitem', { name: '제목 복사' }))
+
+    // 키보드 사용자가 자리를 잃지 않아야 한다 — 넘기는 항목에만 예외를 둔다.
+    await waitFor(() => expect(trigger).toHaveFocus())
+  })
+
   it('하위 작업 추가는 호출처에 알린다 (숨어 있던 섹션을 꺼내는 건 상세 패널의 일)', async () => {
     const user = userEvent.setup()
     const onAddSubtask = vi.fn()
@@ -671,6 +713,36 @@ describe('DueDatePicker — 접힌 알림·반복', () => {
     expect(start).toHaveValue('2026-08-18')
     // 달력에서 거꾸로 된 기간을 아예 고를 수 없게 묶어 둔다.
     expect(start).toHaveAttribute('max', '2026-08-20')
+  })
+
+  it('기간 모드에서 끝을 늘려도 시작일은 제자리다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <DueDatePicker
+        {...props}
+        startDate="2026-08-16"
+        dueDate="2026-08-16"
+        onChange={onChange}
+        trigger={<button type="button">기한</button>}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: '기한' }))
+    fireEvent.change(await screen.findByLabelText('마감일'), { target: { value: '2026-08-19' } })
+
+    // 시작일을 같이 실어 보내지 않으면 스토어가 '마감일만 옮겼다'로 읽고
+    // 기간을 통째로 끌고 간다 — 끝을 늘렸을 뿐인데 시작도 따라 움직였다.
+    expect(onChange).toHaveBeenCalledWith({ dueDate: '2026-08-19', dueTime: null, startDate: '2026-08-16' })
+  })
+
+  it('기간이 아닐 때는 시작일을 싣지 않는다 — 캘린더 드래그는 기간째 옮겨야 한다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<DueDatePicker {...props} dueDate="2026-08-16" onChange={onChange} trigger={<button type="button">기한</button>} />)
+    await user.click(screen.getByRole('button', { name: '기한' }))
+    fireEvent.change(await screen.findByLabelText('마감일'), { target: { value: '2026-08-19' } })
+
+    expect(onChange).toHaveBeenCalledWith({ dueDate: '2026-08-19', dueTime: null })
   })
 
   it('기간을 끄면 시작일을 지운다', async () => {

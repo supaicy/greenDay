@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { CalendarRange, ListPlus, Paperclip, Tag, Timer } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
@@ -39,16 +39,34 @@ export function TaskMoreMenu({
   const setViewType = useStore((s) => s.setViewType)
   const toggleRun = usePomodoroStore((s) => s.toggleRun)
   const running = usePomodoroStore((s) => s.running)
+  // 다른 오버레이로 넘기는 항목인지. Radix 메뉴는 닫히며 포커스를 트리거로
+  // 되돌리는데, 그 순간 갓 열린 팝오버가 focus-outside로 스스로 닫힌다
+  // (실측: 열렸다가 ~400ms 뒤 사라졌다). 넘기는 항목일 때만 복귀를 막는다 —
+  // 나머지는 그대로 돌려줘야 키보드 사용자가 자리를 잃지 않는다.
+  const handoff = useRef(false)
+  const handOffTo = (open: () => void) => () => {
+    handoff.current = true
+    open()
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="top" className="min-w-[184px]">
+      <DropdownMenuContent
+        align="end"
+        side="top"
+        className="min-w-[184px]"
+        onCloseAutoFocus={(e) => {
+          if (!handoff.current) return
+          e.preventDefault()
+          handoff.current = false
+        }}
+      >
         <DropdownMenuItem onSelect={onAddSubtask} className="gap-2 text-sm">
           <ListPlus size={14} />
           {t('detail.addSubtask')}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onAddTag} className="gap-2 text-sm">
+        <DropdownMenuItem onSelect={handOffTo(onAddTag)} className="gap-2 text-sm">
           <Tag size={14} />
           {t('detail.tagsLabel')}
         </DropdownMenuItem>
@@ -56,7 +74,7 @@ export function TaskMoreMenu({
           <Paperclip size={14} />
           {t('detail.addAttachment')}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onSetDateRange} className="gap-2 text-sm">
+        <DropdownMenuItem onSelect={handOffTo(onSetDateRange)} className="gap-2 text-sm">
           <CalendarRange size={14} />
           {t('detail.setDateRange')}
         </DropdownMenuItem>
