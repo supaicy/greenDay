@@ -50,9 +50,14 @@ describe('hasGlobalShortcuts', () => {
 })
 
 describe('needsLicenseKey', () => {
-  // 웹사이트 직접 판매 채널(Windows 비스토어)만 키를 받는다.
-  it('is on only for the direct-sale Windows build', () => {
+  // 판정 기준은 플랫폼이 아니라 판매 채널이다. 예전에는 `platform === 'win32'`로
+  // 근사돼 있었는데, 그건 "맥은 App Store로만 판다"는 당시 계획의 흔적이었다.
+  // 지금 macOS는 직접 다운로드와 Homebrew로 나가므로, 그대로 두면 Mac 사용자에게
+  // 키 입력 칸이 영영 보이지 않는다 — 결제는 했는데 넣을 곳이 없다.
+  it('is on for every direct-sale build, whatever the platform', () => {
     expect(capabilitiesFor(facts({ platform: 'win32' })).needsLicenseKey).toBe(true)
+    expect(capabilitiesFor(facts({ platform: 'darwin' })).needsLicenseKey).toBe(true)
+    expect(capabilitiesFor(facts({ platform: 'linux' })).needsLicenseKey).toBe(true)
   })
 
   // 여기가 핵심이다. 스토어 빌드에 키 입력 칸이 남으면
@@ -60,11 +65,6 @@ describe('needsLicenseKey', () => {
   it('is off for every store build — a key field there is a review rejection', () => {
     expect(capabilitiesFor(facts({ isMas: true })).needsLicenseKey).toBe(false)
     expect(capabilitiesFor(facts({ platform: 'win32', isWindowsStore: true })).needsLicenseKey).toBe(false)
-  })
-
-  // 맥은 App Store로만 판다 — 직접판매 채널이 아니다.
-  it('is off on macOS even outside the store', () => {
-    expect(capabilitiesFor(facts({ platform: 'darwin' })).needsLicenseKey).toBe(false)
   })
 })
 

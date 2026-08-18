@@ -17,6 +17,7 @@ import { UndoToast } from './components/common/UndoToast'
 import { AiChatPanel } from './components/ai/AiChatPanel'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { usePomodoroTicker } from './hooks/usePomodoroTicker'
+import { LicenseGate } from './licensing/LicenseGate'
 
 // CodeMirror 6 라이브프리뷰 에디터(@atomic-editor/editor) 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
 const TaskDetail = lazy(() => import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail })))
@@ -120,6 +121,8 @@ export default function App() {
       <Settings />
       <QuickAdd />
       <UndoToast />
+      {/* 유료 게이트는 앱 전체에서 한 곳이다. enforcement가 꺼져 있으면 아무것도 그리지 않는다. */}
+      <LicenseGate />
     </div>
   )
 }

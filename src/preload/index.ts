@@ -160,7 +160,22 @@ const api = {
   googleSyncNow: () => ipcRenderer.invoke('google:sync-now'),
   googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
 
+  // 라이선스. 키도 토큰도 여기로 넘어오지 않는다 — 상태와 가린 키만 온다.
+  licenseGetState: () => ipcRenderer.invoke('license:state'),
+  licenseActivate: (key: string) => ipcRenderer.invoke('license:activate', key),
+  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate'),
+  licenseOpenPurchase: (source: string) => ipcRenderer.invoke('license:purchase', source),
+  licenseOpenRecover: () => ipcRenderer.invoke('license:recover'),
+
   // IPC events
+  onLicenseChanged: (callback: (state: unknown) => void) => {
+    // 상태는 마감 타이머로도 스스로 움직인다. 이걸 안 들으면 설정 화면이 만료된
+    // 라이선스를 계속 "활성"이라고 말한다 — 데스크톱 앱은 몇 주씩 안 꺼진다.
+    const handler = (_: Electron.IpcRendererEvent, state: unknown): void => callback(state)
+    ipcRenderer.on('license:changed', handler)
+    return () => ipcRenderer.removeListener('license:changed', handler)
+  },
+
   onGlobalQuickAdd: (callback: () => void) => {
     const handler = (_: Electron.IpcRendererEvent): void => callback()
     ipcRenderer.on('global-quick-add', handler)

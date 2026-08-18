@@ -18,6 +18,7 @@ import { LANGUAGES, type Language } from '../../i18n'
 import { isKoreanRecommendedModel, hasKoreanRecommendedModel } from '../../utils/aiModels'
 import { CalendarSyncSection } from './CalendarSyncSection'
 import { GoogleSyncSection } from './GoogleSyncSection'
+import { LicenseSection } from './LicenseSection'
 import type { Capabilities } from '../../../../shared/capabilities'
 
 // 설명은 실제 동작과 1:1로 맞춘다. Cmd+N/Cmd+Shift+A는 토글이고,
@@ -405,6 +406,23 @@ export function Settings() {
               </div>
             </button>
           </div>
+
+          {/* 라이선스. 스토어 빌드에서는 통째로 안 그린다 — 키 입력 칸이 남으면
+              Apple 가이드라인 3.1.1(외부 결제 유도)로 심사에서 거절된다. */}
+          {caps?.needsLicenseKey && (
+            <div className={`border-t pt-4 ${dividerLine(isDark)}`}>
+              <SectionHeading isDark={isDark} label={t('license.title')} />
+              <LicenseSection
+                isDark={isDark}
+                focusRing={focusRing(isDark)}
+                fieldSurface={fieldSurface(isDark)}
+                labelText={labelText(isDark)}
+                hintText={hintText(isDark)}
+                successText={successText(isDark)}
+                errorText={errorText(isDark)}
+              />
+            </div>
+          )}
 
           {/* 캘린더 동기화 */}
           <div className={`border-t pt-4 ${dividerLine(isDark)}`}>

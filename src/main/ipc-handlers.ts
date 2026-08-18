@@ -22,6 +22,8 @@ import { startGoogleAuth } from './google-auth-flow'
 import { runGoogleSync } from './google-sync'
 import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
+import { licensing, publicLicenseState, purchaseUrl, recoverUrl } from './licensing/service'
+import { PURCHASE_SOURCES, type PurchaseSource } from '../shared/license'
 import { toLocalDateString } from '../shared/date'
 
 // 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로
@@ -34,6 +36,11 @@ function csvCell(value: unknown): string {
   const escaped = s.replace(/"/g, '""')
   const safe = /^[=+\-@\t\r\n]/.test(escaped) ? `'${escaped}` : escaped
   return `"${safe}"`
+}
+
+/** 렌더러가 준 문자열이 그대로 URL에 들어가지 않게 한다. */
+function asPurchaseSource(value: unknown): PurchaseSource {
+  return PURCHASE_SOURCES.find((s) => s === value) ?? 'settings'
 }
 
 async function safeOpenExternal(url: string): Promise<void> {
@@ -50,6 +57,24 @@ export function setupIpcHandlers(): void {
   // App meta — 이 빌드가 무엇을 할 수 있는지. 렌더러는 process.mas 같은 사실이 아니라
   // "자체 업데이트를 하는가" 같은 결론만 받는다 (shared/capabilities.ts).
   ipcMain.handle('app:capabilities', () => currentCapabilities())
+
+  // License — 키와 토큰은 메인에만 있다. 렌더러는 "지금 유료 기능을 써도 되는가"와
+  // 화면 문구에 필요한 것만 받는다 (licensing/service.ts의 PublicLicenseState).
+  ipcMain.handle('license:state', () => publicLicenseState())
+  ipcMain.handle('license:activate', async (_, key: unknown) => {
+    const manager = licensing()
+    // 초기화에 실패한 빌드다. 여기서 성공이라고 답하면 아무 일도 안 일어난 채
+    // 사용자는 활성화됐다고 믿는다.
+    if (!manager) return 'network'
+    return manager.activate(typeof key === 'string' ? key : '')
+  })
+  ipcMain.handle('license:deactivate', async () => {
+    const manager = licensing()
+    if (!manager) return 'network'
+    return manager.deactivate()
+  })
+  ipcMain.handle('license:purchase', (_, source: unknown) => safeOpenExternal(purchaseUrl(asPurchaseSource(source))))
+  ipcMain.handle('license:recover', () => safeOpenExternal(recoverUrl()))
 
   // Folders
   ipcMain.handle('get-folders', () => db.getFolders())

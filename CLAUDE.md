@@ -46,6 +46,30 @@ TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 �
 - **스토어 구독**: selector 없는 `useStore()`는 모든 쓰기에 재렌더된다.
   `useStore((s) => s.x)`로 조각만 구독한다.
 
+## 라이선스 (2026-08-18)
+
+`src/main/licensing/` — 서버는 `pay.begreen.dev`(BicMac과 같은 워커). 앱은 활성화와
+30일 재검증 때만 서버를 부르고, 그 사이 판정은 전부 로컬에서 서명으로 한다.
+
+- **`IS_ENFORCED = false`로 출하한다** (`licensing/service.ts`). 켜기 전에 서버
+  배포와 실거래 활성화를 확인할 것. 꺼져 있는 동안은 아무것도 잠기지 않고
+  트라이얼 시작일도 **기록되지 않는다** — 켜는 날 모두가 온전한 30일을 받아야 한다.
+- **`greenday` slug와 `GREENDAY-` 접두사는 출시 후 못 바꾼다.** 토큰의 `prod`
+  클레임과 발급된 모든 키가 여기 묶인다. 워커 시크릿 하나가 모든 제품에 서명하므로
+  **`prod` 검사가 제품 격리의 전부다** — 지우면 BicMac 키로 haru가 열린다.
+- **권한은 서명 검증을 통과한 페이로드에서만 나온다.** `license.json`의 어떤 값도
+  권한을 만들지 못한다. 유예 마감은 토큰의 `exp + 30일`이지, 앱이 적어둔
+  타임스탬프가 아니다.
+- **거부와 불통을 뭉치지 말 것.** 409와 JSON 봉투가 있는 404만 라이선스를 닫는다.
+  Cloudflare의 HTML 404·타임아웃·봉투 없는 400은 닫지 않는다 — 워커 배포 사고
+  한 번에 유료 사용자 전원이 라이선스를 잃는다.
+- **키와 토큰은 렌더러로 내려보내지 않는다.** IPC는 `shared/license.ts`의
+  `PublicLicenseState`만 넘긴다(상태·마감·가린 키).
+- **키 입력 UI는 `capabilities.needsLicenseKey`로만 그린다.** 스토어 빌드에 남으면
+  Apple 3.1.1(외부 결제 유도)로 심사에서 거절된다.
+- 게이트는 `licensing/LicenseGate.tsx` **한 곳**이다(무료 티어 없음). 잠긴
+  화면에서도 내보내기가 눌린다 — 데이터를 인질로 잡지 않는다.
+
 ## Health Stack
 
 - typecheck: tsc --build

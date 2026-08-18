@@ -7,6 +7,7 @@ import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
 import { setUiLanguage, uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
+import { disposeLicensing, initLicensing } from './licensing/service'
 import { handleGoogleCallback } from './google-auth-flow'
 import { APP_BUNDLE_ID, isAppScheme, findAppSchemeArg } from '../shared/app-id'
 
@@ -110,6 +111,8 @@ function bootstrap(): void {
     }
 
     initDatabase()
+    // 창을 만들기 전에 — 렌더러가 뜨자마자 라이선스 상태를 묻는다.
+    initLicensing()
     setupIpcHandlers()
 
     ipcMain.handle('set-language', (_, language: unknown) => setUiLanguage(language))
@@ -205,6 +208,8 @@ function bootstrap(): void {
   app.on('will-quit', () => {
     // 리마인더 폴러 정리
     if (reminderInterval) clearInterval(reminderInterval)
+    // 라이선스 마감 타이머 정리 — 안 끄면 종료가 최대 24일 지연된다.
+    disposeLicensing()
     globalShortcut.unregisterAll()
   })
 }

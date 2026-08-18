@@ -41,10 +41,14 @@ export interface Capabilities {
   /**
    * 설정에 라이선스 키 입력 칸을 보여야 하는가.
    *
-   * 웹사이트에서 직접 판매하는 빌드(현재 계획상 Windows 비스토어판)만 true다.
-   * **스토어 빌드에 이 UI가 있으면 심사에서 거절된다** — Apple 가이드라인 3.1.1은
-   * 앱 안에서 외부 결제로 유도하는 것을 금지한다. 그래서 규칙을 문서가 아니라
-   * 여기 코드로 두고 테스트로 고정한다.
+   * 웹사이트에서 직접 판매하는 빌드만 true다. **스토어 빌드에 이 UI가 있으면
+   * 심사에서 거절된다** — Apple 가이드라인 3.1.1은 앱 안에서 외부 결제로 유도하는
+   * 것을 금지한다. 그래서 규칙을 문서가 아니라 여기 코드로 두고 테스트로 고정한다.
+   *
+   * 기준은 플랫폼이 아니라 **판매 채널**이다. 한동안 `platform === 'win32'`로
+   * 적혀 있었는데 그건 "맥은 App Store로만 판다"는 옛 계획을 플랫폼으로 근사한
+   * 것이었고, macOS를 직접 다운로드로 팔기 시작한 순간 Mac 구매자에게 키를 넣을
+   * 곳이 사라지는 버그가 됐다.
    */
   needsLicenseKey: boolean
 
@@ -58,7 +62,7 @@ export function capabilitiesFor(facts: PlatformFacts): Capabilities {
   return {
     canSelfUpdate: !facts.isDev && !isStoreBuild,
     hasGlobalShortcuts: !facts.isMas,
-    needsLicenseKey: facts.platform === 'win32' && !isStoreBuild,
+    needsLicenseKey: !isStoreBuild,
     updatesViaStore: isStoreBuild
   }
 }
