@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>상세 패널 TickTick 배치 전환</title>
+<style>
+  :root {
+    --bg:#fafaf9; --surface:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#16a34a; --accent-soft:#f0fdf4; --warn:#b45309; --warn-soft:#fffbeb;
+    --hot:#b91c1c; --hot-soft:#fef2f2; --cool:#1d4ed8; --cool-soft:#eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e; --line:#44403c;
+      --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33;
+      --hot:#f87171; --hot-soft:#7f1d1d33; --cool:#93c5fd; --cool-soft:#1e3a8a33; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:26px; }
+  h2 { font-size:19px; margin:40px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+  h3 { font-size:15.5px; margin:22px 0 6px; }
+  .tldr { background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:16px 20px; }
+  .tldr strong { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap; }
+  code { font:13px ui-monospace,"SF Mono",Menlo,monospace; background:var(--surface);
+    border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  ul { padding-left:22px; margin:8px 0; } li { margin:5px 0; }
+  .note { color:var(--muted); font-size:13.5px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:14px 0; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; border-radius:5px; padding:1px 7px; white-space:nowrap; }
+  .tag.done { background:var(--accent-soft); color:var(--accent); }
+  .tag.fix { background:var(--warn-soft); color:var(--warn); }
+  .tag.red { background:var(--hot-soft); color:var(--hot); }
+  .ba { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+  .g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:16px 0; }
+  @media (max-width:720px) { .ba, .g3 { grid-template-columns:1fr; } }
+  .ba figure, .g3 figure { margin:0; }
+  .ba img, .g3 img { width:100%; border:1px solid var(--line); border-radius:8px; display:block; background:#fff; }
+  .ba figcaption, .g3 figcaption { color:var(--muted); font-size:12.5px; margin-top:6px; text-align:center; }
+  .num { font-variant-numeric:tabular-nums; }
+  footer { margin-top:48px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+<h1>상세 패널 TickTick 배치 전환</h1>
+<div class="meta">2026-08-18 · Greenday · 제공하신 TickTick 화면 4장 기준 · 커밋 <code>2678a65</code> · 브랜치 <code>supaicy/coordinate</code>(push 안 함)</div>
+
+<div class="tldr">
+<strong>네 가지 다 넣었습니다.</strong> 우선순위는 우측 상단 깃발 메뉴로, 태그는 칩 + 자동완성으로, 자주 안 쓰는 동작은 우측 하단 ⋯ 메뉴로 옮기고, 그렇게 비운 자리를 전부 메모에 줬습니다. <strong>메모 편집기가 실제 앱에서 <span class="num">591 × 579px</span></strong>로, 패널 높이의 <span class="num">72%</span>를 차지합니다. 상시 노출 컨트롤은 <strong>메타 영역 9개 + 라벨 6개 → 상단바 2개 + 태그 (+) 1개, 라벨 0개</strong>가 됐습니다. 헬스: typecheck 0 · lint 0 errors · <strong><span class="num">580</span> tests green</strong>(+14).
+</div>
+
+<h2>1 · 요청 4건 → 구현</h2>
+<table>
+<thead><tr><th>요청</th><th>구현</th><th>파일</th></tr></thead>
+<tbody>
+<tr><td>① 우측 상단 깃발 → 우선순위</td><td>깃발 아이콘 하나가 현재 등급을 <em>색</em>으로 알리고, 누르면 높음·중간·낮음·없음이 뜬다(선택 항목에 체크). 4칸짜리 세그먼티드를 없앴다.</td><td><code>PriorityMenu.tsx</code> <span class="tag done">새 파일</span></td></tr>
+<tr><td>② 태그</td><td>칩 + 원형 (+). (+)를 누르면 입력과 함께 <em>저장소에서 이미 쓰인 태그</em>가 목록으로 뜬다. 입력한 말로 좁혀지고, 이미 붙은 태그는 빠진다.</td><td><code>TagPicker.tsx</code> <span class="tag done">새 파일</span></td></tr>
+<tr><td>③ 우측 하단 ⋯</td><td>하위 작업 추가 · 태그 · 파일 추가 · 포커스 시작 / 제목 복사 · 삭제. <strong>이 앱에 실제로 있는 기능만</strong> 넣었다(결정 3번).</td><td><code>TaskMoreMenu.tsx</code> <span class="tag done">새 파일</span></td></tr>
+<tr><td>④ md 작성칸이 너무 작다</td><td>메타를 상단바·하단바·⋯로 흩어 보내고 남는 세로를 메모가 전부 가져간다(<code>flex-1 min-h-[240px]</code>). 하위작업·첨부는 비어 있으면 아예 자리를 차지하지 않는다.</td><td><code>TaskDetail.tsx</code></td></tr>
+</tbody>
+</table>
+
+<h2>2 · 전후</h2>
+<div class="ba">
+  <figure><img src="assets/2026-08-17-after.png" alt="이전 배치"><figcaption>전 — 라벨·값 두 칸 격자에 마감일·알림·반복·우선순위·목록·태그가 쌓이고, 메모는 그 아래 남은 자리</figcaption></figure>
+  <figure><img src="assets/2026-08-18-tt-panel.png" alt="새 배치"><figcaption>후 — 상단바(완료·기한 … 깃발) / 본문(제목·태그·<strong>메모</strong>) / 하단바(목록 … 닫기·⋯)</figcaption></figure>
+</div>
+
+<table>
+<thead><tr><th></th><th>전</th><th>후</th></tr></thead>
+<tbody>
+<tr><td>메타 영역 상시 컨트롤</td><td class="num">9개 (마감일·알림·반복·우선순위 4칸·목록·태그 입력)</td><td class="num">3개 (기한·깃발·태그 +)</td></tr>
+<tr><td>상시 노출 라벨</td><td class="num">6개</td><td class="num">0개 — 아이콘과 자리가 라벨을 대신한다</td></tr>
+<tr><td>패널 전체 버튼(실측)</td><td>—</td><td class="num">7개</td></tr>
+<tr><td>메모 편집기(실측)</td><td>—</td><td class="num">591 × 579px (패널 높이의 72%)</td></tr>
+<tr><td>하위작업 · 첨부</td><td>늘 자리를 차지</td><td>비어 있으면 숨고, ⋯에서 꺼낸다</td></tr>
+</tbody>
+</table>
+<p class="note">실측값은 실행 중인 앱을 CDP(<code>Runtime.evaluate</code>)로 재서 얻었습니다. 창 <span class="num">1200 × 800</span>, 상세 패널 폭 <span class="num">624px</span> 기준입니다.</p>
+
+<h2>3 · 새 오버레이</h2>
+<div class="g3">
+  <figure><img src="assets/2026-08-18-tt-flag.png" alt="깃발 메뉴"><figcaption>① 깃발 — 높음이 맨 위(목록·필터와 같은 방향)</figcaption></figure>
+  <figure><img src="assets/2026-08-18-tt-tags.png" alt="태그 칩"><figcaption>② 태그 칩과 (+)</figcaption></figure>
+  <figure><img src="assets/2026-08-18-tt-more.png" alt="⋯ 메뉴"><figcaption>③ ⋯ — 파괴적 동작은 구분선 아래, 삭제는 빨강</figcaption></figure>
+</div>
+
+<h3>기한 팝오버 — 알림·반복을 접어 넣음 (결정 2번)</h3>
+<div class="ba">
+  <figure><img src="assets/2026-08-18-tt-due.png" alt="기한 팝오버"><figcaption>빠른 선택 → 날짜·시각 → 알림·반복 → 지우기</figcaption></figure>
+  <figure>
+    <div class="card" style="margin:0">
+      <p>'언제'에 관한 것은 한곳에 모입니다. 알림·반복이 메타 줄에 따로 있으면 기한과 떨어져 의미 그룹이 깨지고 상단바가 붐빕니다.</p>
+      <p class="note">각 행은 기존 <code>ReminderPicker</code>·<code>RecurringPicker</code>를 그대로 중첩해 엽니다 — <strong>기능 손실 0</strong>. 접힌 자리에서도 열리는지가 회귀 위험이라 테스트로 못박았습니다.</p>
+    </div>
+  </figure>
+</div>
+
+<h2>4 · 물어봤던 4가지 결정, 그대로 반영</h2>
+<table>
+<thead><tr><th>#</th><th>질문</th><th>답</th><th>반영</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>부분 차용 vs 전면 교체</td><td>전면 교체</td><td>상단바 / 본문 / 하단바 3단으로 통째로 다시 씀</td></tr>
+<tr><td>2</td><td>알림·반복을 어디에</td><td>기한 팝오버 안으로</td><td>구분선 아래 두 행, 값은 우측에 요약</td></tr>
+<tr><td>3</td><td>⋯ 메뉴 범위</td><td>이미 있는 기능만</td><td>없는 기능(기간 설정·이동·복제·고정)은 넣지 않음</td></tr>
+<tr><td>4</td><td>하위작업 · 첨부</td><td>있을 때만 메모 아래</td><td><code>showSubtasks || subtaskCount &gt; 0</code>, <code>attachments.length &gt; 0</code></td></tr>
+</tbody>
+</table>
+
+<h2>5 · 실행 중인 앱에서 확인</h2>
+<p>레이아웃이 붙었다는 것과 <em>눌러서 열린다</em>는 것은 다른 이야기라, 개발 앱을 CDP로 몰아 실제 마우스 이벤트를 보냈습니다(<code>Input.dispatchMouseEvent</code> — Radix 트리거는 <code>click</code>이 아니라 <code>pointerdown</code>을 봅니다).</p>
+<table>
+<thead><tr><th>조작</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td>깃발 1회 클릭</td><td><span class="tag done">열림</span> 높음 · 중간 · 낮음 · 없음</td></tr>
+<tr><td>태그 (+) 1회 클릭</td><td><span class="tag done">열림</span> 입력 포커스, 제안 목록</td></tr>
+<tr><td>⋯ 1회 클릭</td><td><span class="tag done">열림</span> 하위 작업 추가 · 태그 · 파일 추가 · 포커스 시작 · 제목 복사 · 삭제</td></tr>
+<tr><td>기한 1회 클릭</td><td><span class="tag done">열림</span> 오늘 · 내일 · 이번 주말 · 다음 주 · 알림 · 반복 · 마감일 지우기</td></tr>
+<tr><td>태그 두 개 입력 후 칩 x로 제거</td><td><span class="tag done">정상</span> 26개 할일 전부 백업과 동일(태그 포함 차이 0)</td></tr>
+</tbody>
+</table>
+<p class="note">QA 전 <code>~/Library/Application Support/ticktick/ticktick-data.json</code>을 백업하고, 끝난 뒤 백업과 대조해 되돌아왔음을 확인했습니다.</p>
+
+<h2>6 · 이 과정에서 발견해 함께 고친 것</h2>
+<div class="card">
+<p><span class="tag fix">고침</span> <strong>⋯ 버튼이 스스로를 "편집"이라고 말하고 있었다.</strong> 보이스오버·키보드 사용자에게 잘못된 이름이었습니다. <code>common.more</code>(더 보기 / More)를 새로 넣고 그것을 씁니다. 접근성 트리를 훑다가 나왔습니다.</p>
+</div>
+<div class="card">
+<p><span class="tag fix">고침</span> <strong>상세 패널을 넓히면 가운데 목록 제목이 '전/체' 두 줄로 깨졌다.</strong> 제목만 줄어들 수 있어서, 폭이 모자라면 글자 단위로 줄바꿈됐습니다. 이제 <strong>검색창이 먼저 양보</strong>하고(6rem까지), 그래도 모자랄 때만 제목을 잘라 보입니다. 실측: '오늘'이 <span class="num">32px</span> 한 줄로 온전히 나오고 검색창이 <span class="num">192 → 168px</span>로 줄었습니다.</p>
+<p class="note">처음 고칠 때 제목에 <code>min-w-0</code>만 걸었더니 두 줄 깨짐이 <em>한 글자로 잘림</em>으로 바뀌었습니다 — 스크린샷을 다시 찍어보고 잡았습니다.</p>
+</div>
+
+<h2>7 · 테스트 — 통과했다는 것만으로는 아무것도 증명하지 않는다</h2>
+<p>새 오버레이 3형제는 코드가 먼저 쓰였기 때문에, 나중에 붙인 테스트는 <em>그냥 통과합니다</em>. 그래서 일부러 코드를 고장 내고 대응하는 테스트만 빨개지는지 확인했습니다.</p>
+<table>
+<thead><tr><th>심은 결함</th><th>빨개진 테스트</th></tr></thead>
+<tbody>
+<tr><td><code>[...PRIORITY_OPTIONS]</code>에서 <code>.reverse()</code> 제거</td><td><span class="tag red">FAIL</span> 깃발을 한 번 누르면 열리고, 높음이 맨 위다</td></tr>
+<tr><td>제안에서 <code>!tags.includes(tag)</code> 필터 제거</td><td><span class="tag red">FAIL</span> 이미 붙은 태그는 제안하지 않는다</td></tr>
+<tr><td>태그 추가에서 중복 가드 제거</td><td><span class="tag red">FAIL</span> 이미 있는 태그를 다시 넣어도 늘지 않는다</td></tr>
+<tr><td>빠른 선택이 <code>dueTime</code>을 <code>null</code>로 덮음</td><td><span class="tag red">FAIL</span> 빠른 선택은 시각을 건드리지 않는다</td></tr>
+</tbody>
+</table>
+<p>네 변이가 <strong>정확히 그 네 개만</strong> 실패시켰고, 나머지 26개는 초록으로 남았습니다. 복원 후 다시 전부 통과.</p>
+<p class="note">추가한 테스트 14개는 <code>components/tasks/overlays.test.tsx</code>에 있습니다. 그중 두 개는 <strong>"트리거를 한 번 누르면 열린다"</strong> — <code>CLAUDE.md</code>에 적힌, 오버레이가 두 번 눌러야 열리던 그 버그 계열을 막는 자리입니다.</p>
+
+<h2>8 · 헬스</h2>
+<table>
+<thead><tr><th>검사</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td><code>tsc --build</code></td><td><span class="tag done">0 errors</span></td></tr>
+<tr><td><code>biome lint src electron.vite.config.ts</code></td><td><span class="tag done">0 errors</span> (경고 7건은 이번 변경과 무관한 기존 것)</td></tr>
+<tr><td><code>vitest run</code></td><td><span class="tag done">580 passed</span> / 40 files (직전 566 → +14)</td></tr>
+</tbody>
+</table>
+<p class="note">변경 파일: <code>TaskDetail.tsx</code>, <code>DueDatePicker.tsx</code>, <code>TaskList.tsx</code>, <code>overlays.test.tsx</code>, ko/en 로케일 · 새 파일 <code>PriorityMenu.tsx</code>, <code>TagPicker.tsx</code>, <code>TaskMoreMenu.tsx</code>. <code>TaskDetail.tsx</code>는 494 → 419줄로 줄었습니다.</p>
+
+<h2>9 · 남은 것</h2>
+<ul>
+<li>메모 편집기에 placeholder는 이미 들어가 있습니다(<code>메모를 적어보세요…</code>). 다만 <strong>본문이 비어 있어야</strong> 보입니다.</li>
+<li>TickTick에 있고 우리에게 없는 것들 — 기간(시작~종료) 설정, 다른 목록으로 이동, 복제, 고정 — 은 결정 3번에 따라 <strong>넣지 않았습니다</strong>. 기능 자체를 원하시면 별건으로 잡겠습니다.</li>
+<li>우클릭 컨텍스트 메뉴는 아직 손수 만든 <code>&lt;div&gt;</code>입니다(TODOS의 Radix ContextMenu 전환 건). ⋯ 메뉴와 항목이 겹치므로 그때 같이 맞추는 게 낫습니다.</li>
+</ul>
+
+<footer>
+Greenday · 상세 패널 TickTick 배치 전환 · 2026-08-18 · 커밋 <code>2678a65</code> — 로컬에만 있습니다(공개 저장소 push 보류 중)
+</footer>
+</main>
+</body>
+</html>
