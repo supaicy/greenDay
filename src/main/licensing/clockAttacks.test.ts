@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { createLicenseManager } from './licenseManager'
-import { PRODUCT_SLUG } from './activationToken'
+import { licenseHash, PRODUCT_SLUG } from './activationToken'
 import { GRACE_DURATION_MS, TRIAL_DURATION_MS } from './trialWindow'
 import { importTestKey, makeKeyPair, signTestToken } from './testTokens'
 import type { LicenseRecord } from './licenseStore'
@@ -37,7 +37,7 @@ function token(over: { expMs?: number; iatMs?: number } = {}): string {
   const iatMs = over.iatMs ?? NOW
   return signTestToken(
     {
-      lic: 'f'.repeat(64),
+      lic: licenseHash(KEY),
       dev: DEVICE,
       prod: PRODUCT_SLUG,
       exp: Math.floor((over.expMs ?? iatMs + 30 * DAY) / 1000),
@@ -53,7 +53,7 @@ function boot(record: Partial<LicenseRecord>, startAt = NOW) {
   const timers: { atMs: number; fire: () => void }[] = []
   const manager = createLicenseManager({
     client: offline,
-    store: { read: () => ({ ...stored }), write: (next) => Object.assign(stored, next) },
+    store: { read: () => ({ ...stored }), write: (next) => (Object.assign(stored, next), true) },
     publicKey,
     device: () => DEVICE,
     deviceName: null,
@@ -185,7 +185,7 @@ describe('래칫을 조건 없이 믿는 대가', () => {
         ...offline,
         activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + 30 * DAY } })
       },
-      store: { read: () => ({ ...stored }), write: (next) => Object.assign(stored, next) },
+      store: { read: () => ({ ...stored }), write: (next) => (Object.assign(stored, next), true) },
       publicKey,
       device: () => DEVICE,
       deviceName: null,

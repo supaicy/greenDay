@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createLicenseManager, type LicenseManager } from './licenseManager'
-import { PRODUCT_SLUG } from './activationToken'
+import { licenseHash, PRODUCT_SLUG } from './activationToken'
 import { GRACE_DURATION_MS, TRIAL_DURATION_MS } from './trialWindow'
 import type { ClientResult, LicenseClient } from './licenseClient'
 import type { LicenseRecord } from './licenseStore'
@@ -17,11 +17,11 @@ const pair = makeKeyPair()
 const publicKey = importTestKey(pair.rawBase64)
 
 /** 서버가 발급하는 것과 같은 모양의 토큰. */
-function token(over: { expMs?: number; iatMs?: number; dev?: string; prod?: string } = {}): string {
+function token(over: { expMs?: number; iatMs?: number; dev?: string; prod?: string; lic?: string } = {}): string {
   const iatMs = over.iatMs ?? NOW
   return signTestToken(
     {
-      lic: 'f'.repeat(64),
+      lic: over.lic ?? licenseHash(KEY),
       dev: over.dev ?? DEVICE,
       prod: over.prod ?? PRODUCT_SLUG,
       exp: Math.floor((over.expMs ?? iatMs + TOKEN_TTL_MS) / 1000),
@@ -51,6 +51,8 @@ function harness(
     device?: string | null
     enforced?: boolean
     now?: number
+    /** false면 디스크 쓰기가 실패한다 — 저장 실패 경로를 시험한다. */
+    storeWritable?: boolean
   } = {}
 ): Harness {
   const record: LicenseRecord = {
@@ -62,6 +64,7 @@ function harness(
   }
   let current = over.now ?? NOW
   let deviceReads = 0
+  const storeWritable = over.storeWritable ?? true
   const timers: { atMs: number; fire: () => void }[] = []
   const calls: string[] = []
 
@@ -91,7 +94,10 @@ function harness(
     client: traced,
     store: {
       read: () => ({ ...record }),
-      write: (next) => Object.assign(record, next)
+      write: (next) => {
+        Object.assign(record, next)
+        return storeWritable
+      }
     },
     publicKey,
     device: () => {
@@ -168,6 +174,30 @@ describe('결함 1 — 권한은 서명에서만 나온다', () => {
       record: { key: KEY, token: token({ dev: 'b'.repeat(64), expMs: NOW - DAY }), trialStartMs: NOW - 40 * DAY }
     })
     expect(h.manager.getState().status).toBe('trialExpired')
+  })
+
+  it('다른 키로 발급된 토큰은 통과하지 못한다', () => {
+    // 서명·기기·제품이 다 맞아도 이 키의 토큰이 아니다. 이게 없으면 record.key를
+    // 아무 문자열로 바꿔치기해도 옛 토큰이 계속 라이선스로 서고, 서버의 취소가
+    // 서명된 마감까지 도달하지 못한다.
+    const h = harness({
+      record: { key: KEY, token: token({ lic: licenseHash(OTHER_KEY) }), trialStartMs: NOW - 40 * DAY }
+    })
+    expect(h.manager.getState().status).toBe('trialExpired')
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('서버가 다른 키의 토큰을 주면 저장하지 않는다', async () => {
+    const h = harness({
+      client: {
+        activate: async () => ({
+          ok: true,
+          value: { token: token({ lic: licenseHash(OTHER_KEY) }), expiresAtMs: NOW + TOKEN_TTL_MS }
+        })
+      }
+    })
+    expect(await h.manager.activate(KEY)).toBe('badToken')
+    expect(h.record.token).toBeNull()
   })
 
   it('기기를 식별하지 못하면 유예도 없다', () => {
@@ -257,7 +287,11 @@ describe('결함 3 — 진행 중인 요청은 자기가 물어본 키에 대해
       record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
       client: {
         validate: () => new Promise((resolve) => (land = resolve)),
-        activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } })
+        // 서버는 **물어본 그 키**의 토큰을 준다 — lic 클레임이 OTHER_KEY의 해시다.
+        activate: async () => ({
+          ok: true,
+          value: { token: token({ lic: licenseHash(OTHER_KEY) }), expiresAtMs: NOW + TOKEN_TTL_MS }
+        })
       }
     })
 
@@ -425,6 +459,17 @@ describe('activate', () => {
     expect(await h.manager.activate(KEY)).toBe('badToken')
   })
 
+  it('디스크에 못 적으면 성공이라 답하지 않는다', async () => {
+    // 서버 슬롯은 이미 소모됐는데 성공이라 답하면, 사용자는 활성화됐다고 믿고
+    // 재시작하면 사라져 있다. 다음에 다시 넣으면 이번엔 기기 한도에 걸린다.
+    const h = harness({
+      storeWritable: false,
+      client: { activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }) }
+    })
+    expect(await h.manager.activate(KEY)).toBe('saveFailed')
+    expect(h.manager.getState().status).not.toBe('licensed')
+  })
+
   it('서버 거부를 그대로 전한다', async () => {
     for (const [error, expected] of [
       ['deviceLimit', 'deviceLimit'],
@@ -547,6 +592,34 @@ describe('시작 비용', () => {
   it('토큰이 있으면 읽는다 — 검증에 필요하다', () => {
     const h = harness({ record: { key: KEY, token: token() } })
     expect(h.deviceReads()).toBeGreaterThan(0)
+  })
+})
+
+describe('dispose', () => {
+  it('걸려 있던 마감 타이머를 끈다', () => {
+    // 안 끄면 종료가 최대 24일 지연된다.
+    const h = harness({ record: { key: KEY, token: token({ expMs: NOW + DAY }) } })
+    expect(h.timers).toHaveLength(1)
+    h.manager.dispose()
+    expect(h.timers).toHaveLength(0)
+  })
+
+  it('종료 뒤 착륙한 응답이 타이머를 되살리지 않는다', async () => {
+    // 진행 중인 validate는 종료 중에도 착륙한다. 그게 settle을 부르면 몇 주짜리
+    // 타이머가 다시 걸려 프로세스가 그만큼 안 끝난다.
+    let land: (r: ClientResult<{ token: string; expiresAtMs: number }>) => void = () => {}
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: { validate: () => new Promise((resolve) => (land = resolve)) }
+    })
+    const pending = h.manager.revalidateIfNeeded()
+
+    h.manager.dispose()
+    expect(h.timers).toHaveLength(0)
+
+    land({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } })
+    await pending
+    expect(h.timers).toHaveLength(0)
   })
 })
 

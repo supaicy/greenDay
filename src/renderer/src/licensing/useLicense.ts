@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { UNKNOWN_LICENSE_STATE, type LicenseStatus, type PublicLicenseState } from '../../../shared/license'
+import { LICENSE_STATUSES, UNKNOWN_LICENSE_STATE, type PublicLicenseState } from '../../../shared/license'
 
 /**
  * 라이선스 상태를 렌더러 전체가 하나만 보게 한다.
@@ -11,8 +11,6 @@ import { UNKNOWN_LICENSE_STATE, type LicenseStatus, type PublicLicenseState } fr
  * Zustand 스토어에 얹지 않은 이유: 이 값은 렌더러가 절대 쓰지 않는 읽기 전용
  * 사실이고, 스토어에 두면 그 사실이 흐려진다.
  */
-
-const STATUSES: LicenseStatus[] = ['unlicensed', 'trial', 'trialExpired', 'licensed', 'grace']
 
 let state: PublicLicenseState = UNKNOWN_LICENSE_STATE
 const listeners = new Set<() => void>()
@@ -26,7 +24,13 @@ function publish(next: PublicLicenseState): void {
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   if (listeners.size === 1) {
-    void window.api.licenseGetState().then((value: unknown) => publish(normalize(value)))
+    // `.catch`가 없으면 IPC 거절이 unhandled rejection이 되고, 상태는
+    // UNKNOWN(=잠그지 않음)에 영구히 머문다. 모르는 것과 "물어봤는데 실패한 것"을
+    // 같은 값으로 두되, 실패를 조용히 삼키지는 않는다.
+    void window.api
+      .licenseGetState()
+      .then((value: unknown) => publish(normalize(value)))
+      .catch((error: unknown) => console.error('[license] 상태를 받아오지 못했다', error))
     stop = window.api.onLicenseChanged((value: unknown) => publish(normalize(value)))
   }
   return () => {
@@ -51,7 +55,7 @@ function subscribe(listener: () => void): () => void {
 function normalize(value: unknown): PublicLicenseState {
   if (typeof value !== 'object' || value === null) return UNKNOWN_LICENSE_STATE
   const o = value as Record<string, unknown>
-  const status = STATUSES.find((s) => s === o.status)
+  const status = LICENSE_STATUSES.find((s) => s === o.status)
   if (!status) return UNKNOWN_LICENSE_STATE
   return {
     status,
@@ -68,7 +72,11 @@ export function useLicense(): PublicLicenseState {
 
 /** 상태를 새로 받아온다. 활성화·해제 직후처럼 우리가 원인인 변화에 쓴다. */
 export async function refreshLicense(): Promise<void> {
-  publish(normalize(await window.api.licenseGetState()))
+  try {
+    publish(normalize(await window.api.licenseGetState()))
+  } catch (error) {
+    console.error('[license] 상태를 새로 받아오지 못했다', error)
+  }
 }
 
 /** 마감까지 남은 일수. 오늘이 마지막 날이면 0. */

@@ -117,12 +117,40 @@ describe('응답 분류 — 서버가 말한 것이 아닌 것', () => {
   })
 })
 
+describe('요청 자체', () => {
+  it('리다이렉트를 따라가지 않는다 — 본문에 원본 키가 들어 있다', async () => {
+    // 307/308은 POST 본문을 그대로 다시 보낸다. 잘못 설정되거나 탈취된 오리진
+    // 하나가 라이선스 키를 다른 호스트로 흘린다.
+    const inits: RequestInit[] = []
+    const client = createLicenseClient({
+      baseUrl: BASE,
+      fetchImpl: async (_url, init) => {
+        inits.push(init)
+        return new Response(JSON.stringify({ token: 'tok', expiresAt: 1 }), { status: 200 })
+      }
+    })
+    await client.activate(KEY, DEVICE, null)
+    await client.deactivate(KEY, DEVICE)
+    expect(inits).toHaveLength(2)
+    for (const init of inits) expect(init.redirect).toBe('error')
+  })
+})
+
 describe('deactivate', () => {
   it('성공하면 ok', async () => {
     const { client, calls } = clientReplying(json(200, { ok: true }))
     expect(await client.deactivate(KEY, DEVICE)).toEqual({ ok: true, value: undefined })
     expect(calls[0].url).toBe(`${BASE}/v1/deactivate`)
     expect(calls[0].body).toEqual({ key: KEY, device: DEVICE })
+  })
+
+  it('200인데 본문이 서버 답이 아니면 성공으로 읽지 않는다', async () => {
+    // 캡티브 포털이 로그인 페이지를 200으로 실어 보낸다. 성공으로 읽으면 슬롯은
+    // 서버에 잡힌 채 로컬 자격증명만 지워져, 지원 메일 말고는 빠져나올 길이 없다.
+    for (const body of ['<html>Sign in to WiFi</html>', '{}', JSON.stringify({ ok: false })]) {
+      const { client } = clientReplying({ status: 200, body })
+      expect(await client.deactivate(KEY, DEVICE)).toEqual({ ok: false, error: 'network' })
+    }
   })
 
   it('429는 해제 한도 — 라이선스가 나쁘다는 뜻이 아니다', async () => {

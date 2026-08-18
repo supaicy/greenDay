@@ -64,6 +64,10 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        // 리다이렉트를 따라가지 않는다. 307/308은 POST 본문을 그대로 다시
+        // 보내는데, 그 본문에 **원본 라이선스 키**와 기기 해시가 들어 있다.
+        // 잘못 설정되거나 탈취된 오리진 하나가 키를 다른 호스트로 흘린다.
+        redirect: 'error',
         signal: AbortSignal.timeout(TIMEOUT_MS)
       })
       return { status: response.status, text: await response.text() }
@@ -98,7 +102,15 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
     async deactivate(key, device) {
       const reply = await send('/v1/deactivate', { key, device })
       if (!reply) return { ok: false, error: 'network' }
-      if (reply.status === 200) return { ok: true, value: undefined }
+      // 200이라고 서버가 답한 것은 아니다 — 캡티브 포털이 로그인 페이지를 200으로
+      // 실어 보낸다. 그걸 성공으로 읽으면 슬롯은 서버에 잡힌 채 로컬 자격증명만
+      // 지워져, 지원 메일 말고는 빠져나올 길이 없는 상태가 된다. 활성화 쪽은
+      // 이미 본문을 보는데 여기만 안 보고 있었다.
+      if (reply.status === 200) {
+        return decode(reply.text)?.ok === true
+          ? { ok: true, value: undefined }
+          : { ok: false, error: 'network' }
+      }
       // 다른 엔드포인트에서와 뜻이 다른 유일한 상태 코드다.
       if (reply.status === 429) return { ok: false, error: 'deactivationLimit' }
       return { ok: false, error: classify(reply.status, reply.text) }

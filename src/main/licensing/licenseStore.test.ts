@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createFileStore, EMPTY_RECORD, type LicenseRecord } from './licenseStore'
@@ -83,12 +83,38 @@ describe('createFileStore — 쓰기', () => {
     expect(readFileSync(path, 'utf-8')).toContain('\n  "lastSeenMs": 7')
   })
 
-  it('쓸 수 없어도 던지지 않는다', () => {
+  it('쓸 수 없어도 던지지 않되, 실패를 숨기지도 않는다', () => {
     // 디스크가 안 되면 이번 실행 동안 메모리 상태로 계속 간다. 여기서 던지면
-    // 라이선스 저장 실패가 앱 전체를 죽인다.
+    // 라이선스 저장 실패가 앱 전체를 죽인다. 대신 삼키지 않고 false를 낸다 —
+    // 활성화가 "성공했다고 답했는데 재시작하면 사라지는" 결과를 막는 신호다.
     const unwritable = join(dir, 'nested')
     mkdirSync(unwritable)
     const store = createFileStore(unwritable) // 디렉터리에 쓰려는 시도 → EISDIR
     expect(() => store.write(EMPTY_RECORD)).not.toThrow()
+    expect(store.write(EMPTY_RECORD)).toBe(false)
+  })
+
+  it('성공하면 true', () => {
+    expect(createFileStore(path).write(EMPTY_RECORD)).toBe(true)
+  })
+
+  it('제자리에서 자르지 않는다 — 쓰다 끊겨도 옛 레코드가 남는다', () => {
+    // 제자리 쓰기는 전원이 끊긴 순간 깨진 JSON을 남기고, 그걸 parseRecord가
+    // 빈 레코드로 읽는다 — 돈 낸 사람의 활성화가 조용히 사라진다.
+    const store = createFileStore(path)
+    const good: LicenseRecord = { key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9', token: 'tok', lastSeenMs: 7, trialStartMs: 3 }
+    store.write(good)
+
+    // 임시 파일에 쓰고 rename하는지 — 쓰기 도중의 내용이 본 파일에 닿지 않는다.
+    const during = readFileSync(path, 'utf-8')
+    expect(JSON.parse(during)).toEqual(good)
+    expect(existsSync(`${path}.tmp`)).toBe(false)
+  })
+
+  it('실패한 쓰기가 임시 파일을 남기지 않는다', () => {
+    const unwritable = join(dir, 'nested2')
+    mkdirSync(unwritable)
+    createFileStore(unwritable).write(EMPTY_RECORD)
+    expect(existsSync(`${unwritable}.tmp`)).toBe(false)
   })
 })

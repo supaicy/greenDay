@@ -520,7 +520,8 @@
       "malformedKey": "The server did not accept this key.",
       "refused": "The license server refused this request. Please contact support.",
       "nothing": "There is no license to release on this device.",
-      "network": "Could not reach the license server. Try again later."
+      "network": "Could not reach the license server. Try again later.",
+      "saveFailed": "Could not save the license on this device. Check disk space and permissions, then try again."
     }
   }
 }

@@ -26,24 +26,18 @@ import {
   trialEndsAt
 } from './trialWindow'
 
-export type LicenseState =
-  /** 무료 배포 기간이거나, 아직 키를 넣지 않았다. */
-  | { status: 'unlicensed' }
-  | { status: 'trial'; untilMs: number }
-  | { status: 'trialExpired' }
-  | { status: 'licensed'; untilMs: number }
-  /** 토큰이 오프라인에서 만료됐다. 아직 돌지만 네트워크가 필요하다. */
-  | { status: 'grace'; untilMs: number }
+/**
+ * 마감을 들고 다니는 상태들. 나머지는 마감이 없다.
+ *
+ * 이름 집합은 `shared/license.ts`의 `LICENSE_STATUSES`에서 파생된다 — 거기 값이
+ * 하나 늘면 여기서 컴파일 에러가 나고, 렌더러의 목록도 같은 배열을 쓴다.
+ * 손으로 쓴 대칭 어설션이 하던 일을 타입이 대신한다.
+ */
+type WithDeadline = 'trial' | 'licensed' | 'grace'
 
-// 상태 이름이 shared와 갈라지면 렌더러가 모르는 상태를 받고 조용히 아무것도
-// 그리지 않는다. 컴파일 타임에 묶어 둔다.
-type _StatusesMatch = LicenseState['status'] extends LicenseStatus
-  ? LicenseStatus extends LicenseState['status']
-    ? true
-    : never
-  : never
-const _statusesMatch: _StatusesMatch = true
-void _statusesMatch
+export type LicenseState =
+  | { status: Exclude<LicenseStatus, WithDeadline> }
+  | { status: WithDeadline; untilMs: number }
 
 export interface ManagerDeps {
   client: LicenseClient
@@ -93,6 +87,14 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   /** 기기 id는 필요한 순간에만 읽는다 — deps.device의 주석 참고. */
   const deviceId = (): string | null => deps.device()
   let cancelTimer: (() => void) | null = null
+  /**
+   * `dispose()` 이후인가.
+   *
+   * 종료 중에도 진행 중인 `validate` 요청은 착륙한다. 그게 `settle()`을 부르면
+   * 몇 주짜리 타이머가 **다시 걸려** 프로세스가 그만큼 안 끝난다. 취소는
+   * "지금 걸린 타이머 하나"가 아니라 "이제부터 아무것도 안 건다"여야 한다.
+   */
+  let disposed = false
   /** 이 프로세스가 도출한 트라이얼 시작. 한 번 정해지면 안 움직인다 — resolveTrialStart 참고. */
   let trialStartedAt: number | null = null
 
@@ -146,8 +148,9 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     record.lastSeenMs = deps.now()
   }
 
-  function persist(): void {
-    deps.store.write({ ...record })
+  /** 디스크에 확정됐으면 true. 대부분의 호출자는 최선 노력이라 무시한다. */
+  function persist(): boolean {
+    return deps.store.write({ ...record })
   }
 
   // ── 토큰 ───────────────────────────────────────────────────────────────────
@@ -159,6 +162,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     const result = verifyToken(record.token, {
       publicKey: deps.publicKey,
       device,
+      key: record.key,
       nowMs: clockSafeNow()
     })
     return result.ok ? { payload: result.payload, expiresAtMs: result.expiresAtMs } : null
@@ -187,6 +191,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     const result = verifyToken(record.token, {
       publicKey: deps.publicKey,
       device,
+      key: record.key,
       // 되돌린 시계로 보면 만료된 토큰이 유효해 보이고, 그러면 마감이 아예 안 나온다.
       nowMs: clockSafeNow()
     })
@@ -301,6 +306,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    */
   function scheduleClose(deadlineMs: number): void {
     cancelClose()
+    if (disposed) return
     const remaining = deadlineMs - deps.now()
     if (remaining <= 0) return
     const wait = Math.min(remaining, MAX_TIMEOUT_MS)
@@ -332,6 +338,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     const verified = verifyToken(result.value.token, {
       publicKey: deps.publicKey,
       device,
+      key,
       nowMs: deps.now()
     })
     if (!verified.ok) return 'badToken'
@@ -341,7 +348,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 토큰의 `expiresAt`이 아니라 토큰 자체의 `exp`를 쓴다 — 옆에 실려 온
     // 숫자는 서명 밖에 있다.
     anchorClockToServerTime()
-    persist()
+    // 여기서만 확정 여부를 본다. 못 적었는데 성공이라고 답하면, 사용자는
+    // 활성화됐다고 믿고 서버 슬롯은 소모된 채, 재시작하면 사라져 있다.
+    if (!persist()) {
+      record.key = null
+      record.token = null
+      return 'saveFailed'
+    }
     settle()
 
     // 서버도 앱도 예라고 했는데 화면만 아니라고 하는 상태를 만들지 않는다.
@@ -422,6 +435,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       const verified = verifyToken(result.value.token, {
         publicKey: deps.publicKey,
         device,
+        key,
         nowMs: deps.now()
       })
       if (!verified.ok) return
@@ -489,7 +503,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     activate,
     deactivate,
     revalidateIfNeeded,
-    dispose: cancelClose
+    dispose: () => {
+      disposed = true
+      cancelClose()
+    }
   }
 }
 

@@ -14,7 +14,7 @@
  * 우회에 의도적인 노력이 들게 하는 것까지다.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 
 export interface LicenseRecord {
   /** 사용자가 입력한 키. 재검증에 다시 보낸다. */
@@ -29,20 +29,41 @@ export interface LicenseRecord {
 
 export interface LicenseStore {
   read(): LicenseRecord
-  write(record: LicenseRecord): void
+  /** 디스크에 확정됐으면 true. 실패는 던지지 않고 여기로 나온다 — 아래 주석. */
+  write(record: LicenseRecord): boolean
 }
 
 export const EMPTY_RECORD: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: null }
 
 export function createFileStore(filePath: string): LicenseStore {
+  const tempPath = `${filePath}.tmp`
   return {
     read: () => parseRecord(readRaw(filePath)),
+    /**
+     * **임시 파일에 쓰고 rename으로 바꿔 끼운다.** 제자리에서 자르면 그 사이에
+     * 전원이 끊겼을 때 파일이 깨진 JSON으로 남고, `parseRecord`가 그걸 빈
+     * 레코드로 읽는다 — 돈 낸 사람의 활성화가 조용히 사라진다. rename은 같은
+     * 파일시스템 안에서 원자적이라, 어느 시점에 끊겨도 옛 레코드 아니면 새
+     * 레코드이지 그 중간은 없다.
+     *
+     * 실패를 던지지 않는 것은 그대로다 — 여기서 던지면 앱이 시작하다 죽는데,
+     * 라이선스를 못 적은 것보다 나쁜 결과다. 대신 **삼키지도 않는다.**
+     * 확정 여부를 돌려주면 활성화가 "성공했다고 답했는데 재시작하면 사라지는"
+     * 결과를 피할 수 있다.
+     */
     write: (record) => {
       try {
-        writeFileSync(filePath, JSON.stringify(record, null, 2), 'utf-8')
+        writeFileSync(tempPath, JSON.stringify(record, null, 2), 'utf-8')
+        renameSync(tempPath, filePath)
+        return true
       } catch {
-        // 디스크가 안 되면 이번 실행 동안 메모리 상태로 계속 간다. 여기서
-        // 던지면 앱이 시작하다 죽는데, 라이선스를 못 적은 것보다 나쁜 결과다.
+        // 반쯤 쓰인 임시 파일을 남기지 않는다. 이것마저 실패해도 할 수 있는 게 없다.
+        try {
+          unlinkSync(tempPath)
+        } catch {
+          /* 애초에 안 만들어졌다 */
+        }
+        return false
       }
     }
   }

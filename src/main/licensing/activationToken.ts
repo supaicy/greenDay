@@ -11,7 +11,7 @@
  * 만들지 못한다.
  */
 
-import { createPublicKey, verify, type KeyObject } from 'node:crypto'
+import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto'
 
 /** 이 앱이 받아들이는 제품 slug. 서버 `products.slug`와 같고 출시 후 바뀌지 않는다. */
 export const PRODUCT_SLUG = 'greenday'
@@ -55,7 +55,7 @@ export type VerifyResult =
    * 토큰과 똑같이 위조 가능하다.
    */
   | { ok: false; reason: 'expired'; payload: TokenPayload }
-  | { ok: false; reason: 'malformed' | 'badSignature' | 'wrongDevice' | 'wrongProduct' }
+  | { ok: false; reason: 'malformed' | 'badSignature' | 'wrongDevice' | 'wrongProduct' | 'wrongKey' }
 
 export function importRawPublicKey(base64Raw: string): KeyObject | null {
   try {
@@ -73,9 +73,14 @@ export function importRawPublicKey(base64Raw: string): KeyObject | null {
   }
 }
 
+/** 서버가 토큰의 `lic`에 넣는 값 — 정규화된 키의 SHA256. */
+export function licenseHash(key: string): string {
+  return createHash('sha256').update(key, 'utf-8').digest('hex')
+}
+
 export function verifyToken(
   raw: string,
-  opts: { publicKey: KeyObject; device: string; nowMs: number }
+  opts: { publicKey: KeyObject; device: string; nowMs: number; key?: string | null }
 ): VerifyResult {
   const parts = raw.split('.')
   if (parts.length !== 2 || !BASE64URL_RE.test(parts[0]) || !BASE64URL_RE.test(parts[1])) {
@@ -99,6 +104,12 @@ export function verifyToken(
   if (!payload) return { ok: false, reason: 'malformed' }
 
   if (payload.dev !== opts.device) return { ok: false, reason: 'wrongDevice' }
+  // 토큰이 **저장된 그 키**의 것인지. 서명·기기·제품이 다 맞아도 다른 키로
+  // 발급된 토큰이면 이 기기의 것이 아니다. 키를 바꿔치기해 재검증이 옛 토큰을
+  // 계속 쓰게 만드는 길도 여기서 닫힌다.
+  if (opts.key != null && payload.lic !== licenseHash(opts.key)) {
+    return { ok: false, reason: 'wrongKey' }
+  }
   // 서명이 이 토큰을 이 앱의 것으로 만들어 주지 않는다 — 허브가 모든 제품에
   // 같은 키로 서명한다. BicMac 키로 haru가 열리면 안 된다.
   if (payload.prod !== PRODUCT_SLUG) return { ok: false, reason: 'wrongProduct' }

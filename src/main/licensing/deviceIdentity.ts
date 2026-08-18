@@ -45,13 +45,18 @@ function readRawId(probes: DeviceProbes): string | null {
     case 'darwin':
       // 레지스트리 경로가 아니라 클래스로 찾는다 — 플랫폼 전문가의 경로가
       // Intel(AppleACPIPlatformExpert)과 Apple Silicon(AppleARMPE)에서 다르다.
+      // **절대 경로로 부른다.** 맨 이름이면 PATH를 타고, Windows의 CreateProcess는
+      // 앱 디렉터리와 현재 폴더를 PATH보다 먼저 본다. `ioreg`라는 이름의 두 줄짜리
+      // 스크립트를 놓아 두면 기기 해시를 원하는 값으로 만들 수 있고, 그러면 토큰의
+      // 기기 결속과 서버의 기기 한도가 동시에 무의미해진다. 불가능하게 만들지는
+      // 못해도, 비용을 "PATH에 스크립트 하나"에서 "바이너리를 고친다"로 올린다.
       return match(
-        probes.runCommand('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice']),
+        probes.runCommand('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice']),
         /"IOPlatformUUID"\s*=\s*"([^"]+)"/
       )
     case 'win32':
       return match(
-        probes.runCommand('reg', [
+        probes.runCommand(`${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\reg.exe`, [
           'query',
           'HKLM\\SOFTWARE\\Microsoft\\Cryptography',
           '/v',
