@@ -17,17 +17,36 @@ export function validateTaskInput(input: unknown): Record<string, unknown> {
 }
 
 /**
- * 기간의 시작일과 고정 플래그. 렌더러에서 이미 불변식을 지키지만, 이 경계를
- * 통과한 값은 그대로 디스크에 남으므로 모양은 여기서도 확인한다.
- * (앞뒤 순서 검사는 하지 않는다 — 부분 페이로드라 상대편 값을 여기서 알 수 없다.)
+ * 진짜 달력에 있는 날짜인가. 모양만 보면 '2026-13-45'가 통과해
+ * DTSTART;VALUE=DATE:20261345 같은 깨진 iCal이 되고, 서버가 그 이벤트를
+ * 거부해 그 할일만 조용히 동기화되지 않는다.
+ */
+function isRealIsoDate(value: unknown): boolean {
+  if (typeof value !== 'string' || !ISO_DATE.test(value)) return false
+  const d = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value
+}
+
+/**
+ * 날짜·정렬·고정 필드. 이 값들은 그대로 디스크에 남고, 날짜는 CalDAV로 나갈 때
+ * iCal 본문에 거의 그대로 실린다(ical.ts toDateStamp은 하이픈만 지운다) —
+ * 개행이 섞인 날짜 하나면 사용자의 캘린더에 임의 속성을 끼워 넣을 수 있다.
+ * ISO_DATE는 앵커돼 있어 개행을 막고, isRealIsoDate가 달력까지 확인한다.
+ *
+ * (기간의 앞뒤 순서는 검사하지 않는다 — 부분 페이로드라 상대편 값을 모른다.
+ *  그 불변식은 스토어의 normalizeDateRange가 지킨다.)
  */
 function validateRangeAndPin(obj: Record<string, unknown>): void {
-  if ('startDate' in obj && obj.startDate !== null) {
-    if (typeof obj.startDate !== 'string' || !ISO_DATE.test(obj.startDate)) {
+  for (const key of ['startDate', 'dueDate'] as const) {
+    if (key in obj && obj[key] !== null && !isRealIsoDate(obj[key])) {
       throw new Error('Invalid task payload')
     }
   }
   if ('pinned' in obj && typeof obj.pinned !== 'boolean') {
+    throw new Error('Invalid task payload')
+  }
+  // NaN/Infinity는 JSON에 null로 적혀, 재시작하면 정렬이 무너진다.
+  if ('sortOrder' in obj && !Number.isFinite(obj.sortOrder)) {
     throw new Error('Invalid task payload')
   }
 }

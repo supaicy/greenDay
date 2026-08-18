@@ -2,14 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey, capEvents, initDatabase, createTask, getTasks } from './database'
-
-// initDatabase는 app.getPath('userData')만 쓴다 — 임시 디렉터리를 물려 실제 저장소를 흉내낸다.
-const mocked = vi.hoisted(() => ({ userData: '' }))
-vi.mock('electron', () => ({
-  app: { getPath: () => mocked.userData },
-  safeStorage: { isEncryptionAvailable: () => false }
-}))
+import { readHistoryFile, writeHistoryFile, encodeApiKey, decodeApiKey, capEvents } from './database'
 
 let tmp: string
 
@@ -246,25 +239,105 @@ describe('구버전 weekly: 패턴 정규화', () => {
  * 렌더러는 새 할일의 sortOrder를 스스로 정한다(복제는 원본과 다음 항목의
  * 중간값). main이 그 값을 버리고 maxOrder+1로 다시 매기면, 화면에서는 원본
  * 바로 아래 있던 복제본이 재시작 후 목록 맨 끝으로 튄다.
+ *
+ * 이 파일의 다른 describe와 같은 격리를 쓴다 — 정적 import를 쓰면 모듈 수준
+ * `data` 싱글턴 사본이 둘 생기고, 디바운스된 save()가 다음 테스트로 샌다.
  */
-describe('createTask — sortOrder', () => {
+describe('createTask — sortOrder와 새 컬럼', () => {
+  let db: typeof import('./database')
+
+  beforeEach(async () => {
+    vi.resetModules()
+    const dir = tmp
+    vi.doMock('electron', () => ({
+      app: { getPath: () => dir, on: () => {} },
+      safeStorage: { isEncryptionAvailable: () => false }
+    }))
+    db = await import('./database')
+    db.initDatabase()
+  })
+
+  const ids = (): string[] => (db.getTasks() as { id: string }[]).map((t) => t.id)
+  const row = (id: string): Record<string, unknown> | undefined =>
+    (db.getTasks() as Record<string, unknown>[]).find((t) => t.id === id)
+
   it('렌더러가 정한 sortOrder를 그대로 적는다', () => {
-    mocked.userData = tmp
-    initDatabase()
-    createTask({ id: 'a', title: 'A', listId: 'inbox', sortOrder: 1 })
-    createTask({ id: 'b', title: 'B', listId: 'inbox', sortOrder: 2 })
-    createTask({ id: 'copy', title: 'A', listId: 'inbox', sortOrder: 1.5 })
+    db.createTask({ id: 'a', title: 'A', listId: 'inbox', sortOrder: 1 })
+    db.createTask({ id: 'b', title: 'B', listId: 'inbox', sortOrder: 2 })
+    db.createTask({ id: 'copy', title: 'A', listId: 'inbox', sortOrder: 1.5 })
 
     // getTasks는 sort_order로 정렬한다 = 재시작 후 사용자가 보는 순서.
-    expect((getTasks() as { id: string }[]).map((t) => t.id)).toEqual(['a', 'copy', 'b'])
+    expect(ids()).toEqual(['a', 'copy', 'b'])
   })
 
   it('sortOrder를 주지 않으면 그 리스트의 맨 뒤에 붙인다', () => {
-    mocked.userData = tmp
-    initDatabase()
-    createTask({ id: 'a', title: 'A', listId: 'inbox', sortOrder: 5 })
-    createTask({ id: 'b', title: 'B', listId: 'inbox' })
+    db.createTask({ id: 'a', title: 'A', listId: 'inbox', sortOrder: 5 })
+    db.createTask({ id: 'b', title: 'B', listId: 'inbox' })
+    expect(ids()).toEqual(['a', 'b'])
+  })
 
-    expect((getTasks() as { id: string }[]).map((t) => t.id)).toEqual(['a', 'b'])
+  it('createTask가 기간·고정을 저장한다', () => {
+    db.createTask({
+      id: 'p1',
+      title: '스프린트',
+      listId: 'inbox',
+      startDate: '2026-08-18',
+      dueDate: '2026-08-20',
+      pinned: true
+    })
+    expect(row('p1')?.start_date).toBe('2026-08-18')
+    // JSON 저장소는 0/1로 적는다 — 불리언이 새면 옛 레코드와 모양이 갈린다.
+    expect(row('p1')?.pinned).toBe(1)
+  })
+
+  it('updateTask도 고정을 0/1로 적는다', () => {
+    db.createTask({ id: 'p2', title: 'x', listId: 'inbox' })
+    db.updateTask({ id: 'p2', pinned: true, startDate: '2026-08-18' })
+    expect(row('p2')?.pinned).toBe(1)
+    expect(row('p2')?.start_date).toBe('2026-08-18')
+
+    db.updateTask({ id: 'p2', pinned: false })
+    expect(row('p2')?.pinned).toBe(0)
+  })
+
+  it('새 컬럼이 없는 옛 레코드는 기본값으로 채운다', async () => {
+    const legacy = { id: 'old', title: '옛날 것', list_id: 'inbox', sort_order: 1, created_at: '2026-01-01T00:00:00.000Z' }
+    writeFileSync(join(tmp, 'ticktick-data.json'), JSON.stringify({ tasks: [legacy], lists: [] }), 'utf-8')
+    vi.resetModules()
+    const dir = tmp
+    vi.doMock('electron', () => ({
+      app: { getPath: () => dir, on: () => {} },
+      safeStorage: { isEncryptionAvailable: () => false }
+    }))
+    db = await import('./database')
+    db.initDatabase()
+
+    expect(row('old')?.start_date).toBeNull()
+    expect(row('old')?.pinned).toBe(0)
+  })
+
+  it('구버전으로 내려가 마감일을 지운 흔적(끝 없는 시작일)을 로드 때 정리한다', async () => {
+    const orphan = {
+      id: 'orphan',
+      title: '고아',
+      list_id: 'inbox',
+      sort_order: 1,
+      created_at: '2026-01-01T00:00:00.000Z',
+      start_date: '2026-08-18',
+      due_date: null,
+      pinned: 0
+    }
+    writeFileSync(join(tmp, 'ticktick-data.json'), JSON.stringify({ tasks: [orphan], lists: [] }), 'utf-8')
+    vi.resetModules()
+    const dir = tmp
+    vi.doMock('electron', () => ({
+      app: { getPath: () => dir, on: () => {} },
+      safeStorage: { isEncryptionAvailable: () => false }
+    }))
+    db = await import('./database')
+    db.initDatabase()
+
+    // 끝이 없으면 기간이 아니다 — 남겨두면 화면에 'YYYY-MM-DD ~ '가 매달린다.
+    expect(row('orphan')?.start_date).toBeNull()
   })
 })

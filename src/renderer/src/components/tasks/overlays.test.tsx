@@ -52,7 +52,19 @@ beforeAll(async () => {
 // 이 파일은 실제 스토어에 연결된 컴포넌트를 그린다. window.api가 없으면 스토어
 // 쓰기가 unhandled rejection으로 죽어, 가드가 회귀했을 때 깔끔한 실패 대신
 // 에러로 터진다. 또 setState로 심은 값이 모듈 싱글턴에 남아 뒤 테스트로 샌다.
-const STORE_KEYS = ['selectedTaskId', 'showQuickAdd', 'showAddTask', 'tasks'] as const
+const STORE_KEYS = [
+  'selectedTaskId',
+  'showQuickAdd',
+  'showAddTask',
+  'tasks',
+  // 아래는 테스트가 vi.fn()으로 갈아끼우는 것들 — 되돌리지 않으면 뒤 테스트가
+  // 가짜 액션을 물려받아 통과해 버린다.
+  'lists',
+  'updateTask',
+  'duplicateTask',
+  'removeTask',
+  'toggleTask'
+] as const
 let storeSnapshot: Record<string, unknown>
 
 beforeEach(() => {
@@ -236,6 +248,34 @@ describe('ui 프리미티브 — 프로젝트 규칙', () => {
     const menu = await screen.findByRole('menu')
     expect(menu.className).toContain('z-overlayContent')
     expect(menu.className).not.toContain('z-50')
+  })
+
+  it('호출처가 onClick을 줘도 전파 차단이 살아 있다', async () => {
+    const user = userEvent.setup()
+    const rowClick = vi.fn()
+    const contentClick = vi.fn()
+    // 이 프리미티브의 존재 이유가 전파 차단인데, {...props}가 onClick 뒤에
+    // 펼쳐져 있어 호출처가 onClick을 주는 순간 가드가 통째로 덮였다.
+    render(
+      // biome-ignore lint/a11y/useSemanticElements: Sidebar의 실제 구조 재현 — 중첩 button이 있어 <button>으로 못 바꾼다
+      <div role="button" aria-label="행" tabIndex={0} onClick={rowClick} onKeyDown={() => {}}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" onClick={(e) => e.stopPropagation()}>
+              메뉴
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent onClick={contentClick}>
+            <DropdownMenuItem>삭제</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    )
+    await user.click(screen.getByRole('button', { name: '메뉴' }))
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }))
+
+    expect(contentClick).toHaveBeenCalled()
+    expect(rowClick).not.toHaveBeenCalled()
   })
 
   it('다이얼로그의 모서리 지정을 호출처가 이길 수 있다', async () => {
@@ -613,6 +653,61 @@ describe('DueDatePicker — 접힌 알림·반복', () => {
     expect(await screen.findByRole('button', { name: '매주' })).toBeInTheDocument()
   })
 
+  it('기간 신호를 받으면 시작일 칸과 함께 열린다', async () => {
+    // ⋯ 메뉴의 '기간 설정'과 이 팝오버를 잇는 유일한 배선이다.
+    const trigger = <button type="button">기한</button>
+    const { rerender } = render(<DueDatePicker {...props} autoOpenRangeSignal={0} trigger={trigger} />)
+    rerender(<DueDatePicker {...props} autoOpenRangeSignal={1} trigger={trigger} />)
+
+    expect(await screen.findByLabelText('시작')).toBeInTheDocument()
+  })
+
+  it('시작일이 저장돼 있으면 신호 없이도 기간 모드로 열린다', async () => {
+    const user = userEvent.setup()
+    render(<DueDatePicker {...props} startDate="2026-08-18" dueDate="2026-08-20" trigger={<button type="button">기한</button>} />)
+    await user.click(screen.getByRole('button', { name: '기한' }))
+
+    const start = await screen.findByLabelText('시작')
+    expect(start).toHaveValue('2026-08-18')
+    // 달력에서 거꾸로 된 기간을 아예 고를 수 없게 묶어 둔다.
+    expect(start).toHaveAttribute('max', '2026-08-20')
+  })
+
+  it('기간을 끄면 시작일을 지운다', async () => {
+    const user = userEvent.setup()
+    const onStartDateChange = vi.fn()
+    render(
+      <DueDatePicker
+        {...props}
+        startDate="2026-08-18"
+        dueDate="2026-08-20"
+        onStartDateChange={onStartDateChange}
+        trigger={<button type="button">기한</button>}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: '기한' }))
+    await user.click(await screen.findByRole('button', { name: /기간/ }))
+
+    expect(onStartDateChange).toHaveBeenCalledWith(null)
+  })
+
+  it('고른 적 없는 기간을 끌 때는 헛저장하지 않는다', async () => {
+    const user = userEvent.setup()
+    const onStartDateChange = vi.fn()
+    const trigger = <button type="button">기한</button>
+    const { rerender } = render(
+      <DueDatePicker {...props} autoOpenRangeSignal={0} onStartDateChange={onStartDateChange} trigger={trigger} />
+    )
+    rerender(
+      <DueDatePicker {...props} autoOpenRangeSignal={1} onStartDateChange={onStartDateChange} trigger={trigger} />
+    )
+    await screen.findByLabelText('시작')
+    await user.click(screen.getByRole('button', { name: /기간/ }))
+
+    // 지울 것이 없는데 저장을 부르면, 아무것도 안 바뀐 쓰기가 디스크까지 간다.
+    expect(onStartDateChange).not.toHaveBeenCalled()
+  })
+
   it('빠른 선택은 시각을 건드리지 않는다', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
@@ -742,6 +837,25 @@ describe('공유 할일 동작', () => {
     expect(onSelect).toHaveBeenCalled()
   })
 
+  it('완료로 변경을 누르면 그 할일을 토글한다', async () => {
+    const user = userEvent.setup()
+    const toggleTask = vi.fn()
+    useStore.setState({ toggleTask })
+    renderContextMenu()
+    await openContextMenu(user)
+    await user.click(screen.getByRole('menuitem', { name: '완료로 변경' }))
+
+    expect(toggleTask).toHaveBeenCalledWith('task-1')
+  })
+
+  it('이미 완료된 할일은 미완료로 변경으로 뒤집힌다', async () => {
+    const user = userEvent.setup()
+    renderContextMenu({ completed: true })
+    await openContextMenu(user)
+
+    expect(screen.getByRole('menuitem', { name: '미완료로 변경' })).toBeInTheDocument()
+  })
+
   it('고정을 누르면 그 할일을 고정한다', async () => {
     const user = userEvent.setup()
     const updateTask = vi.fn()
@@ -781,11 +895,13 @@ describe('공유 할일 동작', () => {
     useStore.setState({ updateTask })
     renderContextMenu()
     await openContextMenu(user)
-    await user.click(screen.getByRole('menuitem', { name: '다른 리스트로 이동' }))
-    // 여기만 fireEvent다. jsdom엔 레이아웃이 없어서, userEvent가 포인터를
-    // 하위메뉴 항목으로 옮기는 순간 Radix의 hover 의도 판정이 메뉴를 닫는다
-    // (실제 브라우저에서는 포인터가 내용 위에 있어 열린 채로 남는다).
-    fireEvent.click(await screen.findByRole('menuitem', { name: '업무' }))
+    // 포인터로는 못 연다 — jsdom엔 레이아웃이 없어 Radix의 hover 의도 판정이
+    // 하위메뉴를 즉시 닫는다(실제 브라우저에서는 포인터가 내용 위에 남는다).
+    // 키보드 경로는 Radix의 실제 열기·선택 핸들러를 그대로 지난다.
+    screen.getByRole('menuitem', { name: '다른 리스트로 이동' }).focus()
+    await user.keyboard('{ArrowRight}')
+    await screen.findByRole('menuitem', { name: '업무' })
+    await user.keyboard('{ArrowDown}{Enter}')
 
     expect(updateTask).toHaveBeenCalledWith({ id: 'task-1', listId: 'work' })
   })

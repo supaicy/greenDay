@@ -125,3 +125,36 @@ describe('validateTaskUpdate — 기간·고정', () => {
     expect(() => validateTaskInput({ id: 't1', title: 'x', pinned: 'nope' })).toThrow()
   })
 })
+
+/**
+ * 날짜 필드는 CalDAV로 나갈 때 iCal 본문에 거의 그대로 실린다
+ * (ical.ts toDateStamp은 하이픈만 지운다). 이 경계를 통과한 값이 그대로
+ * VEVENT가 되므로, 모양뿐 아니라 '진짜 날짜인가'까지 여기서 막는다.
+ */
+describe('validateTaskUpdate — 날짜 필드가 iCal로 새지 않게', () => {
+  it('개행이 섞인 날짜는 거부한다 — VEVENT에 임의 속성을 끼워 넣을 수 있다', () => {
+    expect(() => validateTaskUpdate({ id: 't1', dueDate: '2026-08-20\r\nX-EVIL:1' })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', startDate: '2026-08-18\r\nX-EVIL:1' })).toThrow()
+  })
+
+  it('달력에 없는 날짜는 거부한다', () => {
+    // 모양만 맞는 값은 DTSTART:00000000 같은 깨진 iCal이 되어 서버가 거부하고,
+    // 그 할일만 조용히 동기화되지 않는다.
+    expect(() => validateTaskUpdate({ id: 't1', dueDate: '2026-13-45' })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', dueDate: '0000-00-00' })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', startDate: '2026-02-29' })).toThrow() // 2026은 윤년이 아니다
+  })
+
+  it('정상 날짜와 null은 통과시킨다', () => {
+    expect(validateTaskUpdate({ id: 't1', dueDate: '2028-02-29' })).toBeTruthy() // 윤년
+    expect(validateTaskUpdate({ id: 't1', dueDate: null })).toBeTruthy()
+  })
+
+  it('sortOrder는 유한한 수만 받는다', () => {
+    // NaN/Infinity는 JSON에 null로 적혀, 재시작하면 정렬이 무너진다.
+    expect(() => validateTaskUpdate({ id: 't1', sortOrder: Number.NaN })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', sortOrder: Number.POSITIVE_INFINITY })).toThrow()
+    expect(() => validateTaskUpdate({ id: 't1', sortOrder: '3' })).toThrow()
+    expect(validateTaskUpdate({ id: 't1', sortOrder: 3.5 })).toBeTruthy()
+  })
+})

@@ -43,7 +43,7 @@ export function DueDatePicker({
   onStartDateChange,
   onReminderChange,
   onRecurringChange,
-  openRangeSignal,
+  autoOpenRangeSignal,
   trigger
 }: {
   dueDate: string | null
@@ -57,7 +57,7 @@ export function DueDatePicker({
   onReminderChange: (reminderAt: string | null) => void
   onRecurringChange: (pattern: string | null) => void
   /** ⋯ 메뉴의 '기간 설정'에서 값이 바뀌면 팝오버를 기간 모드로 연다. */
-  openRangeSignal?: number
+  autoOpenRangeSignal?: number
   trigger: ReactNode
 }) {
   const { t } = useTranslation()
@@ -68,10 +68,10 @@ export function DueDatePicker({
   const rangeMode = rangeArmed || startDate != null
 
   useEffect(() => {
-    if (!openRangeSignal) return
+    if (!autoOpenRangeSignal) return
     setRangeArmed(true)
     setOpen(true)
-  }, [openRangeSignal])
+  }, [autoOpenRangeSignal])
 
   const today = todayString()
   const quick: { labelKey: string; date: string }[] = [

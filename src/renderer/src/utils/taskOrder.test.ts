@@ -58,6 +58,22 @@ describe('orderTasks — 정렬', () => {
     expect(ids(orderTasks(list, 'title', 'asc'))).toEqual(['1', '2'])
   })
 
+  it('생성일 정렬 — 최신이 먼저', () => {
+    const list = [
+      task({ id: 'old', createdAt: '2026-08-01T00:00:00.000Z' }),
+      task({ id: 'new', createdAt: '2026-08-10T00:00:00.000Z' })
+    ]
+    expect(ids(orderTasks(list, 'createdAt', 'asc'))).toEqual(['new', 'old'])
+    expect(ids(orderTasks(list, 'createdAt', 'desc'))).toEqual(['old', 'new'])
+  })
+
+  it('내림차순은 우선순위·제목에도 걸린다', () => {
+    const byP = [task({ id: 'low', priority: 'low' }), task({ id: 'high', priority: 'high' })]
+    expect(ids(orderTasks(byP, 'priority', 'desc'))).toEqual(['low', 'high'])
+    const byT = [task({ id: '1', title: '가' }), task({ id: '2', title: '나' })]
+    expect(ids(orderTasks(byT, 'title', 'desc'))).toEqual(['2', '1'])
+  })
+
   it('원본 배열을 건드리지 않는다', () => {
     const list = [task({ id: 'b', priority: 'low' }), task({ id: 'a', priority: 'high' })]
     orderTasks(list, 'priority', 'asc')

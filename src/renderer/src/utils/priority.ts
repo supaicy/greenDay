@@ -52,13 +52,21 @@ export function byPriority(a: { priority: Priority }, b: { priority: Priority })
 }
 
 /**
- * 고정 먼저, 그 다음 우선순위. 할일 목록을 그리는 화면은 전부 이것을 쓴다 —
- * 고정을 우선순위에 맡기면 '높음' 하나만 생겨도 고정한 것이 아래로 밀려,
- * 고정이라는 말이 무의미해진다. (목록 뷰의 다른 정렬 기준은 utils/taskOrder.ts)
+ * 고정이 먼저. 이 앱에서 '고정은 어떤 정렬 기준보다 앞선다'는 규칙의 유일한
+ * 출처다 — 고정을 정렬에 맡기면 '높음' 하나만 생겨도 고정한 것이 아래로 밀려,
+ * 고정이라는 말이 무의미해진다.
+ *
+ * 쓰는 방법은 둘이다: 다른 기준과 엮을 때는 byPinnedThenPriority(비교자),
+ * 이미 정렬된 목록을 다시 줄 세우지 않고 끌어올릴 때는 taskOrder.ts pinnedFirst.
  */
+export function byPinned(a: { pinned?: boolean }, b: { pinned?: boolean }): number {
+  return Number(!!b.pinned) - Number(!!a.pinned)
+}
+
+/** 고정 먼저, 그 다음 우선순위. 할일 목록을 그리는 화면 다섯 곳이 이것을 쓴다. */
 export function byPinnedThenPriority(
   a: { priority: Priority; pinned?: boolean },
   b: { priority: Priority; pinned?: boolean }
 ): number {
-  return Number(!!b.pinned) - Number(!!a.pinned) || byPriority(a, b)
+  return byPinned(a, b) || byPriority(a, b)
 }

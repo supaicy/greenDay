@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentPropsWithoutRef, ComponentType, ReactNode } from 'react'
 import { ArrowRight, Copy, CopyPlus, Pin, PinOff, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
@@ -18,12 +18,14 @@ import {
 } from '@/components/ui/context-menu'
 import type { Task } from '../../types'
 
-type ItemProps = { onSelect?: (e: Event) => void; className?: string; children?: ReactNode }
-type WrapProps = { className?: string; children?: ReactNode }
+// 프리미티브에서 직접 파생한다. 손으로 3개 키만 적어두면 disabled·asChild·ref가
+// 조용히 사라져, 첫 번째로 필요한 순간 이 파일이 아니라 타입 선언을 고쳐야 한다.
+type ItemProps = ComponentPropsWithoutRef<typeof DropdownMenuItem>
+type WrapProps = ComponentPropsWithoutRef<typeof DropdownMenuSeparator>
 
 /**
  * 같은 항목을 드롭다운으로도 컨텍스트 메뉴로도 그리기 위한 프리미티브 묶음.
- * Radix의 두 메뉴는 API 모양이 같아서, 어느 것을 쓸지만 바꿔 끼우면 된다.
+ * Radix의 두 메뉴는 prop 모양이 같아서, 어느 쪽을 쓸지만 바꿔 끼우면 된다.
  */
 export type MenuKit = {
   Item: ComponentType<ItemProps>

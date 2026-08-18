@@ -276,10 +276,21 @@ export function TaskDetail() {
             setDueTime(next.dueTime ?? '')
             save({ dueDate: next.dueDate, dueTime: next.dueTime })
           }}
-          onStartDateChange={(v) => save({ startDate: v })}
+          onStartDateChange={(v) => {
+            // 기한이 없는 상태에서 시작일부터 고르면, 스토어의 불변식이 그 값을
+            // 즉시 버린다(끝이 없으면 기간이 아니다). 화면에서는 시작 칸이 위에
+            // 있으니 그 순서로 입력하는 게 자연스럽다 — 그날을 마감일로도 잡아
+            // 하루짜리 기간으로 시작하고, 사용자는 끝을 늘리기만 하면 된다.
+            if (v && !dueDate) {
+              setDueDate(v)
+              save({ startDate: v, dueDate: v })
+            } else {
+              save({ startDate: v })
+            }
+          }}
           onReminderChange={(v) => save({ reminderAt: v })}
           onRecurringChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
-          openRangeSignal={rangeSignal}
+          autoOpenRangeSignal={rangeSignal}
           trigger={
             <button type="button" className={ctlCls(!!dueDate || !!dueTime)}>
               <CalendarDays size={14} />

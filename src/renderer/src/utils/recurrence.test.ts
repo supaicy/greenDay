@@ -311,3 +311,31 @@ describe('nextRecurrenceSpawn — 기간', () => {
     expect(spawn?.startDate ?? null).toBeNull()
   })
 })
+
+describe('nextRecurrenceSpawn — 고정', () => {
+  it('고정한 반복은 다음 회차도 고정으로 남는다', () => {
+    // 고정은 "이걸 계속 위에 두겠다"는 뜻이다. 완료할 때마다 풀리면 매번 다시
+    // 고정해야 한다.
+    const spawn = nextRecurrenceSpawn(
+      {
+        title: '약 먹기',
+        listId: 'inbox',
+        dueDate: '2026-08-19',
+        startDate: null,
+        pinned: true,
+        dueTime: null,
+        priority: 'none',
+        tags: [],
+        reminderAt: null,
+        isRecurring: true,
+        recurringPattern: 'daily',
+        scheduledStart: null,
+        scheduledEnd: null,
+        scheduledOverrides: null
+      } as never,
+      [],
+      '2026-08-19'
+    )
+    expect(spawn?.pinned).toBe(true)
+  })
+})

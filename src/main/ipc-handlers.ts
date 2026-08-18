@@ -135,18 +135,21 @@ export function setupIpcHandlers(): void {
       // 읽는 목록이다. 삭제 여부 열이 없는데 휴지통 항목을 섞으면 살아있는 할일과
       // 구분할 수 없어 잘못된 목록이 된다 — CSV에서는 제외한다.
       const tasks = ((parsed.tasks || []) as Record<string, unknown>[]).filter((t) => !t.deleted_at)
-      const header = 'Title,Description,Priority,StartDate,DueDate,List,Completed,CreatedAt\n'
+      // 새 열은 맨 뒤에 붙인다 — 가운데에 끼우면 기존 열 위치로 읽던 스프레드시트·
+      // 스크립트가 오류 없이 엉뚱한 값을 읽는다.
+      const header = 'Title,Description,Priority,DueDate,List,Completed,CreatedAt,StartDate,Pinned\n'
       const rows = tasks
         .map((t: Record<string, unknown>) =>
           [
             t.title,
             t.description,
             t.priority,
-            t.start_date || '',
             t.due_date || '',
             t.list_id,
             t.completed ? 'Yes' : 'No',
-            t.created_at
+            t.created_at,
+            t.start_date || '',
+            t.pinned ? 'Yes' : 'No'
           ]
             .map(csvCell)
             .join(',')

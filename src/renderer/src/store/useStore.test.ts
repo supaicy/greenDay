@@ -530,6 +530,23 @@ describe('duplicateTask', () => {
     expect(ids[0]).toBe('a')
     expect(ids[1]).not.toBe('b')
     expect(ids.slice(2)).toEqual(['b', 'c'])
+
+    // 배열 위치는 set()이 무조건 정한다 — 재시작 후에도 자리를 지키는 것은
+    // sortOrder뿐이므로, 그 값을 확인하지 않으면 이 테스트는 아무것도 막지 못한다.
+    const copy = useStore.getState().tasks.find((t) => t.id !== 'a' && t.id !== 'b' && t.id !== 'c')
+    expect(copy?.sortOrder).toBeGreaterThan(1)
+    expect(copy?.sortOrder).toBeLessThan(2)
+  })
+
+  it('목록의 마지막을 복제하면 그 뒤 슬롯을 받는다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'a', sortOrder: 1 }), task({ id: 'other', listId: 'work', sortOrder: 9 })]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    // 다른 리스트의 sortOrder는 이 계산에 끼어들지 않는다.
+    const copy = useStore.getState().tasks.find((t) => t.id !== 'a' && t.id !== 'other')
+    expect(copy?.sortOrder).toBe(2)
   })
 
   it('내용은 그대로, 완료 상태는 물려받지 않는다', async () => {
@@ -633,11 +650,12 @@ describe('updateTask — 기간(startDate) 불변식', () => {
     expect(useStore.getState().tasks[0].startDate).toBeNull()
   })
 
-  it('마감일을 앞으로 당겨 시작일보다 빨라지면 시작일을 버린다', async () => {
+  it('마감일만 앞으로 당기면 기간이 통째로 따라온다', async () => {
     useStore.setState({ tasks: [task({ id: 'a', dueDate: '2026-08-20', startDate: '2026-08-18' })] })
     await useStore.getState().updateTask({ id: 'a', dueDate: '2026-08-15' })
 
-    expect(useStore.getState().tasks[0].startDate).toBeNull()
+    // 버리지 않는다 — 길이(2일)를 지킨 채 옮긴다.
+    expect(useStore.getState().tasks[0].startDate).toBe('2026-08-13')
     expect(useStore.getState().tasks[0].dueDate).toBe('2026-08-15')
   })
 })
@@ -667,5 +685,54 @@ describe('기간 불변식 — 생성 경로와 함께 실린 필드', () => {
     const t = useStore.getState().tasks[0]
     expect(t.startDate).toBeNull()
     expect(t.dueDate).toBe('2026-08-18')
+  })
+})
+
+describe('기간 — 마감일만 옮기면 기간이 따라간다', () => {
+  it('마감일을 당기면 시작일도 같은 길이만큼 따라온다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', startDate: '2026-08-18', dueDate: '2026-08-20' })] })
+    // 캘린더 드래그·단축키·AI 재예약은 dueDate만 보낸다. 예전에는 그때마다
+    // 기간이 경고 없이 사라져, 사흘짜리 일이 하루짜리가 됐다.
+    await useStore.getState().updateTask({ id: 'a', dueDate: '2026-08-15' })
+
+    const t = useStore.getState().tasks[0]
+    expect(t.dueDate).toBe('2026-08-15')
+    expect(t.startDate).toBe('2026-08-13')
+  })
+
+  it('마감일을 미뤄도 길이는 그대로다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', startDate: '2026-08-18', dueDate: '2026-08-20' })] })
+    await useStore.getState().updateTask({ id: 'a', dueDate: '2026-09-01' })
+
+    expect(useStore.getState().tasks[0].startDate).toBe('2026-08-30')
+  })
+
+  it('시작일을 함께 보내면 그쪽이 사용자의 의도다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', startDate: '2026-08-18', dueDate: '2026-08-20' })] })
+    await useStore.getState().updateTask({ id: 'a', dueDate: '2026-08-25', startDate: '2026-08-24' })
+
+    expect(useStore.getState().tasks[0].startDate).toBe('2026-08-24')
+  })
+
+  it('마감일을 지우면 기간도 사라진다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', startDate: '2026-08-18', dueDate: '2026-08-20' })] })
+    await useStore.getState().updateTask({ id: 'a', dueDate: null })
+
+    expect(useStore.getState().tasks[0].startDate).toBeNull()
+  })
+})
+
+describe('duplicateTask — 중간값이 소진될 때', () => {
+  it('간격이 남아 있지 않으면 맨 뒤로 보낸다 (같은 슬롯을 만들지 않는다)', async () => {
+    // 같은 자리에 반복 복제하면 (a+b)/2가 53회쯤에서 a와 같아진다. 그대로 두면
+    // 원본과 복제본이 같은 sortOrder를 가져 드래그로도 순서를 정할 수 없다.
+    const tiny = 1 + Number.EPSILON // 1 바로 다음 표현 가능한 double — 사이에 자리가 없다
+    useStore.setState({
+      tasks: [task({ id: 'a', sortOrder: 1 }), task({ id: 'b', sortOrder: tiny })]
+    })
+    await useStore.getState().duplicateTask('a')
+
+    const orders = useStore.getState().tasks.map((t) => t.sortOrder)
+    expect(new Set(orders).size).toBe(orders.length)
   })
 })

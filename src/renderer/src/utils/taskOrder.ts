@@ -1,4 +1,4 @@
-import { byPriority } from './priority'
+import { byPinned, byPriority } from './priority'
 import type { SortBy, SortDir, Task } from '../types'
 
 /**
@@ -6,20 +6,18 @@ import type { SortBy, SortDir, Task } from '../types'
  * '고정'이 붙으면서 정렬이 두 단계(고정 → 기준)가 됐고, 그 규칙은 화면 배치가
  * 아니라 검증 가능한 자리에 있어야 한다.
  *
- * 고정은 정렬 기준보다 항상 앞선다. 고정을 정렬에 맡기면 '높음' 하나만 생겨도
- * 고정한 것이 아래로 밀려, 고정이라는 말이 무의미해진다.
- * (비교자로 같은 규칙이 필요한 화면은 utils/priority.ts byPinnedThenPriority)
+ * 고정은 정렬 기준보다 항상 앞선다(규칙의 출처는 utils/priority.ts byPinned).
  */
 export function orderTasks(tasks: Task[], sortBy: SortBy, sortDir: SortDir): Task[] {
   return pinnedFirst(sortBy === 'default' ? tasks : sortByKey(tasks, sortBy, sortDir))
 }
 
-/** 고정을 앞으로 끌어내되, 각 묶음 안의 상대 순서는 그대로 둔다(안정 분할). */
-export function pinnedFirst(tasks: Task[]): Task[] {
-  const pinned: Task[] = []
-  const rest: Task[] = []
-  for (const t of tasks) (t.pinned ? pinned : rest).push(t)
-  return pinned.length > 0 ? [...pinned, ...rest] : tasks
+/**
+ * 고정을 앞으로 끌어내되, 각 묶음 안의 상대 순서는 그대로 둔다.
+ * Array.sort는 안정 정렬이라 byPinned 하나로 분할과 순서 보존이 동시에 된다.
+ */
+function pinnedFirst(tasks: Task[]): Task[] {
+  return tasks.some((t) => t.pinned) ? [...tasks].sort(byPinned) : tasks
 }
 
 /**

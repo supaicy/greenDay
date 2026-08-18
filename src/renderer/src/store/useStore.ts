@@ -23,7 +23,7 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
-import { nextRecurrenceSpawn, collectRecurrenceSpawns, shiftIsoByDays } from '../utils/recurrence'
+import { nextRecurrenceSpawn, collectRecurrenceSpawns, shiftIsoByDays, daysBetween } from '../utils/recurrence'
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
@@ -551,6 +551,12 @@ export const useStore = create<Store>((set, get) => ({
     // 예전에는 patch 전체를 버려서 무관한 수정까지 조용히 사라졌다.
     if ('startDate' in patch || 'dueDate' in patch) {
       if (!current) return
+      // 마감일만 옮기는 조작(캘린더 드래그·'오늘로' 단축키·AI 재예약)은 기간을
+      // 통째로 옮기려는 뜻이다. 길이를 지킨 채 따라가지 않으면, 사흘짜리 일이
+      // 드래그 한 번에 경고도 없이 하루짜리가 된다.
+      if (!('startDate' in patch) && patch.dueDate && current.startDate && current.dueDate) {
+        patch.startDate = shiftIsoByDays(patch.dueDate, -daysBetween(current.startDate, current.dueDate))
+      }
       normalizeDateRange(patch, {
         startDate: 'startDate' in patch ? (patch.startDate ?? null) : current.startDate,
         dueDate: 'dueDate' in patch ? (patch.dueDate ?? null) : current.dueDate
@@ -664,13 +670,17 @@ export const useStore = create<Store>((set, get) => ({
     const now = new Date().toISOString()
 
     // 원본과 다음 항목 사이의 값을 준다 — 다른 행의 sortOrder를 건드리지 않고도
-    // 원본 바로 아래에 놓인다. 같은 자리에 계속 복제하면 간격이 반씩 줄지만,
-    // 드래그 한 번이면 reorderTasks가 정수 슬롯으로 되돌린다.
+    // 원본 바로 아래에 놓인다. (reorderTasks는 기존 슬롯을 맞바꿀 뿐 정수로 다시
+    //  번호를 매기지 않는다. 간격은 스스로 회복되지 않으므로 아래에서 직접 막는다.)
     let after = Number.POSITIVE_INFINITY
     for (const t of all) {
       if (t.listId === src.listId && !t.parentId && t.sortOrder > src.sortOrder) after = Math.min(after, t.sortOrder)
     }
-    const sortOrder = Number.isFinite(after) ? (src.sortOrder + after) / 2 : src.sortOrder + 1
+    // 같은 자리에 계속 복제하면 간격이 반씩 줄어 결국 중간값이 원본과 같아진다.
+    // 그때는 같은 슬롯을 만드는 대신 맨 뒤로 보낸다 — 자리는 아쉬워도 순서는 정해진다.
+    const mid = (src.sortOrder + after) / 2
+    const maxOrder = all.reduce((m, t) => (t.listId === src.listId ? Math.max(m, t.sortOrder) : m), 0)
+    const sortOrder = Number.isFinite(after) && mid > src.sortOrder && mid < after ? mid : maxOrder + 1
 
     // 복제되지 않는 것들: 완료 이력은 이 할일의 것이 아니고, 시간블록은 한 자리에
     // 둘이 겹치게 만들며, 고정은 "이것 하나를 위에 둔다"는 뜻이라 복제가 무의미하다.

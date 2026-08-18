@@ -257,6 +257,18 @@ describe('taskToEvent — 기간', () => {
     expect(ev).toMatchObject({ start: '2026-08-20', end: '2026-08-21', allDay: true })
   })
 
+  it('거꾸로 된 기간은 마감일 하루짜리로 떨어뜨린다', () => {
+    // IPC 검증은 부분 페이로드라 앞뒤 순서를 못 본다. 손으로 고친 JSON이나
+    // 반쪽 쓰기가 들어오면 DTSTART > DTEND인 깨진 VEVENT가 나간다.
+    const ev = taskToEvent({ id: 't', title: 'x', start_date: '2026-08-25', due_date: '2026-08-20' })
+    expect(ev).toMatchObject({ start: '2026-08-20', end: '2026-08-21', allDay: true })
+  })
+
+  it('시작일과 마감일이 같으면 하루짜리다', () => {
+    const ev = taskToEvent({ id: 't', title: 'x', start_date: '2026-08-20', due_date: '2026-08-20' })
+    expect(ev).toMatchObject({ start: '2026-08-20', end: '2026-08-21', allDay: true })
+  })
+
   it('시간블록이 있으면 기간보다 시간블록이 이긴다', () => {
     const ev = taskToEvent({
       id: 't',

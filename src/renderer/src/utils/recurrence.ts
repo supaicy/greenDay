@@ -271,6 +271,8 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, n
       task.startDate && task.dueDate ? shiftIsoByDays(next, -daysBetween(task.startDate, task.dueDate)) : null,
     dueTime: task.dueTime ?? undefined,
     priority: task.priority,
+    // 고정은 "이걸 계속 위에 두겠다"는 뜻이다. 완료할 때마다 풀리면 매번 다시 고정해야 한다.
+    pinned: task.pinned,
     isRecurring: true,
     recurringPattern: task.recurringPattern,
     tags: task.tags,

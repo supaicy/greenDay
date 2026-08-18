@@ -143,6 +143,12 @@ export function initDatabase(): void {
     if (t.scheduled_overrides === undefined) t.scheduled_overrides = null
     if (t.start_date === undefined) t.start_date = null
     if (t.pinned === undefined) t.pinned = 0
+    // 기간의 불변식은 렌더러가 지키지만, 구버전으로 내려가 마감일을 지우면
+    // 그 빌드의 updateTask는 start_date를 모르므로 끝 없는 시작일이 남는다.
+    // 다시 올라와도 그 행을 건드리기 전에는 아무도 고치지 않으므로, 읽는 자리에서 정리한다.
+    if (t.start_date && (typeof t.due_date !== 'string' || (t.start_date as string) > t.due_date)) {
+      t.start_date = null
+    }
     normalizeLegacyWeeklyPattern(t)
   })
   data.lists.forEach((l) => {
@@ -258,7 +264,8 @@ export function createTask(task: Record<string, unknown>): void {
   const maxOrder = data.tasks
     .filter((t) => t.list_id === task.listId && !t.deleted_at)
     .reduce((m, t) => Math.max(m, (t.sort_order as number) || 0), 0)
-  const sortOrder = typeof task.sortOrder === 'number' ? task.sortOrder : maxOrder + 1
+  // Number.isFinite: NaN/Infinity가 sort_order에 앉으면 정렬이 조용히 무너진다.
+  const sortOrder = Number.isFinite(task.sortOrder) ? (task.sortOrder as number) : maxOrder + 1
   data.tasks.push({
     id: task.id,
     title: task.title,

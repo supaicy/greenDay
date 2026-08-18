@@ -125,9 +125,15 @@ export function TimeBlock({ task, start, end, pxPerMin, column, columns, isDark 
       }
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: 드래그 블록 — drag 인터랙션, button 전환 불가 */}
+      {/* biome-ignore lint/a11y/useSemanticElements: 중첩 리사이즈 핸들과 draggable 때문에 <button>으로 바꿀 수 없다 */}
       <div
         ref={elRef}
         draggable
+        // 포커스를 받을 수 있어야 Shift+F10·컨텍스트 메뉴 키로 메뉴를 열 수 있다.
+        // 그 전에는 키보드만으로는 배정 해제조차 할 수 없었다.
+        role="button"
+        tabIndex={0}
+        aria-label={task.title}
         onDragStart={onDragStart}
         style={{
           position: 'absolute',

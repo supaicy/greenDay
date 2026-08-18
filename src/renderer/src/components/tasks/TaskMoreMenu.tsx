@@ -18,7 +18,7 @@ import type { Task } from '../../types'
  * 패널의 주인공이 되게 한다 — 전에는 하위작업·첨부 버튼이 늘 바닥을 차지했다.
  *
  * 앞쪽은 편집기가 필요한 동작(이 패널에만 있다), 뒤쪽은 우클릭 메뉴와 공유하는
- * 즉시 동작이다(taskActions.ts).
+ * 즉시 동작이다(TaskActionItems.tsx).
  */
 export function TaskMoreMenu({
   task,

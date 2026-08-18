@@ -115,46 +115,28 @@ describe('date smart lists exclude subtasks and trashed tasks', () => {
  * 할일이 8/19에는 어느 화면에도 없다 — 진행 중인 그날 정작 안 보인다.
  */
 describe('기간 할일 — 진행 중인 날에도 보인다', () => {
-  const ranged = (over: Partial<Task>): Task =>
-    ({
-      id: 'r',
-      title: '스프린트',
-      description: '',
-      completed: false,
-      priority: 'none',
-      dueTime: null,
-      reminderAt: null,
-      listId: 'inbox',
-      parentId: null,
-      tags: [],
-      createdAt: '2026-08-01T00:00:00.000Z',
-      completedAt: null,
-      deletedAt: null,
-      sortOrder: 0,
-      pinned: false,
-      isRecurring: false,
-      recurringPattern: null,
-      attachments: [],
-      scheduledStart: null,
-      scheduledEnd: null,
-      ...over
-    }) as Task
+  const ranged = (startDate: string, dueDate: string): Task => task(dueDate, false, { startDate })
 
-  it('오늘이 기간 안이면 오늘에 든다', () => {
+  it('오늘이 기간 한가운데면 오늘에 든다', () => {
     const today = todayString()
-    const t = ranged({ startDate: shiftIsoByDays(today, -2), dueDate: shiftIsoByDays(today, 3) })
-    expect(SMART_LIST_PREDICATES.today(t)).toBe(true)
+    expect(SMART_LIST_PREDICATES.today(ranged(shiftIsoByDays(today, -2), shiftIsoByDays(today, 3)))).toBe(true)
+  })
+
+  it('오늘 시작하는 기간은 첫날부터 보인다', () => {
+    // 경계가 <= 가 아니면, 기간을 지정한 바로 그날 목록에서 사라진다.
+    const today = todayString()
+    expect(SMART_LIST_PREDICATES.today(ranged(today, shiftIsoByDays(today, 3)))).toBe(true)
   })
 
   it('기간이 아직 시작 전이면 오늘에 들지 않는다', () => {
     const today = todayString()
-    const t = ranged({ startDate: shiftIsoByDays(today, 1), dueDate: shiftIsoByDays(today, 3) })
-    expect(SMART_LIST_PREDICATES.today(t)).toBe(false)
+    expect(SMART_LIST_PREDICATES.today(ranged(shiftIsoByDays(today, 1), shiftIsoByDays(today, 3)))).toBe(false)
   })
 
-  it('기간이 끝났으면 연체 규칙이 맡는다', () => {
+  it('진행 중이라고 해서 내일·다음 7일까지 번지지는 않는다', () => {
+    // '오늘'에만 넣기로 한 규칙이다. 다른 판별식까지 새면 같은 할일이 네 곳에 뜬다.
     const today = todayString()
-    const t = ranged({ startDate: shiftIsoByDays(today, -5), dueDate: shiftIsoByDays(today, -1) })
-    expect(SMART_LIST_PREDICATES.today(t)).toBe(true)
+    const t = ranged(shiftIsoByDays(today, -2), shiftIsoByDays(today, 3))
+    expect(SMART_LIST_PREDICATES.tomorrow(t)).toBe(false)
   })
 })
