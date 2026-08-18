@@ -23,9 +23,13 @@ import {
 import i18n from '../../i18n'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useStore } from '../../store/useStore'
+import { DueDatePicker } from './DueDatePicker'
+import { PriorityMenu } from './PriorityMenu'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
+import { TagPicker } from './TagPicker'
+import { TaskMoreMenu } from './TaskMoreMenu'
 import { QuickAdd } from '../common/QuickAdd'
 
 beforeAll(async () => {
@@ -376,6 +380,231 @@ describe('Radix 포털과 React 이벤트 버블링', () => {
     // 포털은 DOM상 body 아래지만 React 트리로는 행의 자식이라 클릭이 행까지 올라간다.
     // 그대로 두면 리스트를 지운 직후 그 삭제된 id를 선택해 빈 화면이 남는다.
     expect(setSelectedList).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * TickTick 배치로 옮기며 생긴 오버레이 3형제. 전부 "트리거는 호출처가 준다"
+ * 규약을 따르므로, 규약이 깨지면 한 번 눌러 열리지 않는 그 버그가 되돌아온다.
+ */
+describe('PriorityMenu', () => {
+  it('깃발을 한 번 누르면 열리고, 높음이 맨 위다', async () => {
+    const user = userEvent.setup()
+    render(<PriorityMenu value="none" onChange={() => {}} trigger={<button type="button">우선순위</button>} />)
+
+    await user.click(screen.getByRole('button', { name: '우선순위' }))
+
+    const items = await screen.findAllByRole('menuitem')
+    // PRIORITY_OPTIONS는 없음부터라 뒤집어 쓴다. 목록·필터와 같은 방향이어야 한다.
+    expect(items.map((i) => i.textContent)).toEqual(['높음', '중간', '낮음', '없음'])
+  })
+
+  it('고르면 그 값으로 알린다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<PriorityMenu value="none" onChange={onChange} trigger={<button type="button">우선순위</button>} />)
+
+    await user.click(screen.getByRole('button', { name: '우선순위' }))
+    await user.click(await screen.findByRole('menuitem', { name: '높음' }))
+
+    expect(onChange).toHaveBeenCalledWith('high')
+  })
+})
+
+describe('TagPicker', () => {
+  beforeEach(() => {
+    useStore.setState({
+      tasks: [{ tags: ['출시', '버그'] }, { tags: ['출시', '문서'] }] as never
+    })
+  })
+
+  it('(+)를 한 번 누르면 입력과 함께 이미 쓰던 태그가 뜬다', async () => {
+    const user = userEvent.setup()
+    render(<TagPicker tags={[]} onChange={() => {}} />)
+
+    await user.click(screen.getByRole('button', { name: '태그' }))
+
+    expect(await screen.findByPlaceholderText('태그...')).toBeInTheDocument()
+    // 자동완성의 요점은 오타로 태그가 갈라지는 것을 막는 데 있다.
+    expect(screen.getByRole('button', { name: '출시' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '문서' })).toBeInTheDocument()
+  })
+
+  it('이미 붙은 태그는 제안하지 않는다', async () => {
+    const user = userEvent.setup()
+    render(<TagPicker tags={['출시']} onChange={() => {}} />)
+
+    await user.click(screen.getByRole('button', { name: '태그' }))
+    await screen.findByPlaceholderText('태그...')
+
+    // 칩으로 이미 보이는 것을 목록에 또 내밀면 눌러도 아무 일이 없다.
+    expect(screen.queryByRole('button', { name: '출시' })).toBeNull()
+    expect(screen.getByRole('button', { name: '버그' })).toBeInTheDocument()
+  })
+
+  it('입력한 말로 제안을 좁힌다', async () => {
+    const user = userEvent.setup()
+    render(<TagPicker tags={[]} onChange={() => {}} />)
+
+    await user.click(screen.getByRole('button', { name: '태그' }))
+    await user.type(await screen.findByPlaceholderText('태그...'), '문')
+
+    expect(screen.getByRole('button', { name: '문서' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '버그' })).toBeNull()
+  })
+
+  it('Enter로 새 태그를 더한다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<TagPicker tags={['출시']} onChange={onChange} />)
+
+    await user.click(screen.getByRole('button', { name: '태그' }))
+    await user.type(await screen.findByPlaceholderText('태그...'), '회고{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith(['출시', '회고'])
+  })
+
+  it('이미 있는 태그를 다시 넣어도 늘지 않는다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<TagPicker tags={['출시']} onChange={onChange} />)
+
+    await user.click(screen.getByRole('button', { name: '태그' }))
+    await user.type(await screen.findByPlaceholderText('태그...'), '출시{Enter}')
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('칩의 x로 뗀다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<TagPicker tags={['출시', '버그']} onChange={onChange} />)
+
+    await user.click(screen.getAllByRole('button', { name: '삭제' })[0])
+
+    expect(onChange).toHaveBeenCalledWith(['버그'])
+  })
+})
+
+describe('TaskMoreMenu', () => {
+  it('⋯을 한 번 누르면 이 앱에 실제로 있는 동작만 뜬다', async () => {
+    const user = userEvent.setup()
+    render(
+      <TaskMoreMenu
+        taskId="task-1"
+        title="제목"
+        onAddSubtask={() => {}}
+        onAddTag={() => {}}
+        onAddAttachment={() => {}}
+        trigger={<button type="button">더 보기</button>}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '더 보기' }))
+
+    const items = await screen.findAllByRole('menuitem')
+    expect(items.map((i) => i.textContent)).toEqual([
+      '하위 작업 추가',
+      '태그',
+      '파일 추가',
+      '포커스 시작',
+      '제목 복사',
+      '삭제'
+    ])
+  })
+
+  it('하위 작업 추가는 호출처에 알린다 (숨어 있던 섹션을 꺼내는 건 상세 패널의 일)', async () => {
+    const user = userEvent.setup()
+    const onAddSubtask = vi.fn()
+    render(
+      <TaskMoreMenu
+        taskId="task-1"
+        title="제목"
+        onAddSubtask={onAddSubtask}
+        onAddTag={() => {}}
+        onAddAttachment={() => {}}
+        trigger={<button type="button">더 보기</button>}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '더 보기' }))
+    await user.click(await screen.findByRole('menuitem', { name: '하위 작업 추가' }))
+
+    expect(onAddSubtask).toHaveBeenCalled()
+  })
+
+  it('삭제는 그 할일을 지운다', async () => {
+    const user = userEvent.setup()
+    const removeTask = vi.fn()
+    useStore.setState({ removeTask })
+    render(
+      <TaskMoreMenu
+        taskId="task-1"
+        title="제목"
+        onAddSubtask={() => {}}
+        onAddTag={() => {}}
+        onAddAttachment={() => {}}
+        trigger={<button type="button">더 보기</button>}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '더 보기' }))
+    await user.click(await screen.findByRole('menuitem', { name: '삭제' }))
+
+    expect(removeTask).toHaveBeenCalledWith('task-1')
+  })
+})
+
+describe('DueDatePicker — 접힌 알림·반복', () => {
+  const props = {
+    dueDate: null,
+    dueTime: null,
+    reminderAt: null,
+    recurringPattern: null,
+    isRecurring: false,
+    onChange: () => {},
+    onReminderChange: () => {},
+    onRecurringChange: () => {}
+  }
+
+  it('기한 팝오버 안에서 알림 픽커가 열린다', async () => {
+    const user = userEvent.setup()
+    render(<DueDatePicker {...props} trigger={<button type="button">기한</button>} />)
+
+    await user.click(screen.getByRole('button', { name: '기한' }))
+    // 상단바에서 치웠으므로, 여기서 못 열리면 알림 기능이 통째로 사라진 것이다.
+    await user.click(await screen.findByRole('button', { name: /알림/ }))
+
+    expect(await screen.findByRole('button', { name: '30분 전' })).toBeInTheDocument()
+  })
+
+  it('기한 팝오버 안에서 반복 픽커가 열린다', async () => {
+    const user = userEvent.setup()
+    render(<DueDatePicker {...props} trigger={<button type="button">기한</button>} />)
+
+    await user.click(screen.getByRole('button', { name: '기한' }))
+    await user.click(await screen.findByRole('button', { name: /반복/ }))
+
+    expect(await screen.findByRole('button', { name: '매주' })).toBeInTheDocument()
+  })
+
+  it('빠른 선택은 시각을 건드리지 않는다', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <DueDatePicker
+        {...props}
+        dueTime="09:30"
+        onChange={onChange}
+        trigger={<button type="button">기한</button>}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: '기한' }))
+    await user.click(await screen.findByRole('button', { name: '오늘' }))
+
+    // 날짜만 옮기는 조작이다. 시각까지 날리면 09:30 회의가 조용히 종일 일정이 된다.
+    expect(onChange).toHaveBeenCalledWith({ dueDate: expect.any(String), dueTime: '09:30' })
   })
 })
 

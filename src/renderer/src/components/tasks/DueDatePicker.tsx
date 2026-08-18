@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { X, Bell, Repeat, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { todayString, tomorrowString } from '../../utils/date'
-import { shiftIsoByDays } from '../../utils/recurrence'
+import { formatRecurringPattern, shiftIsoByDays } from '../../utils/recurrence'
+import { ReminderPicker } from './ReminderPicker'
+import { RecurringPicker } from './RecurringPicker'
 
 /**
  * 이번 주 토요일. 오늘이 토/일이면 다음 주 토요일을 준다 —
@@ -33,12 +35,22 @@ export function nextMonday(today: string): string {
 export function DueDatePicker({
   dueDate,
   dueTime,
+  reminderAt,
+  recurringPattern,
+  isRecurring,
   onChange,
+  onReminderChange,
+  onRecurringChange,
   trigger
 }: {
   dueDate: string | null
   dueTime: string | null
+  reminderAt: string | null
+  recurringPattern: string | null
+  isRecurring: boolean
   onChange: (next: { dueDate: string | null; dueTime: string | null }) => void
+  onReminderChange: (reminderAt: string | null) => void
+  onRecurringChange: (pattern: string | null) => void
   trigger: ReactNode
 }) {
   const { t } = useTranslation()
@@ -61,6 +73,9 @@ export function DueDatePicker({
           ? 'border border-surface-line text-gray-300 hover:bg-surface-sunken'
           : 'border border-gray-300 text-gray-700 hover:bg-gray-100'
     }`
+  const rowCls = `flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[13px] transition-colors ${
+    isDark ? 'text-gray-200 hover:bg-surface-sunken' : 'text-gray-700 hover:bg-gray-100'
+  }`
   const fieldCls = `h-8 text-[13px] rounded-md px-2 outline-none border ${
     isDark ? 'bg-surface-sunken text-gray-100 border-surface-line' : 'bg-white text-gray-700 border-gray-300'
   }`
@@ -99,6 +114,45 @@ export function DueDatePicker({
             value={dueTime ?? ''}
             onChange={(e) => onChange({ dueDate, dueTime: e.target.value || null })}
             className={`w-[92px] ${fieldCls}`}
+          />
+        </div>
+
+        {/* '언제'에 관한 것은 한곳에 모은다 — 알림·반복이 메타 줄에 따로 있으면
+            기한과 떨어져 의미 그룹이 깨지고 상단바가 붐빈다. 각 행은 기존
+            픽커를 그대로 중첩해 연다(기능 손실 없음). */}
+        <div className={`border-t pt-2 ${isDark ? 'border-surface-line' : 'border-gray-200'}`}>
+          <ReminderPicker
+            dueDate={dueDate}
+            value={reminderAt}
+            onChange={onReminderChange}
+            trigger={
+              <button type="button" className={rowCls}>
+                <span className="flex items-center gap-2">
+                  <Bell size={13} />
+                  {t('reminder.label')}
+                </span>
+                <span className="flex items-center gap-1 text-gray-400">
+                  {reminderAt ? new Date(reminderAt).toLocaleString() : t('common.none')}
+                  <ChevronRight size={13} />
+                </span>
+              </button>
+            }
+          />
+          <RecurringPicker
+            value={recurringPattern}
+            onChange={onRecurringChange}
+            trigger={
+              <button type="button" className={rowCls}>
+                <span className="flex items-center gap-2">
+                  <Repeat size={13} />
+                  {t('recurring.label')}
+                </span>
+                <span className="flex items-center gap-1 text-gray-400">
+                  {(isRecurring && formatRecurringPattern(recurringPattern)) || t('common.none')}
+                  <ChevronRight size={13} />
+                </span>
+              </button>
+            }
           />
         </div>
 

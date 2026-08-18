@@ -171,9 +171,14 @@ export function TaskListView() {
       <div
         className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}
       >
-        <h1 className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>{listName}</h1>
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        {/* 상세 패널을 넓히면 이 칸이 좁아진다. 예전엔 제목만 줄어들 수 있어서
+            '전체'가 '전/체' 두 줄로 깨졌다 — 폭이 모자라면 검색창이 먼저 양보하고
+            (6rem까지), 그래도 모자랄 때만 제목을 잘라 보인다. */}
+        <h1 className={`min-w-0 truncate text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>
+          {listName}
+        </h1>
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="relative w-48 min-w-[6rem]">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
@@ -182,7 +187,7 @@ export function TaskListView() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('task.search')}
-              className={`text-sm rounded-lg pl-8 pr-3 py-1.5 outline-none border focus:border-primary-500 w-48 ${
+              className={`text-sm rounded-lg pl-8 pr-3 py-1.5 outline-none border focus:border-primary-500 w-full ${
                 isDark
                   ? 'bg-gray-800 text-gray-300 border-gray-700 placeholder-gray-600'
                   : 'bg-gray-100 text-gray-700 border-gray-300 placeholder-gray-400'
