@@ -62,7 +62,14 @@ export type ActivateFailure =
   | 'saveFailed'
   | 'incomplete'
   | ClientError
-export type DeactivateFailure = 'nothing' | 'noDevice' | 'deactivationLimit' | 'refused' | 'network'
+export type DeactivateFailure =
+  | 'nothing'
+  | 'noDevice'
+  | 'deactivationLimit'
+  | 'refused'
+  /** 서버는 슬롯을 풀었는데 로컬에서 못 지웠다 — 재시작하면 옛 토큰이 되살아난다. */
+  | 'saveFailed'
+  | 'network'
 
 /**
  * 어느 화면에서 구매 페이지로 갔는지. 나중에는 알아낼 방법이 없다.
@@ -100,6 +107,15 @@ export function recoverUrl(): string {
 export function asPurchaseSource(value: unknown): PurchaseSource {
   return PURCHASE_SOURCES.find((s) => s === value) ?? 'settings'
 }
+
+/**
+ * 잠긴 채널이 렌더러에 돌려주는 거절.
+ *
+ * `undefined`를 돌려주면 호출한 쪽이 성공으로 읽고 화면에만 존재하는 유령 편집이
+ * 남는다. 거절은 거절처럼 생겨야 하고, 렌더러가 "잠김"과 "핸들러가 터짐"을
+ * 구분할 수 있어야 하므로 양쪽이 아는 자리에 둔다.
+ */
+export const LICENSE_REQUIRED = 'license_required'
 
 /** 아직 메인에서 답이 오기 전 렌더러가 들고 있는 값. 잠그지 않는 쪽으로 기운다. */
 export const UNKNOWN_LICENSE_STATE: PublicLicenseState = {

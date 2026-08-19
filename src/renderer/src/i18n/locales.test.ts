@@ -184,6 +184,7 @@ describe('라이선스 실패 코드 문구', () => {
     noDevice: true,
     deactivationLimit: true,
     refused: true,
+    saveFailed: true,
     network: true
   }
 
@@ -202,11 +203,8 @@ describe('라이선스 실패 코드 문구', () => {
     expect(Object.keys(errorTable(ko as Json)).filter((k) => !codes.has(k))).toEqual([])
   })
 
-  it('성공 문구도 양쪽에 있다', () => {
-    for (const done of ['activated', 'deactivated'] as const) {
-      for (const locale of [ko, en]) {
-        expect(typeof (locale as unknown as Json).license?.[done as never]).toBe('string')
-      }
-    }
+  it('성공 문구도 있다', () => {
+    // en 쪽은 위의 "ko와 en의 키 집합이 완전히 같다"가 이미 보장한다.
+    expect(['license.activated', 'license.deactivated'].filter((k) => !koKeys.has(k))).toEqual([])
   })
 })

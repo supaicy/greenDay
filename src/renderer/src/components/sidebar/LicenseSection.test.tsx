@@ -163,17 +163,32 @@ describe('공유된 활성화 흐름', () => {
     expect(screen.queryByText(i18n.t('license.error.unknownKey'))).not.toBeInTheDocument()
   })
 
-  it('활성화 중에는 해제도 같이 잠긴다', async () => {
-    // 두 요청이 동시에 나가면 서버 슬롯 상태와 로컬이 어긋난다.
+  it('해제 중에는 버튼이 잠긴다', async () => {
     let land: (v: string | null) => void = () => {}
     mountWith(
       { enforced: true, status: 'licensed', maskedKey: MASKED },
       { licenseDeactivate: vi.fn(() => new Promise((resolve) => (land = resolve))) }
     )
     await screen.findByText(i18n.t('license.licensed'))
-    const release = screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivate')) })
-    await userEvent.click(release)
+    await userEvent.click(screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivate')) }))
     expect(screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivating')) })).toBeDisabled()
+    land(null)
+  })
+
+  it('활성화 중에는 해제도 같이 잠긴다', async () => {
+    // 두 요청이 동시에 나가면 서버 슬롯 상태와 로컬이 어긋난다. 전에는 이 이름의
+    // 테스트가 **해제 버튼을 눌러** 해제가 잠기는 것만 봤다 — 이름이 말하는
+    // 교차 잠금은 시험하지 않았고, 실제로 `activation.busy` 항을 지워도 통과했다.
+    let land: (v: string | null) => void = () => {}
+    mountWith(
+      { enforced: true, status: 'trialExpired', maskedKey: MASKED },
+      { licenseActivate: vi.fn(() => new Promise((resolve) => (land = resolve))) }
+    )
+    const field = await screen.findByLabelText(i18n.t('license.keyLabel'))
+    await userEvent.type(field, 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
+    await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
+
+    expect(screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivate')) })).toBeDisabled()
     land(null)
   })
 })

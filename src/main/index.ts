@@ -1,10 +1,11 @@
-import { app, shell, BrowserWindow, globalShortcut, ipcMain, Notification } from 'electron'
+import { app, shell, BrowserWindow, globalShortcut, Notification } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import { initDatabase, closeDatabase, getTasks } from './database'
 import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
+import { handle } from './ipc-gate'
 import { setUiLanguage, uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
 import { applyAppMenu } from './app-menu'
@@ -116,7 +117,7 @@ function bootstrap(): void {
     applyAppMenu(is.dev)
     setupIpcHandlers()
 
-    ipcMain.handle('set-language', (_, language: unknown) => setUiLanguage(language))
+    handle('set-language', 'free', (_, language: unknown) => setUiLanguage(language))
     createWindow()
 
     // **창을 띄운 뒤에** 초기화한다. 토큰이 있는 설치에서는 여기서 기기 id를
@@ -183,11 +184,13 @@ function bootstrap(): void {
     }
 
     // 업데이트 다운로드 / 설치 IPC. 스토어 빌드에서는 no-op — 스토어가 업데이트 담당.
-    ipcMain.handle('download-update', () => {
+    // 업데이트는 무료다 — 잠긴 사람도 최신 버전을 받을 수 있어야 하고,
+    // 구버전에 묶어 두는 것은 아무에게도 이득이 아니다.
+    handle('download-update', 'free', () => {
       if (!currentCapabilities().canSelfUpdate) return
       return autoUpdater.downloadUpdate()
     })
-    ipcMain.handle('install-update', () => {
+    handle('install-update', 'free', () => {
       if (!currentCapabilities().canSelfUpdate) return
       autoUpdater.quitAndInstall(false, true)
     })

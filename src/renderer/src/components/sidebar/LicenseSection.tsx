@@ -47,16 +47,20 @@ export function LicenseSection({
   const busy = activation.busy || releasing
   const error = activation.error ?? releaseError
 
-  async function activate(): Promise<void> {
+  /** 새 시도를 시작하기 전에 지난 결과를 치운다. */
+  function resetOutcome(): void {
     setReleaseError(null)
     setDone(null)
+  }
+
+  async function activate(): Promise<void> {
+    resetOutcome()
     if (await activation.activate()) setDone('activated')
   }
 
   async function deactivate(): Promise<void> {
     setReleasing(true)
-    setReleaseError(null)
-    setDone(null)
+    resetOutcome()
     const failure = await window.api.licenseDeactivate()
     setReleasing(false)
     if (failure) return setReleaseError(failure)
@@ -97,7 +101,7 @@ export function LicenseSection({
             <button
               type="button"
               onClick={() => void activate()}
-              disabled={!activation.canSubmit || releasing}
+              disabled={busy || !activation.canSubmit}
               className={`${button} ${isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'}`}
             >
               {activation.busy ? (

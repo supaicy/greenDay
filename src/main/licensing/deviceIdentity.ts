@@ -56,7 +56,7 @@ function readRawId(probes: DeviceProbes): string | null {
       )
     case 'win32':
       return match(
-        probes.runCommand(`${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\reg.exe`, [
+        probes.runCommand(`${windowsRoot()}\\System32\\reg.exe`, [
           'query',
           'HKLM\\SOFTWARE\\Microsoft\\Cryptography',
           '/v',
@@ -80,6 +80,20 @@ function readRawId(probes: DeviceProbes): string | null {
 function match(output: string | null, re: RegExp): string | null {
   if (!output) return null
   return nonEmpty(re.exec(output)?.[1] ?? null)
+}
+
+/**
+ * Windows 디렉터리. `SystemRoot`를 **그대로 믿지 않는다.**
+ *
+ * 절대 경로로 부르는 이유가 "PATH에 놓인 가짜를 막는 것"인데, 뿌리를 환경변수에서
+ * 가져오면 그 변수를 바꿔 같은 일을 할 수 있다 — `SystemRoot=D:\\fake` 로 띄우고
+ * `D:\\fake\\System32\\reg.exe` 를 놓으면 기기 해시를 원하는 값으로 만든다.
+ * 드라이브 문자 + `\Windows` 모양일 때만 받아들이면, 그 우회의 비용이
+ * "환경변수 하나"에서 "시스템 디렉터리에 쓰기"로 올라간다.
+ */
+function windowsRoot(): string {
+  const root = process.env.SystemRoot
+  return root && /^[A-Za-z]:\\Windows$/i.test(root) ? root : 'C:\\Windows'
 }
 
 function nonEmpty(value: string | null): string | null {

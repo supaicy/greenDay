@@ -16,6 +16,7 @@
  */
 
 import { Menu, type MenuItemConstructorOptions } from 'electron'
+import { uiStrings } from './ui-language'
 
 /**
  * `viewMenu` 역할을 그대로 쓰지 않고 손으로 짓는다 — 그 역할 안에
@@ -46,9 +47,10 @@ export function buildAppMenu(isDev: boolean): Menu | null {
     ...(isMac ? [{ role: 'appMenu' as const }] : []),
     { role: 'fileMenu' },
     { role: 'editMenu' },
-    // 역할 이름은 OS가 현지화한다. 이 라벨만 우리 몫인데, 두 언어 모두에서
-    // 통하는 단어라 언어 설정을 기다리지 않는다(메뉴는 창보다 먼저 선다).
-    { label: 'View', submenu: viewSubmenu() },
+    // 역할 이름은 OS가 현지화한다. 이 라벨만 우리 몫이라 `main-strings.ts`에서
+    // 가져온다 — 메인이 직접 띄우는 문구가 두 주소를 갖지 않게. (`uiStrings()`는
+    // 동기이고 기본이 'ko'라, 메뉴가 창보다 먼저 서는 것과 무관하게 부를 수 있다.)
+    { label: uiStrings().menuView, submenu: viewSubmenu() },
     { role: 'windowMenu' }
   ]
   return Menu.buildFromTemplate(template)

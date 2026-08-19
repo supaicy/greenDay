@@ -13,8 +13,6 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] }
 }))
 
-vi.mock('@electron-toolkit/utils', () => ({ is: { get dev() { return false } } }))
-
 vi.mock('../capabilities', async () => {
   const { capabilitiesFor } = await import('../../shared/capabilities')
   return {

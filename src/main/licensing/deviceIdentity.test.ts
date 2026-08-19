@@ -84,6 +84,30 @@ describe('resolveDeviceId — Windows', () => {
     expect(id).toBe(hashDeviceId('3b1f9d24-6a70-4c8e-9f21-0e5d7c48ab93'))
   })
 
+  it('SystemRoot를 그대로 믿지 않는다', () => {
+    // 절대 경로로 부르는 이유가 "PATH에 놓인 가짜를 막는 것"인데, 뿌리를
+    // 환경변수에서 가져오면 그 변수를 바꿔 똑같이 할 수 있다.
+    const before = process.env.SystemRoot
+    try {
+      process.env.SystemRoot = 'D:\\fake'
+      const commands: string[] = []
+      resolveDeviceId(
+        probes({
+          platform: 'win32',
+          runCommand: (cmd) => {
+            commands.push(cmd)
+            return REG_OUT
+          }
+        })
+      )
+      expect(commands[0]).not.toContain('fake')
+      expect(commands[0]).toMatch(/^C:\\Windows\\System32\\reg\.exe$/i)
+    } finally {
+      if (before === undefined) delete process.env.SystemRoot
+      else process.env.SystemRoot = before
+    }
+  })
+
   it('절대 경로로 부른다 — CreateProcess는 앱 폴더를 PATH보다 먼저 본다', () => {
     const commands: string[] = []
     resolveDeviceId(

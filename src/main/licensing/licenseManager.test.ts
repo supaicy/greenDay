@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createLicenseManager, type LicenseManager, type LicenseState } from './licenseManager'
-import { licenseHash, PRODUCT_SLUG } from './activationToken'
+import { licenseHash } from './activationToken'
+import { PRODUCT_SLUG } from '../../shared/license'
 import { GRACE_DURATION_MS, TRIAL_DURATION_MS } from './trialWindow'
 import type { ClientResult, LicenseClient } from './licenseClient'
 import type { LicenseRecord } from './licenseStore'
@@ -137,7 +138,11 @@ function harness(
       current = ms
     },
     fireDueTimers: () => {
-      const due = timers.splice(0, timers.length)
+      // **도래한 것만** 깨운다. 이름 그대로 동작하지 않으면, 아직 오지 않은
+      // 마감을 앞당겨 깨워 놓고 "그 시각에 이렇게 된다"고 단언하게 된다 —
+      // 콜백이 단조 시계 바닥을 마감까지 끌어올리므로 상태도 함께 앞서 간다.
+      const due = timers.filter((t) => t.atMs <= current)
+      for (const t of due) timers.splice(timers.indexOf(t), 1)
       for (const t of due) t.fire()
     }
   }
@@ -620,6 +625,18 @@ describe('deactivate', () => {
       expect(h.record.key).toBeNull()
       expect(h.record.token).toBeNull()
     }
+  })
+
+  it('서버는 풀었는데 로컬을 못 지우면 성공이라 답하지 않는다', async () => {
+    // 슬롯은 이미 서버에서 풀렸다. 여기서 성공이라 답하면 사용자는 다른 기기에
+    // 키를 넣고, 이 기기는 재시작 때 옛 토큰을 다시 읽어 **같은 키가 두 기기에서**
+    // 활성인 상태가 된다. 활성화에만 걸어 뒀던 확인이다.
+    const h = harness({
+      storeWritable: false,
+      record: { key: KEY, token: token() },
+      client: { deactivate: async () => ({ ok: true, value: undefined }) }
+    })
+    expect(await h.manager.deactivate()).toBe('saveFailed')
   })
 
   it('해제해도 트라이얼이 새로 열리지는 않는다', async () => {

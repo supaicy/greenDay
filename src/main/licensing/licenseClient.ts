@@ -110,8 +110,6 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
           ? { ok: true, value: undefined }
           : { ok: false, error: 'network' }
       }
-      // 다른 엔드포인트에서와 뜻이 다른 유일한 상태 코드다.
-      if (reply.status === 429) return { ok: false, error: 'deactivationLimit' }
       return { ok: false, error: classify(reply.status, reply.text) }
     }
   }
@@ -129,21 +127,21 @@ function classify(status: number, text: string): ClientError {
   const named = decode(text)?.error
   const name = typeof named === 'string' ? named : null
 
-  switch (status) {
-    case 400:
-      return name === null ? 'network' : 'malformedKey'
-    case 404:
-      if (name === null) return 'network'
-      if (name === 'revoked') return 'revoked'
-      if (name === 'device_not_active') return 'deviceNotActive'
-      return 'unknownKey'
-    // 409는 봉투가 필요 없다. 어떤 프록시도 마음에 안 드는 POST에 충돌을
-    // 지어내지 않고, 기기 한도 판정만이 이걸 만든다.
-    case 409:
-      return 'deviceLimit'
-    default:
-      return 'network'
+  // **서버가 문서로 약속한 코드만** 판정으로 친다. 봉투가 있다는 것만으로는
+  // 부족했다 — CDN이나 API 게이트웨이가 `404 {"error":"route_not_found"}`를
+  // 돌려주면 그게 `unknownKey`가 되어, 재검증이 돈 낸 사람의 토큰을 지우고
+  // 그 뒤로는 토큰이 없어 재검증조차 멈춘다. 모르는 코드는 서버가 아니다.
+  const known: Partial<Record<number, Record<string, ClientError>>> = {
+    400: { malformed_key: 'malformedKey', missing_fields: 'malformedKey', malformed_device: 'malformedKey' },
+    404: { unknown_key: 'unknownKey', revoked: 'revoked', device_not_active: 'deviceNotActive' },
+    409: { device_limit: 'deviceLimit' },
+    429: { deactivation_limit: 'deactivationLimit' }
   }
+  if (name !== null) {
+    const mapped = known[status]?.[name]
+    if (mapped) return mapped
+  }
+  return 'network'
 }
 
 function decode(text: string): Record<string, unknown> | null {

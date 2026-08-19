@@ -13,18 +13,22 @@ interface MainStrings {
   /** 권한 프롬프트를 유도하려고 띄우는 확인용 알림. */
   permProbeTitle: string
   permProbeBody: string
+  /** 앱 메뉴의 보기 항목. 나머지 항목은 Electron의 role이 OS 언어로 현지화한다. */
+  menuView: string
 }
 
 const STRINGS: Record<MainLanguage, MainStrings> = {
   ko: {
     reminder: '리마인더',
     permProbeTitle: 'Greenday 알림 확인',
-    permProbeBody: '이 배너가 보이면 리마인더도 이렇게 도착합니다.'
+    permProbeBody: '이 배너가 보이면 리마인더도 이렇게 도착합니다.',
+    menuView: '보기'
   },
   en: {
     reminder: 'Reminder',
     permProbeTitle: 'Greenday notification check',
-    permProbeBody: 'If you can see this banner, reminders will arrive the same way.'
+    permProbeBody: 'If you can see this banner, reminders will arrive the same way.',
+    menuView: 'View'
   }
 }
 

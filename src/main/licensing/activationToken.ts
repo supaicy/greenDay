@@ -20,7 +20,6 @@ import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto
  * 체크아웃은 제품 X를 팔고 앱은 X의 토큰을 거절하는데, 증상은 "결제했는데
  * 활성화가 안 된다"뿐이다.
  */
-export { PRODUCT_SLUG } from '../../shared/license'
 import { PRODUCT_SLUG } from '../../shared/license'
 
 /**

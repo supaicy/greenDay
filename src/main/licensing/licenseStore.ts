@@ -14,7 +14,7 @@
  * 우회에 의도적인 노력이 들게 하는 것까지다.
  */
 
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs'
 
 export interface LicenseRecord {
   /** 사용자가 입력한 키. 재검증에 다시 보낸다. */
@@ -53,7 +53,17 @@ export function createFileStore(filePath: string): LicenseStore {
      */
     write: (record) => {
       try {
-        writeFileSync(tempPath, JSON.stringify(record, null, 2), 'utf-8')
+        // **fsync까지 하고 rename한다.** rename은 원자적 *교체*이지 내구성 있는
+        // *커밋*이 아니다 — 임시 파일의 내용이 아직 페이지 캐시에만 있으면,
+        // 활성화가 성공이라 답한 뒤 전원이 끊겼을 때 빈 파일이 제자리에 남는다.
+        // 실행당 한두 번뿐인 쓰기라 이 비용은 값이 있다.
+        const fd = openSync(tempPath, 'w')
+        try {
+          writeSync(fd, JSON.stringify(record, null, 2), null, 'utf-8')
+          fsyncSync(fd)
+        } finally {
+          closeSync(fd)
+        }
         renameSync(tempPath, filePath)
         return true
       } catch {

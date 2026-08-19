@@ -95,8 +95,14 @@ const REVALIDATE_POLL_MS = 6 * 60 * 60 * 1000
 const RETRY_BASE_MS = 60_000
 const RETRY_MAX_MS = 60 * 60 * 1000
 
-/** 한 번의 재검증이 무엇으로 끝났는가 — 다음 예약 간격이 여기서 갈린다. */
-type RevalidateOutcome = 'notNeeded' | 'refreshed' | 'unreachable' | 'refused'
+/**
+ * 한 번의 재검증이 무엇으로 끝났는가 — 다음 예약 간격이 여기서 갈린다.
+ *
+ * 두 갈래뿐이다. 한때 `refreshed`·`refused`·`notNeeded`를 따로 뒀는데 셋이
+ * 같은 길로 갔다 — 이름이 실제로 없는 4단 정책을 암시했다. 재시도하지 않는
+ * 이유가 "거부였다"가 아니라 "서버가 답했다"라는 것도 이 이름이 말해 준다.
+ */
+type RevalidateOutcome = 'answered' | 'unreachable'
 
 interface VerifiedToken {
   payload: TokenPayload
@@ -109,6 +115,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   /** 기기 id는 필요한 순간에만 읽는다 — deps.device의 주석 참고. */
   const deviceId = (): string | null => deps.device()
   let cancelTimer: (() => void) | null = null
+  /** 지금 걸려 있는 마감. 같은 마감을 다시 걸어 타이머를 굶기지 않기 위한 것. */
+  let armedDeadlineMs: number | null = null
   /**
    * `dispose()` 이후인가.
    *
@@ -123,8 +131,6 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   let unreachableStreak = 0
   /** 이 프로세스가 도출한 트라이얼 시작. 한 번 정해지면 안 움직인다 — resolveTrialStart 참고. */
   let trialStartedAt: number | null = null
-  /** `resolveTrialStart`가 레코드를 건드렸는가 — 플러시는 `evaluateTrial`이 한 번만 한다. */
-  let trialStartDirty = false
 
   // ── 시계 ───────────────────────────────────────────────────────────────────
 
@@ -266,10 +272,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   function evaluateTrial(): LicenseState {
     if (!deps.enforced) return { status: 'unlicensed' }
     // 두 갱신을 먼저 모으고 디스크는 한 번만 만진다.
-    const dirty = touchClock()
+    const clockMoved = touchClock()
+    const before = record.trialStartMs
     const startedAt = resolveTrialStart()
-    if (dirty || trialStartDirty) persist()
-    trialStartDirty = false
+    if (clockMoved || record.trialStartMs !== before) persist()
     return isTrialOpen(startedAt, clockSafeNow())
       ? { status: 'trial', untilMs: trialEndsAt(startedAt) }
       : { status: 'trialExpired' }
@@ -304,7 +310,6 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     if (recorded === null) {
       trialStartedAt = clockSafeNow()
       record.trialStartMs = trialStartedAt
-      trialStartDirty = true
       return trialStartedAt
     }
     // 과거로 당긴 시작일은 트라이얼을 일찍 끝낼 뿐이라 바닥이 필요 없다.
@@ -314,7 +319,6 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     }
     if (recorded - systemNow <= TRIAL_DURATION_MS) {
       record.trialStartMs = systemNow
-      trialStartDirty = true
     }
     trialStartedAt = systemNow
     return trialStartedAt
@@ -325,6 +329,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   function cancelClose(): void {
     cancelTimer?.()
     cancelTimer = null
+    armedDeadlineMs = null
   }
 
   /**
@@ -338,14 +343,27 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 즉시 깨어 `settle`을 무한히 다시 돌린다. 그래서 조각으로 나눠 건다.
    */
   function scheduleClose(deadlineMs: number): void {
-    cancelClose()
     if (disposed) return
-    const remaining = deadlineMs - deps.now()
+    // **이미 이 마감을 기다리고 있으면 건드리지 않는다.**
+    //
+    // 이게 없으면 6시간 폴이 `settle()` → `apply()`를 돌 때마다 타이머를 취소하고
+    // 다시 걸어, 6시간보다 먼 마감은 **영영 발화하지 못한다.** 그 타이머가 단조
+    // 시계 방어의 전부다(깨어났다는 사실 자체가 시간이 흘렀다는 증거) — 굶기면
+    // 벽시계를 묶어 둔 사용자에게 트라이얼이 안 닫힌다. 리뷰에서 실증했다.
+    if (armedDeadlineMs === deadlineMs && cancelTimer) return
+    cancelClose()
+    // 남은 시간을 **래칫으로** 잰다. `deps.now()`(생 벽시계)로 재면, 시계를 묶어
+    // 두거나 되돌린 사용자에게 `remaining`이 줄지 않아 조각이 깰 때마다 또 한
+    // 조각(최대 24.8일)을 다시 걸고, 마감이 영원히 뒤로 물러난다. 바닥은 조각이
+    // 깰 때마다 단조로 올라가므로, 그걸 기준으로 재야 실제로 줄어든다.
+    const remaining = deadlineMs - clockSafeNow()
     if (remaining <= 0) return
     const wait = Math.min(remaining, MAX_TIMEOUT_MS)
     const reachedMs = clockSafeNow() + wait
+    armedDeadlineMs = deadlineMs
     cancelTimer = deps.setTimer(wait, () => {
       cancelTimer = null
+      armedDeadlineMs = null
       // 자고 났다는 것은 벽시계에 물어볼 수 없는 사실을 안다는 뜻이다:
       // setTimeout은 단조 시계로 재므로 날짜를 아무리 고쳐도 이 줄이 돌았다면
       // 그만큼의 시간이 실제로 흘렀다. 기록해 두면 되돌리기가 막힌다 —
@@ -423,8 +441,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 요청이 나가 있는 동안 다른 키가 도착했으면, 아무도 놓아달라고 하지 않은
     // 라이선스를 버리는 셈이 된다.
     if (record.key !== key) return null
-    clearLocalLicense(false)
-    return null
+    // **디스크에서 지우지 못했으면 성공이라 답하지 않는다.** 서버 슬롯은 이미
+    // 풀렸는데 옛 토큰이 파일에 남아 있으면, 재시작 때 그게 다시 읽히면서 같은
+    // 키가 다른 기기에서도 활성인 상태가 된다. 활성화에만 걸어 뒀던 확인이다.
+    return clearLocalLicense(false) ? null : 'saveFailed'
   }
 
   /**
@@ -442,10 +462,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 이 기기에 키가 없으니 움직일 수 있는 것은 트라이얼뿐이다. 마감을 걸친
       // 실행이라면 다음 실행을 기다리지 말고 여기서 창을 닫는다.
       apply(evaluateTrial())
-      return 'notNeeded'
+      return 'answered'
     }
     const device = deviceId()
-    if (!device) return 'notNeeded'
+    if (!device) return 'answered'
 
     if (touchClock()) persist()
     const token = settle()
@@ -457,7 +477,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     if (deps.now() > token.payload.iat * 1000 + lifetimeMs / 2) {
       return refresh(key, device)
     }
-    return 'notNeeded'
+    return 'answered'
   }
 
   /**
@@ -470,16 +490,14 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   function armNextRevalidation(outcome: RevalidateOutcome): void {
     cancelRevalidateTimer()
     if (disposed) return
-    if (outcome === 'unreachable') {
-      unreachableStreak += 1
-    } else {
-      unreachableStreak = 0
-    }
+    unreachableStreak = outcome === 'unreachable' ? unreachableStreak + 1 : 0
+    // 상한을 씌우지 않는다 — 두 값 모두 `MAX_TIMEOUT_MS`의 1/100 이하인 상수라
+    // 클램프가 발화할 수 없다. `scheduleClose` 쪽은 마감이 토큰에서 오므로 진짜다.
     const delay =
-      outcome === 'unreachable'
-        ? Math.min(RETRY_BASE_MS * 2 ** (unreachableStreak - 1), RETRY_MAX_MS)
-        : REVALIDATE_POLL_MS
-    cancelRevalidate = deps.setTimer(Math.min(delay, MAX_TIMEOUT_MS), () => {
+      unreachableStreak === 0
+        ? REVALIDATE_POLL_MS
+        : Math.min(RETRY_BASE_MS * 2 ** (unreachableStreak - 1), RETRY_MAX_MS)
+    cancelRevalidate = deps.setTimer(delay, () => {
       cancelRevalidate = null
       void revalidateIfNeeded()
     })
@@ -499,29 +517,29 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 다른 기기가 가져갈 수 있는 슬롯 위에서 라이선스가 되살아난다. 기기
       // 한도가 느린 응답 하나로 무너지는 것이다. 다른 키로 재활성화한 경우도
       // 같은 검사가 막는다 — 이 답은 물어본 그 키에 대한 것이다.
-      if (record.key !== key) return 'notNeeded'
+      if (record.key !== key) return 'answered'
       const verified = verifyToken(result.value.token, {
         publicKey: deps.publicKey,
         device,
         key,
         nowMs: deps.now()
       })
-      if (!verified.ok) return 'notNeeded'
+      if (!verified.ok) return 'answered'
       record.token = result.value.token
       anchorClockToServerTime()
       persist()
       settle()
-      return 'refreshed'
+      return 'answered'
     }
 
     // 서버에 못 닿은 것은 판정이 아니다. 검증된 토큰과 그것이 얻은 유예가
     // 그대로 선다 — 이걸 거부처럼 다루면 기차 터널 하나가 라이선스를 지운다.
     if (!isServerRefusal(result.error)) return 'unreachable'
-    if (record.key !== key) return 'refused'
+    if (record.key !== key) return 'answered'
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
     // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
     clearLocalLicense(true)
-    return 'refused'
+    return 'answered'
   }
 
   /**
@@ -530,15 +548,16 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 호출자마다 따로 지우면, 나중에 필드가 하나 늘었을 때 한쪽에서만 기억되고
    * 다른 쪽에서 잊힌다.
    */
-  function clearLocalLicense(keepKey: boolean): void {
+  function clearLocalLicense(keepKey: boolean): boolean {
     // 토큰을 버리면 유예도 같이 사라진다 — 마감이 토큰에서 계산되므로 잊어야 할
     // 두 번째 자격증명이 없다.
     record.token = null
     if (!keepKey) record.key = null
-    persist()
+    const committed = persist()
     // 트라이얼이 뭐라고 하든 그리로 돌아간다. 2주 전에 설치한 사람에게는
     // "만료"다. 기록된 시작일이 판정하므로 이걸로 새 창을 만들 수는 없다.
     settle()
+    return committed
   }
 
   function allowsPaidFeatures(): boolean {

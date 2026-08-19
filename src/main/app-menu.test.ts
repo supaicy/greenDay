@@ -41,6 +41,13 @@ describe('앱 메뉴', () => {
     expect(found).toContain('togglefullscreen')
   })
 
+  it('보기 메뉴 라벨은 main-strings에서 온다', async () => {
+    // 하드코딩하면 다음 사람이 "환경설정…"을 넣을 때도 하드코딩하고,
+    // main-strings.ts가 막으려던 분산이 메뉴를 통해 돌아온다.
+    const { mainStrings } = await import('../shared/main-strings')
+    expect(entries(buildAppMenu(false))).toContain(mainStrings('ko').menuView)
+  })
+
   it('개발 빌드는 기본 메뉴를 그대로 쓴다', () => {
     // DevTools 없이 개발할 수 없고, 여기서 막으면 CDP로 붙는 QA 하네스만 불편해진다.
     expect(buildAppMenu(true)).toBeNull()

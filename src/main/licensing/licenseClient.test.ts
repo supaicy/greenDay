@@ -52,7 +52,7 @@ describe('activate — 요청', () => {
 
 describe('응답 분류 — 서버가 거부한 것', () => {
   const cases: [string, Reply, ClientError][] = [
-    ['409는 봉투 없이도 기기 한도다', { status: 409, body: '' }, 'deviceLimit'],
+    ['409 + device_limit', json(409, { error: 'device_limit' }), 'deviceLimit'],
     ['404 + revoked', json(404, { error: 'revoked' }), 'revoked'],
     ['404 + unknown_key', json(404, { error: 'unknown_key' }), 'unknownKey']
   ]
@@ -79,6 +79,22 @@ describe('응답 분류 — 서버가 말한 것이 아닌 것', () => {
   it('봉투 없는 400도 판정이 아니다', async () => {
     const { client } = clientReplying({ status: 400, body: 'Bad Request' })
     expect(await client.activate(KEY, DEVICE, null)).toEqual({ ok: false, error: 'network' })
+  })
+
+  it('모르는 오류 코드는 서버가 말한 것이 아니다', async () => {
+    // 봉투가 있다는 것만으로는 부족하다 — CDN이나 API 게이트웨이가
+    // `404 {"error":"route_not_found"}`를 돌려주면, 그게 unknownKey가 되어
+    // 재검증이 돈 낸 사람의 토큰을 지우고 그 뒤로는 재검증조차 멈춘다.
+    for (const reply of [
+      json(404, { error: 'route_not_found' }),
+      json(404, { error: 'not_found' }),
+      json(409, { error: 'conflict' }),
+      { status: 409, body: '' },
+      json(400, { error: 'bad_request' })
+    ]) {
+      const { client } = clientReplying(reply)
+      expect(await client.activate(KEY, DEVICE, null)).toEqual({ ok: false, error: 'network' })
+    }
   })
 
   it('봉투 있는 400은 형식 오류지만 라이선스를 닫지는 않는다', async () => {
@@ -123,7 +139,7 @@ describe('분류는 엔드포인트마다 같다', () => {
   // 조용히 라이선스를 닫고, deactivate가 409를 기기 한도로 읽으면 슬롯을 풀려는
   // 사람에게 "기기가 다 찼습니다"라고 말한다.
   const cases: [Reply, ClientError][] = [
-    [{ status: 409, body: '' }, 'deviceLimit'],
+    [json(409, { error: 'device_limit' }), 'deviceLimit'],
     [json(404, { error: 'revoked' }), 'revoked'],
     [{ status: 404, body: '<!DOCTYPE html>' }, 'network'],
     [json(500, { error: 'internal' }), 'network']
@@ -186,6 +202,10 @@ describe('deactivate', () => {
     const { client } = clientReplying(json(429, { error: 'deactivation_limit' }))
     expect(await client.deactivate(KEY, DEVICE)).toEqual({ ok: false, error: 'deactivationLimit' })
     expect(isServerRefusal('deactivationLimit')).toBe(false)
+
+    // 봉투 없는 429는 CDN의 속도 제한일 수 있다 — 판정이 아니다.
+    const { client: bare } = clientReplying({ status: 429, body: 'Too Many Requests' })
+    expect(await bare.deactivate(KEY, DEVICE)).toEqual({ ok: false, error: 'network' })
   })
 
   it('이미 해제된 기기는 device_not_active', async () => {

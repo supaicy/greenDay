@@ -71,7 +71,7 @@ export function initLicensing(): void {
     store: createFileStore(join(app.getPath('userData'), 'license.json')),
     publicKey,
     device: currentDeviceId,
-    deviceName: safeHostname(),
+    deviceName: deviceLabel(),
     enforced: enforcementActive(),
     now: () => Date.now(),
     setTimer: (ms, fn) => {
@@ -101,7 +101,7 @@ export function publicLicenseState(): PublicLicenseState {
     allowsPaidFeatures: manager.allowsPaidFeatures(),
     enforced: enforcementActive(),
     maskedKey: manager.getMaskedKey(),
-    deviceName: safeHostname()
+    deviceName: deviceLabel()
   }
 }
 
@@ -117,6 +117,7 @@ export function disposeLicensing(): void {
   manager?.dispose()
   manager = null
   cachedDeviceId = null
+  cachedDeviceLabel = undefined
 }
 
 // ── 기기 식별 ────────────────────────────────────────────────────────────────
@@ -183,11 +184,21 @@ function persistedFallbackId(): string {
   return fresh
 }
 
-/** 관리자 화면 표시용. 실패해도 활성화를 막지는 않는다. */
-function safeHostname(): string | null {
-  try {
-    return hostname() || null
-  } catch {
-    return null
+/**
+ * 서버로 보내는 기기 이름 — **한 번만 읽어 양쪽이 같은 값을 쓴다.**
+ *
+ * 전에는 활성화에 실리는 값과 화면에 "이게 나갑니다"라고 적는 값이 서로 다른
+ * 읽기였다. 두 시점 사이에 호스트명이 바뀌면(회사 MDM이 이름을 밀어 넣는 일이
+ * 흔하다) 고지가 거짓말이 된다. 고지는 **구성상** 참이어야 한다.
+ */
+let cachedDeviceLabel: string | null | undefined
+function deviceLabel(): string | null {
+  if (cachedDeviceLabel === undefined) {
+    try {
+      cachedDeviceLabel = hostname() || null
+    } catch {
+      cachedDeviceLabel = null
+    }
   }
+  return cachedDeviceLabel
 }

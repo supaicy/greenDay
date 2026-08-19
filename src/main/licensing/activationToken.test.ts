@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import {
-  PRODUCT_SLUG,
-  PRODUCTION_PUBLIC_KEY_BASE64,
-  importRawPublicKey,
-  verifyToken
-} from './activationToken'
+import { PRODUCTION_PUBLIC_KEY_BASE64, importRawPublicKey, verifyToken } from './activationToken'
+import { PRODUCT_SLUG } from '../../shared/license'
 import { importTestKey, makeKeyPair, signTestToken } from './testTokens'
 
 const DEVICE = 'a'.repeat(64)
