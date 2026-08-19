@@ -118,6 +118,32 @@ describe('응답 분류 — 서버가 말한 것이 아닌 것', () => {
   })
 })
 
+describe('분류는 엔드포인트마다 같다', () => {
+  // 지금까지 activate로만 시험했다. validate가 404를 다르게 읽으면 배경 갱신이
+  // 조용히 라이선스를 닫고, deactivate가 409를 기기 한도로 읽으면 슬롯을 풀려는
+  // 사람에게 "기기가 다 찼습니다"라고 말한다.
+  const cases: [Reply, ClientError][] = [
+    [{ status: 409, body: '' }, 'deviceLimit'],
+    [json(404, { error: 'revoked' }), 'revoked'],
+    [{ status: 404, body: '<!DOCTYPE html>' }, 'network'],
+    [json(500, { error: 'internal' }), 'network']
+  ]
+  for (const [reply, expected] of cases) {
+    it(`${reply.status} → ${expected} (activate·validate)`, async () => {
+      const a = clientReplying(reply)
+      expect(await a.client.activate(KEY, DEVICE, null)).toEqual({ ok: false, error: expected })
+      const v = clientReplying(reply)
+      expect(await v.client.validate(KEY, DEVICE)).toEqual({ ok: false, error: expected })
+    })
+  }
+
+  it('기기 이름이 없으면 빈 문자열로 보낸다 — 서버 스키마가 null을 안 받는다', async () => {
+    const { client, calls } = clientReplying(ok(1_800_000_000))
+    await client.activate(KEY, DEVICE, null)
+    expect(calls[0].body).toEqual({ key: KEY, device: DEVICE, deviceName: '' })
+  })
+})
+
 describe('요청 자체', () => {
   it('리다이렉트를 따라가지 않는다 — 본문에 원본 키가 들어 있다', async () => {
     // 307/308은 POST 본문을 그대로 다시 보낸다. 잘못 설정되거나 탈취된 오리진

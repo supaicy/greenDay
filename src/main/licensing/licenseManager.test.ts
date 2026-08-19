@@ -493,6 +493,107 @@ describe('activate', () => {
   })
 })
 
+describe('활성화·해제의 실패 경로 — 전부 사용자 문구가 있는 것들', () => {
+  it('기기를 못 읽으면 네트워크도 안 치고 noDevice', async () => {
+    const h = harness({ device: null })
+    expect(await h.manager.activate(KEY)).toBe('noDevice')
+    expect(h.calls).toEqual([])
+  })
+
+  it('해제할 것이 없으면 nothing', async () => {
+    expect(await harness().manager.deactivate()).toBe('nothing')
+  })
+
+  it('슬롯은 잡혔는데 기기를 못 대면 nothing이 아니라 noDevice', async () => {
+    // "해제할 게 없다"고 말하면, 두 번째 기기를 여는 유일한 방법에서 사용자를
+    // 돌려보내게 된다. 슬롯은 실제로 잡혀 있다.
+    const h = harness({ device: null, record: { key: KEY, token: token() } })
+    expect(await h.manager.deactivate()).toBe('noDevice')
+  })
+
+  it('서버가 해제를 거부하면 refused이고 키는 남는다', async () => {
+    for (const error of ['revoked', 'deviceLimit'] as const) {
+      const h = harness({
+        record: { key: KEY, token: token() },
+        client: { deactivate: async () => ({ ok: false, error }) }
+      })
+      expect(await h.manager.deactivate()).toBe('refused')
+      expect(h.record.key).toBe(KEY)
+    }
+  })
+
+  it('서버도 토큰도 멀쩡한데 상태가 라이선스가 안 되면 incomplete', async () => {
+    // 여기서 성공이라고 답하면 사용자는 활성화됐다고 믿는데 앱은 잠긴 채다.
+    // 오류도 없고 다시 해볼 것도 없는, 가장 나쁜 침묵이다.
+    let reads = 0
+    const stored: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: NOW - 40 * DAY }
+    const manager = createLicenseManager({
+      client: {
+        activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }),
+        validate: async () => ({ ok: false, error: 'network' }),
+        deactivate: async () => ({ ok: false, error: 'network' })
+      },
+      store: {
+        read: () => ({ ...stored }),
+        write: (next) => {
+          Object.assign(stored, next)
+          return true
+        }
+      },
+      publicKey,
+      // 활성화는 기기를 한 번 읽고(1회), 뒤이은 settle이 다시 읽는다(2회).
+      // 두 번째에서 하드웨어 조회가 실패하면 토큰은 멀쩡한데 상태가 안 선다.
+      device: () => (++reads <= 1 ? DEVICE : null),
+      deviceName: null,
+      enforced: true,
+      now: () => NOW,
+      setTimer: () => () => {}
+    })
+    expect(await manager.activate(KEY)).toBe('incomplete')
+  })
+
+  it('재검증에서 받은 토큰도 검증에 실패하면 저장하지 않는다', async () => {
+    // 활성화 경로만 막고 이쪽을 열어두면, 가짜 서버가 배경 갱신으로 들어온다.
+    const other = makeKeyPair()
+    const forged = signTestToken(
+      { lic: licenseHash(KEY), dev: DEVICE, prod: PRODUCT_SLUG, exp: 9_999_999_999, iat: 0 },
+      other.privateKey
+    )
+    const stored = token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY })
+    const h = harness({
+      record: { key: KEY, token: stored },
+      client: { validate: async () => ({ ok: true, value: { token: forged, expiresAtMs: NOW + TOKEN_TTL_MS } }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.token).toBe(stored)
+  })
+
+  it('기기를 못 읽으면 재검증도 네트워크를 치지 않는다', async () => {
+    const h = harness({ device: null, record: { key: KEY, token: token() } })
+    await h.manager.revalidateIfNeeded()
+    expect(h.calls).toEqual([])
+  })
+})
+
+describe('경계값', () => {
+  it('유예 천장 정각은 닫힌 것으로 본다', () => {
+    const expMs = NOW - GRACE_DURATION_MS // 천장이 정확히 NOW다
+    const h = harness({ record: { key: KEY, token: token({ expMs }), trialStartMs: NOW - 40 * DAY } })
+    expect(h.manager.getState().status).toBe('trialExpired')
+
+    const h2 = harness({ record: { key: KEY, token: token({ expMs: expMs + 1000 }), trialStartMs: NOW - 40 * DAY } })
+    expect(h2.manager.getState().status).toBe('grace')
+  })
+
+  it('이미 지난 마감에는 타이머를 걸지 않는다', () => {
+    // 걸면 지연이 0 이하라 즉시 깨어 settle을 무한히 다시 돈다.
+    const h = harness({
+      record: { key: KEY, token: token({ expMs: NOW - GRACE_DURATION_MS - DAY }), trialStartMs: NOW - 40 * DAY }
+    })
+    expect(h.timers).toHaveLength(0)
+  })
+})
+
 describe('deactivate', () => {
   it('서버가 확인해야 로컬을 지운다', async () => {
     // 실패했는데 지우면 라이선스도 없고 슬롯은 잡힌 채인 상태가 된다 —
@@ -684,6 +785,112 @@ describe('getMaskedKey', () => {
     expect(h.manager.getMaskedKey()).toBe('GREENDAY-••••-••••-••••-G8H9')
     // 가운데 묶음이 그대로 새면 가리는 의미가 없다.
     expect(h.manager.getMaskedKey()).not.toContain('A2B3')
+  })
+})
+
+describe('재검증 예약 — 한 번 실패하고 끝나지 않는다', () => {
+  /** 재검증 타이머만 골라 낸다. 마감 타이머와 섞이면 무엇을 깨우는지 알 수 없다. */
+  const revalidateTimers = (h: Harness): { atMs: number; fire: () => void }[] =>
+    h.timers.filter((t) => t.atMs - NOW <= 6 * 60 * 60 * 1000 + 1)
+
+  it('시작할 때 못 닿으면 물러서며 다시 시도한다', async () => {
+    // 이게 없으면 **시작 순간 잠깐 오프라인이었던 것만으로** 영영 다시 묻지
+    // 않고, 유예가 끝나는 날 멀쩡한 구매자가 잠긴다.
+    let attempts = 0
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: {
+        validate: async () => {
+          attempts += 1
+          return { ok: false, error: 'network' }
+        }
+      }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(attempts).toBe(1)
+
+    const first = revalidateTimers(h)
+    expect(first).toHaveLength(1)
+    expect(first[0].atMs - NOW).toBe(60_000) // 1분 뒤
+  })
+
+  it('연속 실패마다 간격이 늘고 상한에서 멈춘다', async () => {
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: { validate: async () => ({ ok: false, error: 'network' }) }
+    })
+    const delays: number[] = []
+    for (let i = 0; i < 8; i += 1) {
+      await h.manager.revalidateIfNeeded()
+      const armed = revalidateTimers(h)
+      delays.push(armed[armed.length - 1].atMs - NOW)
+      h.timers.length = 0
+    }
+    // 1·2·4·8·16·32·60·60분 — 물러서되 한 시간을 넘지 않는다.
+    expect(delays).toEqual([60_000, 120_000, 240_000, 480_000, 960_000, 1_920_000, 3_600_000, 3_600_000])
+  })
+
+  it('한 번 성공하면 간격이 처음으로 돌아간다', async () => {
+    let fail = true
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: {
+        validate: async () =>
+          fail
+            ? { ok: false, error: 'network' as const }
+            : {
+                ok: true as const,
+                // 갱신은 됐지만 여전히 반감기 뒤다 — 다음 호출도 네트워크를 친다.
+                // 아니면 "성공 뒤 다시 실패"를 시험할 수가 없다.
+                value: {
+                  token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }),
+                  expiresAtMs: NOW + 10 * DAY
+                }
+              }
+      }
+    })
+    await h.manager.revalidateIfNeeded()
+    await h.manager.revalidateIfNeeded()
+    h.timers.length = 0
+
+    fail = false
+    await h.manager.revalidateIfNeeded()
+    // 성공했으니 재시도가 아니라 평소 주기로 돌아간다.
+    expect(revalidateTimers(h)[0].atMs - NOW).toBe(6 * 60 * 60 * 1000)
+    h.timers.length = 0
+
+    // 그리고 **다음 실패는 처음부터** 물러선다. 카운터를 안 되돌리면 여기서
+    // 4분이 나오고, 며칠 켜 둔 앱이 잠깐 끊길 때마다 한 시간씩 기다리게 된다.
+    fail = true
+    await h.manager.revalidateIfNeeded()
+    expect(revalidateTimers(h)[0].atMs - NOW).toBe(60_000)
+  })
+
+  it('서버가 거부하면 재시도하지 않는다', async () => {
+    // 답이 왔고 그 답이 아니오였다. 다시 물어도 같은 답이 온다 — 물러서며
+    // 두드리는 것은 취소된 키로 서버를 때리는 것뿐이다.
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'revoked' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(revalidateTimers(h)[0].atMs - NOW).toBe(6 * 60 * 60 * 1000)
+  })
+
+  it('키가 없어도 주기는 계속 돈다 — 트라이얼 마감을 봐야 한다', async () => {
+    const h = harness()
+    await h.manager.revalidateIfNeeded()
+    expect(revalidateTimers(h).length).toBeGreaterThan(0)
+  })
+
+  it('dispose 뒤에는 다시 걸지 않는다', async () => {
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: { validate: async () => ({ ok: false, error: 'network' }) }
+    })
+    h.manager.dispose()
+    await h.manager.revalidateIfNeeded()
+    expect(h.timers).toHaveLength(0)
   })
 })
 

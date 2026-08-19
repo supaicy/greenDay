@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, ExternalLink, Loader2, Unlink, WifiOff } from 'lucide-react'
+import { useActivation } from '../../licensing/useActivation'
 import { daysLeft, refreshLicense, useLicense } from '../../licensing/useLicense'
-import type { ActivateFailure, DeactivateFailure } from '../../../../shared/license'
+import type { DeactivateFailure } from '../../../../shared/license'
 
 interface Props {
   isDark: boolean
@@ -36,30 +37,29 @@ export function LicenseSection({
 }: Props): React.JSX.Element {
   const { t } = useTranslation()
   const license = useLicense()
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState<'activate' | 'deactivate' | null>(null)
-  const [error, setError] = useState<ActivateFailure | DeactivateFailure | null>(null)
+  // 활성화 흐름은 잠금 화면과 공유한다 — 두 화면이 같은 키에 대해 다르게
+  // 실패하면 안 된다(licensing/useActivation.ts).
+  const activation = useActivation()
+  const [releasing, setReleasing] = useState(false)
+  const [releaseError, setReleaseError] = useState<DeactivateFailure | null>(null)
   const [done, setDone] = useState<'activated' | 'deactivated' | null>(null)
 
+  const busy = activation.busy || releasing
+  const error = activation.error ?? releaseError
+
   async function activate(): Promise<void> {
-    setBusy('activate')
-    setError(null)
+    setReleaseError(null)
     setDone(null)
-    const failure = await window.api.licenseActivate(key)
-    setBusy(null)
-    if (failure) return setError(failure)
-    setKey('')
-    setDone('activated')
-    await refreshLicense()
+    if (await activation.activate()) setDone('activated')
   }
 
   async function deactivate(): Promise<void> {
-    setBusy('deactivate')
-    setError(null)
+    setReleasing(true)
+    setReleaseError(null)
     setDone(null)
     const failure = await window.api.licenseDeactivate()
-    setBusy(null)
-    if (failure) return setError(failure)
+    setReleasing(false)
+    if (failure) return setReleaseError(failure)
     setDone('deactivated')
     await refreshLicense()
   }
@@ -87,8 +87,8 @@ export function LicenseSection({
           <div className="flex gap-2">
             <input
               id="license-key"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
+              value={activation.key}
+              onChange={(e) => activation.setKey(e.target.value)}
               placeholder={t('license.keyPlaceholder')}
               spellCheck={false}
               autoCapitalize="characters"
@@ -97,10 +97,10 @@ export function LicenseSection({
             <button
               type="button"
               onClick={() => void activate()}
-              disabled={busy !== null || key.trim() === ''}
+              disabled={!activation.canSubmit || releasing}
               className={`${button} ${isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'}`}
             >
-              {busy === 'activate' ? (
+              {activation.busy ? (
                 <span className="flex items-center gap-1.5">
                   <Loader2 size={13} className="animate-spin" /> {t('license.activating')}
                 </span>
@@ -132,11 +132,11 @@ export function LicenseSection({
           <button
             type="button"
             onClick={() => void deactivate()}
-            disabled={busy !== null}
+            disabled={busy}
             className={`${neutralButton} flex items-center gap-1.5`}
           >
-            {busy === 'deactivate' ? <Loader2 size={13} className="animate-spin" /> : <Unlink size={13} />}
-            {t(busy === 'deactivate' ? 'license.deactivating' : 'license.deactivate')}
+            {releasing ? <Loader2 size={13} className="animate-spin" /> : <Unlink size={13} />}
+            {t(releasing ? 'license.deactivating' : 'license.deactivate')}
           </button>
           <p className={`text-xs ${hintText}`}>{t('license.deactivateDesc')}</p>
         </div>

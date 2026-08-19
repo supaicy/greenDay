@@ -1,10 +1,9 @@
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ExternalLink, Loader2, Lock } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { useStore } from '../store/useStore'
-import { refreshLicense, useLicense } from './useLicense'
-import type { ActivateFailure } from '../../../shared/license'
+import { useActivation } from './useActivation'
+import { useLicense } from './useLicense'
 
 /**
  * 유료 기능 게이트 — 앱 전체에서 **단 한 곳**이다.
@@ -34,21 +33,9 @@ export function LicenseGate(): React.JSX.Element | null {
   const { t } = useTranslation()
   const license = useLicense()
   const exportData = useStore((s) => s.exportData)
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<ActivateFailure | null>(null)
+  const { key, setKey, busy, error, activate, canSubmit } = useActivation()
 
   if (!license.enforced || license.allowsPaidFeatures) return null
-
-  async function activate(): Promise<void> {
-    setBusy(true)
-    setError(null)
-    const failure = await window.api.licenseActivate(key)
-    setBusy(false)
-    if (failure) return setError(failure)
-    setKey('')
-    await refreshLicense()
-  }
 
   return (
     <Dialog open>
@@ -77,7 +64,7 @@ export function LicenseGate(): React.JSX.Element | null {
           <button
             type="button"
             onClick={() => void activate()}
-            disabled={busy || key.trim() === ''}
+            disabled={!canSubmit}
             className="rounded-lg bg-primary-500 px-3 py-2 text-sm text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : t('license.activate')}

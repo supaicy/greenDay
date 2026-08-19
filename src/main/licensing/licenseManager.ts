@@ -76,6 +76,28 @@ export interface LicenseManager {
 /** setTimeout이 정직하게 다룰 수 있는 최대 지연. 넘기면 1ms로 취급해 즉시 깬다. */
 const MAX_TIMEOUT_MS = 2_147_483_647
 
+/**
+ * 재검증을 얼마나 자주 들여다보는가.
+ *
+ * 매번 네트워크를 치는 주기가 아니다 — 반감기를 지났는지 **확인**하는 주기다.
+ * 실행할 때 한 번만 보면, 몇 주 켜 두는 데스크톱 앱이 취소도 해제도 모른 채
+ * 토큰 만료와 유예를 다 쓴다.
+ */
+const REVALIDATE_POLL_MS = 6 * 60 * 60 * 1000
+
+/**
+ * 서버에 못 닿았을 때의 재시도 간격과 상한.
+ *
+ * 이게 없으면 **시작할 때 잠깐 오프라인이었던 것만으로** 연결이 돌아와도 영영
+ * 다시 시도하지 않고, 유예가 끝나는 날 멀쩡한 구매자가 잠긴다. 반대로 촘촘히
+ * 재시도하면 비행기 안에서 배터리를 태운다.
+ */
+const RETRY_BASE_MS = 60_000
+const RETRY_MAX_MS = 60 * 60 * 1000
+
+/** 한 번의 재검증이 무엇으로 끝났는가 — 다음 예약 간격이 여기서 갈린다. */
+type RevalidateOutcome = 'notNeeded' | 'refreshed' | 'unreachable' | 'refused'
+
 interface VerifiedToken {
   payload: TokenPayload
   expiresAtMs: number
@@ -95,6 +117,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * "지금 걸린 타이머 하나"가 아니라 "이제부터 아무것도 안 건다"여야 한다.
    */
   let disposed = false
+  /** 재검증 예약. 마감 타이머와 별개다 — 둘은 서로 다른 것을 기다린다. */
+  let cancelRevalidate: (() => void) | null = null
+  /** 연속으로 서버에 못 닿은 횟수. 성공하면 0으로 돌아간다. */
+  let unreachableStreak = 0
   /** 이 프로세스가 도출한 트라이얼 시작. 한 번 정해지면 안 움직인다 — resolveTrialStart 참고. */
   let trialStartedAt: number | null = null
   /** `resolveTrialStart`가 레코드를 건드렸는가 — 플러시는 `evaluateTrial`이 한 번만 한다. */
@@ -406,30 +432,65 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 한 달에 한 번 온라인이 되는 기기도 유예 끝에 몰리지 않는다.
    */
   async function revalidateIfNeeded(): Promise<void> {
+    const outcome = await runRevalidation()
+    armNextRevalidation(outcome)
+  }
+
+  async function runRevalidation(): Promise<RevalidateOutcome> {
     const key = record.key
     if (!key || !record.token) {
       // 이 기기에 키가 없으니 움직일 수 있는 것은 트라이얼뿐이다. 마감을 걸친
       // 실행이라면 다음 실행을 기다리지 말고 여기서 창을 닫는다.
       apply(evaluateTrial())
-      return
+      return 'notNeeded'
     }
     const device = deviceId()
-    if (!device) return
+    if (!device) return 'notNeeded'
 
-    touchClock()
+    if (touchClock()) persist()
     const token = settle()
     if (!token) {
       // 유예 중이다. 반감기를 따질 토큰이 없으니 무조건 시도한다.
-      await refresh(key, device)
-      return
+      return refresh(key, device)
     }
     const lifetimeMs = (token.payload.exp - token.payload.iat) * 1000
     if (deps.now() > token.payload.iat * 1000 + lifetimeMs / 2) {
-      await refresh(key, device)
+      return refresh(key, device)
     }
+    return 'notNeeded'
   }
 
-  async function refresh(key: string, device: string): Promise<void> {
+  /**
+   * 다음 재검증을 예약한다.
+   *
+   * 못 닿았으면 물러서며 다시 시도하고(1분 → 2분 → … → 1시간), 그 외에는 그냥
+   * 주기적으로 반감기를 확인한다. 서버가 **거부**한 경우는 재시도하지 않는다 —
+   * 답이 왔고 그 답이 아니오였으므로, 다시 물어도 같은 답이 온다.
+   */
+  function armNextRevalidation(outcome: RevalidateOutcome): void {
+    cancelRevalidateTimer()
+    if (disposed) return
+    if (outcome === 'unreachable') {
+      unreachableStreak += 1
+    } else {
+      unreachableStreak = 0
+    }
+    const delay =
+      outcome === 'unreachable'
+        ? Math.min(RETRY_BASE_MS * 2 ** (unreachableStreak - 1), RETRY_MAX_MS)
+        : REVALIDATE_POLL_MS
+    cancelRevalidate = deps.setTimer(Math.min(delay, MAX_TIMEOUT_MS), () => {
+      cancelRevalidate = null
+      void revalidateIfNeeded()
+    })
+  }
+
+  function cancelRevalidateTimer(): void {
+    cancelRevalidate?.()
+    cancelRevalidate = null
+  }
+
+  async function refresh(key: string, device: string): Promise<RevalidateOutcome> {
     const result = await deps.client.validate(key, device)
 
     if (result.ok) {
@@ -438,28 +499,29 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 다른 기기가 가져갈 수 있는 슬롯 위에서 라이선스가 되살아난다. 기기
       // 한도가 느린 응답 하나로 무너지는 것이다. 다른 키로 재활성화한 경우도
       // 같은 검사가 막는다 — 이 답은 물어본 그 키에 대한 것이다.
-      if (record.key !== key) return
+      if (record.key !== key) return 'notNeeded'
       const verified = verifyToken(result.value.token, {
         publicKey: deps.publicKey,
         device,
         key,
         nowMs: deps.now()
       })
-      if (!verified.ok) return
+      if (!verified.ok) return 'notNeeded'
       record.token = result.value.token
       anchorClockToServerTime()
       persist()
       settle()
-      return
+      return 'refreshed'
     }
 
     // 서버에 못 닿은 것은 판정이 아니다. 검증된 토큰과 그것이 얻은 유예가
     // 그대로 선다 — 이걸 거부처럼 다루면 기차 터널 하나가 라이선스를 지운다.
-    if (!isServerRefusal(result.error)) return
-    if (record.key !== key) return
+    if (!isServerRefusal(result.error)) return 'unreachable'
+    if (record.key !== key) return 'refused'
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
     // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
     clearLocalLicense(true)
+    return 'refused'
   }
 
   /**
@@ -513,6 +575,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     dispose: () => {
       disposed = true
       cancelClose()
+      cancelRevalidateTimer()
     }
   }
 }
