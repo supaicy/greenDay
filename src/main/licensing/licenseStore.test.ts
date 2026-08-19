@@ -118,3 +118,44 @@ describe('createFileStore — 쓰기', () => {
     expect(existsSync(`${unwritable}.tmp`)).toBe(false)
   })
 })
+
+// `durable`은 fsync를 걸지 말지만 고른다 — 결과 파일과 실패 처리는 같아야 한다.
+// 두 갈래가 갈린 뒤로 기본값(false)만 시험하면, 활성화가 쓰는 **바로 그 갈래**가
+// 시험되지 않은 채 남는다. fsync 자체는 관찰할 수 없으니 나머지 전부를 겹쳐 본다.
+describe.each([[false], [true]])('createFileStore — 쓰기 (durable=%s)', (durable) => {
+  const record: LicenseRecord = {
+    key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9',
+    token: 'tok.sig',
+    lastSeenMs: 1_800_000_000_000,
+    trialStartMs: 1_700_000_000_000
+  }
+
+  it('쓴 것을 그대로 다시 읽는다', () => {
+    const store = createFileStore(path)
+    expect(store.write(record, durable)).toBe(true)
+    expect(store.read()).toEqual(record)
+    expect(existsSync(`${path}.tmp`)).toBe(false)
+  })
+
+  it('사람이 읽을 수 있게 쓴다', () => {
+    createFileStore(path).write(record, durable)
+    expect(readFileSync(path, 'utf-8')).toContain('\n  "lastSeenMs": 1800000000000')
+  })
+
+  it('한글이 섞여도 깨지지 않는다', () => {
+    // durable 갈래는 `writeSync(fd, string, position, encoding)`이라 인코딩을
+    // 인자로 준다. 위치와 인코딩 자리를 바꿔 쓰면 latin1로 떨어져 조용히 깨진다.
+    const store = createFileStore(path)
+    store.write({ ...record, key: '한글-키-テスト' }, durable)
+    expect(store.read().key).toBe('한글-키-テスト')
+  })
+
+  it('쓸 수 없으면 false를 내고 임시 파일을 남기지 않는다', () => {
+    const unwritable = join(dir, `nested-${durable}`)
+    mkdirSync(unwritable)
+    const store = createFileStore(unwritable)
+    expect(() => store.write(record, durable)).not.toThrow()
+    expect(store.write(record, durable)).toBe(false)
+    expect(existsSync(`${unwritable}.tmp`)).toBe(false)
+  })
+})

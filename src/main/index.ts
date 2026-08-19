@@ -117,7 +117,11 @@ function bootstrap(): void {
     applyAppMenu(is.dev)
     setupIpcHandlers()
 
-    handle('set-language', 'free', (_, language: unknown) => setUiLanguage(language))
+    // 언어가 실제로 바뀌었을 때만 메뉴를 다시 짓는다. 메뉴는 부팅 때 한 번 서고
+    // 그대로 남으므로, 이게 없으면 라벨이 기본값 'ko'로 영영 굳는다.
+    handle('set-language', 'free', (_, language: unknown) => {
+      if (setUiLanguage(language)) applyAppMenu(is.dev)
+    })
     createWindow()
 
     // **창을 띄운 뒤에** 초기화한다. 토큰이 있는 설치에서는 여기서 기기 id를

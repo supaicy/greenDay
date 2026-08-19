@@ -25,9 +25,9 @@ function walk(dir: string, out: string[] = []): string[] {
 /**
  * 채널을 등록하는 두 형태를 모두 잡는다.
  *
- * `ipc-handlers.ts`는 `ipcMain.handle`을 직접 부르지 않고 라이선스 게이트를 끼운
- * 로컬 `handle()` 래퍼를 쓴다(licensing/freeChannels.ts). `ipcMain.handle`만 찾으면
- * 그 파일의 채널 60여 개가 통째로 안 보이고, 이 파일의 검사가 전부 공짜로 통과한다.
+ * 메인은 `ipcMain.handle`을 직접 부르지 않고 라이선스 게이트(`main/ipc-gate.ts`의
+ * `handle(channel, tier, listener)`)로만 등록한다. `ipcMain.handle`만 찾으면 채널
+ * 60여 개가 통째로 안 보이고, 이 파일의 검사가 전부 공짜로 통과한다.
  */
 const CHANNEL_RE = /(?:ipcMain\.)?\bhandle\(\s*['"]([^'"]+)['"]/g
 

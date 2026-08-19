@@ -48,8 +48,12 @@ export function buildAppMenu(isDev: boolean): Menu | null {
     { role: 'fileMenu' },
     { role: 'editMenu' },
     // 역할 이름은 OS가 현지화한다. 이 라벨만 우리 몫이라 `main-strings.ts`에서
-    // 가져온다 — 메인이 직접 띄우는 문구가 두 주소를 갖지 않게. (`uiStrings()`는
-    // 동기이고 기본이 'ko'라, 메뉴가 창보다 먼저 서는 것과 무관하게 부를 수 있다.)
+    // 가져온다 — 메인이 직접 띄우는 문구가 두 주소를 갖지 않게.
+    //
+    // **여기서 읽은 값은 이 메뉴가 서 있는 내내 고정된다.** 메뉴는 부팅 때 한 번
+    // 짓고 `setApplicationMenu`로 걸어 두는 물건이라, 언어가 바뀌면 호출처가
+    // 다시 지어 줘야 한다(`index.ts`의 `set-language`). 그 재건축이 없던 동안
+    // 라벨은 기본값 'ko'에 영구히 묶여 있었다.
     { label: uiStrings().menuView, submenu: viewSubmenu() },
     { role: 'windowMenu' }
   ]

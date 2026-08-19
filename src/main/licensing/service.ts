@@ -18,12 +18,8 @@ import { createLicenseClient } from './licenseClient'
 import { createLicenseManager, type LicenseManager } from './licenseManager'
 import { createFileStore } from './licenseStore'
 import { resolveDeviceId } from './deviceIdentity'
-import {
-  LICENSE_BASE_URL,
-  UNKNOWN_LICENSE_STATE,
-  type PublicLicenseState,
-  type PurchaseSource
-} from '../../shared/license'
+import { LICENSE_BASE_URL, type PurchaseSource } from './endpoints'
+import { UNKNOWN_LICENSE_STATE, type PublicLicenseState } from '../../shared/license'
 
 export type { PurchaseSource, PublicLicenseState }
 
@@ -117,6 +113,10 @@ export function disposeLicensing(): void {
   manager?.dispose()
   manager = null
   cachedDeviceId = null
+  // **`null`이 아니라 `undefined`다.** 두 캐시의 "아직 안 읽음"이 서로 다른데,
+  // 그게 일부러다(각각의 선언부 주석 참고). 여기서 위 줄을 복사해 `null`을 쓰면
+  // `deviceLabel()`이 "읽었는데 없더라"로 읽어, 이 프로세스가 끝날 때까지
+  // 기기 이름이 영영 null이 된다 — 조용하고, 테스트가 잡지 못한다.
   cachedDeviceLabel = undefined
 }
 

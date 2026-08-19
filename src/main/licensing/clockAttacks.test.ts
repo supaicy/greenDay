@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest'
 import { createLicenseManager } from './licenseManager'
 import { licenseHash } from './activationToken'
-import { PRODUCT_SLUG } from '../../shared/license'
+import { PRODUCT_SLUG } from './endpoints'
 import { GRACE_DURATION_MS, TRIAL_DURATION_MS } from './trialWindow'
 import { importTestKey, makeKeyPair, signTestToken } from './testTokens'
 import type { LicenseRecord } from './licenseStore'
@@ -48,12 +48,35 @@ function token(over: { expMs?: number; iatMs?: number } = {}): string {
   )
 }
 
-function boot(record: Partial<LicenseRecord>, startAt = NOW) {
+/**
+ * 매니저 하나를 세우고 **두 시계를 따로** 흘린다.
+ *
+ * 벽시계(`now()`)와 단조 시계는 다른 것이고, 이 파일의 공격들이 노리는 것이
+ * 정확히 그 차이다. `setTimeout`은 단조라 사용자가 날짜를 붙들어도 타이머는 제
+ * 시간에 깬다 — 그게 마지막 방어선이다. 그래서 타이머는 **단조 시각으로만**
+ * 예약되고, `setNow`는 벽시계를 옮기면서 단조를 앞으로 간 만큼만 밀어 준다
+ * (되돌린 시계는 단조를 되돌리지 못한다).
+ *
+ * `frozenClock`은 벽시계를 `NOW`에 붙들어 둔 사용자다 — 단조만 흐른다.
+ */
+function boot(
+  record: Partial<LicenseRecord>,
+  over: { startAt?: number; frozenClock?: boolean; client?: Partial<LicenseClient> } = {}
+) {
   const stored: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: null, ...record }
-  let clock = startAt
-  const timers: { atMs: number; fire: () => void }[] = []
+  let clock = over.startAt ?? NOW
+  let mono = 0
+  const timers: { atMono: number; fire: () => void }[] = []
+
+  /** 도래한 것만 깨운다 — 콜백이 단조 바닥을 마감까지 끌어올리므로, 안 온 것까지 깨우면 상태가 앞서 간다. */
+  const fireDue = (): void => {
+    const due = timers.filter((t) => t.atMono <= mono)
+    for (const t of due) timers.splice(timers.indexOf(t), 1)
+    for (const t of due) t.fire()
+  }
+
   const manager = createLicenseManager({
-    client: offline,
+    client: { ...offline, ...over.client },
     store: {
       read: () => ({ ...stored }),
       write: (next) => {
@@ -65,9 +88,9 @@ function boot(record: Partial<LicenseRecord>, startAt = NOW) {
     device: () => DEVICE,
     deviceName: null,
     enforced: true,
-    now: () => clock,
+    now: () => (over.frozenClock ? NOW : clock),
     setTimer: (ms, fn) => {
-      const entry = { atMs: clock + ms, fire: fn }
+      const entry = { atMono: mono + ms, fire: fn }
       timers.push(entry)
       return () => {
         const i = timers.indexOf(entry)
@@ -75,22 +98,24 @@ function boot(record: Partial<LicenseRecord>, startAt = NOW) {
       }
     }
   })
+
   return {
     manager,
     record: stored,
+    /** 벽시계를 옮긴다. 앞으로 간 만큼만 단조도 흐른다. */
     setNow: (t: number) => {
+      mono += Math.max(0, t - clock)
       clock = t
     },
-    /**
-     * 절전에서 깨어나듯, **도래한** 마감 타이머만 깨운다.
-     *
-     * 아직 안 온 타이머까지 깨우면 안 된다 — 콜백이 단조 시계 바닥을 마감까지
-     * 끌어올리므로, 시험이 만들려던 시각보다 앞선 상태에서 판정하게 된다.
-     */
-    wake: () => {
-      const due = timers.filter((t) => t.atMs <= clock)
-      for (const t of due) timers.splice(timers.indexOf(t), 1)
-      for (const t of due) t.fire()
+    /** 절전에서 깨어나듯, 도래한 마감 타이머를 깨운다. */
+    wake: fireDue,
+    /** 단조로만 시간을 흘리며 도래한 타이머를 깨운다. 재검증은 비동기라 기다린다. */
+    run: async (untilMs: number, stepMs: number) => {
+      for (let t = stepMs; t <= untilMs; t += stepMs) {
+        mono = t
+        fireDue()
+        await new Promise((r) => setImmediate(r))
+      }
     }
   }
 }
@@ -166,58 +191,11 @@ describe('시계를 크게 되돌려도 만료된 토큰이 되살아나지 않�
 })
 
 describe('벽시계를 묶어 둬도 마감은 온다', () => {
-  /**
-   * 벽시계와 단조 시계를 **따로** 흘린다. `setTimeout`은 단조라, 사용자가 날짜를
-   * 붙들어도 타이머는 제 시간에 깬다 — 그게 이 설계의 마지막 방어선이다.
-   */
-  function frozenClockBoot(record: Partial<LicenseRecord>) {
-    const stored: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: null, ...record }
-    let mono = 0
-    const timers: { atMono: number; fire: () => void }[] = []
-    const manager = createLicenseManager({
-      client: offline,
-      store: {
-        read: () => ({ ...stored }),
-        write: (next) => {
-          Object.assign(stored, next)
-          return true
-        }
-      },
-      publicKey,
-      device: () => DEVICE,
-      deviceName: null,
-      enforced: true,
-      now: () => NOW, // 사용자가 날짜를 여기 붙들어 뒀다
-      setTimer: (ms, fn) => {
-        const entry = { atMono: mono + ms, fire: fn }
-        timers.push(entry)
-        return () => {
-          const i = timers.indexOf(entry)
-          if (i >= 0) timers.splice(i, 1)
-        }
-      }
-    })
-    return {
-      manager,
-      record: stored,
-      /** 단조로 시간을 흘리며 도래한 타이머를 깨운다. 재검증은 비동기라 기다린다. */
-      run: async (untilMs: number, stepMs: number) => {
-        for (let t = stepMs; t <= untilMs; t += stepMs) {
-          mono = t
-          const due = timers.filter((x) => x.atMono <= mono)
-          for (const x of due) timers.splice(timers.indexOf(x), 1)
-          for (const x of due) x.fire()
-          await new Promise((r) => setImmediate(r))
-        }
-      }
-    }
-  }
-
   it('날짜를 붙들어도 트라이얼은 30일에 닫힌다', async () => {
     // 6시간짜리 재검증 폴이 `settle()`을 돌 때마다 마감 타이머를 다시 걸면,
     // 그 타이머는 영영 발화하지 못한다. 게다가 남은 시간을 생 벽시계로 재면
     // 시계가 안 가는 동안 마감이 계속 뒤로 물러난다. 둘 다 실증된 우회였다.
-    const h = frozenClockBoot({ trialStartMs: NOW })
+    const h = boot({ trialStartMs: NOW }, { frozenClock: true })
     await h.manager.revalidateIfNeeded()
     expect(h.manager.allowsPaidFeatures()).toBe(true)
 
@@ -228,12 +206,15 @@ describe('벽시계를 묶어 둬도 마감은 온다', () => {
 
   it('날짜를 붙들어도 유예 천장은 온다', async () => {
     const expMs = NOW - DAY
-    const h = frozenClockBoot({
-      key: KEY,
-      token: token({ expMs, iatMs: expMs - 30 * DAY }),
-      lastSeenMs: NOW,
-      trialStartMs: NOW - 40 * DAY // 트라이얼도 이미 끝났다 — 유예가 닫히면 갈 곳이 없어야 한다
-    })
+    const h = boot(
+      {
+        key: KEY,
+        token: token({ expMs, iatMs: expMs - 30 * DAY }),
+        lastSeenMs: NOW,
+        trialStartMs: NOW - 40 * DAY // 트라이얼도 이미 끝났다 — 유예가 닫히면 갈 곳이 없어야 한다
+      },
+      { frozenClock: true }
+    )
     await h.manager.revalidateIfNeeded()
     expect(h.manager.getState().status).toBe('grace')
 
@@ -258,35 +239,17 @@ describe('래칫을 조건 없이 믿는 대가', () => {
   it('유료 사용자는 재활성화 한 번으로 회복한다', async () => {
     // 이쪽에는 서버라는 진짜 시각의 증거가 있다. 그게 없었다면 위의 엄격함은
     // 정당화되지 않는다.
-    const stored: LicenseRecord = {
-      key: null,
-      token: null,
-      lastSeenMs: NOW + 100 * 365 * DAY, // 시계가 한 번 미래로 튀었다
-      trialStartMs: NOW - 40 * DAY
-    }
-    const manager = createLicenseManager({
-      client: {
-        ...offline,
-        activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + 30 * DAY } })
+    const h = boot(
+      {
+        lastSeenMs: NOW + 100 * 365 * DAY, // 시계가 한 번 미래로 튀었다
+        trialStartMs: NOW - 40 * DAY
       },
-      store: {
-      read: () => ({ ...stored }),
-      write: (next) => {
-        Object.assign(stored, next)
-        return true
-      }
-    },
-      publicKey,
-      device: () => DEVICE,
-      deviceName: null,
-      enforced: true,
-      now: () => NOW,
-      setTimer: () => () => {}
-    })
-    expect(manager.allowsPaidFeatures()).toBe(false)
+      { client: { activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + 30 * DAY } }) } }
+    )
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
 
-    expect(await manager.activate(KEY)).toBeNull()
-    expect(stored.lastSeenMs).toBe(NOW) // 서버가 바닥을 내려 줬다
-    expect(manager.allowsPaidFeatures()).toBe(true)
+    expect(await h.manager.activate(KEY)).toBeNull()
+    expect(h.record.lastSeenMs).toBe(NOW) // 서버가 바닥을 내려 줬다
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
   })
 })

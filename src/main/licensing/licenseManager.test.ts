@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createLicenseManager, type LicenseManager, type LicenseState } from './licenseManager'
 import { licenseHash } from './activationToken'
-import { PRODUCT_SLUG } from '../../shared/license'
+import { PRODUCT_SLUG } from './endpoints'
 import { GRACE_DURATION_MS, TRIAL_DURATION_MS } from './trialWindow'
 import type { ClientResult, LicenseClient } from './licenseClient'
 import type { LicenseRecord } from './licenseStore'
@@ -45,6 +45,8 @@ interface Harness {
   deviceReads: () => number
   /** 디스크에 몇 번 썼는가. 메인 프로세스의 동기 writeFileSync다. */
   writes: () => number
+  /** 각 쓰기가 fsync를 요구했는가. fsync 한 번이 이 볼륨에서 약 4ms다. */
+  durability: boolean[]
   /** 화면에 알린 상태들. 이게 없으면 렌더러가 마감을 모른다. */
   changes: LicenseState[]
 }
@@ -71,6 +73,7 @@ function harness(
   let deviceReads = 0
   const storeWritable = over.storeWritable ?? true
   let writes = 0
+  const durability: boolean[] = []
   const changes: LicenseState[] = []
   const timers: { atMs: number; fire: () => void }[] = []
   const calls: string[] = []
@@ -101,8 +104,9 @@ function harness(
     client: traced,
     store: {
       read: () => ({ ...record }),
-      write: (next) => {
+      write: (next, durable = false) => {
         writes += 1
+        durability.push(durable)
         Object.assign(record, next)
         return storeWritable
       }
@@ -133,6 +137,7 @@ function harness(
     calls,
     deviceReads: () => deviceReads,
     writes: () => writes,
+    durability,
     changes,
     setNow: (ms) => {
       current = ms
@@ -427,6 +432,29 @@ describe('결함 6 — 접근할 때마다 실제 시각으로 다시 계산한�
     h.setNow(NOW + TRIAL_DURATION_MS)
     expect(h.manager.allowsPaidFeatures()).toBe(false)
   })
+
+  it('그 재계산이 유료 IPC마다 ed25519 검증을 돌리지는 않는다', () => {
+    // `allowsPaidFeatures`는 **모든 유료 채널 앞에** 선다(`ipc-gate.ts`).
+    // 만료를 지났는데 상태가 아직 `licensed`인 창에서 서명을 다시 검증하면,
+    // `update-task`·`reorder-tasks` 같은 것 앞에 33µs가 붙는다 — 그 IPC가 하는
+    // 일(SQLite 쓰기 한 번)보다 비싸다.
+    //
+    // 그 창은 짧지 않다. 마감 타이머는 단조 시계로 재는데 `clockSafeNow()`는
+    // 벽시계라, NTP가 시계를 앞으로 당기거나 절전에서 깨면 타이머는 원래 지연을
+    // 그대로 들고 있는 채 판정만 마감을 넘긴다 — 최대 24.8일(`MAX_TIMEOUT_MS`).
+    //
+    // 다시 검증할 이유도 없다. `licensed`에 들어왔다는 것 자체가 서명·기기·제품이
+    // 이미 통과했다는 뜻이고, 그 뒤로 달라진 것은 시간뿐이다.
+    const expMs = NOW + DAY
+    const h = harness({ record: { key: KEY, token: token({ expMs }) } })
+    h.timers.length = 0
+    h.setNow(expMs + 1)
+
+    const before = h.deviceReads()
+    for (let i = 0; i < 20; i++) expect(h.manager.allowsPaidFeatures()).toBe(true)
+    // 기기 읽기는 검증의 대리 지표다 — `verifyCurrent()`가 먼저 기기를 읽는다.
+    expect(h.deviceReads() - before).toBe(0)
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -603,7 +631,10 @@ describe('deactivate', () => {
   it('서버가 확인해야 로컬을 지운다', async () => {
     // 실패했는데 지우면 라이선스도 없고 슬롯은 잡힌 채인 상태가 된다 —
     // 지원 메일 말고는 빠져나올 길이 없는 유일한 결과다.
-    const h = harness({ record: { key: KEY, token: token() }, client: { deactivate: async () => ({ ok: false, error: 'network' }) } })
+    const h = harness({
+      record: { key: KEY, token: token() },
+      client: { deactivate: async () => ({ ok: false, error: 'network' }) }
+    })
     expect(await h.manager.deactivate()).toBe('network')
     expect(h.record.key).toBe(KEY)
     expect(h.manager.getState().status).toBe('licensed')
@@ -620,7 +651,10 @@ describe('deactivate', () => {
 
   it('서버에 이미 없는 기기는 로컬도 정리한다', async () => {
     for (const error of ['unknownKey', 'deviceNotActive'] as const) {
-      const h = harness({ record: { key: KEY, token: token() }, client: { deactivate: async () => ({ ok: false, error }) } })
+      const h = harness({
+        record: { key: KEY, token: token() },
+        client: { deactivate: async () => ({ ok: false, error }) }
+      })
       expect(await h.manager.deactivate()).toBeNull()
       expect(h.record.key).toBeNull()
       expect(h.record.token).toBeNull()
@@ -671,7 +705,11 @@ describe('revalidateIfNeeded', () => {
     // 취소는 서명 없이 도착하므로, 잘못된 취소는 재활성화 한 번으로 회복 가능한
     // 자리에 있어야 한다.
     const h = harness({
-      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), trialStartMs: NOW - 40 * DAY },
+      record: {
+        key: KEY,
+        token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }),
+        trialStartMs: NOW - 40 * DAY
+      },
       client: { validate: async () => ({ ok: false, error: 'revoked' }) }
     })
     await h.manager.revalidateIfNeeded()
@@ -733,6 +771,33 @@ describe('시작 비용', () => {
     // 바뀐 것이 없다. 실행할 때마다 쓰면 SSD에 이유 없는 쓰기가 쌓인다.
     const h = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW } })
     expect(h.writes()).toBe(0)
+  })
+
+  it('시계 래칫을 올리는 쓰기는 fsync를 요구하지 않는다', () => {
+    // 이 볼륨에서 fsync 한 번이 약 4ms — 그냥 쓰기의 22배이고, 메인 프로세스를
+    // 그대로 세운다. 6시간 폴이 상태와 무관하게 매번 한 번씩 쓰므로 모든 쓰기에
+    // 물리면 일주일에 28번 디스크 배리어를 친다. 래칫은 잃어도 다음 실행에서
+    // 다시 올라가는 단조 바닥일 뿐이라 그 값을 낼 이유가 없다.
+    const h = harness()
+    expect(h.durability).toEqual([false])
+  })
+
+  it('자격증명이 생기고 사라지는 쓰기는 fsync를 요구한다', async () => {
+    // 여기서만 "성공했다"고 사용자에게 말한다. 그 답 뒤에 전원이 끊겨 빈 파일이
+    // 남으면, 서버 슬롯은 소모됐는데 앱에는 아무것도 없는 상태가 된다.
+    const h = harness({
+      client: {
+        activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }),
+        deactivate: async () => ({ ok: true, value: undefined })
+      }
+    })
+    h.durability.length = 0
+    expect(await h.manager.activate(KEY)).toBeNull()
+    expect(h.durability).toContain(true)
+
+    h.durability.length = 0
+    await h.manager.deactivate()
+    expect(h.durability).toContain(true)
   })
 })
 
@@ -887,7 +952,11 @@ describe('재검증 예약 — 한 번 실패하고 끝나지 않는다', () => 
     // 답이 왔고 그 답이 아니오였다. 다시 물어도 같은 답이 온다 — 물러서며
     // 두드리는 것은 취소된 키로 서버를 때리는 것뿐이다.
     const h = harness({
-      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), trialStartMs: NOW - 40 * DAY },
+      record: {
+        key: KEY,
+        token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }),
+        trialStartMs: NOW - 40 * DAY
+      },
       client: { validate: async () => ({ ok: false, error: 'revoked' }) }
     })
     await h.manager.revalidateIfNeeded()

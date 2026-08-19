@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createLicenseClient, isServerRefusal } from './licenseClient'
+import { createLicenseClient, isServerRefusal, KNOWN_REFUSALS } from './licenseClient'
 import type { ClientError } from '../../shared/license'
 
 const KEY = 'GREENDAY-A2B3-C4D5-E6F7-G8H9'
@@ -212,5 +212,31 @@ describe('deactivate', () => {
     const { client } = clientReplying(json(404, { error: 'device_not_active' }))
     expect(await client.deactivate(KEY, DEVICE)).toEqual({ ok: false, error: 'deviceNotActive' })
     expect(isServerRefusal('deviceNotActive')).toBe(false)
+  })
+})
+
+describe('KNOWN_REFUSALS — 서버 어휘의 사본', () => {
+  it('권위 있는 세 코드가 표에 살아 있다', () => {
+    // 이 표는 서버(`bicmac-license`)의 어휘를 클라이언트에 베껴 둔 것이라 드리프트가
+    // 가능하다. 대부분의 드리프트는 안전한 쪽으로 떨어진다 — 모르는 코드는
+    // `network`가 되고 라이선스는 산다.
+    //
+    // 위험한 방향은 하나뿐이다: 이 셋 중 하나의 **이름이 서버에서 바뀌면**
+    // `isServerRefusal`이 발화하지 않아 취소된 라이선스가 유예 끝까지 살아 있는다.
+    // 서버 코드를 고치는 사람이 여기서 멈추도록 이름 그대로 못 박는다.
+    expect(KNOWN_REFUSALS['404:unknown_key']).toBe('unknownKey')
+    expect(KNOWN_REFUSALS['404:revoked']).toBe('revoked')
+    expect(KNOWN_REFUSALS['409:device_limit']).toBe('deviceLimit')
+    for (const error of ['unknownKey', 'revoked', 'deviceLimit'] as const) {
+      expect(isServerRefusal(error)).toBe(true)
+    }
+  })
+
+  it('표의 나머지는 권위가 없다', () => {
+    // 한도·형식·이미 해제됨은 "라이선스가 유효하지 않다"는 답이 아니다.
+    for (const error of Object.values(KNOWN_REFUSALS)) {
+      if (error === 'unknownKey' || error === 'revoked' || error === 'deviceLimit') continue
+      expect(isServerRefusal(error), `${error}가 판정으로 취급된다`).toBe(false)
+    }
   })
 })

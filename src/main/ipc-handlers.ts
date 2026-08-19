@@ -24,7 +24,7 @@ import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
 import { licensing, publicLicenseState } from './licensing/service'
 import { handle } from './ipc-gate'
-import { asPurchaseSource, purchaseUrl, recoverUrl } from '../shared/license'
+import { asPurchaseSource, purchaseUrl, recoverUrl } from './licensing/endpoints'
 import { toLocalDateString } from '../shared/date'
 
 // 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로

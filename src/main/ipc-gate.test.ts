@@ -1,17 +1,15 @@
 /**
- * 게이트가 **배선돼 있는지**, 그리고 **우회할 자리가 없는지** 확인한다.
+ * 게이트가 **배선돼 있는지**, 그리고 **정책이 무엇인지** 확인한다.
  *
- * 등급이 필수 인자가 되면서 "무료 채널 목록"과 그 목록을 지키던 소스 스크레이퍼가
- * 사라졌다. 남은 위험은 하나뿐이다 — 누군가 `ipcMain.handle`을 직접 부르는 것.
- * 그건 소스로 막는다(아래 첫 describe).
+ * 실제로 등록시키고 불러 본다. 정책이 옳은 것과 배선이 된 것은 따로 깨지고,
+ * 실제로 래퍼에서 확인 한 줄을 지웠을 때 다른 테스트가 전부 통과했다.
  *
- * 나머지는 실제로 등록시키고 불러 본다. 정책이 옳은 것과 배선이 된 것은 따로
- * 깨지고, 실제로 래퍼에서 확인 한 줄을 지웠을 때 다른 테스트가 전부 통과했다.
+ * 우회 경로(`ipcMain.handle` 직접 호출)는 여기가 아니라 `ipcMainBoundary.test.ts`가
+ * 본다 — 그건 이 파일의 커다란 electron 목이 하나도 필요 없는 검사인데, 여기 있으면
+ * 핸들러 import 그래프가 한 번 깨질 때 보안 가드까지 같이 쓰러진다.
  */
 
 import { describe, it, expect, vi, beforeAll } from 'vitest'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
 const handlers = new Map<string, Handler>()
@@ -50,7 +48,7 @@ vi.mock('./licensing/service', async (importOriginal) => {
 })
 
 const { setupIpcHandlers } = await import('./ipc-handlers')
-const { LICENSE_REQUIRED } = await import('../shared/license')
+const { LICENSE_REQUIRED, registeredTiers } = await import('./ipc-gate')
 
 beforeAll(() => {
   setupIpcHandlers()
@@ -62,25 +60,57 @@ function invoke(channel: string): unknown {
   return handler({})
 }
 
-describe('우회할 자리가 없다', () => {
-  it('ipcMain.handle은 게이트 안에서만 불린다', () => {
-    // 전에는 게이트가 `ipc-handlers.ts`의 파일 지역 헬퍼라, `index.ts`가 raw
-    // ipcMain.handle로 등록한 채널 셋이 그냥 열려 있었다. 목록을 지키던 테스트는
-    // 그 파일을 훑지도 않아서 볼 수조차 없었다. 이제는 통로가 하나고, 그 통로를
-    // 우회하는 순간 여기가 빨개진다.
-    const offenders: string[] = []
-    for (const file of walk(__dirname)) {
-      if (file.endsWith('ipc-gate.ts') || /\.test\.tsx?$/.test(file)) continue
-      if (readFileSync(file, 'utf-8').includes('ipcMain.handle')) {
-        offenders.push(file.split('/src/')[1])
-      }
-    }
-    expect(offenders, `게이트를 우회해 등록하는 파일: ${offenders.join(', ')}`).toEqual([])
+/**
+ * 무료로 열린 채널의 **완전한 목록**. 등급이 인자가 되면서 이 질문에 한눈에
+ * 답할 자리가 없어졌고, 등급 뒤집기는 배관처럼 읽히는 한 토큰짜리 diff가 됐다.
+ * 여기서 통째로 못 박으면 그 한 토큰이 반드시 의도적인 편집이 된다.
+ *
+ * 넷 중 하나가 아니면 여기 없어야 한다: 읽기 / 내보내기 / 라이선스 자체 /
+ * 결제와 무관한 앱 메타. 늘리기 전에 그 이유부터 적을 것.
+ */
+const FREE_CHANNELS = [
+  'ai:get-config',
+  'ai:get-history',
+  'app:capabilities',
+  'app:notification-permission',
+  'app:open-notification-settings',
+  'app:request-notification-permission',
+  'calendar:get-config',
+  'export-data',
+  'get-folders',
+  'get-habit-logs',
+  'get-habits',
+  'get-lists',
+  'get-pomodoro-sessions',
+  'get-score',
+  'get-tasks',
+  'get-trash-tasks',
+  'google:get-config',
+  'license:activate',
+  'license:deactivate',
+  'license:purchase',
+  'license:recover',
+  'license:state',
+  'open-attachment',
+  'open-external',
+  // 단축키 자체는 잠그지 않는다 — 눌러서 열리는 창의 쓰기가 이미 유료다.
+  'register-global-shortcut'
+]
+
+describe('정책', () => {
+  it('무료로 열린 채널은 이것뿐이다', () => {
+    const free = [...registeredTiers()]
+      .filter(([, tier]) => tier === 'free')
+      .map(([channel]) => channel)
+      .sort()
+    expect(free).toEqual([...FREE_CHANNELS].sort())
   })
 
-  it('등록된 채널이 실제로 있다', () => {
-    // 0이면 아래 검사가 전부 공짜로 통과한다.
+  it('등록된 채널이 빠짐없이 등급을 갖는다', () => {
+    // 0이면 아래 검사가 전부 공짜로 통과한다. 그리고 두 수가 갈리면 어딘가가
+    // 게이트를 통하지 않고 등록했다는 뜻이다.
     expect(handlers.size).toBeGreaterThan(50)
+    expect(registeredTiers().size).toBe(handlers.size)
   })
 })
 
@@ -116,12 +146,3 @@ describe('열린 상태', () => {
     expect(() => invoke('reorder-tasks')).not.toThrow(LICENSE_REQUIRED)
   })
 })
-
-function walk(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) walk(full, out)
-    else if (full.endsWith('.ts')) out.push(full)
-  }
-  return out
-}

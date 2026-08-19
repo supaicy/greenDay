@@ -67,8 +67,13 @@ TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 �
   `PublicLicenseState`만 넘긴다(상태·마감·가린 키).
 - **키 입력 UI는 `capabilities.needsLicenseKey`로만 그린다.** 스토어 빌드에 남으면
   Apple 3.1.1(외부 결제 유도)로 심사에서 거절된다.
-- 게이트는 `licensing/LicenseGate.tsx` **한 곳**이다(무료 티어 없음). 잠긴
-  화면에서도 내보내기가 눌린다 — 데이터를 인질로 잡지 않는다.
+- **진짜 게이트는 메인 프로세스의 `main/ipc-gate.ts`다.** 렌더러의
+  `licensing/LicenseGate.tsx`는 화면일 뿐이고, DOM 노드 하나 지우면 뚫린다.
+  등록할 때 등급을 필수 인자로 고른다 — `handle('create-task', 'paid', …)`.
+  **무엇이 무료인지는 `ipc-gate.test.ts`의 `FREE_CHANNELS`가 통째로 못 박는다**
+  (읽기 / 내보내기 / 라이선스 자체 / 결제와 무관한 앱 메타, 넷뿐이다).
+  `ipcMain.handle`을 직접 부르지 말 것 — biome 규칙과 `ipcMainBoundary.test.ts`가
+  양쪽에서 막는다. 잠긴 화면에서도 내보내기가 눌린다 — 데이터를 인질로 잡지 않는다.
 
 ## Health Stack
 

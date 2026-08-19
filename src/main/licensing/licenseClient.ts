@@ -54,6 +54,34 @@ export interface LicenseClient {
 
 const TIMEOUT_MS = 15_000
 
+/**
+ * **서버가 문서로 약속한 코드만** 판정으로 친다.
+ *
+ * 봉투가 있다는 것만으로는 부족했다 — CDN이나 API 게이트웨이가
+ * `404 {"error":"route_not_found"}`를 돌려주면 그게 `unknownKey`가 되어,
+ * 재검증이 돈 낸 사람의 토큰을 지우고 그 뒤로는 토큰이 없어 재검증조차 멈춘다.
+ * 모르는 코드는 서버가 아니다.
+ *
+ * 여기 없는 코드로 **떨어지는 방향은 안전하다** — `network`가 되고, 그건
+ * "못 닿았다"라서 라이선스가 그대로 산다. 위험한 방향은 반대다: 서버가
+ * `revoked`·`unknown_key`·`device_limit` 중 하나의 **이름을 바꾸면**
+ * `isServerRefusal`이 발화하지 않고 취소된 라이선스가 유예 끝까지 산다.
+ * 그래서 그 셋은 테스트가 따로 못 박는다.
+ *
+ * 모듈 상수인 이유는 호출마다 다시 짓지 않으려는 것보다도, 서버 계약이
+ * 함수 몸통이 아니라 파일 맨 위에서 읽혀야 하기 때문이다.
+ */
+export const KNOWN_REFUSALS: Record<string, ClientError> = {
+  '400:malformed_key': 'malformedKey',
+  '400:missing_fields': 'malformedKey',
+  '400:malformed_device': 'malformedKey',
+  '404:unknown_key': 'unknownKey',
+  '404:revoked': 'revoked',
+  '404:device_not_active': 'deviceNotActive',
+  '409:device_limit': 'deviceLimit',
+  '429:deactivation_limit': 'deactivationLimit'
+}
+
 export function createLicenseClient(options: LicenseClientOptions): LicenseClient {
   const fetchImpl = options.fetchImpl ?? ((url, init) => fetch(url, init))
 
@@ -95,8 +123,7 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
   }
 
   return {
-    activate: (key, device, deviceName) =>
-      activation('/v1/activate', { key, device, deviceName: deviceName ?? '' }),
+    activate: (key, device, deviceName) => activation('/v1/activate', { key, device, deviceName: deviceName ?? '' }),
     validate: (key, device) => activation('/v1/validate', { key, device }),
     async deactivate(key, device) {
       const reply = await send('/v1/deactivate', { key, device })
@@ -106,9 +133,7 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
       // 지워져, 지원 메일 말고는 빠져나올 길이 없는 상태가 된다. 활성화 쪽은
       // 이미 본문을 보는데 여기만 안 보고 있었다.
       if (reply.status === 200) {
-        return decode(reply.text)?.ok === true
-          ? { ok: true, value: undefined }
-          : { ok: false, error: 'network' }
+        return decode(reply.text)?.ok === true ? { ok: true, value: undefined } : { ok: false, error: 'network' }
       }
       return { ok: false, error: classify(reply.status, reply.text) }
     }
@@ -121,27 +146,13 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
  * 엔드포인트마다 따로 쓰면 어긋난다. 무엇보다 **거부는 거부처럼 생겨야 한다.**
  * Cloudflare의 HTML 404, 이름이 바뀐 워커 라우트, 캡티브 포털의 400, 엣지 WAF —
  * 어느 것도 라이선스 서버가 "아니오"라고 말한 것이 아니고, 상태 코드만으로는
- * 진짜와 구별되지 않는다. 그래서 4xx는 **JSON 봉투가 디코드될 때만** 판정이 된다.
+ * 진짜와 구별되지 않는다. 그래서 4xx는 **`KNOWN_REFUSALS`에 이름이 있을 때만**
+ * 판정이 된다.
  */
 function classify(status: number, text: string): ClientError {
   const named = decode(text)?.error
-  const name = typeof named === 'string' ? named : null
-
-  // **서버가 문서로 약속한 코드만** 판정으로 친다. 봉투가 있다는 것만으로는
-  // 부족했다 — CDN이나 API 게이트웨이가 `404 {"error":"route_not_found"}`를
-  // 돌려주면 그게 `unknownKey`가 되어, 재검증이 돈 낸 사람의 토큰을 지우고
-  // 그 뒤로는 토큰이 없어 재검증조차 멈춘다. 모르는 코드는 서버가 아니다.
-  const known: Partial<Record<number, Record<string, ClientError>>> = {
-    400: { malformed_key: 'malformedKey', missing_fields: 'malformedKey', malformed_device: 'malformedKey' },
-    404: { unknown_key: 'unknownKey', revoked: 'revoked', device_not_active: 'deviceNotActive' },
-    409: { device_limit: 'deviceLimit' },
-    429: { deactivation_limit: 'deactivationLimit' }
-  }
-  if (name !== null) {
-    const mapped = known[status]?.[name]
-    if (mapped) return mapped
-  }
-  return 'network'
+  if (typeof named !== 'string') return 'network'
+  return KNOWN_REFUSALS[`${status}:${named}`] ?? 'network'
 }
 
 function decode(text: string): Record<string, unknown> | null {

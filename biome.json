@@ -49,5 +49,27 @@
         "organizeImports": "off"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/main/**", "!src/main/ipc-gate.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": {
+                    "importNames": ["ipcMain"],
+                    "message": "IPC는 ipc-gate.ts의 handle()로만 등록한다."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

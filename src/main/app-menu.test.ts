@@ -41,11 +41,22 @@ describe('앱 메뉴', () => {
     expect(found).toContain('togglefullscreen')
   })
 
-  it('보기 메뉴 라벨은 main-strings에서 온다', async () => {
+  it('보기 메뉴 라벨이 UI 언어를 따라간다', async () => {
     // 하드코딩하면 다음 사람이 "환경설정…"을 넣을 때도 하드코딩하고,
     // main-strings.ts가 막으려던 분산이 메뉴를 통해 돌아온다.
+    //
+    // 'ko'만 확인하면 안 된다. `uiLanguage`의 기본값이 'ko'라, 언어가 바뀌어도
+    // 메뉴가 안 따라오는 상태에서 그 단언은 통과한다 — 실제로 그런 채로 한
+    // 라운드를 지나갔고, 영어 사용자에게 메뉴만 한국어로 굳어 있었다.
     const { mainStrings } = await import('../shared/main-strings')
+    const { setUiLanguage } = await import('./ui-language')
     expect(entries(buildAppMenu(false))).toContain(mainStrings('ko').menuView)
+    expect(setUiLanguage('en')).toBe(true)
+    expect(entries(buildAppMenu(false))).toContain(mainStrings('en').menuView)
+    // 같은 값을 다시 넣으면 '안 바뀌었다'고 답해야 한다 — index.ts가 이 답으로
+    // 메뉴 재건축 여부를 정하므로, 늘 true면 언어 저장마다 메뉴가 다시 선다.
+    expect(setUiLanguage('en')).toBe(false)
+    setUiLanguage('ko')
   })
 
   it('개발 빌드는 기본 메뉴를 그대로 쓴다', () => {

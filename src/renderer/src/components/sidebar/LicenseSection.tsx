@@ -44,6 +44,11 @@ export function LicenseSection({
   const [releaseError, setReleaseError] = useState<DeactivateFailure | null>(null)
   const [done, setDone] = useState<'activated' | 'deactivated' | null>(null)
 
+  // 두 버튼이 서로를 잠근다 — 활성화 중에 해제를 누르거나 그 반대가 되면, 방금
+  // 넣은 키가 도착하는 순간 지워지는 종류의 경합이 생긴다.
+  //
+  // 다만 활성화 버튼에는 `busy`를 쓰지 않는다. `useActivation`의 `canSubmit`이
+  // 이미 `!busy`를 품고 있어서 `busy || !canSubmit`은 앞항이 죽은 항이 된다.
   const busy = activation.busy || releasing
   const error = activation.error ?? releaseError
 
@@ -101,7 +106,7 @@ export function LicenseSection({
             <button
               type="button"
               onClick={() => void activate()}
-              disabled={busy || !activation.canSubmit}
+              disabled={!activation.canSubmit || releasing}
               className={`${button} ${isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'}`}
             >
               {activation.busy ? (
@@ -195,9 +200,7 @@ function StatusLine({
     return (
       <span>
         {t('license.free')}
-        <span className={`block text-xs mt-0.5 ${hintText}`}>
-          {t('license.freeDesc')}
-        </span>
+        <span className={`block text-xs mt-0.5 ${hintText}`}>{t('license.freeDesc')}</span>
       </span>
     )
   }

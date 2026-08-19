@@ -18,13 +18,7 @@ import { looksValidKey, normalizeKey } from './licenseKey'
 import { isServerRefusal, type LicenseClient } from './licenseClient'
 import type { LicenseRecord, LicenseStore } from './licenseStore'
 import type { ActivateFailure, DeactivateFailure, LicenseStatus } from '../../shared/license'
-import {
-  effectiveNow,
-  GRACE_DURATION_MS,
-  isTrialOpen,
-  TRIAL_DURATION_MS,
-  trialEndsAt
-} from './trialWindow'
+import { effectiveNow, GRACE_DURATION_MS, isTrialOpen, TRIAL_DURATION_MS, trialEndsAt } from './trialWindow'
 
 /**
  * 마감을 들고 다니는 상태들. 나머지는 마감이 없다.
@@ -35,9 +29,7 @@ import {
  */
 type WithDeadline = 'trial' | 'licensed' | 'grace'
 
-export type LicenseState =
-  | { status: Exclude<LicenseStatus, WithDeadline> }
-  | { status: WithDeadline; untilMs: number }
+export type LicenseState = { status: Exclude<LicenseStatus, WithDeadline> } | { status: WithDeadline; untilMs: number }
 
 export interface ManagerDeps {
   client: LicenseClient
@@ -114,9 +106,15 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   let state: LicenseState = { status: 'unlicensed' }
   /** 기기 id는 필요한 순간에만 읽는다 — deps.device의 주석 참고. */
   const deviceId = (): string | null => deps.device()
-  let cancelTimer: (() => void) | null = null
-  /** 지금 걸려 있는 마감. 같은 마감을 다시 걸어 타이머를 굶기지 않기 위한 것. */
-  let armedDeadlineMs: number | null = null
+  /**
+   * 지금 걸려 있는 마감 타이머와 그 마감 시각 — **한 덩어리로 든다.**
+   *
+   * 취소 함수와 마감을 따로 두면 "둘 다 null이거나 둘 다 차 있다"를 손으로
+   * 지켜야 하고, 어긋나는 순간의 증상이 둘 다 조용하다: 하나만 지우면 타이머가
+   * 굶고(아래 `scheduleClose` 주석), 반대로 어긋나면 이른 반환이 영영 걸려 다시
+   * 걸리지 않는다. 몇 주씩 안 꺼지는 앱에서만 보이는 종류의 고장이다.
+   */
+  let armed: { deadlineMs: number; cancel: () => void } | null = null
   /**
    * `dispose()` 이후인가.
    *
@@ -188,9 +186,26 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     record.lastSeenMs = deps.now()
   }
 
-  /** 디스크에 확정됐으면 true. 대부분의 호출자는 최선 노력이라 무시한다. */
+  /**
+   * 최선 노력 저장 — 시계 래칫과 트라이얼 시작일처럼 **잃어도 자가 치유되는** 것.
+   *
+   * fsync를 걸지 않는다. rename이 원자적이라 깨진 JSON은 어차피 나올 수 없고,
+   * 여기서 쓰는 값들은 다음 실행에서 다시 도출된다. 6시간 폴이 매번 이 길로
+   * 오므로 여기에 배리어를 물리면 하루 4번 메인 프로세스가 4ms씩 선다.
+   */
   function persist(): boolean {
     return deps.store.write({ ...record })
+  }
+
+  /**
+   * 내구성 있는 저장 — **사용자에게 결과를 말하기 직전**의 것.
+   *
+   * 활성화·갱신·해제 셋뿐이다. 이 답 뒤에 전원이 끊겨 빈 파일이 남으면 서버
+   * 슬롯은 움직였는데 앱에는 아무것도 없는 상태가 되고, 그건 지원 메일 말고는
+   * 빠져나올 길이 없다. 그 한 줌에만 fsync 값을 낸다.
+   */
+  function commit(): boolean {
+    return deps.store.write({ ...record }, true)
   }
 
   // ── 토큰 ───────────────────────────────────────────────────────────────────
@@ -327,9 +342,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   // ── 마감 타이머 ────────────────────────────────────────────────────────────
 
   function cancelClose(): void {
-    cancelTimer?.()
-    cancelTimer = null
-    armedDeadlineMs = null
+    armed?.cancel()
+    armed = null
   }
 
   /**
@@ -350,7 +364,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 다시 걸어, 6시간보다 먼 마감은 **영영 발화하지 못한다.** 그 타이머가 단조
     // 시계 방어의 전부다(깨어났다는 사실 자체가 시간이 흘렀다는 증거) — 굶기면
     // 벽시계를 묶어 둔 사용자에게 트라이얼이 안 닫힌다. 리뷰에서 실증했다.
-    if (armedDeadlineMs === deadlineMs && cancelTimer) return
+    if (armed?.deadlineMs === deadlineMs) return
     cancelClose()
     // 남은 시간을 **래칫으로** 잰다. `deps.now()`(생 벽시계)로 재면, 시계를 묶어
     // 두거나 되돌린 사용자에게 `remaining`이 줄지 않아 조각이 깰 때마다 또 한
@@ -360,10 +374,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     if (remaining <= 0) return
     const wait = Math.min(remaining, MAX_TIMEOUT_MS)
     const reachedMs = clockSafeNow() + wait
-    armedDeadlineMs = deadlineMs
-    cancelTimer = deps.setTimer(wait, () => {
-      cancelTimer = null
-      armedDeadlineMs = null
+    const cancel = deps.setTimer(wait, () => {
+      armed = null
       // 자고 났다는 것은 벽시계에 물어볼 수 없는 사실을 안다는 뜻이다:
       // setTimeout은 단조 시계로 재므로 날짜를 아무리 고쳐도 이 줄이 돌았다면
       // 그만큼의 시간이 실제로 흘렀다. 기록해 두면 되돌리기가 막힌다 —
@@ -372,6 +384,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       if (advanceClockFloor(reachedMs)) persist()
       settle()
     })
+    armed = { deadlineMs, cancel }
   }
 
   // ── 공개 동작 ──────────────────────────────────────────────────────────────
@@ -401,7 +414,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     anchorClockToServerTime()
     // 여기서만 확정 여부를 본다. 못 적었는데 성공이라고 답하면, 사용자는
     // 활성화됐다고 믿고 서버 슬롯은 소모된 채, 재시작하면 사라져 있다.
-    if (!persist()) {
+    if (!commit()) {
       record.key = null
       record.token = null
       return 'saveFailed'
@@ -491,8 +504,9 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     cancelRevalidateTimer()
     if (disposed) return
     unreachableStreak = outcome === 'unreachable' ? unreachableStreak + 1 : 0
-    // 상한을 씌우지 않는다 — 두 값 모두 `MAX_TIMEOUT_MS`의 1/100 이하인 상수라
-    // 클램프가 발화할 수 없다. `scheduleClose` 쪽은 마감이 토큰에서 오므로 진짜다.
+    // 상한을 씌우지 않는다 — 둘 다 상수이고 가장 큰 `REVALIDATE_POLL_MS`(6시간)도
+    // `MAX_TIMEOUT_MS`(약 24.8일)의 1/99이라 클램프가 발화할 수 없다.
+    // `scheduleClose` 쪽은 마감이 토큰에서 오므로 진짜 상한이 필요하다.
     const delay =
       unreachableStreak === 0
         ? REVALIDATE_POLL_MS
@@ -527,7 +541,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       if (!verified.ok) return 'answered'
       record.token = result.value.token
       anchorClockToServerTime()
-      persist()
+      commit()
       settle()
       return 'answered'
     }
@@ -553,7 +567,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 두 번째 자격증명이 없다.
     record.token = null
     if (!keepKey) record.key = null
-    const committed = persist()
+    const committed = commit()
     // 트라이얼이 뭐라고 하든 그리로 돌아간다. 2주 전에 설치한 사람에게는
     // "만료"다. 기록된 시작일이 판정하므로 이걸로 새 창을 만들 수는 없다.
     settle()
@@ -565,14 +579,18 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 허용 상태는 저마다 자기 마감과 **지금** 비교된다. `state`는 실행 시점과
     // 마감 타이머에서만 움직이는데, 데스크톱 앱은 몇 주씩 안 꺼진다.
     switch (state.status) {
-      case 'licensed': {
-        if (clockSafeNow() < state.untilMs) return true
-        // 만료된 라이선스는 절벽이 아니라 같은 토큰이 얻는 유예로 떨어진다.
-        // 새벽 3시에 토큰이 만료된 유료 사용자를 앱이 꺼질 때까지 거절하고
-        // 트라이얼 만료 안내를 보여주는 것은 정확히 틀린 사람을 벌주는 것이다.
-        const ceiling = graceDeadlineOf(verifyCurrent())
-        return ceiling !== null && clockSafeNow() < ceiling
-      }
+      // 만료된 라이선스는 절벽이 아니라 같은 토큰이 얻는 유예로 떨어진다.
+      // 새벽 3시에 토큰이 만료된 유료 사용자를 앱이 꺼질 때까지 거절하고
+      // 트라이얼 만료 안내를 보여주는 것은 정확히 틀린 사람을 벌주는 것이다.
+      //
+      // 그 천장을 **산술로** 얻는다. `licensed`의 `untilMs`는 검증을 통과한
+      // 토큰의 `exp`(ms) 그 자체라, 유예 끝은 거기에 상수를 더한 값이다 —
+      // `graceDeadlineOf(verifyCurrent())`가 계산하는 것과 같은 숫자다.
+      // 여기서 다시 검증하면 **모든 유료 IPC 앞에** ed25519 한 번(33µs)이
+      // 붙는데, `licensed`에 들어왔다는 것 자체가 서명·기기·제품이 통과했다는
+      // 뜻이고 그 뒤로 달라진 것은 시간뿐이라 새로 알아낼 것이 없다.
+      case 'licensed':
+        return clockSafeNow() < state.untilMs + GRACE_DURATION_MS
       case 'grace':
       case 'trial':
         return clockSafeNow() < state.untilMs
