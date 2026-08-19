@@ -22,8 +22,7 @@ import {
   readFileSync,
   renameSync,
   unlinkSync,
-  writeFileSync,
-  writeSync
+  writeFileSync
 } from 'node:fs'
 
 export interface LicenseRecord {
@@ -65,15 +64,21 @@ export function createFileStore(filePath: string): LicenseStore {
      * 확정 여부를 돌려주면 활성화가 "성공했다고 답했는데 재시작하면 사라지는"
      * 결과를 피할 수 있다.
      *
-     * **fsync는 `durable`일 때만.** rename은 원자적 *교체*이지 내구성 있는
-     * *커밋*이 아니라서, 임시 파일의 내용이 아직 페이지 캐시에만 있으면 활성화가
-     * 성공이라 답한 뒤 전원이 끊겼을 때 빈 파일이 제자리에 남는다. 그런데 이
-     * 볼륨(APFS)에서 fsync 한 번은 **약 4ms, 그냥 쓰기의 22배**이고 메인
-     * 프로세스를 그대로 세운다. 라이선스가 있는 설치에서는 6시간 재검증 폴이
-     * 상태가 안 바뀌어도 매번 한 번씩 쓰므로(하루 4회), 모든 쓰기에 물리면
-     * 래칫 하나 올리자고 일주일에 28번 디스크 배리어를 친다. 그리고 래칫은 잃어도 자가 치유된다 — 다음 실행에서
-     * 다시 올라가는 단조 바닥일 뿐 아무 권한도 주지 않는다. 잃으면 안 되는 것은
-     * "사용자에게 성공했다고 말한" 쓰기뿐이다.
+     * **fsync는 잃으면 안 되는 것이 실려 있을 때.** rename은 원자적 *교체*이지
+     * 내구성 있는 *커밋*이 아니라서, 임시 파일의 내용이 아직 페이지 캐시에만
+     * 있으면 성공이라 답한 뒤 전원이 끊겼을 때 빈 파일이 제자리에 남는다.
+     * 그런데 이 볼륨(APFS)에서 fsync 한 번은 **약 4ms, 그냥 쓰기의 22배**이고
+     * 메인 프로세스를 그대로 세운다. 라이선스가 있는 설치에서는 6시간 재검증
+     * 폴이 상태가 안 바뀌어도 매번 한 번씩 쓰므로(하루 4회), 모든 쓰기에 물리면
+     * 래칫 하나 올리자고 일주일에 28번 디스크 배리어를 친다.
+     *
+     * 그래서 배리어를 걸지 말지는 **호출처가 고른다.** 판단 근거가 여기 없기
+     * 때문이다: `write()`는 레코드를 통째로 직렬화하므로 래칫 하나 올리는 쓰기도
+     * 같은 파일에 키와 토큰을 다시 쓰고, 그게 플러시되기 전에 전원이 끊기면
+     * 자가 치유되는 것은 래칫뿐이고 돈 낸 사람의 라이선스는 사라진다. 무엇이
+     * 실려 있는지는 `licenseManager.persist()`가 안다 — 규칙은 거기 한 곳에만
+     * 둔다(한때 "래칫은 자가 치유되니 안 걸어도 된다"고만 적어 뒀는데, 그
+     * 문장은 레코드가 통째로 실린다는 사실을 빠뜨리고 있었다).
      *
      * `writeFileSync(..., { flush: true })`로 줄여 쓰지 말 것. 더 단정해 보이지만
      * 여기서 재보면 0.11ms — 그냥 쓰기(0.15ms)와 구별되지 않고 명시적
@@ -88,7 +93,12 @@ export function createFileStore(filePath: string): LicenseStore {
         if (durable) {
           const fd = openSync(tempPath, 'w')
           try {
-            writeSync(fd, json, null, 'utf-8')
+            // `writeSync`가 아니라 `writeFileSync(fd, …)`다. 앞엣것은 짧은 쓰기를
+            // **재시도하지 않아서**, 디스크가 가득 차면 부분 쓰기를 예외 없이
+            // 돌려준다 — 그러면 잘린 JSON을 rename이 원자적으로 갈아끼우고
+            // fsync가 그 잘림을 내구성 있게 못 박은 뒤, 이 함수가 true를 답한다.
+            // `writeFileSync`는 루프를 돌고, fd를 받아도 닫지 않아 fsync가 이어진다.
+            writeFileSync(fd, json, 'utf-8')
             fsyncSync(fd)
           } finally {
             closeSync(fd)

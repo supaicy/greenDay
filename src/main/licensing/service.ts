@@ -38,13 +38,18 @@ export const IS_ENFORCED = false
  * `IS_ENFORCED`만으로는 부족하다. 스토어 빌드에서 켜지면 **Apple로 결제한 사람이
  * 우리 키가 없다는 이유로 잠기고**, 잠금 화면에는 키 입력 칸과 외부 구매 링크가
  * 뜬다 — 가이드라인 3.1.1 위반이자 심사 거절 사유다. `needsLicenseKey`가
- * "직판 채널인가"를 이미 알고 있으니 그걸 그대로 쓴다.
+ * "직판 채널인가"를 이미 알고 있으니 그 항을 쓴다.
  *
  * 한 곳에서 정해야 한다는 것이 핵심이다. 렌더러에서 따로 확인하면 게이트와
  * 설정 화면이 서로 다른 판단을 하게 된다.
+ *
+ * 술어는 `needsLicenseKey`가 아니라 **`enforcesLicense`**다. 앞엣것은 "키 입력을
+ * 그려도 되는가"라 개발 빌드에서도 참이고(`capabilities.test.ts`가 일부러 못
+ * 박는다), 그걸 그대로 쓰면 enforcement를 켜는 날 `npm run dev`가 진짜
+ * 트라이얼을 시작하고 30일 뒤 개발 환경이 스스로 잠긴다 — 넣을 키도 없이.
  */
 function enforcementActive(): boolean {
-  return IS_ENFORCED && currentCapabilities().needsLicenseKey
+  return IS_ENFORCED && currentCapabilities().enforcesLicense
 }
 
 let manager: LicenseManager | null = null
@@ -60,6 +65,13 @@ export function initLicensing(): void {
     return
   }
 
+  // **대입이 먼저다.** `createLicenseManager`는 돌려주기 전에 `settle()`을 도는데,
+  // 그게 상태를 옮기면 `onChange`가 여기서 불린다 — 그때 `manager`가 아직 null이라
+  // `publicLicenseState()`가 `UNKNOWN_LICENSE_STATE`(잠그지 않음)를 내보낸다.
+  // 앱이 내보내는 **첫 방송이 정반대 값**이 되는 것이다. 오늘 무해한 이유는
+  // 창이 아직 구독하지 않았다는 순서 하나뿐이고, enforcement를 켜면 거의 매
+  // 실행에서 발화한다. 그래서 알림을 한 박자 미루고, 대입 뒤에 직접 한 번 쏜다.
+  let ready = false
   manager = createLicenseManager({
     client: createLicenseClient({ baseUrl: LICENSE_BASE_URL }),
     store: createFileStore(join(app.getPath('userData'), 'license.json')),
@@ -72,8 +84,14 @@ export function initLicensing(): void {
       const handle = setTimeout(fn, ms)
       return () => clearTimeout(handle)
     },
-    onChange: broadcast
+    onChange: () => {
+      if (ready) broadcast()
+    }
   })
+  ready = true
+
+  // 생성자가 상태를 옮겼을 수 있다. 이제 매니저가 대입돼 있으니 진짜 값이 나간다.
+  broadcast()
 
   // 실행할 때마다 조용히 한 번. 반감기를 지난 토큰만 네트워크를 치므로, 한 달에
   // 한 번 온라인이 되는 기기도 유예 끝에 몰리지 않는다.
@@ -103,7 +121,15 @@ export function publicLicenseState(): PublicLicenseState {
 function broadcast(): void {
   const payload = publicLicenseState()
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send('license:changed', payload)
+    // **창 하나가 던져도 나머지를 죽이지 않는다.** 정리 중인 `webContents`로
+    // 보내면 던지는데, 이 함수는 `apply()` 안에서 불리므로 그 던짐이
+    // `revalidateIfNeeded`의 재예약까지 타고 올라가 폴을 영영 멈춘다.
+    // (매니저 쪽에도 `finally`를 뒀다. 여기까지 오는 게 애초에 낫다.)
+    try {
+      win.webContents.send('license:changed', payload)
+    } catch {
+      /* 닫히는 중인 창이다 */
+    }
   }
 }
 

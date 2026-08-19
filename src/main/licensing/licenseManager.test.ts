@@ -49,6 +49,8 @@ interface Harness {
   durability: boolean[]
   /** 화면에 알린 상태들. 이게 없으면 렌더러가 마감을 모른다. */
   changes: LicenseState[]
+  /** 다음 상태 알림부터 던지게 한다. */
+  breakBroadcast: () => void
 }
 
 function harness(
@@ -75,6 +77,8 @@ function harness(
   let writes = 0
   const durability: boolean[] = []
   const changes: LicenseState[] = []
+  /** 켜면 상태 알림이 던진다 — 정리 중인 `webContents`가 그렇다. 생성 뒤에만 켠다. */
+  let throwOnChange = false
   const timers: { atMs: number; fire: () => void }[] = []
   const calls: string[] = []
 
@@ -107,8 +111,12 @@ function harness(
       write: (next, durable = false) => {
         writes += 1
         durability.push(durable)
+        // **실패한 쓰기는 아무것도 안 남긴다.** 진짜 스토어는 임시 파일에 쓰고
+        // rename으로 갈아끼우므로, 실패하면 옛 레코드가 그대로 있다. 여기서
+        // 갱신해 버리면 저장 실패 경로가 실제보다 관대해 보인다.
+        if (!storeWritable) return false
         Object.assign(record, next)
-        return storeWritable
+        return true
       }
     },
     publicKey,
@@ -119,7 +127,10 @@ function harness(
     deviceName: 'test-machine',
     enforced: over.enforced ?? true,
     now: () => current,
-    onChange: (next) => changes.push(next),
+    onChange: (next) => {
+      changes.push(next)
+      if (throwOnChange) throw new Error('webContents가 정리됐다')
+    },
     setTimer: (ms, fn) => {
       const entry = { atMs: current + ms, fire: fn }
       timers.push(entry)
@@ -139,6 +150,9 @@ function harness(
     writes: () => writes,
     durability,
     changes,
+    breakBroadcast: () => {
+      throwOnChange = true
+    },
     setNow: (ms) => {
       current = ms
     },
@@ -793,6 +807,89 @@ describe('revalidateIfNeeded', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('재검증이 조용히 빠뜨리던 것들', () => {
+  it('알림이 던져도 다음 폴은 걸린다', async () => {
+    // `apply()`는 창에 방송하는데, 정리 중인 `webContents`는 던진다. 그 던짐이
+    // `armNextRevalidation`까지 건너뛰면 폴이 영영 다시 걸리지 않고, 데스크톱
+    // 앱은 몇 주씩 안 꺼지므로 그 세션 내내 취소도 만료도 눈치채지 못한다.
+    const h = harness({ record: { trialStartMs: NOW } })
+    h.breakBroadcast()
+    // 상태가 실제로 움직여야 알림이 나간다 — 트라이얼을 넘긴다.
+    h.setNow(NOW + TRIAL_DURATION_MS + DAY)
+    // 재예약은 옛 타이머를 지우고 새로 걸므로 개수가 아니라 **시각**이 증거다.
+    const before = h.timers.map((t) => t.atMs)
+    await expect(h.manager.revalidateIfNeeded()).rejects.toThrow()
+    const armedAt = h.timers.map((t) => t.atMs)
+    expect(armedAt, '다음 재검증이 예약되지 않았다').not.toEqual(before)
+    expect(armedAt).toHaveLength(1)
+  })
+
+  it('저장에 실패한 재활성화가 멀쩡하던 라이선스를 지우지 않는다', async () => {
+    // 이미 라이선스가 있는 사람이 키를 다시 넣었는데 쓰기가 한 번 실패하면,
+    // 되돌리기가 `null`을 쓰는 한 메모리의 라이선스가 사라지고 다음 `persist()`가
+    // 그 빈 레코드를 디스크에 못 박는다 — 일시적인 ENOSPC가 영구 손실이 된다.
+    const stored = token()
+    const h = harness({
+      record: { key: KEY, token: stored, lastSeenMs: NOW },
+      storeWritable: false,
+      client: {
+        activate: async () => ({
+          ok: true,
+          value: { token: token({ lic: licenseHash(OTHER_KEY) }), expiresAtMs: NOW + TOKEN_TTL_MS }
+        })
+      }
+    })
+    expect(h.manager.getState().status).toBe('licensed')
+
+    expect(await h.manager.activate(OTHER_KEY)).toBe('saveFailed')
+
+    expect(h.record.key, '옛 키가 지워졌다').toBe(KEY)
+    expect(h.record.token, '옛 토큰이 지워졌다').toBe(stored)
+    expect(h.record.lastSeenMs).toBe(NOW)
+    expect(h.manager.getMaskedKey()).not.toBeNull()
+  })
+
+  it('기기 한도는 취소가 아니다 — 토큰을 지우지 않는다', async () => {
+    // `/v1/validate`도 서버에서는 활성화라, 이 기기 슬롯이 빠진 뒤 키가 한도에
+    // 차 있으면 409가 온다. 그걸 취소로 읽으면 돈 낸 사람이 유예도 없이 그
+    // 자리에서 잠기고, 폴은 6시간마다 같은 거절을 받아 영영 못 빠져나온다.
+    const stored = token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY })
+    const h = harness({
+      record: { key: KEY, token: stored },
+      client: { validate: async () => ({ ok: false, error: 'deviceLimit' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.token).toBe(stored)
+    expect(h.manager.getState().status).toBe('licensed')
+  })
+
+  it('취소는 여전히 토큰을 지운다', async () => {
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: { validate: async () => ({ ok: false, error: 'revoked' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.token).toBeNull()
+    expect(h.record.key).toBe(KEY) // 잘못된 취소는 재활성화로 회복 가능해야 한다
+  })
+
+  it('시계 바닥은 서버가 서명한 iat로 내린다 — 로컬 벽시계가 아니라', async () => {
+    // 이게 래칫을 **낮출 수 있는 유일한 경로**다. 로컬 시계로 내리면, 되돌리기를
+    // 막으려는 장치의 유일한 하강 문이 공격자가 쓰는 값을 믿는 셈이 된다.
+    // 두 값을 벌려 놔야 구분된다 — 같으면 어느 쪽을 써도 테스트가 통과한다.
+    const serverIatMs = NOW - 3 * DAY
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), lastSeenMs: NOW + 90 * DAY },
+      client: {
+        validate: async () => ({
+          ok: true,
+          value: { token: token({ iatMs: serverIatMs, expMs: NOW + 27 * DAY }), expiresAtMs: NOW + 27 * DAY }
+        })
+      }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.lastSeenMs).toBe(serverIatMs)
+  })
+
   it('취소된 뒤 키만 남은 설치는 폴마다 서버를 두드리지 않는다', () => {
     // `if (!key || !record.token)`에서 토큰 쪽 항만 지워도 테스트가 전부 통과했다.
     // 그 상태가 바로 `clearLocalLicense(true)`가 남기는 것(서버가 취소했을 때)이라,
@@ -894,7 +991,19 @@ describe('시작 비용', () => {
     expect(h.writes()).toBe(0)
   })
 
-  it('시계 래칫을 올리는 쓰기는 fsync를 요구하지 않는다', () => {
+  it('키나 토큰이 실려 있으면 래칫 쓰기도 fsync한다', () => {
+    // `write()`는 레코드를 통째로 직렬화한다. 래칫 하나 올리는 쓰기도 같은
+    // 파일에 키와 토큰을 다시 쓰므로, 그게 플러시되기 전에 전원이 끊기면
+    // 자가 치유되는 것은 래칫뿐이고 라이선스는 사라진다.
+    const h = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW - 5 * DAY } })
+    h.durability.length = 0
+    return h.manager.revalidateIfNeeded().then(() => {
+      expect(h.durability.length).toBeGreaterThan(0)
+      expect(h.durability.every(Boolean), '라이선스가 실린 쓰기가 fsync 없이 나갔다').toBe(true)
+    })
+  })
+
+  it('트라이얼 설치의 래칫 쓰기는 fsync를 요구하지 않는다', () => {
     // 이 볼륨에서 fsync 한 번이 약 4ms — 그냥 쓰기의 22배이고, 메인 프로세스를
     // 그대로 세운다. 6시간 폴이 상태와 무관하게 매번 한 번씩 쓰므로 모든 쓰기에
     // 물리면 일주일에 28번 디스크 배리어를 친다. 래칫은 잃어도 다음 실행에서

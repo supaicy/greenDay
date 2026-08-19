@@ -17,9 +17,15 @@ vi.mock('node:os', () => ({
   }
 }))
 
+/** 방송을 실제로 받아 보는 가짜 창. 창이 없으면 첫 방송이 무엇인지 볼 수 없다. */
+const sent: { channel: string; payload: unknown }[] = []
 vi.mock('electron', () => ({
   app: { getPath: () => '/tmp/greenday-service-test' },
-  BrowserWindow: { getAllWindows: () => [] }
+  BrowserWindow: {
+    getAllWindows: () => [
+      { webContents: { send: (channel: string, payload: unknown) => sent.push({ channel, payload }) } }
+    ]
+  }
 }))
 
 vi.mock('../capabilities', async () => {
@@ -101,6 +107,26 @@ describe('기기 이름 캐시', () => {
   it('빈 호스트네임은 null이다 — 화면에 빈 <code>가 뜨지 않게', () => {
     boot('')
     expect(publicLicenseState().deviceName).toBeNull()
+    disposeLicensing()
+  })
+})
+
+describe('첫 방송', () => {
+  it('매니저가 대입된 뒤에 나간다 — 아니면 정반대 값이 나간다', () => {
+    // `createLicenseManager`는 돌려주기 전에 `settle()`을 돈다. 그때 상태가
+    // 움직이면 `onChange`가 불리는데, 그 시점에 `manager`는 아직 null이라
+    // `publicLicenseState()`가 `UNKNOWN_LICENSE_STATE`(잠그지 않음, deviceName
+    // null)를 내보낸다. 앱이 내보내는 **첫 방송이 정반대 값**이 되는 것이다.
+    // 오늘 무해한 이유는 창이 아직 구독하지 않았다는 순서 하나뿐이다.
+    disposeLicensing()
+    hostname = 'mac-broadcast'
+    sent.length = 0
+    initLicensing()
+
+    const changes = sent.filter((s) => s.channel === 'license:changed')
+    expect(changes.length, '첫 방송이 아예 없다').toBeGreaterThan(0)
+    // UNKNOWN_LICENSE_STATE는 deviceName이 null이다. 진짜 상태는 호스트네임을 싣는다.
+    expect((changes[0].payload as { deviceName: string | null }).deviceName).toBe('mac-broadcast')
     disposeLicensing()
   })
 })

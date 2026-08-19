@@ -82,3 +82,26 @@ describe('updatesViaStore', () => {
     }
   })
 })
+
+describe('enforcesLicense — 잠그는가', () => {
+  it('개발 빌드는 키 입력을 보여 주지만 잠그지는 않는다', () => {
+    // 두 질문이다. 한 술어에 맡기면 enforcement를 켜는 날 `npm run dev`가
+    // 진짜 트라이얼을 시작하고 30일 뒤 개발 환경이 스스로 잠긴다 — 넣을 키도 없이.
+    const dev = capabilitiesFor(facts({ isDev: true }))
+    expect(dev.needsLicenseKey).toBe(true)
+    expect(dev.enforcesLicense).toBe(false)
+  })
+
+  it('직판 출하 빌드는 잠근다', () => {
+    const shipped = capabilitiesFor(facts({}))
+    expect(shipped.enforcesLicense).toBe(true)
+  })
+
+  it('스토어 빌드는 키도 안 받고 잠그지도 않는다 — Apple 3.1.1', () => {
+    for (const store of [facts({ isMas: true }), facts({ isWindowsStore: true })]) {
+      const c = capabilitiesFor(store)
+      expect(c.needsLicenseKey).toBe(false)
+      expect(c.enforcesLicense).toBe(false)
+    }
+  })
+})

@@ -181,26 +181,36 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   }
 
   /**
-   * 서버의 말에 따라 시계를 지금으로 다시 맞춘다.
+   * 서버가 방금 서명한 시각으로 래칫을 다시 맞춘다.
    *
-   * 서버가 방금 발급한 토큰은 진짜 시각의 증거이고, `lastSeen`을 **낮출 수 있는
-   * 유일한 것**이다. 이게 없으면 시계가 한 번 앞서 튄 기기는 재활성화로도
-   * 회복하지 못한다.
+   * `lastSeen`을 **낮출 수 있는 유일한 것**이다. 이게 없으면 시계가 한 번 앞서
+   * 튄 기기는 재활성화로도 회복하지 못한다.
+   *
+   * 기준은 토큰의 `iat`다 — `deps.now()`가 아니다. 로컬 벽시계는 이 래칫이
+   * 애초에 방어하려는 대상이라, 그걸로 바닥을 내리면 유일한 하강 경로가 공격자가
+   * 쓰는 값을 믿는 셈이 된다. `iat`는 서명 안에 있고 검증을 통과한 뒤에만 여기
+   * 닿는다.
    */
-  function anchorClockToServerTime(): void {
-    record.lastSeenMs = deps.now()
+  function anchorClockToServerTime(payload: TokenPayload): void {
+    record.lastSeenMs = payload.iat * 1000
   }
 
   /**
-   * 최선 노력 저장 — 시계 래칫과 트라이얼 시작일처럼 **잃어도 자가 치유되는** 것.
+   * 시계 래칫과 트라이얼 시작일 같은, **잃어도 자가 치유되는** 값의 저장.
    *
-   * fsync를 걸지 않는다. rename이 원자적이라 깨진 JSON은 어차피 나올 수 없고,
-   * 여기서 쓰는 값들은 다음 실행에서 다시 도출된다. 라이선스가 있는 설치에서는
-   * 6시간 폴이 매번 이 길로 오므로, 여기에 배리어를 물리면 하루 4번 메인
-   * 프로세스가 4ms씩 선다.
+   * 그런데 배리어를 아예 안 걸 수는 없다. `store.write()`는 레코드를 **통째로**
+   * 직렬화하므로 래칫 하나 올리는 쓰기도 같은 파일에 키와 토큰을 다시 쓴다.
+   * 그게 플러시되기 전에 전원이 끊기면 자가 치유되는 것은 래칫뿐이고, 돈 낸
+   * 사람의 라이선스는 사라진다 — 6시간 폴이 라이선스 설치에서 매번 이 길로
+   * 오므로 드문 사고도 아니다.
+   *
+   * 그래서 **실려 있는 것으로 고른다.** 키도 토큰도 없는 트라이얼 설치에서만
+   * 진짜로 값싼 쓰기이고, 그때가 하루 4번 4ms를 아끼는 것이 의미 있는
+   * 유일한 경우다(그쪽이 사용자 대다수이기도 하다).
    */
   function persist(): boolean {
-    return deps.store.write({ ...record })
+    const carriesCredentials = record.key !== null || record.token !== null
+    return deps.store.write({ ...record }, carriesCredentials)
   }
 
   /**
@@ -433,16 +443,21 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     })
     if (!verified.ok) return 'badToken'
 
+    // **되돌릴 것을 먼저 챙긴다.** 이미 라이선스가 있는 사람이 키를 다시
+    // 넣었는데 디스크 쓰기가 한 번 실패하면, 되돌리기가 `null`을 쓰는 한
+    // 멀쩡하던 라이선스가 메모리에서 사라진다 — 그리고 다음 `persist()`가
+    // 그 빈 레코드를 디스크에 못 박는다. 일시적인 ENOSPC가 영구 손실이 된다.
+    const before = { key: record.key, token: record.token, lastSeenMs: record.lastSeenMs }
+
     record.key = key
     record.token = result.value.token
     // 토큰의 `expiresAt`이 아니라 토큰 자체의 `exp`를 쓴다 — 옆에 실려 온
     // 숫자는 서명 밖에 있다.
-    anchorClockToServerTime()
+    anchorClockToServerTime(verified.payload)
     // 여기서만 확정 여부를 본다. 못 적었는데 성공이라고 답하면, 사용자는
     // 활성화됐다고 믿고 서버 슬롯은 소모된 채, 재시작하면 사라져 있다.
     if (!commit()) {
-      record.key = null
-      record.token = null
+      Object.assign(record, before)
       return 'saveFailed'
     }
     settle()
@@ -512,8 +527,16 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 한 달에 한 번 온라인이 되는 기기도 유예 끝에 몰리지 않는다.
    */
   async function revalidateIfNeeded(): Promise<void> {
-    const outcome = await runRevalidation()
-    armNextRevalidation(outcome)
+    // **무슨 일이 있어도 다음 폴을 건다.** 여기서 던지면 재예약이 통째로
+    // 건너뛰어지고, 데스크톱 앱은 몇 주씩 안 꺼지므로 그 세션 내내 취소도
+    // 만료도 눈치채지 못한다. 던질 만한 자리가 실제로 있다: `apply()`가
+    // `onChange`로 창에 방송하는데, 정리 중인 `webContents`는 던진다.
+    let outcome: RevalidateOutcome = 'unreachable'
+    try {
+      outcome = await runRevalidation()
+    } finally {
+      armNextRevalidation(outcome)
+    }
   }
 
   async function runRevalidation(): Promise<RevalidateOutcome> {
@@ -587,7 +610,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       })
       if (!verified.ok) return 'settled'
       record.token = result.value.token
-      anchorClockToServerTime()
+      anchorClockToServerTime(verified.payload)
       commit()
       settle()
       return 'settled'
@@ -597,6 +620,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 그대로 선다 — 이걸 거부처럼 다루면 기차 터널 하나가 라이선스를 지운다.
     if (!isServerRefusal(result.error)) return 'unreachable'
     if (record.key !== key) return 'settled'
+    // **한도는 취소가 아니다.** `/v1/validate`는 서버에서 `handleActivate`로 가므로,
+    // 이 기기의 슬롯이 관리자 조치나 오래된 활성화 회수로 빠진 뒤 키가 한도에 차
+    // 있으면 `device_limit`이 온다. 그건 "이 라이선스가 무효다"가 아니라 "슬롯을
+    // 하나 비워라"인데, 여기서 토큰을 지우면 돈 낸 사람이 유예도 없이 그 자리에서
+    // 잠기고 폴은 6시간마다 같은 거절을 받는다. 토큰을 그대로 두면 `exp`+유예만큼
+    // 시간이 생겨 웹에서 슬롯을 정리할 수 있고, 정리되는 순간 다음 폴이 통과한다.
+    if (result.error === 'deviceLimit') return 'settled'
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
     // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
     clearLocalLicense(true)

@@ -50,6 +50,16 @@ export interface Capabilities {
    */
   needsLicenseKey: boolean
 
+  /**
+   * 이 빌드가 실제로 **잠그는가**.
+   *
+   * `needsLicenseKey`와 갈라 둔다. 그쪽은 "키 입력을 그려도 되는가"이고 개발
+   * 빌드에서 참이다(개발 중에도 그 화면을 봐야 한다). 한 술어에 두 질문을
+   * 맡기면 enforcement를 켜는 날 `npm run dev`가 진짜 트라이얼을 시작하고
+   * 30일 뒤 개발 환경이 스스로 잠긴다 — 넣을 키도 없이.
+   */
+  enforcesLicense: boolean
+
   /** 업데이트 UI 대신 "스토어를 통해 업데이트됩니다" 안내를 보여야 하는가. */
   updatesViaStore: boolean
 }
@@ -61,6 +71,7 @@ export function capabilitiesFor(facts: PlatformFacts): Capabilities {
     canSelfUpdate: !facts.isDev && !isStoreBuild,
     hasGlobalShortcuts: !facts.isMas,
     needsLicenseKey: !isStoreBuild,
+    enforcesLicense: !facts.isDev && !isStoreBuild,
     updatesViaStore: isStoreBuild
   }
 }

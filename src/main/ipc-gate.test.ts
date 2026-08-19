@@ -126,10 +126,14 @@ describe('정책', () => {
   })
 
   it('등록된 채널이 빠짐없이 등급을 갖는다', () => {
-    // 0이면 아래 검사가 전부 공짜로 통과한다. 그리고 두 수가 갈리면 어딘가가
-    // 게이트를 통하지 않고 등록했다는 뜻이다.
+    // 0이면 아래 검사가 전부 공짜로 통과한다.
     expect(handlers.size).toBeGreaterThan(50)
-    expect(registeredTiers().size).toBe(handlers.size)
+    // **이게 진짜 경계 검사다.** `handlers`는 목킹된 `ipcMain.handle`이 실제로
+    // 본 것이고 `registeredTiers()`는 게이트가 기록한 것이라, 두 집합이 갈리는
+    // 순간 누군가 게이트를 통하지 않고 등록한 것이다. 소스 정규식과 달리
+    // 별칭·네임스페이스·구조분해 어느 것으로도 피해 갈 수 없다 — 런타임에
+    // 남는 흔적을 보기 때문이다.
+    expect([...registeredTiers().keys()].sort()).toEqual([...handlers.keys()].sort())
   })
 })
 

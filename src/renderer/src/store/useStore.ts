@@ -5,6 +5,7 @@ import { isVirtualSmartList, tagFromListId } from '../utils/smartLists'
 import { getFilteredTaskIds } from '../utils/filteredTaskIds'
 import { todayString, tomorrowString } from '../utils/date'
 import { pointsForTask, POINTS_PER_HABIT, POINTS_PER_POMODORO } from '../utils/score'
+import { refreshLicense } from '../licensing/useLicense'
 import type {
   Task,
   TaskList,
@@ -331,11 +332,37 @@ export function normalizeDateRange(
 function persist(what: string, run: () => unknown): void {
   try {
     const r = run()
-    if (r instanceof Promise) r.catch((e) => console.error(`[persist] ${what} 실패`, e))
+    if (r instanceof Promise) r.catch((e) => report(what, e))
   } catch (e) {
-    console.error(`[persist] ${what} 실패`, e)
+    report(what, e)
   }
 }
+
+/**
+ * 저장 실패를 어떻게 다룰지.
+ *
+ * **잠김은 다르게 다룬다.** 메인의 게이트가 유료 채널을 거절하면(`ipc-gate.ts`)
+ * 화면은 이미 낙관적으로 바뀐 뒤라, 그냥 로그만 남기면 사용자에게는 편집이
+ * 된 것처럼 보이고 재시작하면 사라진다. 게이트가 던지는 이유로 적어 둔 것이
+ * 바로 그 "유령 편집"인데, 정작 렌더러가 그 거절을 아무도 받지 않고 있었다.
+ *
+ * 문자열로 비교하는 이유: Electron이 거절을 감싸서
+ * `Error invoking remote method 'update-task': Error: license_required`로 만든다.
+ * 그래서 `===`가 아니라 포함 검사다.
+ *
+ * 여기서 하는 일은 **상태를 다시 받아오는 것**뿐이다. 그러면 잠금 화면이 즉시
+ * 뜨고 사용자가 왜 안 먹히는지 알게 된다. 낙관적 변경을 되돌리는 것은 연산마다
+ * 역연산이 필요해 따로 할 일이다(TODOS 참고).
+ */
+function report(what: string, error: unknown): void {
+  console.error(`[persist] ${what} 실패`, error)
+  if (String((error as { message?: unknown })?.message ?? error).includes(LICENSE_REQUIRED_MESSAGE)) {
+    void refreshLicense()
+  }
+}
+
+/** `main/ipc-gate.ts`가 던지는 문구. 프로세스 경계를 넘으며 감싸이므로 포함 검사로 쓴다. */
+const LICENSE_REQUIRED_MESSAGE = 'license_required'
 
 /** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
 function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
@@ -412,20 +439,20 @@ export const useStore = create<Store>((set, get) => ({
     const maxOrder = get().folders.reduce((m, f) => Math.max(m, f.sortOrder || 0), 0)
     const newFolder: Folder = { id, name, collapsed: false, sortOrder: maxOrder + 1, createdAt: now }
     set((s) => ({ folders: [...s.folders, newFolder] }))
-    window.api.createFolder(id, name)
+    persist('createFolder', () => window.api.createFolder(id, name))
   },
   updateFolder: async (id, name, collapsed) => {
     set((s) => ({
       folders: s.folders.map((f) => (f.id === id ? { ...f, name, collapsed } : f))
     }))
-    window.api.updateFolder(id, name, collapsed)
+    persist('updateFolder', () => window.api.updateFolder(id, name, collapsed))
   },
   removeFolder: async (id) => {
     set((s) => ({
       folders: s.folders.filter((f) => f.id !== id),
       lists: s.lists.map((l) => (l.folderId === id ? { ...l, folderId: null } : l))
     }))
-    window.api.deleteFolder(id)
+    persist('deleteFolder', () => window.api.deleteFolder(id))
   },
 
   // === 리스트 ===
@@ -445,7 +472,7 @@ export const useStore = create<Store>((set, get) => ({
       createdAt: now
     }
     set((s) => ({ lists: [...s.lists, newList] }))
-    window.api.createList(id, name, color, 'list', folderId || null)
+    persist('createList', () => window.api.createList(id, name, color, 'list', folderId || null))
   },
   updateList: async (id, updates) => {
     set((s) => ({
@@ -456,7 +483,7 @@ export const useStore = create<Store>((set, get) => ({
     if (updates.color !== undefined) mapped.color = updates.color
     if (updates.folderId !== undefined) mapped.folder_id = updates.folderId
     if (updates.sortOrder !== undefined) mapped.sort_order = updates.sortOrder
-    window.api.updateList(id, mapped)
+    persist('updateList', () => window.api.updateList(id, mapped))
   },
   removeList: async (id) => {
     set((s) => ({
@@ -464,7 +491,7 @@ export const useStore = create<Store>((set, get) => ({
       tasks: s.tasks.map((t) => (t.listId === id ? { ...t, listId: 'inbox' } : t)),
       selectedListId: s.selectedListId === id ? 'inbox' : s.selectedListId
     }))
-    window.api.deleteList(id)
+    persist('deleteList', () => window.api.deleteList(id))
   },
   setEditingList: (id) => set({ editingListId: id }),
 
@@ -626,7 +653,7 @@ export const useStore = create<Store>((set, get) => ({
     set((s) => ({
       tasks: s.tasks.map((t) => (t.id === id ? { ...t, completed: newCompleted, completedAt } : t))
     }))
-    window.api.updateTask({ id, completed: newCompleted })
+    persist('updateTask', () => window.api.updateTask({ id, completed: newCompleted }))
 
     // 완료를 취소하면 줬던 점수를 되돌린다. 예전에는 지급만 해서 같은 할일을
     // 완료/취소 반복하는 것만으로 점수를 무한히 올릴 수 있었다(2026-08-05 검증).
@@ -677,7 +704,7 @@ export const useStore = create<Store>((set, get) => ({
         selectedTaskId: s.selectedTaskId === id ? null : s.selectedTaskId
       }
     })
-    window.api.deleteTask(id)
+    persist('deleteTask', () => window.api.deleteTask(id))
   },
   duplicateTask: async (id) => {
     const all = get().tasks
@@ -757,7 +784,7 @@ export const useStore = create<Store>((set, get) => ({
     // sortOrder 값만 갱신하면 화면은 그대로였다 — 'default' 정렬은 배열 순서를
     // 그대로 쓰기 때문이다(2026-08-05 검증: 재시작해야 반영됨). 값과 함께 배열도 정렬한다.
     set((s) => ({ tasks: applyReorder(s.tasks, ids) }))
-    window.api.reorderTasks(ids)
+    persist('reorderTasks', () => window.api.reorderTasks(ids))
   },
   setDragTaskId: (id) => set({ dragTaskId: id }),
 
@@ -794,7 +821,7 @@ export const useStore = create<Store>((set, get) => ({
       batchSelectedIds: [],
       batchMode: false
     }))
-    window.api.batchUpdateTasks(newlyCompletedIds, { completed: true })
+    persist('batchUpdateTasks', () => window.api.batchUpdateTasks(newlyCompletedIds, { completed: true }))
     await get().addTasks(spawns.map((spawn) => ({ title: spawn.title, opts: spawn })))
     await get().addScores(
       newlyCompleted.map((t) => ({ type: 'taskComplete', points: pointsForTask(t.priority), taskId: t.id }))
@@ -820,7 +847,7 @@ export const useStore = create<Store>((set, get) => ({
       batchSelectedIds: [],
       batchMode: false
     }))
-    window.api.batchUpdateTasks(allDeletedIds, { deleted: true })
+    persist('batchUpdateTasks', () => window.api.batchUpdateTasks(allDeletedIds, { deleted: true }))
   },
   batchMove: async (listId) => {
     const ids = get().batchSelectedIds
@@ -829,7 +856,7 @@ export const useStore = create<Store>((set, get) => ({
       batchSelectedIds: [],
       batchMode: false
     }))
-    window.api.batchUpdateTasks(ids, { listId })
+    persist('batchUpdateTasks', () => window.api.batchUpdateTasks(ids, { listId }))
   },
   batchSetPriority: async (priority) => {
     const ids = get().batchSelectedIds
@@ -837,7 +864,7 @@ export const useStore = create<Store>((set, get) => ({
       tasks: s.tasks.map((t) => (ids.includes(t.id) ? { ...t, priority } : t)),
       batchSelectedIds: []
     }))
-    window.api.batchUpdateTasks(ids, { priority })
+    persist('batchUpdateTasks', () => window.api.batchUpdateTasks(ids, { priority }))
   },
 
   // === 정렬 ===
@@ -947,7 +974,7 @@ export const useStore = create<Store>((set, get) => ({
         events: [...s.score.events, { type, points: applied, date, taskId }].slice(-200)
       }
     }))
-    window.api.addScoreEvent({ type, points: applied, date, taskId })
+    persist('addScoreEvent', () => window.api.addScoreEvent({ type, points: applied, date, taskId }))
   },
 
   addScores: async (entries) => {
@@ -961,7 +988,7 @@ export const useStore = create<Store>((set, get) => ({
       return { type: e.type, points: p, date, taskId: e.taskId }
     })
     set((s) => ({ score: { total, events: [...s.score.events, ...applied].slice(-200) } }))
-    window.api.addScoreEvents(applied)
+    persist('addScoreEvents', () => window.api.addScoreEvents(applied))
   },
 
   // 이 태스크에 지금까지 순수하게 지급된 점수. 완료를 취소할 때 '현재 우선순위'로

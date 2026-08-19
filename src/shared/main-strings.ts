@@ -15,6 +15,9 @@ interface MainStrings {
   permProbeBody: string
   /** 앱 메뉴의 보기 항목. 나머지 항목은 Electron의 role이 OS 언어로 현지화한다. */
   menuView: string
+  /** 데이터 파일을 못 읽었을 때. 렌더러가 아직 없으므로 메인이 직접 띄운다. */
+  dbFailedTitle: string
+  dbFailedBody: string
 }
 
 const STRINGS: Record<MainLanguage, MainStrings> = {
@@ -22,13 +25,19 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
     reminder: '리마인더',
     permProbeTitle: 'Greenday 알림 확인',
     permProbeBody: '이 배너가 보이면 리마인더도 이렇게 도착합니다.',
-    menuView: '보기'
+    menuView: '보기',
+    dbFailedTitle: '데이터를 읽지 못했습니다',
+    dbFailedBody:
+      '저장된 할일 파일을 열 수 없어 빈 상태로 시작합니다. 아직 아무것도 덮어쓰지 않았으니, 먼저 설정 폴더의 ticktick-data.json을 백업해 두세요.'
   },
   en: {
     reminder: 'Reminder',
     permProbeTitle: 'Greenday notification check',
     permProbeBody: 'If you can see this banner, reminders will arrive the same way.',
-    menuView: 'View'
+    menuView: 'View',
+    dbFailedTitle: 'Could not read your data',
+    dbFailedBody:
+      'The saved task file could not be opened, so the app is starting empty. Nothing has been overwritten yet — back up ticktick-data.json in your settings folder first.'
   }
 }
 

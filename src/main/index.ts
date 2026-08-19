@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, globalShortcut, Notification } from 'electron'
+import { app, shell, BrowserWindow, dialog, globalShortcut, Notification } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -96,7 +96,15 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 function bootstrap(): void {
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // **창 만드는 길을 먼저 연다.** 아래 초기화가 던지면 그 뒤가 전부 안 도는데,
+    // macOS에서는 `window-all-closed`가 앱을 끝내지 않으므로 `activate` 핸들러가
+    // 등록되기 전에 던지면 창을 영영 만들 수 없는 독 아이콘이 남는다. 데이터
+    // 파일이 한 번 깨지면 재설치 말고는 빠져나올 길이 없다.
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+
     electronApp.setAppUserModelId(APP_BUNDLE_ID)
 
     app.on('browser-window-created', (_, window) => {
@@ -112,7 +120,15 @@ function bootstrap(): void {
       app.setAsDefaultProtocolClient(APP_BUNDLE_ID)
     }
 
-    initDatabase()
+    try {
+      initDatabase()
+    } catch (error) {
+      // 데이터 파일이 깨졌다. 여기서 그냥 던지면 아래가 전부 안 돌아 창도,
+      // IPC도, 메뉴도 없는 상태가 된다 — 사용자에게는 반응 없는 독 아이콘이다.
+      // 무엇이 잘못됐는지 말해 주고, 창은 띄운다.
+      console.error('[bootstrap] 데이터베이스 초기화 실패', error)
+      dialog.showErrorBox(uiStrings().dbFailedTitle, uiStrings().dbFailedBody)
+    }
     // 출하 빌드에서 개발자 도구 메뉴 항목을 뺀다 (app-menu.ts).
     applyAppMenu(is.dev)
     setupIpcHandlers()
@@ -182,10 +198,6 @@ function bootstrap(): void {
       const updateInterval = setInterval(() => autoUpdater.checkForUpdates(), 60 * 60 * 1000)
       app.on('will-quit', () => clearInterval(updateInterval))
     }
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    })
   })
 
   // macOS는 이미 실행 중인 앱에 open-url로 콜백을 전달한다. whenReady 밖에 둬야

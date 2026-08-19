@@ -76,8 +76,11 @@ TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 �
   (읽기 / 내보내기 / 라이선스 자체 / 앱 메타와 업데이트 / 바깥 열기, 다섯이다).
   `index.ts`가 아니라 `app-ipc.ts`에 등록할 것 — 테스트가 부를 수 있어야 그
   목록이 실제로 전부가 된다.
-  `ipcMain.handle`을 직접 부르지 말 것 — biome 규칙과 `ipcMainBoundary.test.ts`가
-  양쪽에서 막는다. 잠긴 화면에서도 내보내기가 눌린다 — 데이터를 인질로 잡지 않는다.
+  `ipcMain.handle`을 직접 부르지 말 것. 진짜 경계 검사는 `ipc-gate.test.ts`가
+  하는 **런타임 대조**다(목킹된 `ipcMain.handle`이 본 채널 집합 == `registeredTiers()`).
+  biome의 `noRestrictedImports`와 `ipcMainBoundary.test.ts`는 더 빨리 알려 주는
+  보조일 뿐이고 둘 다 구멍이 있다 — 린트는 `import * as el`을, 소스 스크레이퍼는
+  `const bus = el.ipcMain`을 못 본다(실측 확인). 잠긴 화면에서도 내보내기가 눌린다 — 데이터를 인질로 잡지 않는다.
 
 ## Health Stack
 

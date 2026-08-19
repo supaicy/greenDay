@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron'
-import { readFileSync, writeFileSync, writeFile, existsSync, mkdirSync, copyFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, writeFile, existsSync, mkdirSync, copyFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 
 interface DbData {
@@ -489,8 +489,20 @@ export function addScoreEvent(event: Record<string, unknown>): void {
  * 같아서 `.app`·`.command`·`.scpt`를 가리키면 **실행된다.**
  */
 export function isInsideAttachments(candidate: string): boolean {
-  const resolved = path.resolve(candidate)
-  return resolved.startsWith(attachmentsDir + path.sep)
+  // **심볼릭 링크까지 푼다.** `path.resolve`는 문자열 연산이라 첨부 폴더 안에
+  // 놓인 심링크는 그대로 통과하고, `shell.openPath`가 그 링크가 가리키는 것을
+  // 연다 — 이 검사가 막으려던 바로 그 실행 원시연산이 되돌아온다. 오늘 앱이
+  // 심링크를 만들지는 않지만, 백업 복원이나 나중에 붙을 동기화가 만들 수 있다.
+  //
+  // realpath는 없는 경로에서 던진다. 그때는 어차피 열 것도 없으므로 닫는 쪽으로
+  // 떨어진다(문자열 검사로 폴백하지 않는다 — 그러면 구멍이 그대로 남는다).
+  try {
+    const real = realpathSync(path.resolve(candidate))
+    const root = realpathSync(attachmentsDir)
+    return real.startsWith(root + path.sep)
+  } catch {
+    return false
+  }
 }
 
 export function copyAttachment(sourcePath: string, destName: string): string {
