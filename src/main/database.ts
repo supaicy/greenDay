@@ -481,6 +481,18 @@ export function addScoreEvent(event: Record<string, unknown>): void {
 }
 
 // === Attachments ===
+/**
+ * 이 경로가 우리 첨부 폴더 **안**인가.
+ *
+ * `copyAttachment`가 쓰기 쪽에서 이미 같은 판정을 하고 있었는데, 읽기(여는) 쪽에는
+ * 없었다. 그 비대칭이 문제다 — `shell.openPath`는 Finder에서 더블클릭하는 것과
+ * 같아서 `.app`·`.command`·`.scpt`를 가리키면 **실행된다.**
+ */
+export function isInsideAttachments(candidate: string): boolean {
+  const resolved = path.resolve(candidate)
+  return resolved.startsWith(attachmentsDir + path.sep)
+}
+
 export function copyAttachment(sourcePath: string, destName: string): string {
   const safeName = path.basename(destName)
   const destPath = path.resolve(attachmentsDir, safeName)

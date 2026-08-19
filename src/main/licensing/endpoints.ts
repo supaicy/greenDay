@@ -7,8 +7,9 @@
  * `shell.openExternal`로 연다. 렌더러에 URL을 내려보내지 않는 것이 그 설계다.
  *
  * (한때 "electron을 import하는 파일에 두면 테스트할 수 없다"는 이유로 shared에
- * 뒀는데, 그건 사실이 아니었다. `src/main/licensing/`의 파일들은 electron을
- * import하지 않고 전부 노드에서 그대로 테스트된다 — 이 파일도 그렇다.)
+ * 뒀는데, 그건 사실이 아니었다. 이 파일은 electron을 import하지 않아 노드에서
+ * 그대로 테스트된다. 같은 디렉터리라도 `service.ts`는 예외다 — electron 배선이
+ * 거기 모여 있어서 그 테스트만 `vi.mock('electron')`이 필요하다.)
  */
 
 /**

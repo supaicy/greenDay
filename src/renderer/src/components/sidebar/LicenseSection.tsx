@@ -47,8 +47,9 @@ export function LicenseSection({
   // 두 버튼이 서로를 잠근다 — 활성화 중에 해제를 누르거나 그 반대가 되면, 방금
   // 넣은 키가 도착하는 순간 지워지는 종류의 경합이 생긴다.
   //
-  // 다만 활성화 버튼에는 `busy`를 쓰지 않는다. `useActivation`의 `canSubmit`이
-  // 이미 `!busy`를 품고 있어서 `busy || !canSubmit`은 앞항이 죽은 항이 된다.
+  // 활성화 버튼은 이 `busy`를 안 쓰고 `!canSubmit || releasing`으로 적는다.
+  // `canSubmit`이 품는 것은 **`activation.busy`뿐**이라(useActivation.ts) 그쪽만
+  // 중복이고, `releasing`은 죽은 항이 아니다 — 지우면 해제 중에 활성화가 열린다.
   const busy = activation.busy || releasing
   const error = activation.error ?? releaseError
 
@@ -204,16 +205,23 @@ function StatusLine({
       </span>
     )
   }
+  // 1일과 0일은 따로 쓴다. 영어에는 복수 일치가 있어서 `{{days}} days`가
+  // "1 days left" / "within 1 days"로 나온다 — 한국어에는 그 일치가 없어
+  // 번역만 보면 안 보이는 종류의 오류다. (i18next 복수 키는 안 쓴다: 한국어에는
+  // `_one`이 없어서 로케일 키 대칭 테스트와 어긋난다.)
   if (license.status === 'grace') {
+    const days = daysLeft(license.untilMs)
     return (
       <span className="flex items-center gap-1.5">
-        <WifiOff size={14} /> {t('license.grace', { days: daysLeft(license.untilMs) })}
+        <WifiOff size={14} />{' '}
+        {days === 0 ? t('license.graceToday') : days === 1 ? t('license.graceOneDay') : t('license.grace', { days })}
       </span>
     )
   }
   if (license.status === 'trial') {
     const days = daysLeft(license.untilMs)
-    return <span>{days === 0 ? t('license.trialLastDay') : t('license.trial', { days })}</span>
+    if (days === 0) return <span>{t('license.trialLastDay')}</span>
+    return <span>{days === 1 ? t('license.trialOneDay') : t('license.trial', { days })}</span>
   }
   return <span>{t('license.trialExpired')}</span>
 }

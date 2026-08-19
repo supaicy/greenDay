@@ -5,7 +5,7 @@
  * `View > Toggle Developer Tools`가 그대로 출하되고 있었다. 다이얼로그 DOM 노드
  * 하나만 지우면 잠긴 앱이 열렸다 — "앱의 JS를 고친다"보다 싼 우회다.
  *
- * 이제 진짜 게이트는 메인 프로세스에 있으므로(`ipc-handlers.ts`의 `handle`)
+ * 이제 진짜 게이트는 메인 프로세스에 있으므로(`ipc-gate.ts`의 `handle`)
  * DevTools를 열어도 유료 IPC가 거절된다. 그래도 항목을 빼는 이유는, 우회 시도를
  * **한 단계 더 뒤로 미루는 것이 이 설계의 목표**이기 때문이다. 깨지지 않는 DRM을
  * 만드는 것이 아니라 의도적인 노력이 들게 하는 것까지다.
@@ -16,7 +16,7 @@
  */
 
 import { Menu, type MenuItemConstructorOptions } from 'electron'
-import { uiStrings } from './ui-language'
+import { setUiLanguage, uiStrings } from './ui-language'
 
 /**
  * `viewMenu` 역할을 그대로 쓰지 않고 손으로 짓는다 — 그 역할 안에
@@ -63,4 +63,18 @@ export function buildAppMenu(isDev: boolean): Menu | null {
 export function applyAppMenu(isDev: boolean): void {
   const menu = buildAppMenu(isDev)
   if (menu) Menu.setApplicationMenu(menu)
+}
+
+/**
+ * UI 언어를 받아들이고, **바뀌었으면 메뉴를 다시 짓는다.** 바뀌었으면 true.
+ *
+ * 두 줄을 호출처(`app-ipc.ts`)에 두면 그 연결을 확인할 자리가 없다 — 실제로
+ * 그랬고, `if (setUiLanguage(language)) applyAppMenu(is.dev)`를 통째로
+ * `setUiLanguage(language)` 한 줄로 바꿔도 테스트 860개가 전부 통과했다.
+ * 메뉴가 언어를 따라간다는 것과 언어가 실제로 배선돼 있다는 것은 따로 깨진다.
+ */
+export function applyLanguage(value: unknown, isDev: boolean): boolean {
+  if (!setUiLanguage(value)) return false
+  applyAppMenu(isDev)
+  return true
 }

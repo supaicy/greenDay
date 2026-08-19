@@ -31,8 +31,18 @@ function walk(dir: string, out: string[] = []): string[] {
  */
 const CHANNEL_RE = /(?:ipcMain\.)?\bhandle\(\s*['"]([^'"]+)['"]/g
 
+/**
+ * **주석을 지우고 센다.** 이 저장소는 주석에 코드 모양을 자주 적는데, 그러면
+ * 유령 등록이 생긴다 — `ipc-gate.ts`의 설명 주석에 있던 `handle('create-task', …)`
+ * 한 줄 때문에 진짜 `create-task` 핸들러를 지워도 이 테스트가 통과했다.
+ * 형제 파일 `main/ipcMainBoundary.test.ts`가 같은 이유로 같은 처리를 한다.
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+}
+
 const mainSource = walk(path.join(ROOT, 'main'))
-  .map((f) => readFileSync(f, 'utf-8'))
+  .map((f) => stripComments(readFileSync(f, 'utf-8')))
   .join('\n')
 
 const rendererSource = walk(path.join(ROOT, 'renderer'))

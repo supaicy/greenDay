@@ -14,6 +14,18 @@ import {
  * 안 된다"만 남는다.
  */
 
+describe('서버 주소', () => {
+  it('주소를 리터럴로 못 박는다 — 활성화와 구매가 같은 배포를 본다', () => {
+    // 아래 URL 단언들은 양변에 `LICENSE_BASE_URL`을 끼워 넣어서, 주소가 통째로
+    // 틀려도 통과한다. 실제로 `typo.begreen.dev`로 바꿔도 865개가 전부 통과했다 —
+    // 그 상수는 활성화 서버이면서 구매 페이지라, 틀리면 아무도 활성화 못 하고
+    // 아무도 못 산다. 옆의 PRODUCT_SLUG는 같은 이유로 이미 리터럴로 박혀 있다.
+    expect(LICENSE_BASE_URL).toBe('https://pay.begreen.dev')
+    // 다운그레이드도 막는다 — 원본 라이선스 키가 요청 본문에 실린다.
+    expect(LICENSE_BASE_URL.startsWith('https://')).toBe(true)
+  })
+})
+
 describe('구매·복구 URL', () => {
   it('제품과 출처를 싣는다', () => {
     expect(purchaseUrl('settings')).toBe(`${LICENSE_BASE_URL}/buy?product=greenday&src=settings`)

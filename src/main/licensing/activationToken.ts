@@ -14,7 +14,7 @@
 import { createHash, createPublicKey, verify, type KeyObject } from 'node:crypto'
 
 /**
- * 이 앱이 받아들이는 제품 slug — `shared/license.ts`가 원본이다.
+ * 이 앱이 받아들이는 제품 slug — `licensing/endpoints.ts`가 원본이다.
  *
  * 구매 URL(`?product=`)과 토큰의 `prod` 검사가 **같은 값을 봐야 한다.** 갈리면
  * 체크아웃은 제품 X를 팔고 앱은 X의 토큰을 거절하는데, 증상은 "결제했는데

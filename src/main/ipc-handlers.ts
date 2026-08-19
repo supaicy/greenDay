@@ -134,7 +134,16 @@ export function setupIpcHandlers(): void {
     return attachments
   })
   // 첨부파일 열기: 시스템 기본 앱으로 파일 경로를 엶
-  handle('open-attachment', 'free', (_, filePath: string) => shell.openPath(String(filePath)))
+  // **첨부 폴더 안만 연다.** `shell.openPath`는 Finder 더블클릭과 같아서 `.app`이나
+  // `.command`를 가리키면 실행된다. 이 채널은 무료라 잠긴 앱에서도 열려 있고,
+  // 게이트의 전제가 "DevTools와 `window.api.*`가 JS를 고치는 것보다 싸다"이므로
+  // 임의 경로를 받으면 그 상태에서 OS 실행 원시연산을 그냥 내주는 셈이 된다.
+  // 쓰기 쪽(`copyAttachment`)은 처음부터 같은 판정을 하고 있었다 — 비대칭이었다.
+  handle('open-attachment', 'free', (_, filePath: string) => {
+    const target = String(filePath)
+    if (!db.isInsideAttachments(target)) throw new Error('Attachment path outside attachments directory')
+    return shell.openPath(target)
+  })
 
   // Export
   handle('export-data', 'free', async () => {

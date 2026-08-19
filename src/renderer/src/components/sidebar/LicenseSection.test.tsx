@@ -109,10 +109,7 @@ describe('키 입력과 해제', () => {
   })
 
   it('활성화 실패 문구도 코드별로 다르다', async () => {
-    mountWith(
-      { enforced: true, status: 'trialExpired' },
-      { licenseActivate: vi.fn(async () => 'deviceLimit') }
-    )
+    mountWith({ enforced: true, status: 'trialExpired' }, { licenseActivate: vi.fn(async () => 'deviceLimit') })
     await screen.findByLabelText(i18n.t('license.keyLabel'))
     await userEvent.type(screen.getByLabelText(i18n.t('license.keyLabel')), 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
     await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
@@ -189,6 +186,47 @@ describe('공유된 활성화 흐름', () => {
     await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
 
     expect(screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivate')) })).toBeDisabled()
+    land(null)
+  })
+
+  it('해제 중에는 활성화도 같이 잠긴다 — 반대 방향', async () => {
+    // 교차 잠금의 나머지 절반. `disabled={!canSubmit || releasing}`에서 `|| releasing`을
+    // 지워도 테스트가 전부 통과했다. 그 방향이 바로 해제 응답이 지우려는 레코드
+    // 위에 새 키가 내려앉는 경우다(licenseManager의 같은 이름 경합과 짝이다).
+    // 키 입력과 해제 버튼이 **함께** 뜨는 상태를 쓴다 — 서버가 취소해 토큰만
+    // 지워지고 키는 남은 설치(`clearLocalLicense(true)`가 남기는 그것)다.
+    let land: (v: string | null) => void = () => {}
+    mountWith(
+      { enforced: true, status: 'trialExpired', maskedKey: MASKED },
+      { licenseDeactivate: vi.fn(() => new Promise((resolve) => (land = resolve))) }
+    )
+    await userEvent.click(await screen.findByRole('button', { name: new RegExp(i18n.t('license.deactivate')) }))
+
+    const field = await screen.findByLabelText(i18n.t('license.keyLabel'))
+    await userEvent.type(field, 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
+    expect(screen.getByRole('button', { name: i18n.t('license.activate') })).toBeDisabled()
+    land(null)
+  })
+
+  it('새 시도를 시작하면 지난 결과가 사라진다', async () => {
+    // `resetOutcome()`은 이번 라운드에 뽑아낸 것인데 두 호출처 중 어느 쪽을
+    // 지워도 테스트가 전부 통과했다. 지우면 패널이 서로 다른 두 시도의 흔적을
+    // 동시에 보여 준다 — "해제됨"과 "활성화됨"이 나란히.
+    let land: (v: string | null) => void = () => {}
+    mountWith(
+      { enforced: true, status: 'trialExpired', maskedKey: MASKED },
+      {
+        licenseDeactivate: vi.fn(async () => 'network' as const),
+        licenseActivate: vi.fn(() => new Promise((resolve) => (land = resolve)))
+      }
+    )
+    await userEvent.click(await screen.findByRole('button', { name: new RegExp(i18n.t('license.deactivate')) }))
+    await screen.findByText(i18n.t('license.error.network'))
+
+    const field = await screen.findByLabelText(i18n.t('license.keyLabel'))
+    await userEvent.type(field, 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
+    await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
+    expect(screen.queryByText(i18n.t('license.error.network'))).not.toBeInTheDocument()
     land(null)
   })
 })

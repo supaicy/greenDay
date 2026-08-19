@@ -108,6 +108,30 @@ describe('resolveDeviceId — Windows', () => {
     }
   })
 
+  it('정상적인 SystemRoot는 그대로 쓴다 — C: 말고도 설치된다', () => {
+    // 거절 쪽만 시험하고 있었다. `windowsRoot()`를 통째로 `return 'C:\\Windows'`로
+    // 바꿔도 테스트가 전부 통과했는데, 그 변종은 D:에 설치된 윈도우에서 reg.exe를
+    // 못 찾아 조용히 무작위 폴백 id로 떨어진다 — 같은 기기가 다른 해시를 갖는다.
+    const before = process.env.SystemRoot
+    try {
+      process.env.SystemRoot = 'D:\\Windows'
+      const commands: string[] = []
+      resolveDeviceId(
+        probes({
+          platform: 'win32',
+          runCommand: (cmd) => {
+            commands.push(cmd)
+            return REG_OUT
+          }
+        })
+      )
+      expect(commands[0]).toBe('D:\\Windows\\System32\\reg.exe')
+    } finally {
+      if (before === undefined) delete process.env.SystemRoot
+      else process.env.SystemRoot = before
+    }
+  })
+
   it('절대 경로로 부른다 — CreateProcess는 앱 폴더를 PATH보다 먼저 본다', () => {
     const commands: string[] = []
     resolveDeviceId(

@@ -39,17 +39,12 @@ export function LicenseGate(): React.JSX.Element | null {
 
   return (
     <Dialog open>
-      <DialogContent
-        showCloseButton={false}
-        className="w-[440px] max-w-[calc(100vw-3rem)] gap-0 rounded-2xl"
-      >
+      <DialogContent showCloseButton={false} className="w-[440px] max-w-[calc(100vw-3rem)] gap-0 rounded-2xl">
         <DialogTitle className="flex items-center gap-2 text-base font-semibold">
           <Lock size={18} />
           {t('license.lockedTitle')}
         </DialogTitle>
-        <DialogDescription className="mt-2 text-sm text-muted-foreground">
-          {t('license.lockedBody')}
-        </DialogDescription>
+        <DialogDescription className="mt-2 text-sm text-muted-foreground">{t('license.lockedBody')}</DialogDescription>
 
         <div className="mt-5 flex gap-2">
           <input
@@ -65,17 +60,35 @@ export function LicenseGate(): React.JSX.Element | null {
             type="button"
             onClick={() => void activate()}
             disabled={!canSubmit}
-            className="rounded-lg bg-primary-500 px-3 py-2 text-sm text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
+            className="rounded-lg bg-primary-700 px-3 py-2 text-sm text-white transition-colors hover:bg-primary-600 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : t('license.activate')}
+            {/* 스피너만 남기면 접근성 이름이 비어 "버튼"으로만 읽히고, 폭이 14px로
+                줄면서 옆 입력창이 밀린다. LicenseSection 쪽은 처음부터 문구를 남겼다. */}
+            {busy ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 size={14} className="animate-spin" /> {t('license.activating')}
+              </span>
+            ) : (
+              t('license.activate')
+            )}
           </button>
         </div>
-        {error && <p className="mt-2 text-xs text-red-400">{t(`license.error.${error}`)}</p>}
+        {/* 라이트 모드의 카드 배경은 흰색이라 `text-red-400`은 2.77:1로 AA에 못 미친다.
+            잠긴 사용자가 빠져나오려면 반드시 읽어야 하는 한 줄이다. */}
+        {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{t(`license.error.${error}`)}</p>}
+
+        {/* 무엇이 나가는지 **보내기 전에** 적어 둔다. 설정 패널에는 있었는데 이 화면에는
+            없었다 — 트라이얼이 끝난 사람이 실제로 키를 넣는 곳은 여기다. */}
+        {license.deviceName && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {t('license.deviceNameNotice')}: <code className="font-mono">{license.deviceName}</code>
+          </p>
+        )}
 
         <button
           type="button"
           onClick={() => void window.api.licenseOpenPurchase('locked')}
-          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-600"
+          className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary-700 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
         >
           {t('license.buy')} <ExternalLink size={13} />
         </button>
@@ -85,14 +98,14 @@ export function LicenseGate(): React.JSX.Element | null {
           <button
             type="button"
             onClick={() => exportData()}
-            className="w-full rounded-lg bg-muted px-4 py-2 text-sm transition-colors hover:bg-accent"
+            className="w-full rounded-lg bg-muted px-4 py-2 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           >
             {t('license.lockedExport')}
           </button>
           <button
             type="button"
             onClick={() => void window.api.licenseOpenRecover()}
-            className="mt-2 flex w-full items-center justify-center gap-1 text-xs text-muted-foreground underline"
+            className="mt-2 flex w-full items-center justify-center gap-1 text-xs text-muted-foreground underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded"
           >
             {t('license.lost')} <ExternalLink size={11} />
           </button>

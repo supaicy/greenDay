@@ -90,9 +90,9 @@ function harness(
       calls.push('activate')
       return client.activate(k, d, n)
     },
-    validate: (k, d) => {
+    validate: (k, d, n) => {
       calls.push('validate')
-      return client.validate(k, d)
+      return client.validate(k, d, n)
     },
     deactivate: (k, d) => {
       calls.push('deactivate')
@@ -325,6 +325,37 @@ describe('결함 3 — 진행 중인 요청은 자기가 물어본 키에 대해
     expect(h.record.key).toBe(OTHER_KEY)
     expect(h.manager.getState().status).toBe('licensed')
   })
+
+  it('해제 응답이 늦게 오는 사이 **같은 키**가 슬롯을 다시 잡으면 지우지 않는다', async () => {
+    // 반대 방향이다. 키가 바뀌는 것만 보면 이 경우를 못 본다 — `record.key`가
+    // 내내 같은 값이라 가드가 통과하고, 방금 만들어진 라이선스를 지운다.
+    //
+    // 창이 둘일 필요도 없다. 서버의 `/v1/validate`는 `handleActivate`로 가서
+    // 슬롯이 없으면 **다시 INSERT**하므로, 6시간 재검증 폴이 해제 왕복 사이에
+    // 끼기만 하면 된다. 결과가 정확히 이 모듈이 피하려던 그 상태다: 서버에는
+    // 슬롯이 잡혀 있는데 로컬에는 토큰도 키도 없어, 재검증조차 못 하고
+    // 재입력하면 슬롯을 하나 더 먹는다.
+    let landDeactivate: (r: ClientResult<void>) => void = () => {}
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: {
+        deactivate: () => new Promise((resolve) => (landDeactivate = resolve)),
+        validate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } })
+      }
+    })
+
+    const releasing = h.manager.deactivate()
+    // 그 사이 폴이 돌아 같은 키로 슬롯이 다시 잡힌다.
+    await h.manager.revalidateIfNeeded()
+    expect(h.manager.getState().status).toBe('licensed')
+
+    landDeactivate({ ok: true, value: undefined })
+    await releasing
+
+    expect(h.record.key).toBe(KEY)
+    expect(h.record.token).not.toBeNull()
+    expect(h.manager.getState().status).toBe('licensed')
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -370,16 +401,26 @@ describe('결함 4 — 단조 시계로 "마감이 실제로 지났다"를 기�
 // 결함 5 — 미래로 조작된 시각을 디스크에 되써서 트라이얼이 영구 소멸
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('결함 5 — 큰 오차는 메모리에서만 보정한다', () => {
-  it('터무니없이 미래인 시작일은 파일에 되쓰지 않는다', () => {
-    // 되쓰면 시계가 고장 난 정상 사용자(메인보드 배터리 사망)가 벽돌이 된다:
-    // 시계가 회복되는 순간 창은 이미 몇십 년 지난 것이 되고 앱 안에 되돌릴
-    // 방법이 없다. 되쓰지 않으면 조작한 사람은 실행할 때마다 창 하나를 얻는데,
-    // 그건 설정을 지우면 어차피 얻는 것이라 새 손해가 아니다.
+describe('결함 5 — 미래로 적힌 시작일은 보정하되, 시계가 뒤로 갔으면 손대지 않는다', () => {
+  it('터무니없이 미래인 시작일도 되쓴다 — 안 쓰면 재시작마다 새 창이 열린다', () => {
+    // 이 단언은 뒤집힌 것이다. 예전에는 "되쓰지 않는다"였고, 근거는 되쓰면
+    // 시계가 고장 난 사용자가 벽돌이 된다는 것이었다. 그 근거가 틀렸다 —
+    // 되쓰는 값은 **지금 시각**이라 정직한 사용자는 온전한 창을 새로 받는다.
+    // 그리고 안 쓰면 한 번의 파일 편집이 재시작마다 창을 주는 영구
+    // 라이선스가 된다(clockAttacks.test.ts에서 실증). 진짜 보호 대상은
+    // 아래 케이스다.
     const forged = NOW + 100 * 365 * DAY
     const h = harness({ record: { trialStartMs: forged } })
     expect(h.manager.getState().status).toBe('trial')
-    expect(h.record.trialStartMs).toBe(forged)
+    expect(h.record.trialStartMs).toBe(NOW)
+  })
+
+  it('시계가 뒤로 간 기기에서는 손대지 않는다', () => {
+    // 메인보드 배터리가 죽어 시스템 시각이 25년 전으로 올라온 기기. 정상적인
+    // 시작일이 "한참 미래"로 보이지만, 여기서 되쓰면 2001년으로 박제된다.
+    // 위 케이스와 겉모습이 같고, 가르는 것은 래칫이다.
+    const h = harness({ record: { trialStartMs: NOW, lastSeenMs: NOW }, now: NOW - 25 * 365 * DAY })
+    expect(h.record.trialStartMs).toBe(NOW)
   })
 
   it('작은 오차는 보정하고 기록한다', () => {
@@ -620,9 +661,15 @@ describe('경계값', () => {
 
   it('이미 지난 마감에는 타이머를 걸지 않는다', () => {
     // 걸면 지연이 0 이하라 즉시 깨어 settle을 무한히 다시 돈다.
+    //
+    // 정확히 말하면 이걸 막는 것은 `scheduleClose`의 `remaining <= 0` 가드가
+    // 아니라 `apply()`다 — 만료된 상태는 `trialExpired`가 되어 `cancelClose()`
+    // 쪽으로 가고 `scheduleClose`에 들어가지도 않는다. 여기서 확인하는 것은
+    // 그 바깥 동작이고, 안쪽 가드는 도달 불가다(코드 주석 참고).
     const h = harness({
       record: { key: KEY, token: token({ expMs: NOW - GRACE_DURATION_MS - DAY }), trialStartMs: NOW - 40 * DAY }
     })
+    expect(h.manager.getState().status).toBe('trialExpired')
     expect(h.timers).toHaveLength(0)
   })
 })
@@ -744,6 +791,80 @@ describe('revalidateIfNeeded', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // enforcement 스위치
 // ─────────────────────────────────────────────────────────────────────────────
+
+describe('재검증이 조용히 빠뜨리던 것들', () => {
+  it('취소된 뒤 키만 남은 설치는 폴마다 서버를 두드리지 않는다', () => {
+    // `if (!key || !record.token)`에서 토큰 쪽 항만 지워도 테스트가 전부 통과했다.
+    // 그 상태가 바로 `clearLocalLicense(true)`가 남기는 것(서버가 취소했을 때)이라,
+    // 항이 없으면 취소된 키로 6시간마다 영원히 /v1/validate를 친다.
+    const h = harness({ record: { key: KEY, token: null, trialStartMs: NOW - 40 * DAY } })
+    return h.manager.revalidateIfNeeded().then(() => {
+      expect(h.calls).toEqual([])
+      expect(h.manager.getState().status).toBe('trialExpired')
+    })
+  })
+
+  it('기기를 못 읽는 것은 재시도할 일이 아니다', async () => {
+    // `'settled'` 대신 `'unreachable'`을 돌려줘도 테스트가 전부 통과했다. 그 변종은
+    // 자기 id를 영영 못 읽는 기기에서 1분→2분→…→1시간 백오프를 돌리고, 깰 때마다
+    // `deps.device()`(macOS는 동기 ioreg 서브프로세스)를 다시 부른다.
+    const h = harness({ device: null, record: { key: KEY, token: token() } })
+    const before = h.timers.length
+    await h.manager.revalidateIfNeeded()
+    expect(h.calls).toEqual([])
+    const armed = h.timers[h.timers.length - 1]
+    expect(armed.atMs - NOW, '백오프가 걸렸다').toBe(6 * 60 * 60 * 1000)
+    expect(h.timers.length).toBeGreaterThan(before - 1)
+  })
+
+  it('라이선스 상태에서도 폴이 시계 래칫을 올린다', async () => {
+    // 라이선스 레코드는 `settle()`이 `evaluateTrial()`에 닿지 않으므로, 이
+    // `if (touchClock()) persist()` 한 줄이 유료 사용자에게 폴마다 래칫을 올리는
+    // 유일한 자리다. 지워도 테스트가 전부 통과했다 — 몇 주씩 켜 둔 기기가
+    // 마감 타이머가 깰 때까지 바닥을 못 올린다.
+    const h = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW - 5 * DAY } })
+    const before = h.writes()
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.lastSeenMs).toBe(NOW)
+    expect(h.writes()).toBe(before + 1)
+  })
+
+  it('갱신이 쓰는 토큰도 fsync를 요구한다', async () => {
+    // `commit()`의 주석은 "활성화·갱신·해제 셋뿐"이라고 적는데, 테스트는 앞뒤
+    // 둘만 봤다. 갱신을 `persist()`로 바꿔도 전부 통과했다.
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: { validate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }) }
+    })
+    h.durability.length = 0
+    await h.manager.revalidateIfNeeded()
+    expect(h.durability).toContain(true)
+  })
+
+  it('마감만 움직여도 화면에 알린다', async () => {
+    // `sameState`를 `a.status === b.status`로 줄여도 전부 통과했다. 배경 갱신이
+    // 만드는 것이 정확히 그 경우(licensed → 더 나중 exp의 licensed)라, 렌더러가
+    // 갱신 때마다 낡은 마감을 들고 있게 된다.
+    const later = NOW + 40 * DAY
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: { validate: async () => ({ ok: true, value: { token: token({ expMs: later }), expiresAtMs: later } }) }
+    })
+    h.changes.length = 0
+    await h.manager.revalidateIfNeeded()
+    expect(h.changes).toEqual([{ status: 'licensed', untilMs: Math.floor(later / 1000) * 1000 }])
+  })
+
+  it('바뀐 것이 없으면 폴이 디스크를 만지지 않는다', async () => {
+    // `evaluateTrial`의 조건부 플러시를 무조건 `persist()`로 바꿔도 전부 통과했다.
+    // 부팅 때는 조건이 어차피 참이라 기존 테스트가 그 경로를 안 밟는다.
+    const h = harness({ record: { trialStartMs: NOW, lastSeenMs: NOW } })
+    const before = h.writes()
+    await h.manager.revalidateIfNeeded()
+    await h.manager.revalidateIfNeeded()
+    expect(h.writes()).toBe(before)
+  })
+})
 
 describe('시작 비용', () => {
   it('키도 토큰도 없으면 기기 id를 아예 읽지 않는다', async () => {

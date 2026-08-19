@@ -5,8 +5,8 @@ import { autoUpdater } from 'electron-updater'
 import { initDatabase, closeDatabase, getTasks } from './database'
 import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
-import { handle } from './ipc-gate'
-import { setUiLanguage, uiStrings } from './ui-language'
+import { setupAppIpc } from './app-ipc'
+import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
 import { applyAppMenu } from './app-menu'
 import { disposeLicensing, initLicensing } from './licensing/service'
@@ -117,11 +117,7 @@ function bootstrap(): void {
     applyAppMenu(is.dev)
     setupIpcHandlers()
 
-    // 언어가 실제로 바뀌었을 때만 메뉴를 다시 짓는다. 메뉴는 부팅 때 한 번 서고
-    // 그대로 남으므로, 이게 없으면 라벨이 기본값 'ko'로 영영 굳는다.
-    handle('set-language', 'free', (_, language: unknown) => {
-      if (setUiLanguage(language)) applyAppMenu(is.dev)
-    })
+    setupAppIpc(is.dev)
     createWindow()
 
     // **창을 띄운 뒤에** 초기화한다. 토큰이 있는 설치에서는 여기서 기기 id를
@@ -186,18 +182,6 @@ function bootstrap(): void {
       const updateInterval = setInterval(() => autoUpdater.checkForUpdates(), 60 * 60 * 1000)
       app.on('will-quit', () => clearInterval(updateInterval))
     }
-
-    // 업데이트 다운로드 / 설치 IPC. 스토어 빌드에서는 no-op — 스토어가 업데이트 담당.
-    // 업데이트는 무료다 — 잠긴 사람도 최신 버전을 받을 수 있어야 하고,
-    // 구버전에 묶어 두는 것은 아무에게도 이득이 아니다.
-    handle('download-update', 'free', () => {
-      if (!currentCapabilities().canSelfUpdate) return
-      return autoUpdater.downloadUpdate()
-    })
-    handle('install-update', 'free', () => {
-      if (!currentCapabilities().canSelfUpdate) return
-      autoUpdater.quitAndInstall(false, true)
-    })
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

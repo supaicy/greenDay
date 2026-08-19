@@ -7,6 +7,15 @@ import { describe, it, expect, vi } from 'vitest'
 
 let mas = false
 let windowsStore = false
+let hostname = 'mac-1'
+let hostnameReads = 0
+
+vi.mock('node:os', () => ({
+  hostname: () => {
+    hostnameReads += 1
+    return hostname
+  }
+}))
 
 vi.mock('electron', () => ({
   app: { getPath: () => '/tmp/greenday-service-test' },
@@ -16,12 +25,11 @@ vi.mock('electron', () => ({
 vi.mock('../capabilities', async () => {
   const { capabilitiesFor } = await import('../../shared/capabilities')
   return {
-    currentCapabilities: () =>
-      capabilitiesFor({ isDev: false, isMas: mas, isWindowsStore: windowsStore })
+    currentCapabilities: () => capabilitiesFor({ isDev: false, isMas: mas, isWindowsStore: windowsStore })
   }
 })
 
-const { IS_ENFORCED, publicLicenseState, licensing, disposeLicensing } = await import('./service')
+const { IS_ENFORCED, publicLicenseState, licensing, initLicensing, disposeLicensing } = await import('./service')
 
 describe('출하 스위치', () => {
   it('enforcement가 꺼진 채로 나간다', () => {
@@ -48,12 +56,51 @@ describe('publicLicenseState', () => {
   it('스토어 빌드는 enforcement를 보고하지 않는다', () => {
     // 켜지면 Apple로 결제한 사람이 우리 키가 없다는 이유로 잠기고, 잠금 화면에
     // 외부 구매 링크가 뜬다 — 가이드라인 3.1.1 위반이다.
-    for (const build of [{ mas: true, store: false }, { mas: false, store: true }]) {
+    for (const build of [
+      { mas: true, store: false },
+      { mas: false, store: true }
+    ]) {
       mas = build.mas
       windowsStore = build.store
       expect(publicLicenseState().enforced).toBe(false)
     }
     mas = false
     windowsStore = false
+  })
+})
+
+describe('기기 이름 캐시', () => {
+  // 이 캐시는 성능이 아니라 **정직함**을 위한 것이다. 화면에 "이 이름이 서버로
+  // 갑니다"라고 적어 두고 실제로는 다른 값을 보내면 그 고지가 거짓말이 된다.
+  // 그런데 통째로 시험되지 않고 있었다 — dispose에서 `undefined` 대신 `null`을
+  // 쓰는 것, 캐시 검사 자체를 지우는 것, 빈 문자열 정규화를 지우는 것이
+  // 전부 테스트를 통과했다.
+  /** 기기 이름은 매니저가 있을 때만 화면으로 나간다 — 그래서 매번 새로 세운다. */
+  const boot = (host: string): void => {
+    disposeLicensing()
+    hostname = host
+    initLicensing()
+  }
+
+  it('한 번만 읽는다 — 고지한 값과 보내는 값이 같아야 한다', () => {
+    boot('mac-1')
+    expect(publicLicenseState().deviceName).toBe('mac-1')
+    const after = hostnameReads
+    publicLicenseState()
+    publicLicenseState()
+    expect(hostnameReads).toBe(after)
+  })
+
+  it('dispose가 캐시를 비운다 — `null`을 쓰면 영영 null이 된다', () => {
+    boot('mac-1')
+    expect(publicLicenseState().deviceName).toBe('mac-1')
+    boot('mac-2')
+    expect(publicLicenseState().deviceName).toBe('mac-2')
+  })
+
+  it('빈 호스트네임은 null이다 — 화면에 빈 <code>가 뜨지 않게', () => {
+    boot('')
+    expect(publicLicenseState().deviceName).toBeNull()
+    disposeLicensing()
   })
 })

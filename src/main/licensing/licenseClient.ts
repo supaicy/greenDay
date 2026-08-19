@@ -48,7 +48,7 @@ export interface LicenseClientOptions {
 
 export interface LicenseClient {
   activate(key: string, device: string, deviceName: string | null): Promise<ClientResult<Activation>>
-  validate(key: string, device: string): Promise<ClientResult<Activation>>
+  validate(key: string, device: string, deviceName: string | null): Promise<ClientResult<Activation>>
   deactivate(key: string, device: string): Promise<ClientResult<void>>
 }
 
@@ -124,7 +124,11 @@ export function createLicenseClient(options: LicenseClientOptions): LicenseClien
 
   return {
     activate: (key, device, deviceName) => activation('/v1/activate', { key, device, deviceName: deviceName ?? '' }),
-    validate: (key, device) => activation('/v1/validate', { key, device }),
+    // **기기 이름을 같이 보낸다.** 서버의 `/v1/validate`는 `handleActivate`로 가서
+    // 활성 슬롯이 없으면 다시 INSERT한다(관리자 해제나 오래된 활성화 회수 뒤가
+    // 그렇다). 이름을 빼면 그 재등록이 `device_name`을 NULL로 남기고, 기기 목록
+    // 화면에는 이름 없는 행이 뜬다 — 하필 들여다볼 이유가 있는 라이선스에서.
+    validate: (key, device, deviceName) => activation('/v1/validate', { key, device, deviceName: deviceName ?? '' }),
     async deactivate(key, device) {
       const reply = await send('/v1/deactivate', { key, device })
       if (!reply) return { ok: false, error: 'network' }

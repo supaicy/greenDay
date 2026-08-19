@@ -60,9 +60,11 @@ TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 �
 - **권한은 서명 검증을 통과한 페이로드에서만 나온다.** `license.json`의 어떤 값도
   권한을 만들지 못한다. 유예 마감은 토큰의 `exp + 30일`이지, 앱이 적어둔
   타임스탬프가 아니다.
-- **거부와 불통을 뭉치지 말 것.** 409와 JSON 봉투가 있는 404만 라이선스를 닫는다.
-  Cloudflare의 HTML 404·타임아웃·봉투 없는 400은 닫지 않는다 — 워커 배포 사고
-  한 번에 유료 사용자 전원이 라이선스를 잃는다.
+- **거부와 불통을 뭉치지 말 것.** `licenseClient.ts`의 `KNOWN_REFUSALS`에
+  `상태:오류이름`이 **있을 때만** 닫는다. 상태 코드만으로는 절대 닫지 않는다 —
+  봉투 없는 409도, `route_not_found` 같은 모르는 이름의 404도 `network`다.
+  (이 규칙이 한때 "409와 봉투 있는 404"라고 더 넓게 적혀 있었는데, 그대로 고치면
+  CDN이 돌려준 404가 돈 낸 사람의 토큰을 지운다.)
 - **키와 토큰은 렌더러로 내려보내지 않는다.** IPC는 `shared/license.ts`의
   `PublicLicenseState`만 넘긴다(상태·마감·가린 키).
 - **키 입력 UI는 `capabilities.needsLicenseKey`로만 그린다.** 스토어 빌드에 남으면
@@ -71,7 +73,9 @@ TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 �
   `licensing/LicenseGate.tsx`는 화면일 뿐이고, DOM 노드 하나 지우면 뚫린다.
   등록할 때 등급을 필수 인자로 고른다 — `handle('create-task', 'paid', …)`.
   **무엇이 무료인지는 `ipc-gate.test.ts`의 `FREE_CHANNELS`가 통째로 못 박는다**
-  (읽기 / 내보내기 / 라이선스 자체 / 결제와 무관한 앱 메타, 넷뿐이다).
+  (읽기 / 내보내기 / 라이선스 자체 / 앱 메타와 업데이트 / 바깥 열기, 다섯이다).
+  `index.ts`가 아니라 `app-ipc.ts`에 등록할 것 — 테스트가 부를 수 있어야 그
+  목록이 실제로 전부가 된다.
   `ipcMain.handle`을 직접 부르지 말 것 — biome 규칙과 `ipcMainBoundary.test.ts`가
   양쪽에서 막는다. 잠긴 화면에서도 내보내기가 눌린다 — 데이터를 인질로 잡지 않는다.
 

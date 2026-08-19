@@ -38,9 +38,17 @@ describe('activate — 요청', () => {
 
   it('validate는 같은 모양으로 다른 엔드포인트를 친다', async () => {
     const { client, calls } = clientReplying(ok(1_800_000_000))
-    await client.validate(KEY, DEVICE)
+    await client.validate(KEY, DEVICE, 'test-machine')
     expect(calls[0].url).toBe(`${BASE}/v1/validate`)
-    expect(calls[0].body).toEqual({ key: KEY, device: DEVICE })
+    // **기기 이름을 같이 보낸다.** 서버는 이 엔드포인트에서도 슬롯이 없으면 다시
+    // INSERT하므로, 빼면 재등록이 이름 없는 행으로 남는다.
+    expect(calls[0].body).toEqual({ key: KEY, device: DEVICE, deviceName: 'test-machine' })
+  })
+
+  it('기기 이름이 없으면 빈 문자열로 보낸다 — activate와 같은 모양', async () => {
+    const { client, calls } = clientReplying(ok(1_800_000_000))
+    await client.validate(KEY, DEVICE, null)
+    expect(calls[0].body).toEqual({ key: KEY, device: DEVICE, deviceName: '' })
   })
 
   it('토큰과 만료를 ms로 돌려준다', async () => {
@@ -149,7 +157,7 @@ describe('분류는 엔드포인트마다 같다', () => {
       const a = clientReplying(reply)
       expect(await a.client.activate(KEY, DEVICE, null)).toEqual({ ok: false, error: expected })
       const v = clientReplying(reply)
-      expect(await v.client.validate(KEY, DEVICE)).toEqual({ ok: false, error: expected })
+      expect(await v.client.validate(KEY, DEVICE, null)).toEqual({ ok: false, error: expected })
     })
   }
 

@@ -18,10 +18,8 @@ import { createLicenseClient } from './licenseClient'
 import { createLicenseManager, type LicenseManager } from './licenseManager'
 import { createFileStore } from './licenseStore'
 import { resolveDeviceId } from './deviceIdentity'
-import { LICENSE_BASE_URL, type PurchaseSource } from './endpoints'
+import { LICENSE_BASE_URL } from './endpoints'
 import { UNKNOWN_LICENSE_STATE, type PublicLicenseState } from '../../shared/license'
-
-export type { PurchaseSource, PublicLicenseState }
 
 /**
  * 유료 전환 스위치. **꺼진 채로 출하한다.**

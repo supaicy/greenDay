@@ -59,12 +59,19 @@ function token(over: { expMs?: number; iatMs?: number } = {}): string {
  *
  * `frozenClock`은 벽시계를 `NOW`에 붙들어 둔 사용자다 — 단조만 흐른다.
  */
-function boot(
-  record: Partial<LicenseRecord>,
-  over: { startAt?: number; frozenClock?: boolean; client?: Partial<LicenseClient> } = {}
-) {
-  const stored: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: null, ...record }
-  let clock = over.startAt ?? NOW
+interface LaunchOptions {
+  /** 이 실행이 시작될 때의 벽시계. `relaunch`가 쓴다. */
+  at?: number
+  frozenClock?: boolean
+  client?: Partial<LicenseClient>
+}
+
+function boot(record: Partial<LicenseRecord>, over: LaunchOptions = {}) {
+  return launch({ key: null, token: null, lastSeenMs: 0, trialStartMs: null, ...record }, over)
+}
+
+function launch(stored: LicenseRecord, over: LaunchOptions = {}) {
+  let clock = over.at ?? NOW
   let mono = 0
   const timers: { atMono: number; fire: () => void }[] = []
 
@@ -109,6 +116,14 @@ function boot(
     },
     /** 절전에서 깨어나듯, 도래한 마감 타이머를 깨운다. */
     wake: fireDue,
+    /**
+     * 앱을 껐다 켠다 — **디스크만 남고 프로세스 메모리는 사라진다.**
+     *
+     * 트라이얼 시작일 도출은 프로세스당 한 번 메모되므로, 재시작을 넘나드는
+     * 공격은 이 경계를 넘어야만 보인다. 한 프로세스 안에서만 시험하면
+     * 메모이제이션이 공격을 가려 준다.
+     */
+    relaunch: (atMs: number) => launch(stored, { ...over, at: atMs }),
     /** 단조로만 시간을 흘리며 도래한 타이머를 깨운다. 재검증은 비동기라 기다린다. */
     run: async (untilMs: number, stepMs: number) => {
       for (let t = stepMs; t <= untilMs; t += stepMs) {
@@ -144,12 +159,39 @@ describe('미래로 조작된 시작일이 창을 무한히 밀지 못한다', (
     expect(h.manager.getState().status).toBe('trialExpired')
   })
 
-  it('그래도 파일에는 되쓰지 않는다 — 시계 고장난 기기를 벽돌로 만들지 않는다', () => {
+  it('재시작해도 새 창이 열리지 않는다 — 한 번의 편집이 영구 라이선스가 되면 안 된다', () => {
+    // 프로세스 안에서만 막는 것으로는 부족하다. 데스크톱 앱은 스스로 재시작하므로,
+    // 되쓰지 않은 미래 시작일은 **실행마다** 새 창을 주고 사용자는 아무것도 더
+    // 하지 않아도 된다. 설정을 지우는 우회는 30일마다 손을 대야 하는데 이건
+    // 한 번 편집하고 끝이라 문서화된 트레이드오프보다 명백히 강하다.
+    const forged = NOW + 100 * 365 * DAY
+    let h = boot({ trialStartMs: forged })
+    expect(h.manager.allowsPaidFeatures()).toBe(true) // 첫 실행은 창을 준다
+
+    h = h.relaunch(NOW + 31 * DAY)
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+    expect(h.manager.getState().status).toBe('trialExpired')
+
+    // 몇 번을 껐다 켜도 마찬가지다.
+    h = h.relaunch(NOW + 400 * DAY)
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('시계가 뒤로 간 기기에는 되쓰지 않는다 — RTC가 죽은 기기를 벽돌로 만들지 않는다', () => {
+    // 위와 겉모습이 같다(기록된 시작일이 시스템 시각보다 한참 미래). 가르는 것은
+    // 래칫이다: 시계가 뒤로 간 기기만 `lastSeen`이 지금보다 앞서 있다. 여기서
+    // 되쓰면 정직한 사용자의 시작일이 2001년으로 박제된다.
+    const honest = NOW
+    const h = boot({ trialStartMs: honest, lastSeenMs: NOW }, { at: NOW - 25 * 365 * DAY })
+    expect(h.record.trialStartMs).toBe(honest)
+  })
+
+  it('보정한 값을 파일에 남긴다 — 그래야 다음 실행이 같은 창을 본다', () => {
     const forged = NOW + 100 * 365 * DAY
     const h = boot({ trialStartMs: forged })
     h.setNow(NOW + 20 * DAY)
     h.wake()
-    expect(h.record.trialStartMs).toBe(forged)
+    expect(h.record.trialStartMs).toBe(NOW)
   })
 
   it('정직한 트라이얼은 그대로 30일이다', () => {
@@ -234,6 +276,20 @@ describe('래칫을 조건 없이 믿는 대가', () => {
     // 설정 폴더를 지운 것과 같은 상태 — 창이 다시 열린다.
     const fresh = boot({})
     expect(fresh.manager.allowsPaidFeatures()).toBe(true)
+  })
+
+  it('배경 갱신도 시계 바닥을 서버 시각으로 내린다', async () => {
+    // `anchorClockToServerTime()`은 `lastSeen` 래칫을 **낮출 수 있는 유일한 것**인데,
+    // 갱신 쪽 호출을 지워도 테스트가 전부 통과했다. 활성화 쪽만 덮여 있었다.
+    // 그게 없으면 시계가 한 번 앞으로 튄 기기는 배경 갱신으로는 영영 회복 못 하고
+    // 부풀려진 바닥에 갇힌다.
+    const h = boot(
+      { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), lastSeenMs: NOW + 100 * 365 * DAY },
+      { client: { validate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + 30 * DAY } }) } }
+    )
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.lastSeenMs).toBe(NOW)
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
   })
 
   it('유료 사용자는 재활성화 한 번으로 회복한다', async () => {

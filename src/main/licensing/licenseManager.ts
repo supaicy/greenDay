@@ -18,7 +18,7 @@ import { looksValidKey, normalizeKey } from './licenseKey'
 import { isServerRefusal, type LicenseClient } from './licenseClient'
 import type { LicenseRecord, LicenseStore } from './licenseStore'
 import type { ActivateFailure, DeactivateFailure, LicenseStatus } from '../../shared/license'
-import { effectiveNow, GRACE_DURATION_MS, isTrialOpen, TRIAL_DURATION_MS, trialEndsAt } from './trialWindow'
+import { effectiveNow, GRACE_DURATION_MS, isTrialOpen, trialEndsAt } from './trialWindow'
 
 /**
  * 마감을 들고 다니는 상태들. 나머지는 마감이 없다.
@@ -91,10 +91,15 @@ const RETRY_MAX_MS = 60 * 60 * 1000
  * 한 번의 재검증이 무엇으로 끝났는가 — 다음 예약 간격이 여기서 갈린다.
  *
  * 두 갈래뿐이다. 한때 `refreshed`·`refused`·`notNeeded`를 따로 뒀는데 셋이
- * 같은 길로 갔다 — 이름이 실제로 없는 4단 정책을 암시했다. 재시도하지 않는
- * 이유가 "거부였다"가 아니라 "서버가 답했다"라는 것도 이 이름이 말해 준다.
+ * 같은 길로 갔다 — 이름이 실제로 없는 4단 정책을 암시했다.
+ *
+ * `settled`는 "서버가 답했다"가 **아니다.** 서버를 아예 부르지 않는 자리에서도
+ * 이 값이 나온다: 키·토큰이 없을 때, 기기 id를 못 읽을 때, 반감기 전일 때,
+ * 받아온 토큰의 서명이 깨졌을 때. 뜻하는 것은 "못 닿은 것이 아니다" 하나이고,
+ * 가르는 기준도 하나다 — 보통 폴 간격으로 갈 것인가, 물러서며 재시도할 것인가.
+ * (그래서 예전 이름 `answered`는 네 자리에서 거짓이었다.)
  */
-type RevalidateOutcome = 'answered' | 'unreachable'
+type RevalidateOutcome = 'settled' | 'unreachable'
 
 interface VerifiedToken {
   payload: TokenPayload
@@ -190,8 +195,9 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 최선 노력 저장 — 시계 래칫과 트라이얼 시작일처럼 **잃어도 자가 치유되는** 것.
    *
    * fsync를 걸지 않는다. rename이 원자적이라 깨진 JSON은 어차피 나올 수 없고,
-   * 여기서 쓰는 값들은 다음 실행에서 다시 도출된다. 6시간 폴이 매번 이 길로
-   * 오므로 여기에 배리어를 물리면 하루 4번 메인 프로세스가 4ms씩 선다.
+   * 여기서 쓰는 값들은 다음 실행에서 다시 도출된다. 라이선스가 있는 설치에서는
+   * 6시간 폴이 매번 이 길로 오므로, 여기에 배리어를 물리면 하루 4번 메인
+   * 프로세스가 4ms씩 선다.
    */
   function persist(): boolean {
     return deps.store.write({ ...record })
@@ -300,17 +306,30 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 창이 시작된 시각. 미래로 적힌 값은 시스템 시계로 클램프한다 — 창이
    * `시작 + 30일`이라, 2100년을 써넣으면 서명 없는 영구 라이선스가 된다.
    *
-   * 클램프한 값을 **디스크에 되쓰는 것은 오차가 작을 때뿐이다.** NTP 흔들림,
-   * 타임존 없는 첫 부팅, 서머타임 계산 같은 것은 이 기기가 계속 쓸 시계라
-   * 처음 본 값에 창을 고정하는 게 맞다. 반면 몇 년씩 앞선 값은 위조이거나
-   * 메인보드 배터리가 죽어 2001년으로 올라온 기기이고, 여기서는 둘이 똑같아
-   * 보인다. 고정해 버리면 정직한 쪽이 낙인찍힌다 — 시계가 회복되는 순간 창은
-   * 이미 몇십 년 지난 것이 되고 앱 안에 되돌릴 방법이 없다. 안 쓰면 조작한
-   * 사람은 실행마다 창 하나를 얻는데, 그건 설정을 지우면 어차피 얻는 것이다.
+   * **클램프한 값은 디스크에 되쓴다.** 안 쓰면 위조된 미래 시작일이 실행마다
+   * 새로 "지금"으로 보정돼, 한 번의 편집이 재시작마다 창 하나를 주는 영구
+   * 라이선스가 된다 — 설정 삭제(30일마다 손을 대야 한다)보다 명백히 강해서
+   * 문서화된 트레이드오프 선을 넘는다. 리뷰에서 실증했다.
    *
-   * 시스템 시계로 클램프한다 — `clockSafeNow`로 하면 그 바닥인 `lastSeen`도
-   * 쓰기 가능하므로, 두 값을 다 2100으로 써넣으면 "보정"이 2100을 시작일로
-   * 고정해 준다.
+   * (이 자리에는 "되쓰면 정직한 쪽이 낙인찍힌다"고 적혀 있었는데 틀렸다.
+   * 되쓰는 값은 **지금 시각**이라 정직한 사용자는 온전한 창을 새로 받는다.
+   * 진짜 보호 대상은 다른 경우였다 — 아래.)
+   *
+   * **한 가지 예외: 시계 자체가 뒤로 갔을 때.** 메인보드 배터리가 죽어 2001년으로
+   * 올라온 기기에서는 정상적인 시작일이 "한참 미래"로 보인다. 거기서 되쓰면
+   * 진짜 시작일이 2001년으로 박제되고 앱 안에 되돌릴 방법이 없다. 두 상황은
+   * 겉모습이 같지만 래칫이 가른다: `resolveTrialStart`는 `touchClock()` 바로
+   * 뒤에서만 불리므로, 시계가 정상이면 `lastSeen === systemNow`이고 시계가
+   * 뒤로 갔을 때만 `lastSeen > systemNow`다.
+   *
+   * `lastSeen`도 쓰기 가능하니 그걸 앞세워 되쓰기를 막을 수는 있다. 하지만 그
+   * 순간 `clockSafeNow()`가 그 값이 되어 창이 오히려 먼저 닫힌다 — 살아남는
+   * 구간은 `systemNow < lastSeen < systemNow + 30일`뿐이고, 실제 시각이 그
+   * 값을 지나가면 래칫이 따라잡아 되쓰기가 발화한다. 즉 한 번의 편집이
+   * 사 주는 것은 최대 한 창이고, 그건 설정을 지워 얻는 것과 같다.
+   *
+   * 클램프 자체는 시스템 시계로 한다 — `clockSafeNow`로 하면 두 값을 다 2100으로
+   * 써넣었을 때 "보정"이 2100을 시작일로 고정해 준다.
    */
   function resolveTrialStart(): number {
     // **프로세스당 한 번만 도출한다.** 이게 없으면 위 문단의 근거가 성립하지
@@ -332,7 +351,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       trialStartedAt = recorded
       return trialStartedAt
     }
-    if (recorded - systemNow <= TRIAL_DURATION_MS) {
+    // 시계가 뒤로 가지 않았다면 되쓴다. 위 문단 참고.
+    if (systemNow >= record.lastSeenMs) {
       record.trialStartMs = systemNow
     }
     trialStartedAt = systemNow
@@ -371,6 +391,12 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 조각(최대 24.8일)을 다시 걸고, 마감이 영원히 뒤로 물러난다. 바닥은 조각이
     // 깰 때마다 단조로 올라가므로, 그걸 기준으로 재야 실제로 줄어든다.
     const remaining = deadlineMs - clockSafeNow()
+    // **오늘 기준 도달 불가다.** `apply()`가 마감을 거는 세 상태(trial·licensed·grace)는
+    // 전부 `settle()`이 "아직 안 지났다"를 확인한 뒤에만 만들어지고, 그 확인이
+    // `clockSafeNow()`로 이뤄지므로 여기 오는 `remaining`은 항상 양수다.
+    // 그래서 뮤테이션 테스트를 걸지 말 것 — 지워도 아무것도 빨개지지 않는다.
+    // 그런데도 남긴다: 실패 모드가 무한 루프다(음수 지연 → 즉시 발화 → settle →
+    // apply → 다시 여기). 한 줄로 막을 수 있는 종류의 사고가 아니다.
     if (remaining <= 0) return
     const wait = Math.min(remaining, MAX_TIMEOUT_MS)
     const reachedMs = clockSafeNow() + wait
@@ -435,6 +461,9 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   async function deactivate(): Promise<DeactivateFailure | null> {
     const key = record.key
     if (!key) return 'nothing'
+    // 응답이 돌아왔을 때 "그 사이 아무 일도 없었나"를 판정할 기준. 키만으로는
+    // 부족하다 — 아래 가드의 주석 참고.
+    const token = record.token
     const device = deviceId()
     if (!device) {
       // 슬롯은 실제로 잡혀 있는데 이 기기가 자기 이름을 못 댄다. "해제할 게
@@ -445,15 +474,33 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     const result = await deps.client.deactivate(key, device)
     if (!result.ok) {
       if (result.error === 'deactivationLimit') return 'deactivationLimit'
+      // `'refused'`는 지금 서버로는 도달 불가다 — `handleDeactivate`가 낼 수 있는
+      // 것은 missing_fields(400)·unknown_key(404)·deactivation_limit(429)·
+      // device_not_active(404)뿐이고, 위 세 줄이 그중 셋을 이미 걷어낸다.
+      // 남기는 것은 `/v1/deactivate`가 나중에 revoked나 device_limit을 돌려주기
+      // 시작했을 때 조용히 `network`(=재시도해도 된다)로 읽히지 않게 하기
+      // 위해서다. 문구도 그래서 양쪽 로케일에 남아 있다.
       // 서버에 그 슬롯이 이미 없다 — 로컬에 들고 있어봐야 아무에게도 도움이 안 된다.
       if (result.error !== 'unknownKey' && result.error !== 'deviceNotActive') {
         return isServerRefusal(result.error) ? 'refused' : 'network'
       }
     }
 
-    // 요청이 나가 있는 동안 다른 키가 도착했으면, 아무도 놓아달라고 하지 않은
+    // 요청이 나가 있는 동안 자격증명이 바뀌었으면, 아무도 놓아달라고 하지 않은
     // 라이선스를 버리는 셈이 된다.
-    if (record.key !== key) return null
+    //
+    // **토큰도 같이 본다.** 키만 보면 반대 방향을 놓친다: 같은 키가 그 사이
+    // 슬롯을 다시 잡은 경우 `record.key`는 내내 같은 값이라 가드가 통과하고,
+    // 방금 만들어진 라이선스를 지운다. 창이 둘일 필요도 없다 — 서버의
+    // `/v1/validate`가 `handleActivate`로 가서 슬롯이 없으면 다시 INSERT하므로,
+    // 6시간 재검증 폴이 해제 왕복 사이에 끼기만 하면 된다. 그때 남는 상태가
+    // 정확히 이 함수가 피하려던 것이다: 서버에는 슬롯이 잡혀 있는데 로컬에는
+    // 토큰도 키도 없어 재검증조차 못 하고, 재입력하면 슬롯을 하나 더 먹는다.
+    //
+    // (오늘 기준 키를 바꾸는 경로는 전부 토큰도 함께 바꾸므로 뒷항이 앞항을
+    // 덮는다 — 뮤테이션으로 확인했다. 앞항을 남기는 것은 원래 불변식을 문장
+    // 그대로 적어 두기 위해서다. 여기에 뮤테이션 테스트를 걸려 하지 말 것.)
+    if (record.key !== key || record.token !== token) return null
     // **디스크에서 지우지 못했으면 성공이라 답하지 않는다.** 서버 슬롯은 이미
     // 풀렸는데 옛 토큰이 파일에 남아 있으면, 재시작 때 그게 다시 읽히면서 같은
     // 키가 다른 기기에서도 활성인 상태가 된다. 활성화에만 걸어 뒀던 확인이다.
@@ -475,10 +522,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 이 기기에 키가 없으니 움직일 수 있는 것은 트라이얼뿐이다. 마감을 걸친
       // 실행이라면 다음 실행을 기다리지 말고 여기서 창을 닫는다.
       apply(evaluateTrial())
-      return 'answered'
+      return 'settled'
     }
     const device = deviceId()
-    if (!device) return 'answered'
+    if (!device) return 'settled'
 
     if (touchClock()) persist()
     const token = settle()
@@ -490,7 +537,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     if (deps.now() > token.payload.iat * 1000 + lifetimeMs / 2) {
       return refresh(key, device)
     }
-    return 'answered'
+    return 'settled'
   }
 
   /**
@@ -523,7 +570,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   }
 
   async function refresh(key: string, device: string): Promise<RevalidateOutcome> {
-    const result = await deps.client.validate(key, device)
+    const result = await deps.client.validate(key, device, deps.deviceName)
 
     if (result.ok) {
       // 저 `await`는 중단점이고, 그 사이에 사용자가 해제를 끝낼 수 있다 —
@@ -531,29 +578,29 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 다른 기기가 가져갈 수 있는 슬롯 위에서 라이선스가 되살아난다. 기기
       // 한도가 느린 응답 하나로 무너지는 것이다. 다른 키로 재활성화한 경우도
       // 같은 검사가 막는다 — 이 답은 물어본 그 키에 대한 것이다.
-      if (record.key !== key) return 'answered'
+      if (record.key !== key) return 'settled'
       const verified = verifyToken(result.value.token, {
         publicKey: deps.publicKey,
         device,
         key,
         nowMs: deps.now()
       })
-      if (!verified.ok) return 'answered'
+      if (!verified.ok) return 'settled'
       record.token = result.value.token
       anchorClockToServerTime()
       commit()
       settle()
-      return 'answered'
+      return 'settled'
     }
 
     // 서버에 못 닿은 것은 판정이 아니다. 검증된 토큰과 그것이 얻은 유예가
     // 그대로 선다 — 이걸 거부처럼 다루면 기차 터널 하나가 라이선스를 지운다.
     if (!isServerRefusal(result.error)) return 'unreachable'
-    if (record.key !== key) return 'answered'
+    if (record.key !== key) return 'settled'
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
     // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
     clearLocalLicense(true)
-    return 'answered'
+    return 'settled'
   }
 
   /**
