@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>라이선스 클라이언트 — 4단계 리뷰 보고</title>
+<style>
+  :root {
+    --bg:#fafaf9; --surface:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#16a34a; --accent-soft:#f0fdf4; --warn:#b45309; --warn-soft:#fffbeb;
+    --hot:#b91c1c; --hot-soft:#fef2f2; --cool:#1d4ed8; --cool-soft:#eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e; --line:#44403c;
+      --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33;
+      --hot:#f87171; --hot-soft:#7f1d1d33; --cool:#93c5fd; --cool-soft:#1e3a8a33; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:26px; }
+  h2 { font-size:19px; margin:40px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+  h3 { font-size:15px; margin:24px 0 8px; }
+  p { margin:10px 0; }
+  code { font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  pre { background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    padding:14px 16px; overflow-x:auto; }
+  pre code { background:none; border:none; padding:0; }
+  .wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; }
+  .box { border:1px solid var(--line); border-left-width:3px; border-radius:8px;
+    padding:14px 16px; margin:16px 0; background:var(--surface); }
+  .box.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+  .box.hot { border-left-color:var(--hot); background:var(--hot-soft); }
+  .box.ok { border-left-color:var(--accent); background:var(--accent-soft); }
+  .box.cool { border-left-color:var(--cool); background:var(--cool-soft); }
+  .box h3 { margin-top:0; }
+  ul,ol { margin:10px 0; padding-left:22px; }
+  li { margin:5px 0; }
+  .num { font-variant-numeric:tabular-nums; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:600; padding:1px 7px;
+    border-radius:99px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .tag.red { color:var(--accent); border-color:var(--accent); }
+  .tag.kill { color:var(--hot); border-color:var(--hot); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0; }
+  .stat { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .stat b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
+  .stat span { color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>라이선스 클라이언트 — 4단계 리뷰 보고</h1>
+<div class="meta">haru / Greenday · 2026-08-22 · <code>d6f7fae..24430b0</code> · 49 files, +2530/−805 · 로컬에만 있음(push 금지)</div>
+
+<div class="grid">
+  <div class="stat"><b>4</b><span>단계, 순차 실행</span></div>
+  <div class="stat"><b>16</b><span>리뷰 갈래</span></div>
+  <div class="stat"><b>~70</b><span>반영한 지적</span></div>
+  <div class="stat"><b>915</b><span>테스트 (시작 845)</span></div>
+</div>
+
+<div class="box hot">
+<h3>한 줄 요약</h3>
+<p><b>이 라운드가 찾은 것의 대부분은 앞 단계가 만든 것이다.</b> 4단계 중 3단계에서 가장 심각한 지적이 바로 앞 커밋의 수정이었다.
+고치는 행위 자체가 새 결함의 주된 출처였고, 그래서 단계를 겹치지 않고 순서대로 돌린 것이 실제로 값을 했다.</p>
+</div>
+
+<h2>단계별</h2>
+<div class="wrap"><table>
+<tr><th>단계</th><th>갈래</th><th>가장 무거운 것</th><th>커밋</th></tr>
+<tr><td>1 · /simplify</td><td>reuse · simplification · efficiency · altitude</td>
+<td>메뉴 라벨이 영구히 한국어로 굳음 / 유료 IPC마다 ed25519 재검증(1000배)</td><td><code>6e372ee</code></td></tr>
+<tr><td>2 · /review</td><td>전문가 6 + critical + 적대 2</td>
+<td>해제가 방금 잡힌 슬롯을 지움 / 한 번의 파일 편집이 영구 트라이얼 / 게이트 사각지대</td><td><code>915f1e1</code> <code>768487f</code></td></tr>
+<tr><td>3 · /code-review</td><td>CLAUDE.md · 얕은 스캔 · git 이력 · 과거 PR · 주석 준수</td>
+<td>부팅 catch가 데이터 손실을 염 / <code>persist()</code> 스윕이 반쪽</td><td><code>e6aea5a</code></td></tr>
+<tr><td>4 · codex</td><td>gpt-5.6-sol, effort max</td>
+<td>런타임 개발 탐지가 잠금을 푸는 열쇠 / 깨진 <code>license.json</code>을 조용히 파기</td><td><code>24430b0</code></td></tr>
+</table></div>
+
+<h2>내가 만든 결함들</h2>
+
+<div class="box hot">
+<h3>1. 고치려던 것이 더 나쁜 것을 열었다</h3>
+<p>2단계에서 "부팅이 던지면 창을 못 만드는 독 아이콘이 된다"를 고치려고 <code>initDatabase()</code>의 던짐을 잡았다.
+3단계에서 세 갈래가 각자 같은 결론에 도달했다 — <b>그 던짐이 우연한 보호였다.</b> 창도 IPC도 없으니 파일이 덮어써질 수 없었던 것이고,
+잡고 나니 <code>dbPath</code>는 진짜 파일을 가리키고 <code>data</code>는 빈 기본값인 채로 앱이 살아 있어서
+사용자가 뭐 하나만 건드리면 원본이 날아간다.</p>
+<p>게다가 같은 커밋에서 내가 쓴 다이얼로그가 <i>"아직 아무것도 덮어쓰지 않았으니 백업하세요"</i>라고 약속하고 있었다 — 읽는 동안 이미 늦을 수 있는 약속이다.
+지금은 원본을 먼저 <code>.corrupt-&lt;ts&gt;</code>로 복사하고 그 세션을 읽기 전용으로 돌린다. 부탁이 아니라 기계로 지킨다.</p>
+</div>
+
+<div class="box hot">
+<h3>2. 잠금을 푸는 열쇠를 직접 만들었다</h3>
+<p><code>npm run dev</code>가 30일 뒤 스스로 잠기는 문제를 고치려고 <code>enforcesLicense</code>에 <code>!isDev</code>를 넣었다.
+그런데 <code>is.dev</code>는 <code>!app.isPackaged</code>, 즉 <b>런타임 탐지</b>다. 출하한 asar를 맨 Electron으로 열면 "개발 중"으로 보여
+트라이얼도 IPC 게이트도 함께 꺼진다 — 앱의 JS를 고치는 것보다 <b>싼</b> 우회이고, 이 설계가 넘지 않기로 한 선이다.</p>
+<p>빌드 시점 상수로 옮겼고, 출하 번들에서 상수 접힘이 일어나 <code>enforcesLicense: !isStoreBuild</code>가 되는 것을 산출물에서 확인했다.
+실행 방식으로 바뀔 경로 자체가 없다.</p>
+</div>
+
+<div class="box warn">
+<h3>3. 절반만 고치고 "전부"라고 적었다</h3>
+<p><code>persist()</code> 스윕에서 함수 이름 목록을 grep해 15곳을 감쌌고, 커밋 메시지에 "전부 감쌌다"고 썼다.
+유료 채널 12곳이 남아 있었다 — 되돌리기 복원, 휴지통 비우기, 습관, 뽀모도로, AI 히스토리.
+새로 쓴 테스트는 그중 하나만 봐서 못 잡았다.</p>
+<p>같은 종류로, 같은 커밋에서 <code>activate</code>의 되돌리기는 스냅샷 복원으로 고치고 <code>deactivate</code>는 빠뜨렸다.
+그리고 <code>ticktick-data.json</code>에 넣은 깨진 파일 방어를 <code>license.json</code>에는 빠뜨렸다.</p>
+</div>
+
+<div class="box warn">
+<h3>4. 주석이 코드보다 빨리 낡았다</h3>
+<p>라운드마다 가장 많이 나온 결함이 코드 버그가 아니라 <b>주석이 사실과 다른 것</b>이었다(2단계 12건 중 8건이 같은 커밋에서 만들어진 것).
+가장 위험했던 것은 <code>CLAUDE.md</code>의 거부 규칙이 코드보다 <i>넓게</i> 닫는다고 말한 것 — 그 문장대로 고치면
+CDN의 404가 유료 사용자 토큰을 지운다.</p>
+<p>그리고 <code>ipc-gate.ts</code>의 설명 주석에 <code>handle('create-task', …)</code>를 예시로 적었더니,
+<code>preload/wiring.test.ts</code>의 소스 스크레이퍼가 그걸 <b>실제 등록으로 세어</b> 진짜 핸들러를 지워도 통과했다.</p>
+</div>
+
+<h2>여러 갈래가 독립적으로 도달한 것</h2>
+<p>서로 다른 프롬프트·문맥의 에이전트가 같은 자리를 짚은 것들. 확신도 채점에서 가장 높게 잡았다.</p>
+<div class="wrap"><table>
+<tr><th>갈래 수</th><th>지적</th></tr>
+<tr><td><span class="tag kill">3</span></td><td>부팅 catch가 데이터 손실을 연다 (얕은 스캔 · git 이력 · 주석 준수)</td></tr>
+<tr><td><span class="tag kill">3</span></td><td>게이트 감시가 <code>index.ts</code>의 채널 3개를 못 본다 (testing · api-contract · maintainability)</td></tr>
+<tr><td><span class="tag">2</span></td><td><code>persist()</code> 스윕이 유료 채널 12곳을 빠뜨렸다</td></tr>
+<tr><td><span class="tag">2</span></td><td><code>license_required</code>가 프로세스 양쪽에 따로 선언됐다</td></tr>
+<tr><td><span class="tag">2</span></td><td>렌더러가 게이트의 거절을 아무도 안 받는다</td></tr>
+</table></div>
+
+<h2>실측으로 뒤집힌 것</h2>
+<div class="wrap"><table>
+<tr><th>주장</th><th>실측</th></tr>
+<tr><td><code>writeFileSync({flush:true})</code>가 더 단순하고 같은 일을 한다</td>
+<td><b>거짓.</b> 0.11ms — 그냥 쓰기(0.15ms)와 구별 안 되고 명시적 fsync(4.07ms)의 1/36. 배리어가 안 걸린다.</td></tr>
+<tr><td>biome 규칙과 소스 스크레이퍼가 <code>ipcMain</code> 우회를 양쪽에서 막는다</td>
+<td><b>거짓.</b> <code>const bus = el.ipcMain</code>은 둘 다 놓친다. 런타임 대조만 잡는다.</td></tr>
+<tr><td>미래 시작일을 되쓰면 정직한 사용자가 낙인찍힌다</td>
+<td><b>거짓.</b> 되쓰는 값은 <i>지금</i>이라 온전한 창을 새로 받는다. 진짜 보호 대상은 시계가 <i>뒤로</i> 간 기기였다.</td></tr>
+<tr><td>haru는 테라코타 <code>#C4612A</code> + Fraunces (내 메모리)</td>
+<td><b>이 저장소에 없음.</b> 실제로는 파랑 <code>#4A90D9</code> + Apple 시스템 폰트. <code>DESIGN.md</code>도 없다.</td></tr>
+</table></div>
+
+<h2>켜기 전에 정할 것</h2>
+<p>전부 제품 결정이라 코드로 바꾸지 않았다. <code>TODOS.md</code>에 적어 뒀다.</p>
+<ol>
+<li><b>트라이얼 리셋에 비용이 없다.</b> <code>license.json</code>이 데이터 파일과 <i>일부러</i> 분리돼 있어서, 지우면 데이터 손실 0으로 트라이얼이 새로 열린다. 코드 곳곳의 근거가 이 사실 위에 서 있다.</li>
+<li><b>출하한 enforcement-off 빌드는 영구 무료 클라이언트다.</b> 자동 업데이트가 opt-in이라 나중의 플래그 전환도 서버 배포도 닿지 않는다.</li>
+<li><b><code>license.json.tmp</code>를 못 쓰게 만들면 트라이얼이 무한이다.</b> 한 번 설정하면 실행마다 새 30일 — 파일을 매달 지우는 것보다 강하다.</li>
+<li><b>잠긴 동안에도 리마인더가 뜬다.</b> 알림을 막을지, "무료 티어 없음"이라는 문구를 고칠지.</li>
+<li><b>취소·한도로 잠긴 사람에게 "체험판이 끝났습니다"가 뜬다.</b> 거부 이유가 버려져 화면에 안 실린다.</li>
+<li><b>낙관적 편집의 되돌리기가 없다.</b> 잠금 화면은 뜨지만 이미 반영된 변경은 남았다가 재시작에 사라진다.</li>
+<li><b>문의 수단이 없다.</b> 문구 셋이 문의를 안내하는데 앱에 그 길이 없고, 기기 목록 페이지도 서버에 아직 없다.</li>
+</ol>
+
+<h2>남은 서버 의존</h2>
+<p>기기 목록에서 골라 해제하는 UI는 <code>POST /v1/devices { key }</code>가 필요하다. 계약은 <code>TODOS.md</code>에 적어 뒀고, 그때까지 설정 화면은 "이 기기 해제"만 제공한다.</p>
+
+<h2>방법론 메모</h2>
+<p>모든 수정은 <b>뮤테이션으로 검증</b>했다 — 고친 자리에 결함을 도로 심어 테스트가 빨개지는 것을 확인했다.
+그 과정에서 시험할 수 없는 가드 둘을 발견해 하나로 줄였고(<code>scheduleClose</code>의 도달 불가 가드는 실패 모드가 무한 루프라 이유를 적고 남겼다),
+가짜 스토어가 <i>실패를 보고하면서 레코드를 갱신하던</i> 하네스 결함도 그 김에 잡혔다 — 저장 실패 경로가 실제보다 관대해 보이고 있었다.</p>
+
+</main>
+</body>
+</html>
