@@ -868,6 +868,49 @@ describe('재검증이 조용히 빠뜨리던 것들', () => {
     expect(h.manager.getMaskedKey()).not.toBeNull()
   })
 
+  it('갱신을 디스크에 못 적으면 화면도 옛 토큰에 머문다', async () => {
+    // 못 적었는데 새 토큰으로 화면을 갱신하면, 재시작 때 옛(만료된) 토큰이 돌아와
+    // 사용자가 이유 없이 잠긴다. 그리고 `settled`라 답하면 6시간을 기다린다.
+    const stored = token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY })
+    const h = harness({
+      record: { key: KEY, token: stored, lastSeenMs: NOW },
+      storeWritable: false,
+      client: { validate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.token, '못 적은 토큰이 메모리에 남았다').toBe(stored)
+    // 못 닿은 것으로 쳐야 곧 다시 시도한다 — 백오프는 6시간보다 짧다.
+    const armed = h.timers[h.timers.length - 1]
+    expect(armed.atMs - NOW).toBeLessThan(6 * 60 * 60 * 1000)
+  })
+
+  it('취소를 디스크에 못 적으면 곧 다시 시도한다', async () => {
+    // `settled`라 답하면 6시간을 기다리는데, 그동안 취소된 자격증명이 디스크에
+    // 그대로 남아 재시작이 되살린다.
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), lastSeenMs: NOW },
+      storeWritable: false,
+      client: { validate: async () => ({ ok: false, error: 'revoked' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    const armed = h.timers[h.timers.length - 1]
+    expect(armed.atMs - NOW).toBeLessThan(6 * 60 * 60 * 1000)
+  })
+
+  it('시계를 되돌려도 반감기 판단은 래칫으로 한다', async () => {
+    // 생 벽시계로 재면, 시계를 되돌린 기기에서 토큰이 영영 "아직 반감기 전"으로
+    // 보여 재검증이 서버를 **한 번도** 안 친다 — 취소가 도달할 길이 없어진다.
+    // 래칫(`lastSeenMs`)은 되돌릴 수 없으므로 그걸로 재야 한다.
+    const h = harness({
+      // 반감기는 iat+15일 = NOW-5일. 진짜 시각(NOW)으로는 이미 지났다.
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), lastSeenMs: NOW },
+      client: { validate: async () => ({ ok: false, error: 'network' }) },
+      now: NOW - 18 * DAY // 사용자가 시계를 되돌렸다 — 벽시계로는 반감기 전이다.
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.calls, '되돌린 시계가 재검증을 막았다').toEqual(['validate'])
+  })
+
   it('기기 한도는 취소가 아니다 — 토큰을 지우지 않는다', async () => {
     // `/v1/validate`도 서버에서는 활성화라, 이 기기 슬롯이 빠진 뒤 키가 한도에
     // 차 있으면 409가 온다. 그걸 취소로 읽으면 돈 낸 사람이 유예도 없이 그

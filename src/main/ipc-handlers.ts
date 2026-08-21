@@ -23,7 +23,7 @@ import { runGoogleSync } from './google-sync'
 import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
 import { licensing, publicLicenseState } from './licensing/service'
-import { handle } from './ipc-gate'
+import { handle, LICENSE_REQUIRED } from './ipc-gate'
 import { asPurchaseSource, purchaseUrl, recoverUrl } from './licensing/endpoints'
 import { toLocalDateString } from '../shared/date'
 
@@ -125,6 +125,11 @@ export function setupIpcHandlers(): void {
       ]
     })
     if (result.canceled) return []
+    // **다시 확인한다.** 게이트는 호출 시점에만 보는데, 이 다이얼로그는 사용자가
+    // 열어 둔 채 몇 시간이 지날 수 있다(절전 포함). 그 사이 트라이얼이 끝났으면
+    // 여기서 복사한 파일은 뒤이은 할일 저장이 거절되면서 아무도 참조하지 않는
+    // 채로 첨부 폴더에 남는다.
+    if (licensing()?.allowsPaidFeatures() === false) throw new Error(LICENSE_REQUIRED)
     const attachments: { name: string; path: string }[] = []
     for (const filePath of result.filePaths) {
       const name = `${uuid()}-${basename(filePath)}`
@@ -359,7 +364,10 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  handle('calendar:disconnect', 'paid', () => {
+  // 연결 **해제**는 무료다. 잠겼다고 저장된 CalDAV 비밀번호를 못 지우게 하면,
+  // 유료화가 사용자의 자격증명을 인질로 잡는 것이 된다 — 내보내기를 무료로 둔
+  // 것과 같은 이유다. 연결(쓰기)은 그대로 유료다.
+  handle('calendar:disconnect', 'free', () => {
     // 자격증명과 동기화 상태를 모두 버린다. 서버의 일정은 건드리지 않는다 —
     // 연동 해제가 사용자의 캘린더를 비우는 동작이면 되돌릴 방법이 없다.
     storeCalendarConfig({ ...DEFAULT_CONFIG })
@@ -486,7 +494,8 @@ export function setupIpcHandlers(): void {
     }
   })
 
-  handle('google:disconnect', 'paid', async () => {
+  // 위와 같다. 구글 리프레시 토큰을 지우고 revoke하는 길은 잠겨도 열려 있어야 한다.
+  handle('google:disconnect', 'free', async () => {
     const config = loadGoogle()
     // 서버 쪽 권한까지 회수한다. 실패해도 로컬 토큰은 반드시 지운다.
     if (config.tokens?.refreshToken || config.tokens?.accessToken) {

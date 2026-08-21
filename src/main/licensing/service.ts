@@ -189,7 +189,7 @@ function readDeviceId(): string | null {
  * 같은 폴더에 있어서 어차피 같이 리셋된다. Electron 앱에서 목표는 깨지지 않는
  * DRM이 아니라 우회에 의도적인 노력이 들게 하는 것까지다.
  */
-function persistedFallbackId(): string {
+function persistedFallbackId(): string | null {
   const path = join(app.getPath('userData'), 'device-id')
   try {
     if (existsSync(path)) {
@@ -203,7 +203,12 @@ function persistedFallbackId(): string {
   try {
     writeFileSync(path, fresh, 'utf-8')
   } catch {
-    // 못 쓰면 이번 실행 동안만 유효한 id가 된다. 활성화는 다음 실행에서 다시 필요해진다.
+    // **못 적으면 내주지 않는다.** 예전에는 "이번 실행 동안만 유효한 id"라며
+    // 그냥 돌려줬는데, 그건 실행마다 다른 기기로 보인다는 뜻이다 — 재검증이
+    // `/v1/validate`에서 슬롯을 새로 INSERT하므로 몇 번 껐다 켜면 기기 한도가
+    // 남의 슬롯도 아닌 자기 유령들로 가득 찬다. 식별 실패는 아무것도 안 하는
+    // 쪽이 낫다: 호출처가 `noDevice`로 받아 서버를 건드리지 않는다.
+    return null
   }
   return fresh
 }

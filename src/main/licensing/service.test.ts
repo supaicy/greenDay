@@ -31,7 +31,8 @@ vi.mock('electron', () => ({
 vi.mock('../capabilities', async () => {
   const { capabilitiesFor } = await import('../../shared/capabilities')
   return {
-    currentCapabilities: () => capabilitiesFor({ isDev: false, isMas: mas, isWindowsStore: windowsStore })
+    currentCapabilities: () =>
+      capabilitiesFor({ isDev: false, isDevBuild: false, isMas: mas, isWindowsStore: windowsStore })
   }
 })
 

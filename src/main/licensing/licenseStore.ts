@@ -16,6 +16,7 @@
 
 import {
   closeSync,
+  copyFileSync,
   existsSync,
   fsyncSync,
   openSync,
@@ -121,11 +122,29 @@ export function createFileStore(filePath: string): LicenseStore {
   }
 }
 
+/**
+ * 파일을 읽는다. **"없다"와 "못 읽는다"를 가른다.**
+ *
+ * 예전에는 둘 다 `null`이었고, 그래서 깨진 파일이 새 설치와 구별되지 않았다.
+ * enforcement가 켜지면 그 다음이 나쁘다: 트라이얼 레코드를 그 위에 그대로 써서
+ * 돈 낸 사람의 키와 토큰이 영구히 사라진다. 같은 라운드에서 `ticktick-data.json`에는
+ * 넣은 방어를 여기 빠뜨렸다 — 더 작지만 더 되돌리기 어려운 파일인데.
+ *
+ * 못 읽으면 원본을 옆으로 복사해 두고 빈 레코드로 시작한다. 사본이 있으면
+ * 지원 메일 한 통으로 복구된다.
+ */
 function readRaw(filePath: string): unknown {
+  if (!existsSync(filePath)) return null
   try {
-    if (!existsSync(filePath)) return null
     return JSON.parse(readFileSync(filePath, 'utf-8'))
-  } catch {
+  } catch (error) {
+    try {
+      const aside = `${filePath}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`
+      copyFileSync(filePath, aside)
+      console.error(`[license] 읽기 실패 — 원본을 ${aside}로 복사했다`, error)
+    } catch (copyError) {
+      console.error('[license] 읽기 실패, 원본 복사도 실패', error, copyError)
+    }
     return null
   }
 }

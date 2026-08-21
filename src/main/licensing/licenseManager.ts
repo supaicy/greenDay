@@ -557,7 +557,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       return refresh(key, device)
     }
     const lifetimeMs = (token.payload.exp - token.payload.iat) * 1000
-    if (deps.now() > token.payload.iat * 1000 + lifetimeMs / 2) {
+    // 래칫으로 잰다. 생 벽시계로 재면 시계를 되돌린 기기에서 토큰이 영영
+    // "아직 반감기 전"으로 보여 재검증이 서버를 한 번도 안 친다 — 취소가
+    // 도달하지 못한다. 이 파일의 다른 시각 비교는 전부 `clockSafeNow()`다.
+    if (clockSafeNow() > token.payload.iat * 1000 + lifetimeMs / 2) {
       return refresh(key, device)
     }
     return 'settled'
@@ -593,6 +596,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   }
 
   async function refresh(key: string, device: string): Promise<RevalidateOutcome> {
+    const before = { token: record.token, lastSeenMs: record.lastSeenMs }
     const result = await deps.client.validate(key, device, deps.deviceName)
 
     if (result.ok) {
@@ -611,7 +615,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       if (!verified.ok) return 'settled'
       record.token = result.value.token
       anchorClockToServerTime(verified.payload)
-      commit()
+      if (!commit()) {
+        // 디스크에 못 적었는데 새 토큰으로 화면을 갱신하면, 재시작 때 옛(만료된)
+        // 토큰이 돌아와 사용자가 이유 없이 잠긴다. 메모리도 되돌리고, 이번은
+        // 못 닿은 것으로 쳐서 곧 다시 시도한다.
+        Object.assign(record, { token: before.token, lastSeenMs: before.lastSeenMs })
+        return 'unreachable'
+      }
       settle()
       return 'settled'
     }
@@ -629,8 +639,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     if (result.error === 'deviceLimit') return 'settled'
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
     // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
-    clearLocalLicense(true)
-    return 'settled'
+    //
+    // 못 지웠으면 `settled`라 답하지 않는다. 그러면 6시간을 기다리는데, 그동안
+    // 취소된 자격증명이 디스크에 그대로 남아 재시작이 되살린다.
+    return clearLocalLicense(true) ? 'settled' : 'unreachable'
   }
 
   /**

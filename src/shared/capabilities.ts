@@ -16,6 +16,14 @@
 export interface PlatformFacts {
   /** electron-vite 개발 서버로 띄운 상태인가. */
   isDev: boolean
+  /**
+   * **빌드 시점에** 개발 빌드였는가. `isDev`(런타임 `app.isPackaged`)와 다르다.
+   *
+   * 잠금 판정에는 이쪽만 쓴다. 런타임 탐지로 잠금을 끄면 출하한 asar를 맨
+   * Electron으로 여는 것만으로 enforcement가 사라지고, 그건 앱의 JS를 고치는
+   * 것보다 싼 우회다.
+   */
+  isDevBuild: boolean
   /** Mac App Store(샌드박스) 빌드인가. Electron의 `process.mas`. */
   isMas: boolean
   /** Microsoft Store(AppX) 빌드인가. Electron의 `process.windowsStore`. */
@@ -71,7 +79,7 @@ export function capabilitiesFor(facts: PlatformFacts): Capabilities {
     canSelfUpdate: !facts.isDev && !isStoreBuild,
     hasGlobalShortcuts: !facts.isMas,
     needsLicenseKey: !isStoreBuild,
-    enforcesLicense: !facts.isDev && !isStoreBuild,
+    enforcesLicense: !facts.isDevBuild && !isStoreBuild,
     updatesViaStore: isStoreBuild
   }
 }

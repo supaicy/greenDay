@@ -92,6 +92,11 @@ const FREE_CHANNELS = [
   'app:open-notification-settings',
   'app:request-notification-permission',
   'calendar:get-config',
+  // 연결 **해제**는 자격증명을 지우는 길이라 잠겨도 열어 둔다 — 부류 2를
+  // "내보내기"보다 넓게 읽는다: 자기 것을 꺼내거나 지우는 길이다. 잠겼다고
+  // 저장된 비밀번호를 못 지우게 하면 유료화가 자격증명을 인질로 잡는 것이 된다.
+  'calendar:disconnect',
+  'google:disconnect',
   'export-data',
   'get-folders',
   'get-habit-logs',

@@ -22,7 +22,8 @@ export interface DeviceProbes {
   runCommand: (command: string, args: string[]) => string | null
   readTextFile: (path: string) => string | null
   /** 하드웨어에서 못 읽었을 때 쓰는, 디스크에 보관되는 난수 id. */
-  fallbackId: () => string
+  /** 하드웨어를 못 읽었을 때 쓸 지속되는 난수 id. **지속시킬 수 없으면 null.** */
+  fallbackId: () => string | null
 }
 
 export function hashDeviceId(raw: string): string {
@@ -36,8 +37,12 @@ export function hashDeviceId(raw: string): string {
  * 트라이얼 시작일도 같은 곳에 있어서 어차피 같이 리셋된다. Electron 앱에서
  * 목표는 깨지지 않는 DRM이 아니라 우회에 의도적인 노력이 들게 하는 것까지다.
  */
-export function resolveDeviceId(probes: DeviceProbes): string {
-  return hashDeviceId(readRawId(probes) ?? probes.fallbackId())
+export function resolveDeviceId(probes: DeviceProbes): string | null {
+  const raw = readRawId(probes) ?? probes.fallbackId()
+  // **식별 못 하면 아무것도 안 내준다.** 실행마다 다른 id를 내주면 재검증이
+  // 그때마다 새 슬롯을 잡아 기기 한도가 자기 유령들로 찬다. 호출처는 `noDevice`로
+  // 받아 서버를 건드리지 않는다 — 다음 실행에서 다시 시도하면 된다.
+  return raw === null ? null : hashDeviceId(raw)
 }
 
 function readRawId(probes: DeviceProbes): string | null {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createFileStore, EMPTY_RECORD, type LicenseRecord } from './licenseStore'
@@ -33,6 +33,23 @@ describe('createFileStore — 읽기', () => {
     const store = createFileStore(path)
     store.write(record)
     expect(createFileStore(path).read()).toEqual(record)
+  })
+
+  it('깨진 파일은 원본 사본을 남긴다 — 조용히 지우지 않는다', () => {
+    // 이게 없으면 "없다"와 "못 읽는다"가 구별되지 않는다. enforcement가 켜지면
+    // 그 다음이 나쁘다: 트라이얼 레코드를 그 위에 그대로 써서 돈 낸 사람의 키와
+    // 토큰이 영구히 사라진다. `ticktick-data.json`에는 넣은 방어를 여기 빠뜨렸었다.
+    const broken = '{"key":"GREENDAY-A2B3'
+    write(broken)
+    expect(createFileStore(path).read()).toEqual(EMPTY_RECORD)
+    const aside = readdirSync(dir).filter((f) => f.includes('.corrupt-'))
+    expect(aside, '원본 사본이 없다').toHaveLength(1)
+    expect(readFileSync(join(dir, aside[0]), 'utf-8')).toBe(broken)
+  })
+
+  it('파일이 아예 없을 때는 사본을 만들지 않는다', () => {
+    expect(createFileStore(path).read()).toEqual(EMPTY_RECORD)
+    expect(readdirSync(dir).filter((f) => f.includes('.corrupt-'))).toHaveLength(0)
   })
 
   it('깨진 JSON은 빈 레코드로 떨어진다', () => {

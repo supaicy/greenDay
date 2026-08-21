@@ -10,6 +10,7 @@ import { capabilitiesFor, type PlatformFacts } from './capabilities'
 
 const facts = (over: Partial<PlatformFacts> = {}): PlatformFacts => ({
   isDev: false,
+  isDevBuild: false,
   isMas: false,
   isWindowsStore: false,
   ...over
@@ -87,9 +88,17 @@ describe('enforcesLicense — 잠그는가', () => {
   it('개발 빌드는 키 입력을 보여 주지만 잠그지는 않는다', () => {
     // 두 질문이다. 한 술어에 맡기면 enforcement를 켜는 날 `npm run dev`가
     // 진짜 트라이얼을 시작하고 30일 뒤 개발 환경이 스스로 잠긴다 — 넣을 키도 없이.
-    const dev = capabilitiesFor(facts({ isDev: true }))
+    const dev = capabilitiesFor(facts({ isDevBuild: true, isDev: true }))
     expect(dev.needsLicenseKey).toBe(true)
     expect(dev.enforcesLicense).toBe(false)
+  })
+
+  it('**런타임 `isDev`로는 잠금이 풀리지 않는다** — 빌드 시점 값만 본다', () => {
+    // `is.dev`는 `!app.isPackaged`라, 출하한 asar를 맨 Electron으로 열면 참이 된다.
+    // 그걸로 잠금을 끄면 앱의 JS를 고치는 것보다 싼 우회가 생긴다 — 이 설계가
+    // 넘지 않기로 한 선이다. 출하 빌드는 실행 방식과 무관하게 잠근다.
+    const shippedButUnpackaged = capabilitiesFor(facts({ isDev: true, isDevBuild: false }))
+    expect(shippedButUnpackaged.enforcesLicense).toBe(true)
   })
 
   it('직판 출하 빌드는 잠근다', () => {
