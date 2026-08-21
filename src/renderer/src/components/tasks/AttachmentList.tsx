@@ -74,7 +74,14 @@ export function AttachmentList({
                 <button
                   type="button"
                   title={att.name}
-                  onClick={() => window.api.openAttachment(att.path)}
+                  // `open-attachment`는 이제 거절할 수 있다 — 첨부 폴더 밖이거나
+                  // 파일이 사라진 경우다(봉쇄 검사가 없는 경로에 닫는 쪽으로 떨어진다).
+                  // 안 받으면 처리되지 않은 rejection이 되고 사용자는 아무 반응도 못 본다.
+                  onClick={() => {
+                    void window.api
+                      .openAttachment(att.path)
+                      .catch((error: unknown) => console.error('[attachment] 열지 못했다', error))
+                  }}
                   className={`flex-1 text-sm text-left truncate ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
                 >
                   {att.name}

@@ -823,6 +823,26 @@ describe('재검증이 조용히 빠뜨리던 것들', () => {
     expect(armedAt).toHaveLength(1)
   })
 
+  it('저장에 실패한 해제가 멀쩡하던 라이선스를 지우지 않는다', async () => {
+    // `activate`와 짝이다. 디스크에 못 적었는데 메모리만 비우면, 사용자에게는
+    // "해제 실패"라고 말하면서 앱은 이미 라이선스를 잃는다 — 그리고 다음 폴의
+    // `persist()`가 그 빈 레코드를 적어 실패라던 일이 조용히 성공해 버린다.
+    const stored = token()
+    const h = harness({
+      record: { key: KEY, token: stored, lastSeenMs: NOW },
+      storeWritable: false,
+      client: { deactivate: async () => ({ ok: true, value: undefined }) }
+    })
+    expect(h.manager.getState().status).toBe('licensed')
+
+    expect(await h.manager.deactivate()).toBe('saveFailed')
+
+    expect(h.record.key, '옛 키가 지워졌다').toBe(KEY)
+    expect(h.record.token, '옛 토큰이 지워졌다').toBe(stored)
+    expect(h.manager.getState().status, '화면만 라이선스를 잃었다').toBe('licensed')
+    expect(h.manager.getMaskedKey()).not.toBeNull()
+  })
+
   it('저장에 실패한 재활성화가 멀쩡하던 라이선스를 지우지 않는다', async () => {
     // 이미 라이선스가 있는 사람이 키를 다시 넣었는데 쓰기가 한 번 실패하면,
     // 되돌리기가 `null`을 쓰는 한 메모리의 라이선스가 사라지고 다음 `persist()`가

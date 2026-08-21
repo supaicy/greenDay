@@ -640,15 +640,26 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    * 다른 쪽에서 잊힌다.
    */
   function clearLocalLicense(keepKey: boolean): boolean {
+    // **되돌릴 것을 먼저 챙긴다** — `activate`와 같은 이유다. 디스크에 못 적었는데
+    // 메모리만 비워 두면, 호출처는 "해제 실패"를 사용자에게 보여 주는데 앱은 이미
+    // 라이선스를 잃은 상태가 된다(잠금 화면이 뜨고 `getMaskedKey()`가 null이다).
+    // 게다가 다음 폴의 `persist()`가 그 빈 레코드를 디스크에 그대로 적어, 실패라고
+    // 답한 일이 조용히 성공해 버린다. 같은 커밋에서 `activate`만 고치고 여기를
+    // 빠뜨렸었다.
+    const before = { key: record.key, token: record.token }
+
     // 토큰을 버리면 유예도 같이 사라진다 — 마감이 토큰에서 계산되므로 잊어야 할
     // 두 번째 자격증명이 없다.
     record.token = null
     if (!keepKey) record.key = null
-    const committed = commit()
+    if (!commit()) {
+      Object.assign(record, before)
+      return false
+    }
     // 트라이얼이 뭐라고 하든 그리로 돌아간다. 2주 전에 설치한 사람에게는
     // "만료"다. 기록된 시작일이 판정하므로 이걸로 새 창을 만들 수는 없다.
     settle()
-    return committed
+    return true
   }
 
   function allowsPaidFeatures(): boolean {

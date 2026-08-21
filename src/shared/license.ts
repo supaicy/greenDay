@@ -71,6 +71,23 @@ export type DeactivateFailure =
   | 'saveFailed'
   | 'network'
 
+/**
+ * 잠긴 채널이 돌려주는 거절.
+ *
+ * `undefined`를 돌려주면 호출한 쪽이 성공으로 읽고 화면에만 존재하는 유령 편집이
+ * 남는다. 거절은 거절처럼 생겨야 한다.
+ *
+ * **양쪽이 쓴다.** 메인의 `ipc-gate.ts`가 던지고, 렌더러의 `useStore`가 그걸 보고
+ * 잠금 화면을 띄운다. 한때 "그렇게 구분하는 렌더러 코드가 없다"며 main으로
+ * 옮겼는데, 바로 그 코드를 만들면서 문자열을 렌더러에 다시 선언하고 있었다 —
+ * 이름을 바꾸면 아무것도 안 깨진 채 게이트 알림만 조용히 죽는 모양이었다.
+ *
+ * **비교는 `includes`로 한다.** `ipcRenderer.invoke`가 거절을
+ * `Error invoking remote method 'create-task': Error: license_required`로 감싸므로
+ * `===`가 맞지 않는다.
+ */
+export const LICENSE_REQUIRED = 'license_required'
+
 /** 아직 메인에서 답이 오기 전 렌더러가 들고 있는 값. 잠그지 않는 쪽으로 기운다. */
 export const UNKNOWN_LICENSE_STATE: PublicLicenseState = {
   status: 'unlicensed',

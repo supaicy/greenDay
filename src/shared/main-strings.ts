@@ -28,7 +28,7 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
     menuView: '보기',
     dbFailedTitle: '데이터를 읽지 못했습니다',
     dbFailedBody:
-      '저장된 할일 파일을 열 수 없어 빈 상태로 시작합니다. 아직 아무것도 덮어쓰지 않았으니, 먼저 설정 폴더의 ticktick-data.json을 백업해 두세요.'
+      '저장된 할일 파일을 열 수 없어 빈 상태로 시작합니다. 원본은 같은 폴더에 .corrupt- 사본으로 남겨 뒀고, 이번 실행에서는 아무것도 저장하지 않습니다 — 앱을 닫아도 원본은 그대로입니다.'
   },
   en: {
     reminder: 'Reminder',
@@ -37,7 +37,7 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
     menuView: 'View',
     dbFailedTitle: 'Could not read your data',
     dbFailedBody:
-      'The saved task file could not be opened, so the app is starting empty. Nothing has been overwritten yet — back up ticktick-data.json in your settings folder first.'
+      'The saved task file could not be opened, so the app is starting empty. A .corrupt- copy of the original was saved next to it, and nothing will be written this session — closing the app leaves your original untouched.'
   }
 }
 

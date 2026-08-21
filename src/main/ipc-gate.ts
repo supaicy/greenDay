@@ -21,21 +21,11 @@
 
 import { ipcMain } from 'electron'
 import { licensing } from './licensing/service'
-
-/**
- * 잠긴 채널이 돌려주는 거절.
- *
- * `undefined`를 돌려주면 호출한 쪽이 성공으로 읽고 화면에만 존재하는 유령 편집이
- * 남는다. 거절은 거절처럼 생겨야 한다.
- *
- * **`shared/`가 아니라 여기 있다.** 한때 "렌더러가 '잠김'과 '핸들러가 터짐'을
- * 구분할 수 있어야 하니 양쪽이 아는 자리"라고 적어 뒀는데 둘 다 틀렸다: 그렇게
- * 구분하는 렌더러 코드가 없고, 있더라도 이 상수로는 못 한다 — `ipcRenderer.invoke`가
- * 거절을 `Error invoking remote method 'create-task': Error: license_required`로
- * 감싸 보내므로 `===` 비교가 맞지 않는다. 나중에 그 구분이 실제로 필요해지면
- * preload가 타입 있는 결과로 매핑하는 별도의 일이고, 그때 소비자와 함께 옮긴다.
- */
-export const LICENSE_REQUIRED = 'license_required'
+// 렌더러도 이 문구를 본다(`useStore`의 `report`) — 그래서 shared에 있다.
+// 한 번 여기로 옮겼다가 되돌렸다: 소비자가 없다는 이유였는데, 바로 그 소비자를
+// 만들면서 문자열을 렌더러에 다시 선언하고 있었다.
+export { LICENSE_REQUIRED } from '../shared/license'
+import { LICENSE_REQUIRED } from '../shared/license'
 
 /**
  * `free`로 열어 두는 이유는 다섯이다 — 읽기(잠금 화면 뒤에서도 앱이 스스로를

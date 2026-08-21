@@ -6,6 +6,7 @@ import { getFilteredTaskIds } from '../utils/filteredTaskIds'
 import { todayString, tomorrowString } from '../utils/date'
 import { pointsForTask, POINTS_PER_HABIT, POINTS_PER_POMODORO } from '../utils/score'
 import { refreshLicense } from '../licensing/useLicense'
+import { LICENSE_REQUIRED } from '../../../shared/license'
 import type {
   Task,
   TaskList,
@@ -348,7 +349,9 @@ function persist(what: string, run: () => unknown): void {
  *
  * 문자열로 비교하는 이유: Electron이 거절을 감싸서
  * `Error invoking remote method 'update-task': Error: license_required`로 만든다.
- * 그래서 `===`가 아니라 포함 검사다.
+ * 그래서 `===`가 아니라 포함 검사다. 문구 자체는 `shared/license.ts`에서 가져온다 —
+ * 여기 다시 적어 두면 메인에서 이름을 바꿨을 때 아무것도 안 깨진 채 이 경로만
+ * 조용히 죽는다.
  *
  * 여기서 하는 일은 **상태를 다시 받아오는 것**뿐이다. 그러면 잠금 화면이 즉시
  * 뜨고 사용자가 왜 안 먹히는지 알게 된다. 낙관적 변경을 되돌리는 것은 연산마다
@@ -356,13 +359,10 @@ function persist(what: string, run: () => unknown): void {
  */
 function report(what: string, error: unknown): void {
   console.error(`[persist] ${what} 실패`, error)
-  if (String((error as { message?: unknown })?.message ?? error).includes(LICENSE_REQUIRED_MESSAGE)) {
+  if (String((error as { message?: unknown })?.message ?? error).includes(LICENSE_REQUIRED)) {
     void refreshLicense()
   }
 }
-
-/** `main/ipc-gate.ts`가 던지는 문구. 프로세스 경계를 넘으며 감싸이므로 포함 검사로 쓴다. */
-const LICENSE_REQUIRED_MESSAGE = 'license_required'
 
 /** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
 function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
@@ -764,18 +764,18 @@ export const useStore = create<Store>((set, get) => ({
         tasks: [...s.tasks, restored]
       }))
     }
-    window.api.restoreTask(id)
+    persist('restoreTask', () => window.api.restoreTask(id))
   },
   permanentDeleteTask: async (id) => {
     set((s) => ({
       trashTasks: s.trashTasks.filter((t) => t.id !== id),
       tasks: s.tasks.filter((t) => t.id !== id && t.parentId !== id)
     }))
-    window.api.permanentDeleteTask(id)
+    persist('permanentDeleteTask', () => window.api.permanentDeleteTask(id))
   },
   emptyTrash: async () => {
     set({ trashTasks: [] })
-    window.api.emptyTrash()
+    persist('emptyTrash', () => window.api.emptyTrash())
   },
   // 같은 태스크를 다시 클릭하면 상세를 닫는다(토글). 다른 id면 전환, null이면 닫기.
   selectTask: (id) => set((s) => ({ selectedTaskId: s.selectedTaskId === id ? null : id })),
@@ -904,7 +904,7 @@ export const useStore = create<Store>((set, get) => ({
         trashTasks: s.trashTasks.filter((t) => t.id !== task.id),
         tasks: [...s.tasks, { ...task, deletedAt: null }]
       }))
-      window.api.restoreTask(task.id)
+      persist('restoreTask', () => window.api.restoreTask(task.id))
     } else if (action.type === 'deleteTasks') {
       const ids = action.data as string[]
       set((s) => {
@@ -914,7 +914,7 @@ export const useStore = create<Store>((set, get) => ({
           tasks: [...s.tasks, ...restored.map((t) => ({ ...t, deletedAt: null }))]
         }
       })
-      for (const id of ids) window.api.restoreTask(id)
+      for (const id of ids) persist('restoreTask', () => window.api.restoreTask(id))
     }
   },
 
@@ -924,14 +924,14 @@ export const useStore = create<Store>((set, get) => ({
     const now = new Date().toISOString()
     const newHabit: Habit = { id, name, color, frequency, targetDays, createdAt: now }
     set((s) => ({ habits: [...s.habits, newHabit] }))
-    window.api.createHabit(id, name, color, frequency, targetDays)
+    persist('createHabit', () => window.api.createHabit(id, name, color, frequency, targetDays))
   },
   removeHabit: async (id) => {
     set((s) => ({
       habits: s.habits.filter((h) => h.id !== id),
       habitLogs: s.habitLogs.filter((l) => l.habitId !== id)
     }))
-    window.api.deleteHabit(id)
+    persist('deleteHabit', () => window.api.deleteHabit(id))
   },
   toggleHabitLog: async (habitId, date) => {
     const existing = get().habitLogs.find((l) => l.habitId === habitId && l.date === date)
@@ -945,7 +945,7 @@ export const useStore = create<Store>((set, get) => ({
       set((s) => ({ habitLogs: [...s.habitLogs, newLog] }))
       get().addScore('habitComplete', POINTS_PER_HABIT)
     }
-    window.api.toggleHabitLog(id, habitId, date)
+    persist('toggleHabitLog', () => window.api.toggleHabitLog(id, habitId, date))
   },
 
   // === 포모도로 ===
@@ -953,7 +953,7 @@ export const useStore = create<Store>((set, get) => ({
     const id = uuid()
     const fullSession: PomodoroSession = { ...session, id }
     set((s) => ({ pomodoroSessions: [...s.pomodoroSessions, fullSession] }))
-    window.api.savePomodoroSession({ ...session, id })
+    persist('savePomodoroSession', () => window.api.savePomodoroSession({ ...session, id }))
 
     if (session.type === 'work' && session.completedAt) {
       get().addScore('pomodoroComplete', POINTS_PER_POMODORO)
@@ -1071,7 +1071,7 @@ export const useStore = create<Store>((set, get) => ({
       set({ aiPull: { model, status: i18n.t('ai.pullFailed'), percent: null, error, active: false } })
       cleanup()
     })
-    void window.api.aiPullModel?.(model)
+    persist('aiPullModel', () => window.api.aiPullModel?.(model))
   },
   aiWarmup: async () => {
     // 로컬 모델을 미리 로드해 첫 응답의 콜드 지연 제거 (Ollama가 아니면 main에서 no-op)
@@ -1147,7 +1147,7 @@ export const useStore = create<Store>((set, get) => ({
       const cap = aiConfig?.maxHistoryMessages ?? 200
       const trimmed = trimHistory(aiMessages, cap)
       set({ aiLoading: false, aiMessages: trimmed })
-      void window.api.aiSaveHistory(trimmed)
+      persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
       cleanup()
     })
     const cleanupError = window.api.onAiStreamError?.((error: string) => {
@@ -1157,7 +1157,7 @@ export const useStore = create<Store>((set, get) => ({
       const cap = get().aiConfig?.maxHistoryMessages ?? 200
       const trimmed = trimHistory(withError, cap)
       set({ aiLoading: false, aiMessages: trimmed })
-      void window.api.aiSaveHistory(trimmed)
+      persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
       cleanup()
     })
 
@@ -1177,7 +1177,7 @@ export const useStore = create<Store>((set, get) => ({
   },
   aiClearMessages: () => {
     set({ aiMessages: [], aiPendingAction: null })
-    void window.api.aiSaveHistory([])
+    persist('aiSaveHistory', () => window.api.aiSaveHistory([]))
   },
   aiSubmit: (message) => {
     // 신뢰 가능한 모델 + 액션 의도(명령형 휴리스틱)면 '기존 할일' 액션 해석으로 라우팅(확인 카드).

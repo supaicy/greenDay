@@ -48,11 +48,34 @@ let data: DbData = {
 let dbPath: string
 let attachmentsDir: string
 
+/**
+ * 데이터 파일을 못 읽었는가. **읽기 실패는 쓰기 금지로 이어져야 한다.**
+ *
+ * 예전에는 `load()`의 던짐이 그대로 부팅을 끊어서, 창도 IPC도 없었고 그래서
+ * 파일이 덮어써질 수 없었다 — 우연한 보호였다. 그 던짐을 잡아 창을 띄우게
+ * 바꾸면서 그 보호가 사라졌다: `dbPath`는 이미 사용자의 진짜 파일을 가리키고
+ * `data`는 빈 기본값이라, 사용자가 뭐든 하나 건드리는 순간 `save()`가 그
+ * 빈 값으로 원본을 덮어쓴다. 복구 가능한 고장이 영구 손실이 되는 것이다.
+ */
+let dbReadFailed = false
+
+/** 데이터 파일을 못 읽어 쓰기가 막혀 있는가. 부팅이 사용자에게 알리는 데 쓴다. */
+export function isDatabaseReadOnly(): boolean {
+  return dbReadFailed
+}
+
 // 디바운스된 비동기 저장 (300ms 내 연속 변경은 한 번만 기록)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let savePending = false
 
 function save(): void {
+  // 읽기에 실패한 세션에서는 절대 쓰지 않는다 — 위 `dbReadFailed` 주석 참고.
+  //
+  // **여기 한 곳이면 된다.** `flushSave()`는 `hadTimer || savePending`일 때만
+  // 쓰는데 둘 다 이 함수만 세운다. 그쪽에도 같은 가드를 뒀다가 뺐다 —
+  // 어느 한쪽만 지워도 다른 쪽이 덮어서 뮤테이션이 아무것도 못 잡았고,
+  // 그건 시험할 수 없는 가드를 하나 늘린 것뿐이었다.
+  if (dbReadFailed) return
   savePending = true
   if (saveTimer) return
   saveTimer = setTimeout(() => {
@@ -142,7 +165,23 @@ export function initDatabase(): void {
   calendarConfigPath = path.join(userDataPath, 'calendar-config.json')
   attachmentsDir = path.join(userDataPath, 'attachments')
   if (!existsSync(attachmentsDir)) mkdirSync(attachmentsDir, { recursive: true })
-  data = load()
+  try {
+    data = load()
+    dbReadFailed = false
+  } catch (error) {
+    // **원본을 먼저 옆으로 치운다.** 그래야 사용자에게 "덮어쓰지 않았다"고 말할 수
+    // 있다 — 다이얼로그를 읽는 동안 백업하라고 부탁하는 것은 약속이 아니다.
+    // 그 뒤 이 세션은 읽기 전용으로 간다(`save`/`flushSave`가 즉시 반환).
+    dbReadFailed = true
+    try {
+      const aside = `${dbPath}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`
+      copyFileSync(dbPath, aside)
+      console.error(`[db] 읽기 실패 — 원본을 ${aside}로 복사했다`, error)
+    } catch (copyError) {
+      console.error('[db] 읽기 실패, 원본 복사도 실패', error, copyError)
+    }
+    throw error
+  }
 
   // 기존 데이터 마이그레이션
   data.tasks.forEach((t) => {
@@ -505,11 +544,26 @@ export function isInsideAttachments(candidate: string): boolean {
   }
 }
 
+/**
+ * 첨부를 폴더 안으로 복사한다.
+ *
+ * 판정이 `isInsideAttachments`와 **같지 않다.** 그쪽은 "이미 있는 것을 열어도
+ * 되는가"라 존재하지 않으면 닫는 쪽으로 떨어지고, 이쪽은 "여기에 새로 써도
+ * 되는가"라 존재하지 않는 것이 정상이다. 그래서 검사를 둘로 나눈다:
+ *   - 이름은 `basename`으로 잘라 상위 이동을 없앤다(문자열 검사면 충분하다).
+ *   - **이미 뭔가 있으면** realpath로 확인한다 — 그 자리에 바깥을 가리키는
+ *     심링크가 놓여 있으면 `copyFileSync`가 그걸 따라가 폴더 밖에 쓴다.
+ *     읽기 쪽에 심링크 방어를 넣으면서 이쪽을 "같은 판정"이라고 적어 뒀는데,
+ *     같지 않았다.
+ */
 export function copyAttachment(sourcePath: string, destName: string): string {
   const safeName = path.basename(destName)
   const destPath = path.resolve(attachmentsDir, safeName)
   if (!destPath.startsWith(attachmentsDir + path.sep) && destPath !== attachmentsDir) {
     throw new Error('Path traversal blocked in copyAttachment')
+  }
+  if (existsSync(destPath) && !isInsideAttachments(destPath)) {
+    throw new Error('Attachment destination escapes the attachments directory')
   }
   copyFileSync(sourcePath, destPath)
   return destPath

@@ -68,7 +68,9 @@ TimeBlock이 같은 것을 쓴다. 항목은 `TaskActionItems.tsx` 한 곳에 �
 - **키와 토큰은 렌더러로 내려보내지 않는다.** IPC는 `shared/license.ts`의
   `PublicLicenseState`만 넘긴다(상태·마감·가린 키).
 - **키 입력 UI는 `capabilities.needsLicenseKey`로만 그린다.** 스토어 빌드에 남으면
-  Apple 3.1.1(외부 결제 유도)로 심사에서 거절된다.
+  Apple 3.1.1(외부 결제 유도)로 심사에서 거절된다. **잠그는가는 다른 질문이라
+  `capabilities.enforcesLicense`가 답한다**(`= !isDev && !isStoreBuild`). 한 술어로
+  둘 다 하면 enforcement를 켜는 날 `npm run dev`가 30일 뒤 스스로 잠긴다.
 - **진짜 게이트는 메인 프로세스의 `main/ipc-gate.ts`다.** 렌더러의
   `licensing/LicenseGate.tsx`는 화면일 뿐이고, DOM 노드 하나 지우면 뚫린다.
   등록할 때 등급을 필수 인자로 고른다 — `handle('create-task', 'paid', …)`.

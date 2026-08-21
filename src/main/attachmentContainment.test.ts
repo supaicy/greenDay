@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -21,7 +21,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] }
 }))
 
-const { initDatabase, isInsideAttachments } = await import('./database')
+const { initDatabase, isInsideAttachments, copyAttachment } = await import('./database')
 
 const attachments = join(root, 'attachments')
 const outside = join(root, 'outside')
@@ -37,6 +37,28 @@ beforeAll(() => {
 
 afterAll(() => {
   rmSync(root, { recursive: true, force: true })
+})
+
+describe('copyAttachment — 쓰기 쪽', () => {
+  it('이름의 상위 이동은 잘라 낸다', () => {
+    const src = join(outside, 'src.txt')
+    writeFileSync(src, 'hi')
+    // basename으로 잘리므로 폴더 안에 평평하게 떨어진다.
+    expect(copyAttachment(src, '../escaped.txt')).toBe(join(attachments, 'escaped.txt'))
+  })
+
+  it('**그 자리에 바깥을 가리키는 심링크가 있으면 거절한다**', () => {
+    // `copyFileSync`는 심링크를 따라간다. 읽기 쪽에 심링크 방어를 넣으면서 이쪽을
+    // "같은 판정"이라고 적어 뒀는데, 문자열 비교뿐이라 여기로 쓰면 폴더 밖에 쓴다.
+    const src = join(outside, 'src2.txt')
+    writeFileSync(src, 'hi')
+    const victim = join(outside, 'victim.txt')
+    writeFileSync(victim, 'original')
+    symlinkSync(victim, join(attachments, 'trap.txt'))
+
+    expect(() => copyAttachment(src, 'trap.txt')).toThrow()
+    expect(readFileSync(victim, 'utf-8'), '폴더 밖 파일이 덮어써졌다').toBe('original')
+  })
 })
 
 describe('isInsideAttachments', () => {

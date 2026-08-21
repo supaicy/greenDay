@@ -52,7 +52,7 @@ export function buildAppMenu(isDev: boolean): Menu | null {
     //
     // **여기서 읽은 값은 이 메뉴가 서 있는 내내 고정된다.** 메뉴는 부팅 때 한 번
     // 짓고 `setApplicationMenu`로 걸어 두는 물건이라, 언어가 바뀌면 호출처가
-    // 다시 지어 줘야 한다(`index.ts`의 `set-language`). 그 재건축이 없던 동안
+    // 다시 지어 줘야 한다(`app-ipc.ts`의 `set-language`). 그 재건축이 없던 동안
     // 라벨은 기본값 'ko'에 영구히 묶여 있었다.
     { label: uiStrings().menuView, submenu: viewSubmenu() },
     { role: 'windowMenu' }
