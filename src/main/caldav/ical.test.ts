@@ -105,6 +105,40 @@ describe('serializeEvent', () => {
     expect(serializeEvent(makeEvent({ description: '' }), NOW)).not.toContain('DESCRIPTION')
     expect(serializeEvent(makeEvent({ description: '메모' }), NOW)).toContain('DESCRIPTION:메모')
   })
+
+  /**
+   * M4 — UID는 task id에서 만들어지고, 그 id가 어디까지 검증되는지는 이 파일이
+   * 알 수 없다. 이스케이프하지 않으면 여기가 사용자의 캘린더에 임의 속성을
+   * 심는 유일한 통로가 된다.
+   */
+  describe('UID 이스케이프', () => {
+    it('개행이 든 UID가 새 속성 줄을 만들지 않는다', () => {
+      const ics = serializeEvent(
+        makeEvent({ uid: 'greenday-x\r\nATTENDEE;CN=Mallory:mailto:m@evil.example' }),
+        NOW
+      )
+      expect(ics).not.toContain('\r\nATTENDEE')
+      expect(ics).toContain('ATTENDEE')  // 값 안에 문자열로는 남는다
+      expect(ics).toContain('\\n')       // 개행이 escapeText로 접혔다
+      // VEVENT의 속성 이름만 뽑았을 때 우리가 쓴 것만 있어야 한다.
+      const names = ics
+        .split('\r\n')
+        .filter((l) => l && !l.startsWith(' '))
+        .map((l) => l.split(/[;:]/)[0])
+      expect(names).not.toContain('ATTENDEE')
+    })
+
+    it('세미콜론·쉼표가 든 UID도 파라미터로 새지 않는다', () => {
+      const ics = serializeEvent(makeEvent({ uid: 'a;TZID=X,b' }), NOW)
+      expect(ics).toContain('UID:a\\;TZID=X\\,b')
+    })
+
+    it('이스케이프한 UID는 그대로 되읽힌다 (충돌 복구의 UID 대조가 여기 기댄다)', () => {
+      const uid = 'greenday-a;b,c\nd'
+      const [parsed] = parseEvents(serializeEvent(makeEvent({ uid }), NOW))
+      expect(parsed.uid).toBe(uid)
+    })
+  })
 })
 
 describe('parseEvents', () => {

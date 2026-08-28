@@ -120,7 +120,15 @@ export function serializeEvent(event: CalendarEvent, now: string): string {
     'PRODID:-//haru//haru calendar sync//EN',
     'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
-    `UID:${event.uid}`,
+    // **UID도 TEXT다(RFC 5545 §3.8.4.7).** 이스케이프하지 않으면 여기가 유일한
+    // 속성 주입 자리가 된다: UID는 task id에서 만들어지는데, 그 id에 개행이나
+    // 세미콜론이 섞이면 우리가 쓰지 않은 iCalendar 속성이 사용자의 캘린더에
+    // 그대로 실린다(`\r\nATTENDEE;CN=...` 한 줄이면 된다). SUMMARY·DESCRIPTION은
+    // 처음부터 escapeText를 지났는데 UID만 날것이었다.
+    //
+    // 읽는 쪽(`parseEvents`)도 같이 `unescapeText`한다 — 한쪽만 바꾸면 특수문자가
+    // 든 UID가 왕복하며 달라져, 충돌 복구의 UID 대조가 우리 일정을 남의 것으로 본다.
+    `UID:${escapeText(event.uid)}`,
     `DTSTAMP:${toUtcStamp(now)}`,
     `SEQUENCE:${event.sequence}`,
     `SUMMARY:${escapeText(event.summary)}`
@@ -202,7 +210,9 @@ export function parseEvents(icsText: string): CalendarEvent[] {
 
     switch (line.name) {
       case 'UID':
-        current.uid = line.value
+        // 쓰는 쪽이 escapeText를 지나므로 여기서 되돌린다 — 대칭이 아니면
+        // 왕복한 UID가 원본과 달라진다(위 serializeEvent 주석 참고).
+        current.uid = unescapeText(line.value)
         break
       case 'SUMMARY':
         current.summary = unescapeText(line.value)
