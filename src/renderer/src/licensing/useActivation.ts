@@ -36,18 +36,40 @@ export function useActivation(): Activation {
     busy,
     error,
     canSubmit: !busy && key.trim() !== '',
+    /**
+     * **`finally`가 이 흐름의 유일한 탈출구다.**
+     *
+     * 예전에는 `setBusy(false)`가 `await` 바로 다음 줄이었다. IPC가 *거절*되면
+     * 그 줄에 도달하지 못해 `busy`가 영원히 참으로 남고 `canSubmit`이 영영
+     * false가 된다 — 잠금 화면(LicenseGate)에서는 그게 **키를 넣을 유일한
+     * 경로**라 사용자가 빠져나올 방법이 사라진다. 설정 화면에서는 같은 값이
+     * 해제 버튼까지 잠근다(LicenseSection의 `busy`가 둘을 묶는다).
+     *
+     * 거절을 삼키지도 않는다. 호출처가 `void activate()`라 여기서 던지면
+     * unhandled rejection으로 사라지고 화면에는 아무 문구도 안 뜬다 —
+     * "눌렀는데 아무 일도 안 일어난다"가 된다. `network`로 갈아 끼운다:
+     * 메인이 답을 못 준 것이므로 "서버에 못 닿았다"와 같은 종류의 모름이고,
+     * 그 문구가 이미 "잠시 후 다시 시도"를 말한다.
+     */
     activate: async () => {
       setBusy(true)
       setError(null)
-      const failure = await window.api.licenseActivate(key)
-      setBusy(false)
-      if (failure) {
-        setError(failure)
+      try {
+        const failure = await window.api.licenseActivate(key)
+        if (failure) {
+          setError(failure)
+          return false
+        }
+        setKey('')
+        await refreshLicense()
+        return true
+      } catch (error) {
+        console.error('[license] 활성화 요청이 거절됐다', error)
+        setError('network')
         return false
+      } finally {
+        setBusy(false)
       }
-      setKey('')
-      await refreshLicense()
-      return true
     }
   }
 }

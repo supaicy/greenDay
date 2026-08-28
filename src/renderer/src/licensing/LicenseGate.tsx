@@ -40,9 +40,13 @@ export function LicenseGate(): React.JSX.Element | null {
   return (
     <Dialog open>
       <DialogContent showCloseButton={false} className="w-[440px] max-w-[calc(100vw-3rem)] gap-0 rounded-2xl">
+        {/* **제목이 이 화면에서 확실히 읽히는 유일한 줄이다.** 기본값은 "체험 기간이
+            끝났습니다"인데, 취소된 키로 막힌 사람에게 그건 거짓말이다 — 그 사람은
+            돈을 냈고, 여기서 구매를 권하면 같은 것을 두 번 사게 만든다. 서버가
+            말해 준 이유가 있으면 그걸 제목으로 올린다(문구는 활성화 실패와 같은 표). */}
         <DialogTitle className="flex items-center gap-2 text-base font-semibold">
           <Lock size={18} />
-          {t('license.lockedTitle')}
+          {license.blockedReason ? t(`license.error.${license.blockedReason}`) : t('license.lockedTitle')}
         </DialogTitle>
         <DialogDescription className="mt-2 text-sm text-muted-foreground">{t('license.lockedBody')}</DialogDescription>
 

@@ -22,6 +22,25 @@ export const LICENSE_STATUSES = ['unlicensed', 'trial', 'trialExpired', 'license
 export type LicenseStatus = (typeof LICENSE_STATUSES)[number]
 
 /**
+ * **서버가 말해 준** 거절 사유. 상태 이름과 다른 축이다.
+ *
+ * `status`는 "지금 무엇이 열려 있는가"(trial·licensed·grace…)이고, 이건 "왜
+ * 그렇게 됐는가"다. 둘을 한 축으로 뭉치면 취소된 키의 사용자가 `trialExpired`가
+ * 되고 화면에는 "체험 기간이 끝났습니다"가 뜬다 — 그 사람은 돈을 냈고,
+ * 필요한 안내는 환불 문의이지 구매가 아니다.
+ *
+ * **이름을 `ClientError`에서 빌려 온다.** 렌더러가 `license.error.<이름>`으로
+ * 문구를 찾으므로, 이미 활성화 실패에 쓰는 그 표가 그대로 답이 된다 —
+ * 같은 사실에 두 벌의 문구를 두지 않는다.
+ *
+ * 둘뿐인 이유: 서버의 판정(`isServerRefusal`) 중 사용자가 **행동을 바꿔야 하는**
+ * 것이 이 둘이다. `unknownKey`는 여기 오지 않는다 — 활성화 시점에만 나오고,
+ * 그때는 입력한 사람이 그 자리에서 실패 문구로 본다.
+ */
+export const LICENSE_BLOCK_REASONS = ['revoked', 'deviceLimit'] as const
+export type LicenseBlockReason = (typeof LICENSE_BLOCK_REASONS)[number]
+
+/**
  * 렌더러가 받는 전부. **키도 토큰도 여기 없다.**
  */
 export interface PublicLicenseState {
@@ -42,6 +61,14 @@ export interface PublicLicenseState {
    * 사용자가 모르는 것은 다른 문제**라, 보내기 전에 같은 화면에 적어 둔다.
    */
   deviceName: string | null
+  /**
+   * 서버가 마지막으로 말해 준 거절 사유. 없으면 null.
+   *
+   * `status`와 **독립이다.** `deviceLimit`은 토큰이 살아 있는 동안에도 붙는다 —
+   * 그게 요점이다: 아직 쓸 수 있을 때 알려 줘야 웹에서 슬롯을 정리할 시간이 있다.
+   * 유예가 끝난 뒤에 말하면 그건 통보다.
+   */
+  blockedReason: LicenseBlockReason | null
 }
 
 /** 서버가 답했거나, 답하지 않았거나. */
@@ -95,5 +122,6 @@ export const UNKNOWN_LICENSE_STATE: PublicLicenseState = {
   allowsPaidFeatures: true,
   enforced: false,
   maskedKey: null,
-  deviceName: null
+  deviceName: null,
+  blockedReason: null
 }

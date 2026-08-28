@@ -1,5 +1,10 @@
 import { useSyncExternalStore } from 'react'
-import { LICENSE_STATUSES, UNKNOWN_LICENSE_STATE, type PublicLicenseState } from '../../../shared/license'
+import {
+  LICENSE_BLOCK_REASONS,
+  LICENSE_STATUSES,
+  UNKNOWN_LICENSE_STATE,
+  type PublicLicenseState
+} from '../../../shared/license'
 
 /**
  * 라이선스 상태를 렌더러 전체가 하나만 보게 한다.
@@ -63,7 +68,11 @@ function normalize(value: unknown): PublicLicenseState {
     allowsPaidFeatures: o.allowsPaidFeatures !== false,
     enforced: o.enforced === true,
     maskedKey: typeof o.maskedKey === 'string' ? o.maskedKey : null,
-    deviceName: typeof o.deviceName === 'string' ? o.deviceName : null
+    deviceName: typeof o.deviceName === 'string' ? o.deviceName : null,
+    // 모르는 이름은 버린다. 화면이 `license.error.<이름>`으로 문구를 찾으므로,
+    // 그대로 통과시키면 사용자가 그 키 문자열을 날것으로 본다 — 상태 이름을
+    // 거르는 위 줄과 같은 이유다.
+    blockedReason: LICENSE_BLOCK_REASONS.find((r) => r === o.blockedReason) ?? null
   }
 }
 

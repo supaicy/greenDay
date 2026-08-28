@@ -17,8 +17,14 @@ import { verifyToken, type TokenPayload, type VerifyResult } from './activationT
 import { looksValidKey, normalizeKey } from './licenseKey'
 import { isServerRefusal, type LicenseClient } from './licenseClient'
 import type { LicenseRecord, LicenseStore } from './licenseStore'
-import type { ActivateFailure, DeactivateFailure, LicenseStatus } from '../../shared/license'
+import type {
+  ActivateFailure,
+  DeactivateFailure,
+  LicenseBlockReason,
+  LicenseStatus
+} from '../../shared/license'
 import { effectiveNow, GRACE_DURATION_MS, isTrialOpen, trialEndsAt } from './trialWindow'
+import { checkpointOf, elapsedSinceCheckpoint, sameCheckpoint, type BootSession } from './bootSession'
 
 /**
  * 마감을 들고 다니는 상태들. 나머지는 마감이 없다.
@@ -49,6 +55,13 @@ export interface ManagerDeps {
   /** 유료 전환 스위치. false면 아무것도 잠기지 않고 트라이얼도 시작되지 않는다. */
   enforced: boolean
   now: () => number
+  /**
+   * 지금의 부팅 세션 — 벽시계와 무관한 시간 경과의 증거(`bootSession.ts`).
+   *
+   * `device`와 같은 이유로 값이 아니라 함수다. uptime은 부를 때마다 달라져야 하고,
+   * 부팅 식별자는 서브프로세스가 필요하니 호출처가 캐시한다.
+   */
+  bootSession: () => BootSession
   /** 지연 뒤 실행하고 취소 함수를 준다. 테스트가 손으로 깨울 수 있게 주입한다. */
   setTimer: (ms: number, fn: () => void) => () => void
   onChange?: (state: LicenseState) => void
@@ -58,6 +71,8 @@ export interface LicenseManager {
   getState(): LicenseState
   /** 화면에 보일 가린 키. 키 자체는 렌더러로 내려가지 않는다. */
   getMaskedKey(): string | null
+  /** 서버가 말해 준 거절 사유. 상태와 다른 축이다 — `shared/license.ts` 참고. */
+  getBlockedReason(): LicenseBlockReason | null
   allowsPaidFeatures(): boolean
   activate(rawKey: string): Promise<ActivateFailure | null>
   deactivate(): Promise<DeactivateFailure | null>
@@ -86,6 +101,16 @@ const REVALIDATE_POLL_MS = 6 * 60 * 60 * 1000
  */
 const RETRY_BASE_MS = 60_000
 const RETRY_MAX_MS = 60 * 60 * 1000
+
+/**
+ * 유료 접근이 시계 바닥을 디스크까지 내리는 최소 간격.
+ *
+ * 값의 뜻이 정확히 하나다: **끄고 시계를 되돌려 얻을 수 있는 시간의 상한.**
+ * 0으로 두면 유료 IPC마다 `writeFileSync`가 돌고, 크게 두면 그만큼이 새어 나간다.
+ * 5분이면 30일 창을 갉아먹는 데 8,640번의 껐다 켜기가 필요하다 — 그 지점에서는
+ * 우회 비용이 이 설계가 목표로 하는 "의도적인 노력"을 이미 넘는다.
+ */
+const CLOCK_PERSIST_INTERVAL_MS = 5 * 60 * 1000
 
 /**
  * 한 번의 재검증이 무엇으로 끝났는가 — 다음 예약 간격이 여기서 갈린다.
@@ -134,6 +159,18 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   let unreachableStreak = 0
   /** 이 프로세스가 도출한 트라이얼 시작. 한 번 정해지면 안 움직인다 — resolveTrialStart 참고. */
   let trialStartedAt: number | null = null
+  /** 디스크에 마지막으로 내려간 바닥. `touchClockDurably`가 쓰기 간격을 이걸로 잰다. */
+  let persistedFloorMs = record.lastSeenMs
+  /**
+   * 자격증명이 바뀔 때마다 오른다. 날아가 있는 응답이 착륙했을 때 "그 사이 아무
+   * 일도 없었나"를 판정하는 **유일한** 기준이다.
+   *
+   * 키 비교로는 부족했다. 같은 키로 재활성화하면 `record.key`가 내내 같은 값이라
+   * 가드가 통과하고, 15초 전에 떠난 `/validate`의 `revoked` 응답이 **방금 만들어진
+   * 새 토큰을 지운다.** 감사에서 지연된 옛 응답을 착륙시켜 실증했다.
+   * 세대 번호는 "값이 같은가"가 아니라 "손을 댔는가"를 세므로 그 경우를 본다.
+   */
+  let generation = 0
 
   // ── 시계 ───────────────────────────────────────────────────────────────────
 
@@ -163,8 +200,33 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     return effectiveNow(deps.now(), record.lastSeenMs)
   }
 
+  /**
+   * 지금 알 수 있는 모든 시간 증거를 래칫에 붓는다. 무언가 움직였으면 true.
+   *
+   * 증거가 둘이고, **둘이 서로를 메운다.**
+   *
+   *   1. **벽시계 관측.** 시계가 정직하면 이것만으로 충분하다. 묶어 두거나
+   *      되돌리면 아무것도 늘지 않는다.
+   *   2. **부팅 세션의 uptime.** 벽시계를 고쳐도 따라가지 않는다. 프로세스를
+   *      껐다 켜도 살아남는다 — `setTimeout`의 단조 경과가 못 하는 일이 그것이다.
+   *
+   * 2번이 없던 동안 벽시계를 고정한 채 껐다 켜기를 반복하면 트라이얼도 만료도
+   * 영영 움직이지 않았다(감사에서 5시간 경과 후 재생성으로 실증했다).
+   */
   function touchClock(): boolean {
-    return advanceClockFloor(deps.now())
+    const session = deps.bootSession()
+    const elapsed = elapsedSinceCheckpoint(record.monotonic, session)
+    // 경과를 **바닥 위에** 얹는다. 벽시계가 아니라 우리가 이미 정당화한 지점이
+    // 기준이라야, 시계를 되돌려도 창이 계속 닫힌다.
+    let moved = elapsed > 0 && advanceClockFloor(record.lastSeenMs + elapsed)
+    // 관측 지점을 지금으로 옮긴다 — 안 옮기면 같은 구간을 부를 때마다 다시 센다.
+    const next = checkpointOf(session)
+    if (!sameCheckpoint(record.monotonic, next)) {
+      record.monotonic = next
+      moved = true
+    }
+    if (advanceClockFloor(deps.now())) moved = true
+    return moved
   }
 
   /**
@@ -193,6 +255,10 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    */
   function anchorClockToServerTime(payload: TokenPayload): void {
     record.lastSeenMs = payload.iat * 1000
+    // **관측 지점도 함께 옮긴다.** 안 옮기면 다음 `touchClock()`이 "체크포인트
+    // 이후 흐른 시간"을 방금 내려놓은 바닥 위에 다시 얹어, 서버가 준 시각을
+    // 곧바로 앞질러 버린다. 바닥을 내렸으면 재는 기준도 지금부터다.
+    record.monotonic = checkpointOf(deps.bootSession())
   }
 
   /**
@@ -211,6 +277,28 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   function persist(): boolean {
     const carriesCredentials = record.key !== null || record.token !== null
     return deps.store.write({ ...record }, carriesCredentials)
+  }
+
+  /**
+   * 유료 접근 때마다 바닥을 밀어 올리고, **가끔 디스크까지** 내린다.
+   *
+   * 왜 여기인가: 감사가 실증한 우회는 "앱을 켜 두고 쓰다가, 끄고, 시계를 되돌려
+   * 다시 켠다"였다. 그 사이 흐른 시간은 `setTimeout`만 알고 있었고 그건 프로세스와
+   * 함께 죽는다. 유료 기능을 실제로 쓴 순간이 곧 "이 사람이 이 시점에 존재했다"는
+   * 증거이므로, 그 증거를 디스크에 남긴다.
+   *
+   * **모든 호출마다 쓰지는 않는다.** 이 함수는 유료 IPC마다 불린다 —
+   * `writeFileSync` + fsync를 거기 물리면 앱이 눈에 띄게 느려진다. 바닥이
+   * 마지막으로 기록된 지점에서 `CLOCK_PERSIST_INTERVAL_MS`만큼 멀어졌을 때만
+   * 쓴다. 그 간격이 곧 이 우회로 얻을 수 있는 시간의 상한이다 — 5분.
+   *
+   * `!enforced`에서는 아무것도 하지 않는다(호출처가 그 앞에서 돌아선다).
+   * 잠들어 있는 배관이 디스크를 만지면 안 된다.
+   */
+  function touchClockDurably(): void {
+    if (!touchClock()) return
+    if (record.lastSeenMs - persistedFloorMs < CLOCK_PERSIST_INTERVAL_MS) return
+    if (persist()) persistedFloorMs = record.lastSeenMs
   }
 
   /**
@@ -306,7 +394,25 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     const clockMoved = touchClock()
     const before = record.trialStartMs
     const startedAt = resolveTrialStart()
-    if (clockMoved || record.trialStartMs !== before) persist()
+    const startMoved = record.trialStartMs !== before
+    if ((clockMoved || startMoved) && !persist() && startMoved) {
+      // **시작일을 못 적었으면 창을 열어 주지 않는다.**
+      //
+      // 예전에는 `persist()`의 답을 버렸다. 쓸 수 없는 저장소(읽기 전용 마운트,
+      // 권한 제거, 가득 찬 디스크)에서는 `trialStartMs`가 영원히 null로 남고,
+      // 실행할 때마다 `resolveTrialStart`가 "지금"을 새 시작으로 도출해
+      // **매번 온전한 30일**을 내줬다. 감사에서 같은 빈 레코드로 매니저를 두 번
+      // 만들어 실증했다.
+      //
+      // 이건 제외하기로 한 "설정 폴더를 지우면 리셋된다"와 다르다. 그건 30일마다
+      // 사람이 손을 대야 하지만, 이건 조건을 **한 번** 만들면 계속 유지된다.
+      //
+      // 메모(`trialStartedAt`)도 함께 되돌린다. 안 그러면 이 프로세스가 끝날 때까지
+      // 그 값이 살아남아, 다음 호출은 "이미 도출했다"며 그냥 통과한다.
+      record.trialStartMs = before
+      trialStartedAt = null
+      return { status: 'trialExpired' }
+    }
     return isTrialOpen(startedAt, clockSafeNow())
       ? { status: 'trial', untilMs: trialEndsAt(startedAt) }
       : { status: 'trialExpired' }
@@ -417,7 +523,16 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       // 그만큼의 시간이 실제로 흘렀다. 기록해 두면 되돌리기가 막힌다 —
       // 아니면 활성화 시점으로 되돌린 시계가 만료된 토큰을 다시 유효하게 만들고,
       // 같은 거짓말로 또 한 번의 창이 걸린다.
-      if (advanceClockFloor(reachedMs)) persist()
+      //
+      // **순서가 중요하다.** 단조 증거가 둘인데(이 타이머와 부팅 uptime) 같은
+      // 구간을 재고 있으므로, `touchClock()`이 먼저 돌아 체크포인트를 옮겨야
+      // 한다. 뒤집으면 타이머가 올린 바닥 **위에** uptime 경과가 통째로 다시
+      // 얹혀 시간이 두 배로 흐른다 — 30일 트라이얼이 29일째에 닫혔다.
+      const movedByClock = touchClock()
+      // 그래도 타이머 증거를 지우지는 않는다. uptime을 못 읽는 환경에서
+      // 남는 유일한 단조 증거이고, 두 값 중 큰 쪽만 살아남으므로 겹쳐도 해가 없다.
+      const movedByTimer = advanceClockFloor(reachedMs)
+      if (movedByClock || movedByTimer) persist()
       settle()
     })
     armed = { deadlineMs, cancel }
@@ -447,10 +562,18 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 넣었는데 디스크 쓰기가 한 번 실패하면, 되돌리기가 `null`을 쓰는 한
     // 멀쩡하던 라이선스가 메모리에서 사라진다 — 그리고 다음 `persist()`가
     // 그 빈 레코드를 디스크에 못 박는다. 일시적인 ENOSPC가 영구 손실이 된다.
-    const before = { key: record.key, token: record.token, lastSeenMs: record.lastSeenMs }
+    const before = {
+      key: record.key,
+      token: record.token,
+      lastSeenMs: record.lastSeenMs,
+      monotonic: record.monotonic,
+      blockedReason: record.blockedReason
+    }
 
     record.key = key
     record.token = result.value.token
+    // 서버가 방금 이 키를 받아 줬다 — 지난 거절은 더 이상 사실이 아니다.
+    record.blockedReason = null
     // 토큰의 `expiresAt`이 아니라 토큰 자체의 `exp`를 쓴다 — 옆에 실려 온
     // 숫자는 서명 밖에 있다.
     anchorClockToServerTime(verified.payload)
@@ -460,6 +583,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       Object.assign(record, before)
       return 'saveFailed'
     }
+    // 자격증명이 바뀌었다 — 날아가 있는 재검증 응답은 이제 낡았다(H11).
+    generation++
     settle()
 
     // 서버도 앱도 예라고 했는데 화면만 아니라고 하는 상태를 만들지 않는다.
@@ -476,9 +601,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   async function deactivate(): Promise<DeactivateFailure | null> {
     const key = record.key
     if (!key) return 'nothing'
-    // 응답이 돌아왔을 때 "그 사이 아무 일도 없었나"를 판정할 기준. 키만으로는
-    // 부족하다 — 아래 가드의 주석 참고.
-    const token = record.token
+    // 응답이 돌아왔을 때 "그 사이 아무 일도 없었나"를 판정할 기준.
+    const startedAt = generation
     const device = deviceId()
     if (!device) {
       // 슬롯은 실제로 잡혀 있는데 이 기기가 자기 이름을 못 댄다. "해제할 게
@@ -504,18 +628,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 요청이 나가 있는 동안 자격증명이 바뀌었으면, 아무도 놓아달라고 하지 않은
     // 라이선스를 버리는 셈이 된다.
     //
-    // **토큰도 같이 본다.** 키만 보면 반대 방향을 놓친다: 같은 키가 그 사이
-    // 슬롯을 다시 잡은 경우 `record.key`는 내내 같은 값이라 가드가 통과하고,
-    // 방금 만들어진 라이선스를 지운다. 창이 둘일 필요도 없다 — 서버의
-    // `/v1/validate`가 `handleActivate`로 가서 슬롯이 없으면 다시 INSERT하므로,
-    // 6시간 재검증 폴이 해제 왕복 사이에 끼기만 하면 된다. 그때 남는 상태가
-    // 정확히 이 함수가 피하려던 것이다: 서버에는 슬롯이 잡혀 있는데 로컬에는
-    // 토큰도 키도 없어 재검증조차 못 하고, 재입력하면 슬롯을 하나 더 먹는다.
-    //
-    // (오늘 기준 키를 바꾸는 경로는 전부 토큰도 함께 바꾸므로 뒷항이 앞항을
-    // 덮는다 — 뮤테이션으로 확인했다. 앞항을 남기는 것은 원래 불변식을 문장
-    // 그대로 적어 두기 위해서다. 여기에 뮤테이션 테스트를 걸려 하지 말 것.)
-    if (record.key !== key || record.token !== token) return null
+    // **세대로 본다.** 예전에는 키와 토큰의 값을 비교했는데, 값 비교는 "같은 키로
+    // 다시 활성화됐다"를 못 본다 — 그 경우 두 값이 모두 원래대로 돌아와 있어
+    // 가드가 통과하고, 방금 만들어진 라이선스를 지운다. 창이 둘일 필요도 없다:
+    // 서버의 `/v1/validate`가 슬롯이 없으면 다시 INSERT하므로 6시간 재검증 폴이
+    // 해제 왕복 사이에 끼기만 하면 된다. 남는 상태가 정확히 이 함수가 피하려던
+    // 것이다 — 서버에는 슬롯이 잡혀 있는데 로컬에는 토큰도 키도 없다.
+    if (generation !== startedAt) return null
     // **디스크에서 지우지 못했으면 성공이라 답하지 않는다.** 서버 슬롯은 이미
     // 풀렸는데 옛 토큰이 파일에 남아 있으면, 재시작 때 그게 다시 읽히면서 같은
     // 키가 다른 기기에서도 활성인 상태가 된다. 활성화에만 걸어 뒀던 확인이다.
@@ -596,16 +715,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   }
 
   async function refresh(key: string, device: string): Promise<RevalidateOutcome> {
-    const before = { token: record.token, lastSeenMs: record.lastSeenMs }
+    // 저 `await`는 중단점이다. 그 사이에 사용자가 해제를 끝내거나 새 키를 넣거나
+    // 같은 키를 다시 넣을 수 있고, 세 경우 모두 이 응답을 낡은 것으로 만든다(H11).
+    const startedAt = generation
     const result = await deps.client.validate(key, device, deps.deviceName)
+    if (generation !== startedAt) return 'settled'
 
     if (result.ok) {
-      // 저 `await`는 중단점이고, 그 사이에 사용자가 해제를 끝낼 수 있다 —
-      // 슬롯은 서버에서 풀렸고 키는 여기서 지워졌다. 그 뒤에 이 토큰을 쓰면
-      // 다른 기기가 가져갈 수 있는 슬롯 위에서 라이선스가 되살아난다. 기기
-      // 한도가 느린 응답 하나로 무너지는 것이다. 다른 키로 재활성화한 경우도
-      // 같은 검사가 막는다 — 이 답은 물어본 그 키에 대한 것이다.
-      if (record.key !== key) return 'settled'
       const verified = verifyToken(result.value.token, {
         publicKey: deps.publicKey,
         device,
@@ -613,15 +729,29 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
         nowMs: deps.now()
       })
       if (!verified.ok) return 'settled'
+      // **되돌릴 것은 `await` 뒤에서 잡는다** — `activate()`와 같은 모양이다.
+      //
+      // 앞에서 잡으면 그 15초 동안 마감 타이머가 깨어 래칫을 올렸을 때, 커밋
+      // 실패의 되돌리기가 그 값을 await 이전으로 **내려놓는다.** 되돌리기가
+      // 시간 되돌리기가 되는 것이다. 그래서 되돌릴 것을 `token` 하나로 줄인다:
+      // 래칫은 `advanceClockFloor`(올리기만 한다)와 `anchorClockToServerTime`
+      // (서명된 시각) 둘로만 움직여야 한다.
+      const previousToken = record.token
       record.token = result.value.token
+      // 서버가 이 키를 다시 받아 줬다 — 지난 거절은 더 이상 사실이 아니다.
+      record.blockedReason = null
       anchorClockToServerTime(verified.payload)
       if (!commit()) {
         // 디스크에 못 적었는데 새 토큰으로 화면을 갱신하면, 재시작 때 옛(만료된)
         // 토큰이 돌아와 사용자가 이유 없이 잠긴다. 메모리도 되돌리고, 이번은
         // 못 닿은 것으로 쳐서 곧 다시 시도한다.
-        Object.assign(record, { token: before.token, lastSeenMs: before.lastSeenMs })
+        record.token = previousToken
         return 'unreachable'
       }
+      // **갱신도 자격증명 변경이다.** 이걸 세지 않으면, 날아가 있는 해제 요청이
+      // 돌아와 방금 다시 잡은 슬롯을 지운다 — 서버의 `/v1/validate`가 슬롯이
+      // 없으면 다시 INSERT하므로 6시간 폴이 해제 왕복 사이에 끼기만 하면 된다.
+      generation++
       settle()
       return 'settled'
     }
@@ -629,20 +759,46 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 서버에 못 닿은 것은 판정이 아니다. 검증된 토큰과 그것이 얻은 유예가
     // 그대로 선다 — 이걸 거부처럼 다루면 기차 터널 하나가 라이선스를 지운다.
     if (!isServerRefusal(result.error)) return 'unreachable'
-    if (record.key !== key) return 'settled'
     // **한도는 취소가 아니다.** `/v1/validate`는 서버에서 `handleActivate`로 가므로,
     // 이 기기의 슬롯이 관리자 조치나 오래된 활성화 회수로 빠진 뒤 키가 한도에 차
     // 있으면 `device_limit`이 온다. 그건 "이 라이선스가 무효다"가 아니라 "슬롯을
     // 하나 비워라"인데, 여기서 토큰을 지우면 돈 낸 사람이 유예도 없이 그 자리에서
     // 잠기고 폴은 6시간마다 같은 거절을 받는다. 토큰을 그대로 두면 `exp`+유예만큼
     // 시간이 생겨 웹에서 슬롯을 정리할 수 있고, 정리되는 순간 다음 폴이 통과한다.
-    if (result.error === 'deviceLimit') return 'settled'
+    if (result.error === 'deviceLimit') {
+      // **아직 쓸 수 있을 때 말해 준다.** 이유를 여기서 버리면 사용자는 유예가
+      // 끝나 잠긴 뒤에야 무언가 잘못됐음을 알고, 그때는 슬롯을 정리할 시간이
+      // 남아 있지 않다. 권한은 1밀리초도 바뀌지 않는다 — 문구만 정확해진다.
+      rememberBlockedReason('deviceLimit')
+      return 'settled'
+    }
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
     // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
     //
+    // 사유를 **먼저** 세운다. `clearLocalLicense`가 커밋하므로 같은 쓰기에 실린다.
+    // 이걸 안 남기면 취소된 사용자에게 "체험 기간이 끝났습니다"가 뜬다 — 돈을 낸
+    // 사람에게 구매를 권하는 화면이고, 필요한 것은 환불 문의다. 게다가 토큰을 지운
+    // 뒤로는 재검증이 서버를 아예 안 부르므로(`runRevalidation`이 그 앞에서 돌아선다)
+    // 다시 알아낼 기회도 없다.
+    record.blockedReason = 'revoked'
     // 못 지웠으면 `settled`라 답하지 않는다. 그러면 6시간을 기다리는데, 그동안
     // 취소된 자격증명이 디스크에 그대로 남아 재시작이 되살린다.
-    return clearLocalLicense(true) ? 'settled' : 'unreachable'
+    if (clearLocalLicense(true)) return 'settled'
+    record.blockedReason = null
+    return 'unreachable'
+  }
+
+  /**
+   * 사유를 디스크까지 남기고, 화면에 알린다.
+   *
+   * 상태(`state`)는 안 바뀌었을 수 있다 — `deviceLimit`은 라이선스가 살아 있는
+   * 채로 붙는다. 그래서 `apply()`의 변화 감지에 기댈 수 없고, 여기서 직접 쏜다.
+   */
+  function rememberBlockedReason(reason: LicenseBlockReason): void {
+    if (record.blockedReason === reason) return
+    record.blockedReason = reason
+    persist()
+    deps.onChange?.(state)
   }
 
   /**
@@ -668,6 +824,8 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       Object.assign(record, before)
       return false
     }
+    // 자격증명이 바뀌었다 — 날아가 있는 재검증 응답은 이제 낡았다(H11).
+    generation++
     // 트라이얼이 뭐라고 하든 그리로 돌아간다. 2주 전에 설치한 사람에게는
     // "만료"다. 기록된 시작일이 판정하므로 이걸로 새 창을 만들 수는 없다.
     settle()
@@ -676,6 +834,11 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
 
   function allowsPaidFeatures(): boolean {
     if (!deps.enforced) return true
+    // **유료 기능을 쓴 순간이 곧 시간의 증거다.** 이 호출이 곧 "이 사람이 지금
+    // 존재한다"이고, 그 사실을 디스크에 남기지 않으면 앱을 끄는 것만으로 지워진다
+    // — 감사가 실증한 우회가 정확히 그것이다(끄고, 시계를 되돌리고, 다시 켠다).
+    // 매번 쓰지는 않는다: `touchClockDurably`가 간격을 잰다.
+    touchClockDurably()
     // 허용 상태는 저마다 자기 마감과 **지금** 비교된다. `state`는 실행 시점과
     // 마감 타이머에서만 움직이는데, 데스크톱 앱은 몇 주씩 안 꺼진다.
     switch (state.status) {
@@ -705,6 +868,7 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
   return {
     getState: () => state,
     getMaskedKey: () => (record.key ? maskKey(record.key) : null),
+    getBlockedReason: () => record.blockedReason,
     allowsPaidFeatures,
     activate,
     deactivate,
@@ -713,6 +877,13 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       disposed = true
       cancelClose()
       cancelRevalidateTimer()
+      // **종료도 관측이다.** `touchClockDurably`의 5분 간격은 평시에 디스크를
+      // 아끼려는 것이지, 마지막 관측을 버리라는 뜻이 아니다. 여기서 안 내리면
+      // 마지막 5분이 매 실행마다 사라지고, 짧게 켰다 끄기를 반복하면 그게 곧
+      // "시간이 전혀 흐르지 않는" 사용 패턴이 된다.
+      if (deps.enforced && touchClock()) {
+        if (persist()) persistedFloorMs = record.lastSeenMs
+      }
     }
   }
 }

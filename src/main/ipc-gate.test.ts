@@ -9,7 +9,7 @@
  * 핸들러 import 그래프가 한 번 깨질 때 보안 가드까지 같이 쓰러진다.
  */
 
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
 const handlers = new Map<string, Handler>()
@@ -54,9 +54,18 @@ vi.mock('./licensing/service', async (importOriginal) => {
 
 const { setupIpcHandlers } = await import('./ipc-handlers')
 const { setupAppIpc } = await import('./app-ipc')
-const { LICENSE_REQUIRED, registeredTiers } = await import('./ipc-gate')
+const { LICENSE_REQUIRED, UNTRUSTED_SENDER, isTrustedSender, registeredTiers } = await import('./ipc-gate')
+
+/**
+ * dev 서버를 흉내 내 앱 문서 URL을 **이 테스트가 아는 값**으로 고정한다.
+ * 번들 경로(`__dirname`)에 기대면 실행 위치에 따라 답이 달라진다.
+ */
+const APP_ORIGIN = 'http://localhost:5173'
+const APP_DOCUMENT = `${APP_ORIGIN}/index.html`
+const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
 
 beforeAll(() => {
+  process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
   // **둘 다 부른다.** `setupIpcHandlers()`만 부르던 동안 `app-ipc.ts`의 세 채널이
   // `registeredTiers()`에 아예 안 나타나서, 등급을 `paid`로 뒤집어도 테스트가
   // 전부 통과했다. 그 셋이 `index.ts` 안에 있어 부를 수가 없었던 것이 원인이라
@@ -65,10 +74,20 @@ beforeAll(() => {
   setupAppIpc(false)
 })
 
+afterAll(() => {
+  if (previousRendererUrl === undefined) delete process.env.ELECTRON_RENDERER_URL
+  else process.env.ELECTRON_RENDERER_URL = previousRendererUrl
+})
+
+/** 우리 문서에서 온 호출. 발신자 검사가 생긴 뒤로 `{}`는 더 이상 통과하지 않는다. */
 function invoke(channel: string): unknown {
+  return invokeFrom(channel, APP_DOCUMENT)
+}
+
+function invokeFrom(channel: string, senderUrl: string | undefined): unknown {
   const handler = handlers.get(channel)
   if (!handler) throw new Error(`등록되지 않은 채널: ${channel}`)
-  return handler({})
+  return handler({ senderFrame: senderUrl === undefined ? null : { url: senderUrl } })
 }
 
 /**
@@ -181,5 +200,74 @@ describe('열린 상태', () => {
     // 우리 실수로 돈 낸 사람을 막는 것보다, 못 막는 편이 낫다.
     allowsPaid = null
     expect(() => invoke('reorder-tasks')).not.toThrow(LICENSE_REQUIRED)
+  })
+})
+
+/**
+ * 창에 HTML 파일을 떨어뜨리면 Electron은 그 파일로 네비게이트하고, preload는
+ * **어떤 문서에든** 다시 걸린다 — `window.api`가 통째로 그 페이지의 것이 된다.
+ * 등급만 보는 게이트는 그걸 막지 못한다.
+ */
+describe('발신자 경계', () => {
+  it('우리 문서가 아니면 등급과 무관하게 거절한다', () => {
+    allowsPaid = true
+    // 무료 채널도 예외가 아니다. 잠긴 앱에서도 열려 있어서 오히려 노릴 표면이고,
+    // `open-attachment`·`open-external`·`export-data`가 전부 여기 있다.
+    for (const channel of ['get-tasks', 'export-data', 'open-external', 'license:state', 'create-task']) {
+      expect(() => invokeFrom(channel, 'file:///Users/x/Downloads/evil.html'), `${channel}이 안 막혔다`).toThrow(
+        UNTRUSTED_SENDER
+      )
+    }
+  })
+
+  it('거절은 라이선스 거절과 구분된다', () => {
+    // 같은 문자열을 쓰면 떨어뜨린 페이지가 유발한 거절이 렌더러에서
+    // "라이선스를 사세요"로 보인다 — `useStore`가 그 값으로 잠금 화면을 띄운다.
+    allowsPaid = true
+    expect(UNTRUSTED_SENDER).not.toBe(LICENSE_REQUIRED)
+    expect(() => invokeFrom('get-tasks', 'file:///evil.html')).not.toThrow(LICENSE_REQUIRED)
+  })
+
+  it('프레임이 이미 사라졌으면 거절한다', () => {
+    // `senderFrame`은 null일 수 있다. 그때 통과시키면 검사가 무의미해진다.
+    allowsPaid = true
+    expect(() => invokeFrom('get-tasks', undefined)).toThrow(UNTRUSTED_SENDER)
+  })
+
+  it('우리 문서는 그대로 통과한다', () => {
+    allowsPaid = true
+    expect(() => invoke('get-tasks')).not.toThrow()
+    // dev 서버는 경로가 갈린다 — 오리진이 같으면 통과해야 한다.
+    expect(() => invokeFrom('get-tasks', `${APP_ORIGIN}/`)).not.toThrow()
+  })
+})
+
+describe('isTrustedSender', () => {
+  it('file:은 경로까지 정확히 맞아야 한다', () => {
+    // `URL.origin`이 file:에서 문자열 `'null'`이라, 오리진 비교로 만들면
+    // **모든** file: URL이 서로 같아진다 — 떨어뜨린 파일도 file:이다.
+    const ours = 'file:///Applications/Greenday.app/Contents/Resources/app.asar/out/renderer/index.html'
+    expect(isTrustedSender(ours, ours)).toBe(true)
+    expect(isTrustedSender('file:///Users/x/Downloads/evil.html', ours)).toBe(false)
+    expect(isTrustedSender('file:///Applications/Greenday.app/Contents/Resources/evil.html', ours)).toBe(false)
+  })
+
+  it('http는 오리진이 경계다', () => {
+    expect(isTrustedSender('http://localhost:5173/index.html', 'http://localhost:5173')).toBe(true)
+    expect(isTrustedSender('http://localhost:5173/@vite/client', 'http://localhost:5173')).toBe(true)
+    // 포트가 다르면 다른 오리진이다.
+    expect(isTrustedSender('http://localhost:5174/index.html', 'http://localhost:5173')).toBe(false)
+    expect(isTrustedSender('http://evil.example/index.html', 'http://localhost:5173')).toBe(false)
+    // 스킴 승격도 다른 오리진이다.
+    expect(isTrustedSender('https://localhost:5173/index.html', 'http://localhost:5173')).toBe(false)
+  })
+
+  it('빈 값과 깨진 URL은 거절한다', () => {
+    expect(isTrustedSender(undefined, 'http://localhost:5173')).toBe(false)
+    expect(isTrustedSender(null, 'http://localhost:5173')).toBe(false)
+    expect(isTrustedSender('', 'http://localhost:5173')).toBe(false)
+    expect(isTrustedSender('not a url', 'http://localhost:5173')).toBe(false)
+    // 기대값이 비어 있으면(계산 실패) 아무것도 통과시키지 않는다.
+    expect(isTrustedSender('http://localhost:5173/', '')).toBe(false)
   })
 })

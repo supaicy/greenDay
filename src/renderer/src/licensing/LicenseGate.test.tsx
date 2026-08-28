@@ -36,7 +36,8 @@ const LICENSED: PublicLicenseState = {
   allowsPaidFeatures: true,
   enforced: true,
   maskedKey: 'GREENDAY-••••-••••-••••-G8H9',
-  deviceName: 'test-machine'
+  deviceName: 'test-machine',
+  blockedReason: null
 }
 
 let exportData: ReturnType<typeof vi.fn>
@@ -45,7 +46,7 @@ let storedExportData: unknown
 const escapeKeyEvent = (): KeyboardEvent =>
   new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
 
-function mountWith(state: Partial<PublicLicenseState>): void {
+function mountWith(state: Partial<PublicLicenseState>, api: Record<string, unknown> = {}): void {
   ;(window as unknown as Record<string, unknown>).api = {
     licenseGetState: vi.fn(async () => ({ ...LICENSED, ...state })),
     licenseActivate: vi.fn(async () => null),
@@ -53,7 +54,8 @@ function mountWith(state: Partial<PublicLicenseState>): void {
     licenseOpenPurchase: vi.fn(),
     licenseOpenRecover: vi.fn(),
     // 구독 해제 함수를 돌려주는 형태 — 안 돌려주면 언마운트가 터진다.
-    onLicenseChanged: vi.fn(() => () => {})
+    onLicenseChanged: vi.fn(() => () => {}),
+    ...api
   }
   render(<LicenseGate />)
 }
@@ -134,6 +136,24 @@ describe('LicenseGate — 떠야 할 때', () => {
   })
 })
 
+describe('LicenseGate — 활성화 IPC가 거절될 때', () => {
+  it('버튼이 다시 열리고, 왜 실패했는지 말한다', async () => {
+    // **이 화면에서는 그게 유일한 탈출구다.** `busy`가 참으로 굳으면
+    // `canSubmit`이 영영 false가 되어, 잠긴 유료 사용자가 키를 넣어 풀 방법이
+    // 사라진다 — 앱을 다시 켜는 것 말고는.
+    mountWith(
+      { enforced: true, allowsPaidFeatures: false, status: 'trialExpired', maskedKey: null },
+      { licenseActivate: vi.fn(() => Promise.reject(new Error('Error invoking remote method'))) }
+    )
+    await screen.findByText(i18n.t('license.lockedTitle'))
+    await userEvent.type(screen.getByLabelText(i18n.t('license.keyLabel')), 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
+    await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
+
+    await screen.findByText(i18n.t('license.error.network'))
+    expect(screen.getByRole('button', { name: i18n.t('license.activate') })).toBeEnabled()
+  })
+})
+
 describe('LicenseGate — IPC가 이상한 값을 줄 때', () => {
   it('allowsPaidFeatures가 없으면 잠그지 않는다', async () => {
     // undefined면 `!allows`가 참이 되어 멀쩡한 유료 사용자가 잠긴다.
@@ -155,5 +175,26 @@ describe('LicenseGate — IPC가 이상한 값을 줄 때', () => {
     render(<LicenseGate />)
     await waitFor(() => expect(window.api.licenseGetState).toHaveBeenCalled())
     expect(screen.queryByText(i18n.t('license.lockedTitle'))).not.toBeInTheDocument()
+  })
+})
+
+describe('LicenseGate — 왜 잠겼는지', () => {
+  it('취소된 키에는 제목이 "체험 기간이 끝났습니다"가 아니다', async () => {
+    // 이 화면에서 확실히 읽히는 줄은 제목이다. 돈을 낸 사람에게 구매를 권하면
+    // 같은 것을 두 번 사게 만든다.
+    mountWith({
+      enforced: true,
+      allowsPaidFeatures: false,
+      status: 'trialExpired',
+      maskedKey: null,
+      blockedReason: 'revoked'
+    })
+    await screen.findByText(i18n.t('license.error.revoked'))
+    expect(screen.queryByText(i18n.t('license.lockedTitle'))).not.toBeInTheDocument()
+  })
+
+  it('이유가 없으면 원래 제목이다 — 위 단언이 공짜로 참이 아니다', async () => {
+    mountWith({ enforced: true, allowsPaidFeatures: false, status: 'trialExpired', maskedKey: null })
+    await screen.findByText(i18n.t('license.lockedTitle'))
   })
 })

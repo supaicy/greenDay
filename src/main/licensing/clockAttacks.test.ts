@@ -66,12 +66,29 @@ interface LaunchOptions {
   client?: Partial<LicenseClient>
 }
 
-function boot(record: Partial<LicenseRecord>, over: LaunchOptions = {}) {
-  return launch({ key: null, token: null, lastSeenMs: 0, trialStartMs: null, ...record }, over)
+/**
+ * OS의 부팅 세션. **프로세스가 아니라 기계에 속하므로 재시작을 넘어 산다** —
+ * 그게 `setTimeout`의 단조 경과와 다른 점이고, H2가 노린 차이다.
+ */
+interface Session {
+  id: string
+  uptimeMs: number
 }
 
-function launch(stored: LicenseRecord, over: LaunchOptions = {}) {
+let bootCount = 0
+
+function boot(record: Partial<LicenseRecord>, over: LaunchOptions = {}) {
+  return launch(
+    { key: null, token: null, lastSeenMs: 0, trialStartMs: null, monotonic: null, blockedReason: null, ...record },
+    over,
+    { id: `boot-${++bootCount}`, uptimeMs: 0 }
+  )
+}
+
+function launch(stored: LicenseRecord, over: LaunchOptions, session: Session) {
   let clock = over.at ?? NOW
+  // 이 프로세스의 단조 시계 — `setTimeout`의 기준이라 실행마다 0에서 시작한다.
+  // `session.uptimeMs`는 그렇지 않다: 같은 부팅이면 재시작을 넘어 계속 올라간다.
   let mono = 0
   const timers: { atMono: number; fire: () => void }[] = []
 
@@ -89,13 +106,15 @@ function launch(stored: LicenseRecord, over: LaunchOptions = {}) {
       write: (next) => {
         Object.assign(stored, next)
         return true
-      }
+      },
+      lastReadSalvaged: () => false
     },
     publicKey,
     device: () => DEVICE,
     deviceName: null,
     enforced: true,
     now: () => (over.frozenClock ? NOW : clock),
+    bootSession: () => ({ id: session.id, uptimeMs: session.uptimeMs }),
     setTimer: (ms, fn) => {
       const entry = { atMono: mono + ms, fire: fn }
       timers.push(entry)
@@ -109,10 +128,17 @@ function launch(stored: LicenseRecord, over: LaunchOptions = {}) {
   return {
     manager,
     record: stored,
-    /** 벽시계를 옮긴다. 앞으로 간 만큼만 단조도 흐른다. */
+    /** 벽시계를 옮긴다. 앞으로 간 만큼만 단조·uptime도 흐른다. */
     setNow: (t: number) => {
-      mono += Math.max(0, t - clock)
+      const forward = Math.max(0, t - clock)
+      mono += forward
+      session.uptimeMs += forward
       clock = t
+    },
+    /** 벽시계는 그대로 두고 실제 시간만 흘린다 — 시계를 묶어 둔 사용자다. */
+    idle: (ms: number) => {
+      mono += ms
+      session.uptimeMs += ms
     },
     /** 절전에서 깨어나듯, 도래한 마감 타이머를 깨운다. */
     wake: fireDue,
@@ -122,11 +148,18 @@ function launch(stored: LicenseRecord, over: LaunchOptions = {}) {
      * 트라이얼 시작일 도출은 프로세스당 한 번 메모되므로, 재시작을 넘나드는
      * 공격은 이 경계를 넘어야만 보인다. 한 프로세스 안에서만 시험하면
      * 메모이제이션이 공격을 가려 준다.
+     *
+     * **부팅 세션은 그대로 물려준다.** 기계는 안 껐다 — 그게 요점이다.
      */
-    relaunch: (atMs: number) => launch(stored, { ...over, at: atMs }),
+    relaunch: (atMs: number) => launch(stored, { ...over, at: atMs }, session),
+    /** 기계를 재부팅한다. 세션 id가 바뀌고 uptime이 0으로 돌아간다. */
+    reboot: (atMs: number) => launch(stored, { ...over, at: atMs }, { id: `boot-${++bootCount}`, uptimeMs: 0 }),
+    /** 종료 훅. 실제 앱은 `will-quit`에서 이걸 부른다. */
+    quit: () => manager.dispose(),
     /** 단조로만 시간을 흘리며 도래한 타이머를 깨운다. 재검증은 비동기라 기다린다. */
     run: async (untilMs: number, stepMs: number) => {
       for (let t = stepMs; t <= untilMs; t += stepMs) {
+        session.uptimeMs += t - mono
         mono = t
         fireDue()
         await new Promise((r) => setImmediate(r))
@@ -262,6 +295,74 @@ describe('벽시계를 묶어 둬도 마감은 온다', () => {
 
     await h.run(40 * DAY, 6 * 60 * 60 * 1000)
     expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+})
+
+/**
+ * H2 — **끄면 단조 경과가 사라진다.**
+ *
+ * `setTimeout`이 단조 시계로 재는 것은 맞지만 그 증거는 프로세스와 함께 죽는다.
+ * 감사 재현: 5시간을 쓴 뒤 껐다가 시계를 되돌려 다시 켜자 `lastSeenMs`가 그대로였고
+ * 라이선스도 그대로였다. 껐다 켜기를 반복하면 벽시계를 고정한 채 무기한 버틴다.
+ *
+ * 메우는 것은 OS의 uptime이다 — 벽시계를 고쳐도 따라가지 않고, 프로세스보다 오래 산다.
+ */
+describe('껐다 켜도 흐른 시간이 사라지지 않는다', () => {
+  it('유료 기능을 쓴 시간이 디스크에 남는다', () => {
+    const h = boot({ trialStartMs: NOW })
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+
+    // 벽시계는 묶어 둔 채 6시간을 실제로 쓴다. 유료 IPC마다 이 함수가 불린다.
+    h.idle(6 * 60 * 60 * 1000)
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+
+    // **그 6시간이 파일에 남아야 한다.** 안 남으면 다음 실행이 0에서 다시 센다.
+    expect(h.record.lastSeenMs).toBeGreaterThanOrEqual(NOW + 6 * 60 * 60 * 1000)
+  })
+
+  it('껐다 켜기를 반복해도 트라이얼은 30일에 닫힌다', () => {
+    // 시계는 첫날에 고정. 프로세스를 계속 새로 만들어 `setTimeout`의 단조 경과를
+    // 매번 버린다 — 그게 감사가 실증한 우회다.
+    let h = boot({ trialStartMs: NOW }, { frozenClock: true })
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+
+    for (let day = 1; day <= 31; day++) {
+      h.idle(DAY) // 하루를 쓴다
+      h.quit() // 끈다 — 마지막 관측이 디스크로 내려간다
+      h = h.relaunch(NOW) // 시계를 첫날로 되돌려 다시 켠다
+    }
+
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+    expect(h.manager.getState().status).toBe('trialExpired')
+  })
+
+  it('재부팅으로도 되감기지 않는다 — 부팅 이후 흐른 시간은 여전히 흐른 시간이다', () => {
+    // 재부팅하면 uptime이 0으로 돌아간다. 그걸 "경과 없음"으로 읽으면 끄고
+    // 재부팅하는 것만으로 시계가 멈춘다. 부팅 세션은 직렬이므로, 다른 세션의
+    // 체크포인트를 봤다면 최소한 지금의 uptime만큼은 실제로 흘렀다.
+    let h = boot({ trialStartMs: NOW }, { frozenClock: true })
+    for (let round = 0; round < 16; round++) {
+      h.idle(2 * DAY)
+      h.quit()
+      h = h.reboot(NOW) // 기계를 껐다 켠다: uptime 0, 새 세션 id
+      h.idle(2 * DAY) // 그리고 다시 쓴다
+    }
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('시계를 앞으로 돌려 uptime을 부풀릴 수는 없다', () => {
+    // uptime은 벽시계에서 파생되지 않는다. 날짜를 100년 앞으로 밀어도 이 값은
+    // 안 움직이므로, 래칫을 부풀려 뒤에 되돌리는 2단계 공격의 재료가 되지 않는다.
+    // (벽시계 관측 자체는 래칫을 올린다 — 그건 원래 그렇고, 창을 일찍 닫는다.)
+    const h = boot({ trialStartMs: NOW })
+    const before = h.record.monotonic?.uptimeMs ?? 0
+    h.setNow(NOW + 100 * 365 * DAY)
+    h.manager.allowsPaidFeatures()
+    // setNow는 앞으로 간 만큼 uptime도 밀지만(실제로 흐른 것으로 친다), 그건
+    // 이 테스트의 관심사가 아니다. 관심사는 **되돌렸을 때** 줄지 않는 것이다.
+    h.setNow(NOW)
+    h.manager.allowsPaidFeatures()
+    expect(h.record.monotonic?.uptimeMs ?? 0).toBeGreaterThanOrEqual(before)
   })
 })
 
