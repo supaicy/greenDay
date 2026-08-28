@@ -46,10 +46,11 @@ beforeEach(() => {
       createTask: vi.fn(),
       reorderTasks: vi.fn(),
       toggleHabitLog: vi.fn(),
-      deleteTask: vi.fn()
+      deleteTask: vi.fn(),
+      restoreTask: vi.fn()
     }
   })
-  useStore.setState({ tasks: [], score: { total: 10, events: [] }, batchSelectedIds: [], batchMode: false })
+  useStore.setState({ tasks: [], score: { total: 10, events: [], taskNet: {} }, batchSelectedIds: [], batchMode: false })
 })
 
 describe('toggleTask scoring', () => {
@@ -72,7 +73,7 @@ describe('toggleTask scoring', () => {
   it('does not revoke points it has no record of awarding', async () => {
     useStore.setState({
       tasks: [task({ id: 'a', priority: 'high', completed: true })],
-      score: { total: 1, events: [] }
+      score: { total: 1, events: [], taskNet: {} }
     })
     await useStore.getState().toggleTask('a')
     expect(useStore.getState().score.total).toBe(1)
@@ -783,5 +784,136 @@ describe('duplicateTask — 하위작업이 섞인 리스트', () => {
     // 재시작하면 복제본이 38칸 뒤에 나타났다.
     const copy = useStore.getState().tasks.find((t) => !t.parentId && !['a', 'b'].includes(t.id))
     expect(copy?.sortOrder).toBe(3)
+  })
+})
+
+/**
+ * H5 — 하위작업이 있는 할일을 지우고 되돌리면 하위작업이 휴지통에 남았다.
+ *
+ * 삭제는 하위작업까지 함께 내리는데(아래 첫 테스트) 되돌리기는 부모 하나만
+ * 올렸다. 화면에서는 하위작업이 통째로 사라진 것으로 보인다. main의
+ * `restoreTask`도 같은 비대칭을 갖고 있었고, 양쪽을 함께 고쳐야 재시작 전후가
+ * 같아진다(`databaseRestoreTask.test.ts`가 main 쪽을 못 박는다).
+ */
+describe('삭제 되돌리기와 하위작업', () => {
+  const family = (): Task[] => [
+    task({ id: 'p', title: '부모' }),
+    task({ id: 'c1', title: '하위1', parentId: 'p' }),
+    task({ id: 'c2', title: '하위2', parentId: 'p' })
+  ]
+  const ids = (list: Task[]): string[] => list.map((t) => t.id).sort()
+
+  it('삭제는 하위작업까지 휴지통으로 내린다', async () => {
+    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('p')
+
+    expect(useStore.getState().tasks).toEqual([])
+    expect(ids(useStore.getState().trashTasks)).toEqual(['c1', 'c2', 'p'])
+  })
+
+  it('되돌리기가 하위작업도 같이 올린다', async () => {
+    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('p')
+    await useStore.getState().popUndo()
+
+    expect(ids(useStore.getState().tasks), '하위작업이 휴지통에 남았다').toEqual(['c1', 'c2', 'p'])
+    expect(useStore.getState().trashTasks).toEqual([])
+    expect(useStore.getState().tasks.every((t) => t.deletedAt === null)).toBe(true)
+    // IPC는 부모 id 하나면 된다 — main이 같은 집합을 되살린다.
+    expect(window.api.restoreTask).toHaveBeenCalledWith('p')
+  })
+
+  it('휴지통 화면의 개별 복원도 하위작업을 데려온다', async () => {
+    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('p')
+    await useStore.getState().restoreTask('p')
+
+    expect(ids(useStore.getState().tasks)).toEqual(['c1', 'c2', 'p'])
+    expect(useStore.getState().trashTasks).toEqual([])
+  })
+
+  // main은 "같은 조작으로 함께 내려간" 하위작업만 되살린다(`deleted_with` 표시).
+  // 화면도 같은 규칙을 써야 재시작 전후가 다르지 않은데, 렌더러의 `Task`에는 그
+  // 표시가 없어서 **삭제 시각이 같은가**로 근사한다.
+  //
+  // 그래서 휴지통 상태를 손으로 세운다. `removeTask`를 두 번 부르면 두 삭제가
+  // 같은 밀리초에 떨어져 시각이 구별되지 않는다 — 사람의 조작에서는 일어나지
+  // 않지만 테스트에서는 매번 일어난다. 근사가 어긋나는 그 드문 경우에도 손해는
+  // "화면이 하위작업 하나를 더 되살려 보여 준다"까지이고, 다음 로드에서 main의
+  // 판정으로 정정된다.
+  it('따로 지웠던 하위작업은 휴지통에 그대로 둔다', async () => {
+    const earlier = '2026-08-28T00:00:00.000Z'
+    const later = '2026-08-28T00:00:01.000Z'
+    useStore.setState({
+      tasks: [],
+      trashTasks: [
+        task({ id: 'c1', parentId: 'p', deletedAt: earlier }),
+        task({ id: 'p', deletedAt: later }),
+        task({ id: 'c2', parentId: 'p', deletedAt: later })
+      ],
+      undoStack: []
+    })
+    await useStore.getState().restoreTask('p')
+
+    expect(ids(useStore.getState().tasks)).toEqual(['c2', 'p'])
+    expect(ids(useStore.getState().trashTasks)).toEqual(['c1'])
+  })
+
+  // 이 버전으로 올라오기 전에 쌓인 undo가 스택에 남아 있을 수 있다.
+  it('옛 모양의 undo 페이로드도 읽는다', async () => {
+    const parent = task({ id: 'p', title: '부모', deletedAt: '2026-08-28T00:00:00.000Z' })
+    useStore.setState({
+      tasks: [],
+      trashTasks: [parent],
+      undoStack: [{ type: 'deleteTask', description: '', data: parent, timestamp: 1 }]
+    })
+    await useStore.getState().popUndo()
+    expect(ids(useStore.getState().tasks)).toEqual(['p'])
+  })
+})
+
+/**
+ * M8 — 완료 이벤트가 200개 창 밖으로 밀리면 완료 취소가 회수하지 못했다.
+ * 회수액의 출처를 잘리는 `events`에서 잘리지 않는 `taskNet` 원장으로 옮겼다.
+ */
+describe('점수 원장', () => {
+  it('완료가 원장에 남고 취소가 그만큼 회수한다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', priority: 'high' })], score: { total: 10, events: [], taskNet: {} } })
+    await useStore.getState().toggleTask('a')
+    expect(useStore.getState().score.taskNet).toEqual({ a: 3 })
+
+    await useStore.getState().toggleTask('a')
+    expect(useStore.getState().score.taskNet).toEqual({})
+    expect(useStore.getState().score.total).toBe(10)
+  })
+
+  it('이벤트가 200개 창 밖으로 밀려도 회수한다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', priority: 'high' })], score: { total: 10, events: [], taskNet: {} } })
+    await useStore.getState().toggleTask('a')
+
+    // 표시용 배열에서 'a'의 완료 이벤트를 밀어낸다.
+    await useStore.getState().addScores(
+      Array.from({ length: 250 }, (_, i) => ({ type: 'habitComplete' as const, points: 1, taskId: `f${i}` }))
+    )
+    expect(useStore.getState().score.events).toHaveLength(200)
+    expect(
+      useStore.getState().score.events.some((e) => e.taskId === 'a'),
+      '전제: 옛 이벤트가 창 밖으로 밀렸다'
+    ).toBe(false)
+
+    const before = useStore.getState().score.total
+    await useStore.getState().toggleTask('a')
+    expect(useStore.getState().score.total, '회수되지 않아 점수가 순증했다').toBe(before - 3)
+  })
+
+  it('일괄 완료도 원장에 남긴다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'a', priority: 'high' }), task({ id: 'b', priority: 'medium' })],
+      score: { total: 0, events: [], taskNet: {} },
+      batchSelectedIds: ['a', 'b'],
+      batchMode: true
+    })
+    await useStore.getState().batchComplete()
+    expect(useStore.getState().score.taskNet).toEqual({ a: 3, b: 2 })
   })
 })

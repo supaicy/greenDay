@@ -60,7 +60,7 @@ interface Store {
   habits: Habit[]
   habitLogs: HabitLog[]
   pomodoroSessions: PomodoroSession[]
-  score: { total: number; events: { type: string; points: number; date: string; taskId?: string }[] }
+  score: ScoreSlice
 
   // UI
   selectedListId: string | SmartList
@@ -364,6 +364,54 @@ function report(what: string, error: unknown): void {
   }
 }
 
+/**
+ * 단건 삭제의 undo 페이로드.
+ *
+ * `UndoAction.data`가 `unknown`이라 모양을 여기서 정한다 — 넣는 곳과 꺼내는 곳이
+ * 둘 다 이 파일이므로 공유 타입을 넓힐 이유가 없다.
+ */
+interface DeletedTaskUndo {
+  task: Task
+  /** 부모와 **같은 조작으로** 함께 내려간 하위작업. 되돌릴 때 같이 올라온다. */
+  subtaskIds: string[]
+}
+
+/**
+ * 옛 모양(`data`가 Task 하나)도 읽는다. 이 버전으로 올라오기 전에 쌓인 undo가
+ * 스택에 남아 있을 수 있고, 그때 `data.task`가 undefined면 되돌리기가 던진다.
+ */
+function readDeletedTaskUndo(raw: unknown): DeletedTaskUndo {
+  const o = raw as Partial<DeletedTaskUndo> & Partial<Task>
+  if (o && typeof o === 'object' && 'task' in o && o.task) {
+    return { task: o.task as Task, subtaskIds: Array.isArray(o.subtaskIds) ? o.subtaskIds : [] }
+  }
+  return { task: raw as Task, subtaskIds: [] }
+}
+
+/**
+ * main이 보낸 score를 온전한 슬라이스로. **`taskNet`이 없으면 지어내지 않는다** —
+ * 빈 원장으로 시작하면 옛 완료의 회수액이 0이 되지만(과소 회수), 이벤트에서
+ * 되짚어 만들면 잘려 나간 이력 때문에 **과대 회수**가 되어 총점이 실제보다
+ * 낮아진다. 두 방향 중 사용자에게서 뺏지 않는 쪽을 고른다.
+ * (main의 `normalizeScore`가 마이그레이션을 이미 했으므로 여기 오는 값에는 보통 들어 있다.)
+ */
+function normalizeScoreSlice(raw: unknown): ScoreSlice {
+  const empty: ScoreSlice = { total: 0, events: [], taskNet: {} }
+  if (typeof raw !== 'object' || raw === null) return empty
+  const o = raw as Record<string, unknown>
+  const taskNet: Record<string, number> = {}
+  if (typeof o.taskNet === 'object' && o.taskNet !== null && !Array.isArray(o.taskNet)) {
+    for (const [id, value] of Object.entries(o.taskNet as Record<string, unknown>)) {
+      if (typeof value === 'number' && Number.isFinite(value) && value !== 0) taskNet[id] = value
+    }
+  }
+  return {
+    total: typeof o.total === 'number' && Number.isFinite(o.total) ? o.total : 0,
+    events: Array.isArray(o.events) ? (o.events as ScoreSlice['events']) : [],
+    taskNet
+  }
+}
+
 /** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
 function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
   if (!s) return fallback
@@ -374,6 +422,34 @@ function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
   }
 }
 
+/**
+ * 점수 상태. `events`는 표시용이라 200개로 잘리고, `taskNet`은 잘리지 않는다.
+ *
+ * 완료 취소가 회수할 금액은 "이 할일에 실제로 지급된 합"인데 그것을 잘리는
+ * 배열에서 구하면, 완료 이벤트가 창 밖으로 밀린 뒤에는 회수액이 0이 된다 —
+ * 지급은 됐는데 회수는 안 되는 순증이고 같은 할일로 반복 가능하다.
+ * main의 `ScoreState`와 같은 모양이다(database.ts).
+ */
+export interface ScoreSlice {
+  total: number
+  events: { type: string; points: number; date: string; taskId?: string }[]
+  taskNet: Record<string, number>
+}
+
+/** 원장에 delta를 반영한다. 0이 되면 지운다 — 원장이 무한히 자라지 않게. */
+export function applyToLedger(
+  ledger: Record<string, number>,
+  taskId: string | undefined,
+  delta: number
+): Record<string, number> {
+  if (!taskId || delta === 0) return ledger
+  const next = { ...ledger }
+  const value = (next[taskId] ?? 0) + delta
+  if (value === 0) delete next[taskId]
+  else next[taskId] = value
+  return next
+}
+
 export const useStore = create<Store>((set, get) => ({
   tasks: [],
   trashTasks: [],
@@ -382,7 +458,7 @@ export const useStore = create<Store>((set, get) => ({
   habits: [],
   habitLogs: [],
   pomodoroSessions: [],
-  score: { total: 0, events: [] },
+  score: { total: 0, events: [], taskNet: {} },
   selectedListId: 'today',
   selectedTaskId: null,
   viewType: 'tasks',
@@ -428,7 +504,9 @@ export const useStore = create<Store>((set, get) => ({
       habitLogs: (rawHabitLogs as Record<string, unknown>[]).map(mapHabitLog),
       folders: (rawFolders as Record<string, unknown>[]).map(mapFolder),
       pomodoroSessions: (rawSessions as Record<string, unknown>[]).map(mapPomodoroSession),
-      score: rawScore as { total: number; events: { type: string; points: number; date: string }[] }
+      // main이 `taskNet`을 안 실어 보내는 일은 없지만(normalizeScore가 항상 채운다),
+      // IPC 너머에서 온 값이라 모양을 믿지 않는다 — 없으면 빈 원장으로 시작한다.
+      score: normalizeScoreSlice(rawScore)
     })
   },
 
@@ -686,8 +764,18 @@ export const useStore = create<Store>((set, get) => ({
     if (task) {
       get().pushUndo({
         type: 'deleteTask',
+        // **하위작업 id까지 싣는다.** 아래 `set`이 하위작업도 함께 휴지통으로
+        // 옮기는데(main의 `deleteTask`도 같다), undo 데이터가 부모 하나뿐이면
+        // 되돌리기가 부모만 되살려 하위작업이 휴지통에 영영 남았다. 화면에서는
+        // 하위작업이 통째로 사라진 것으로 보인다. `batchDelete`는 처음부터
+        // id 목록을 싣고 있었다 — 단건 경로만 빠져 있었다.
+        data: {
+          task,
+          subtaskIds: get()
+            .tasks.filter((t) => t.parentId === id)
+            .map((t) => t.id)
+        } satisfies DeletedTaskUndo,
         description: i18n.t('undo.taskDeleted', { title: task.title }),
-        data: task,
         timestamp: Date.now()
       })
     }
@@ -758,11 +846,19 @@ export const useStore = create<Store>((set, get) => ({
   restoreTask: async (id) => {
     const task = get().trashTasks.find((t) => t.id === id)
     if (task) {
-      const restored = { ...task, deletedAt: null }
-      set((s) => ({
-        trashTasks: s.trashTasks.filter((t) => t.id !== id),
-        tasks: [...s.tasks, restored]
-      }))
+      // main의 `restoreTask`는 **같은 삭제로 함께 내려간** 하위작업까지 되살린다
+      // (같은 `deletedAt` 타임스탬프가 그 증거다). 화면도 같은 규칙을 써야
+      // 재시작 전후가 다르지 않다 — 따로 지웠던 하위작업은 휴지통에 남긴다.
+      set((s) => {
+        const back = s.trashTasks.filter(
+          (t) => t.id === id || (t.parentId === id && t.deletedAt === task.deletedAt)
+        )
+        const backIds = new Set(back.map((t) => t.id))
+        return {
+          trashTasks: s.trashTasks.filter((t) => !backIds.has(t.id)),
+          tasks: [...s.tasks, ...back.map((t) => ({ ...t, deletedAt: null }))]
+        }
+      })
     }
     persist('restoreTask', () => window.api.restoreTask(id))
   },
@@ -899,11 +995,18 @@ export const useStore = create<Store>((set, get) => ({
     const action = stack[stack.length - 1]
     set({ undoStack: stack.slice(0, -1) })
     if (action.type === 'deleteTask') {
-      const task = action.data as Task
-      set((s) => ({
-        trashTasks: s.trashTasks.filter((t) => t.id !== task.id),
-        tasks: [...s.tasks, { ...task, deletedAt: null }]
-      }))
+      const { task, subtaskIds } = readDeletedTaskUndo(action.data)
+      // 부모와 함께 내려간 하위작업을 같이 올린다. main의 `restoreTask`도 같은
+      // 집합을 되살리므로(같은 삭제 타임스탬프를 가진 하위작업), 화면과 디스크가
+      // 어긋나지 않는다 — IPC는 부모 id 하나면 된다.
+      const ids = new Set<string>([task.id, ...subtaskIds])
+      set((s) => {
+        const restored = s.trashTasks.filter((t) => ids.has(t.id))
+        return {
+          trashTasks: s.trashTasks.filter((t) => !ids.has(t.id)),
+          tasks: [...s.tasks, ...restored.map((t) => ({ ...t, deletedAt: null }))]
+        }
+      })
       persist('restoreTask', () => window.api.restoreTask(task.id))
     } else if (action.type === 'deleteTasks') {
       const ids = action.data as string[]
@@ -971,7 +1074,9 @@ export const useStore = create<Store>((set, get) => ({
       score: {
         total: s.score.total + applied,
         // 인메모리 이벤트 배열 최대 200개로 제한 (total은 계속 누적)
-        events: [...s.score.events, { type, points: applied, date, taskId }].slice(-200)
+        events: [...s.score.events, { type, points: applied, date, taskId }].slice(-200),
+        // 원장은 자르지 않는다 — 회수액의 단일 출처다.
+        taskNet: applyToLedger(s.score.taskNet, taskId, applied)
       }
     }))
     persist('addScoreEvent', () => window.api.addScoreEvent({ type, points: applied, date, taskId }))
@@ -987,13 +1092,23 @@ export const useStore = create<Store>((set, get) => ({
       total += p
       return { type: e.type, points: p, date, taskId: e.taskId }
     })
-    set((s) => ({ score: { total, events: [...s.score.events, ...applied].slice(-200) } }))
+    set((s) => ({
+      score: {
+        total,
+        events: [...s.score.events, ...applied].slice(-200),
+        taskNet: applied.reduce((ledger, e) => applyToLedger(ledger, e.taskId, e.points), s.score.taskNet)
+      }
+    }))
     persist('addScoreEvents', () => window.api.addScoreEvents(applied))
   },
 
   // 이 태스크에 지금까지 순수하게 지급된 점수. 완료를 취소할 때 '현재 우선순위'로
   // 다시 계산하면, 완료 후 우선순위를 바꾼 경우 준 것보다 적게/많이 회수돼 총점이 흘렀다.
-  _netScoreFor: (taskId) => get().score.events.reduce((sum, e) => (e.taskId === taskId ? sum + e.points : sum), 0),
+  //
+  // **원장에서 읽는다.** 예전에는 `score.events`를 훑었는데 그 배열이 200개로
+  // 잘리므로, 완료 뒤 다른 점수 이벤트가 200건 쌓이면 회수액이 0이 됐다 —
+  // 지급만 되고 회수는 안 되는 순증이 같은 할일로 무한히 반복 가능했다.
+  _netScoreFor: (taskId) => get().score.taskNet[taskId] ?? 0,
 
   // === 첨부파일 ===
   pickAttachment: async () => {
@@ -1002,7 +1117,19 @@ export const useStore = create<Store>((set, get) => ({
 
   // === 내보내기 ===
   exportData: async () => {
-    return (await window.api.exportData()) as boolean
+    // **거절을 여기서 잡는다.** 읽기 실패 세션에서 main이 이제 거절하고
+    // (`database.ts`의 `DB_READ_ONLY` — 빈 백업으로 사용자의 진짜 백업을 덮지
+    // 않기 위해서다), 저장 경로가 읽기 전용이면 `writeFileSync`도 던진다.
+    // 세 호출처가 전부 반환값을 버리므로, 잡지 않으면 처리되지 않은 거절이 된다.
+    //
+    // 사용자에게 보이는 실패 문구는 아직 없다(M9). 여기서는 `false`를 정직하게
+    // 돌려주는 것까지 한다 — 호출처가 그것을 그릴 준비가 되면 바로 쓰인다.
+    try {
+      return (await window.api.exportData()) as boolean
+    } catch (error) {
+      report('exportData', error)
+      return false
+    }
   },
 
   // === AI ===
