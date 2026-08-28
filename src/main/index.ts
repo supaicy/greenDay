@@ -11,6 +11,7 @@ import { currentCapabilities } from './capabilities'
 import { applyAppMenu } from './app-menu'
 import { disposeLicensing, initLicensing } from './licensing/service'
 import { handleGoogleCallback } from './google-auth-flow'
+import { appDocumentUrl, isAppDocumentUrl } from './navigation-guard'
 import { APP_BUNDLE_ID, isAppScheme, findAppSchemeArg } from '../shared/app-id'
 
 // 리마인더 폴러 인터벌 핸들 (모듈 스코프에서 선언해 will-quit 핸들러에서 접근 가능)
@@ -34,6 +35,10 @@ function receiveOAuthCallback(url: string): void {
 }
 
 function createWindow(): void {
+  const startUrl = appDocumentUrl(
+    is.dev ? process.env.ELECTRON_RENDERER_URL : undefined,
+    join(__dirname, '../renderer/index.html')
+  )
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -66,11 +71,28 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  // **이 창은 앱 문서 밖으로 나가지 않는다** (`navigation-guard.ts` 참고).
+  //
+  // 위 `setWindowOpenHandler`는 **새 창**만 본다. 같은 창이 다른 문서로 넘어가는 길 —
+  // 창에 파일 떨어뜨리기, `location.href`, `target=_self` 링크, 폼 제출 — 은 하나도
+  // 지나지 않는다. 그리고 넘어간 문서에서 preload가 다시 돌아 `window.api`가 통째로
+  // 노출된다(Electron 40에서 실측: 79개 키).
+  //
+  // **두 이벤트 다 건다.** `will-navigate`는 최상위 프레임만 보고,
+  // `will-frame-navigate`는 하위 프레임까지 본다(그리고 최상위에서는 이쪽이 먼저
+  // 발화한다). 오늘 이 앱에 iframe이 없다는 것은 방어가 아니라 우연이다.
+  const blockForeignNavigation = (details: { url: string; preventDefault: () => void }): void => {
+    if (isAppDocumentUrl(details.url, startUrl)) return
+    details.preventDefault()
+    console.warn('[security] 앱 문서 밖으로의 네비게이션을 막았다:', details.url)
   }
+  mainWindow.webContents.on('will-navigate', blockForeignNavigation)
+  mainWindow.webContents.on('will-frame-navigate', blockForeignNavigation)
+
+  // 가드가 비교할 기준과 실제로 로드하는 값이 **같은 문자열**이어야 한다. 예전처럼
+  // `loadFile(경로)`가 URL을 스스로 만들면 기준을 손으로 한 번 더 조립하게 되고,
+  // 둘이 갈리는 순간 가드가 정상 문서를 막아 앱이 아예 안 뜬다.
+  mainWindow.loadURL(startUrl)
 }
 
 // 단일 인스턴스 락. 두 가지를 동시에 한다:
