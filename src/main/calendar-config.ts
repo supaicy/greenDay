@@ -84,6 +84,12 @@ function originOf(serverUrl: string): string | null {
   }
 }
 
+/** 이 주소가 iCloud인가, 직접 넣은 CalDAV 서버인가. 주소 하나로 결정된다. */
+export function providerFor(serverUrl: string): CalendarConfig['provider'] {
+  const origin = originOf(serverUrl)
+  return origin !== null && origin === originOf(DEFAULT_CONFIG.serverUrl) ? 'icloud' : 'caldav'
+}
+
 /**
  * 지금 설정에 대해 이 비밀번호를 써도 되는가, 그리고 못 쓴다면 무엇까지 버려야 하는가.
  *
@@ -200,7 +206,10 @@ export function decodeConfig(raw: Record<string, unknown>, crypto: KeyCrypto): C
   const serverUrl = typeof stored.serverUrl === 'string' ? stored.serverUrl : DEFAULT_CONFIG.serverUrl
   const username = typeof stored.username === 'string' ? stored.username : ''
   const decoded: CalendarConfig = {
-    provider: stored.provider === 'caldav' ? 'caldav' : 'icloud',
+    // **저장된 값이 아니라 주소에서 도출한다.** `provider`를 쓰는 코드가 없었고
+    // 쓰는 코드도 없어서, 이 필드는 늘 'icloud'로 남아 있었다. 무엇을 쓰고 있는지는
+    // 결국 서버 주소가 정하므로, 두 값이 어긋날 수 없게 한쪽에서 파생시킨다.
+    provider: providerFor(serverUrl),
     serverUrl,
     username,
     password: secret?.password ?? null,

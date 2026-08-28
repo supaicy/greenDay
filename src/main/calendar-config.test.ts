@@ -131,9 +131,23 @@ describe('decodeConfig', () => {
     expect(decodeConfig({ syncState }, workingCrypto).syncState).toEqual(syncState)
   })
 
-  it('알 수 없는 provider는 icloud로 되돌린다', () => {
-    expect(decodeConfig({ provider: 'exchange' }, workingCrypto).provider).toBe('icloud')
-    expect(decodeConfig({ provider: 'caldav' }, workingCrypto).provider).toBe('caldav')
+  /**
+   * provider는 **저장된 값이 아니라 서버 주소에서 도출한다.** 저장된 필드를 읽던
+   * 시절에는 그 값을 쓰는 코드도 채우는 코드도 없어서 늘 'icloud'였다.
+   */
+  it('provider는 서버 주소가 정한다 — 저장된 값을 믿지 않는다', () => {
+    expect(decodeConfig({ provider: 'caldav' }, workingCrypto).provider).toBe('icloud')
+    expect(
+      decodeConfig({ provider: 'icloud', serverUrl: 'https://cloud.example/remote.php/dav' }, workingCrypto).provider
+    ).toBe('caldav')
+  })
+
+  it('iCloud 주소는 대소문자·기본 포트가 달라도 iCloud다', () => {
+    expect(decodeConfig({ serverUrl: 'https://CalDAV.iCloud.com:443' }, workingCrypto).provider).toBe('icloud')
+  })
+
+  it('파싱할 수 없는 주소는 직접 입력으로 본다 (iCloud라고 우기지 않는다)', () => {
+    expect(decodeConfig({ serverUrl: 'not a url' }, workingCrypto).provider).toBe('caldav')
   })
 })
 
