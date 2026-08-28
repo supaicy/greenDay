@@ -21,6 +21,9 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     end: '2026-08-03T16:00:00.000Z',
     allDay: false,
     rrule: null,
+    rdates: [],
+    exdates: [],
+    overrides: [],
     lastModified: null,
     sequence: 0,
     completed: false,
@@ -246,5 +249,138 @@ describe('parseEvents', () => {
     const events = parseEvents(ics)
     expect(events).toHaveLength(1)
     expect(events[0].summary).toBe('real')
+  })
+})
+
+/**
+ * H16b — 반복과 회차 예외의 직렬화.
+ *
+ * 예전에는 `rrule`이 "서버가 준 값을 보존만" 하는 필드였고 우리가 만들지 않았다.
+ * 그래서 반복 할일이 한 번짜리 일정으로 나갔다.
+ */
+describe('반복 직렬화', () => {
+  it('RRULE을 낸다', () => {
+    const ics = serializeEvent(makeEvent({ rrule: 'FREQ=WEEKLY;BYDAY=MO' }), NOW)
+    expect(ics).toContain('RRULE:FREQ=WEEKLY;BYDAY=MO')
+  })
+
+  it('EXDATE·RDATE를 낸다', () => {
+    const ics = serializeEvent(
+      makeEvent({
+        rrule: 'FREQ=WEEKLY;BYDAY=MO',
+        exdates: ['2026-08-10T15:00:00.000Z'],
+        rdates: ['2026-08-12T00:00:00.000Z']
+      }),
+      NOW
+    )
+    expect(ics).toContain('EXDATE:20260810T150000Z')
+    expect(ics).toContain('RDATE:20260812T000000Z')
+  })
+
+  it('종일 일정의 EXDATE·RDATE는 VALUE=DATE다 (형식이 DTSTART와 같아야 한다)', () => {
+    const ics = serializeEvent(
+      makeEvent({
+        allDay: true,
+        start: '2026-08-03',
+        end: '2026-08-04',
+        rrule: 'FREQ=DAILY',
+        exdates: ['2026-08-10'],
+        rdates: ['2026-08-12']
+      }),
+      NOW
+    )
+    expect(ics).toContain('EXDATE;VALUE=DATE:20260810')
+    expect(ics).toContain('RDATE;VALUE=DATE:20260812')
+  })
+
+  it('값이 없으면 줄 자체를 내지 않는다', () => {
+    const ics = serializeEvent(makeEvent(), NOW)
+    expect(ics).not.toContain('EXDATE')
+    expect(ics).not.toContain('RDATE')
+    expect(ics).not.toContain('RRULE')
+  })
+
+  it('옮긴 회차는 같은 UID의 두 번째 VEVENT로 나간다', () => {
+    const ics = serializeEvent(
+      makeEvent({
+        rrule: 'FREQ=WEEKLY;BYDAY=MO',
+        overrides: [
+          {
+            recurrenceId: '2026-08-10T15:00:00.000Z',
+            start: '2026-08-10T05:00:00.000Z',
+            end: '2026-08-10T06:30:00.000Z'
+          }
+        ]
+      }),
+      NOW
+    )
+    // 리소스 하나 안에 VEVENT 둘.
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
+    expect(ics.match(/UID:greenday-1@supaicy\.github\.io/g)).toHaveLength(2)
+    expect(ics).toContain('RECURRENCE-ID:20260810T150000Z')
+    expect(ics).toContain('DTSTART:20260810T050000Z')
+    expect(ics).toContain('DTEND:20260810T063000Z')
+    // 예외는 스스로 반복하지 않는다.
+    expect(ics.match(/RRULE:/g)).toHaveLength(1)
+  })
+
+  it('예외 VEVENT는 부모보다 뒤에 온다', () => {
+    const ics = serializeEvent(
+      makeEvent({
+        rrule: 'FREQ=DAILY',
+        overrides: [
+          { recurrenceId: '2026-08-10T15:00:00.000Z', start: '2026-08-10T05:00:00.000Z', end: '2026-08-10T06:00:00.000Z' }
+        ]
+      }),
+      NOW
+    )
+    expect(ics.indexOf('RRULE:')).toBeLessThan(ics.indexOf('RECURRENCE-ID:'))
+  })
+
+  it('반복 일정을 통째로 되읽는다', () => {
+    const original = makeEvent({
+      rrule: 'FREQ=WEEKLY;BYDAY=MO,WE',
+      exdates: ['2026-08-10T15:00:00.000Z'],
+      rdates: ['2026-08-12T00:00:00.000Z'],
+      overrides: [
+        { recurrenceId: '2026-08-17T15:00:00.000Z', start: '2026-08-17T05:00:00.000Z', end: '2026-08-17T06:00:00.000Z' }
+      ]
+    })
+    const parsed = parseEvents(serializeEvent(original, NOW))
+    // **RECURRENCE-ID가 붙은 VEVENT는 별개 일정이 아니다.** 따로 세면 같은 UID가
+    // 둘이 되어, 동기화가 그 둘을 서로 덮어쓰는 두 리소스로 취급한다.
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].rrule).toBe('FREQ=WEEKLY;BYDAY=MO,WE')
+    expect(parsed[0].exdates).toEqual(original.exdates)
+    expect(parsed[0].rdates).toEqual(original.rdates)
+    expect(parsed[0].overrides).toEqual(original.overrides)
+  })
+
+  it('쉼표로 이어진 EXDATE도 읽는다', () => {
+    const [parsed] = parseEvents(
+      [
+        'BEGIN:VEVENT',
+        'UID:a',
+        'DTSTART:20260803T150000Z',
+        'RRULE:FREQ=DAILY',
+        'EXDATE:20260810T150000Z,20260811T150000Z',
+        'END:VEVENT'
+      ].join('\r\n')
+    )
+    expect(parsed.exdates).toEqual(['2026-08-10T15:00:00.000Z', '2026-08-11T15:00:00.000Z'])
+  })
+
+  it('EXDATE 줄이 여러 번 나와도 모은다', () => {
+    const [parsed] = parseEvents(
+      [
+        'BEGIN:VEVENT',
+        'UID:a',
+        'DTSTART:20260803T150000Z',
+        'EXDATE:20260810T150000Z',
+        'EXDATE:20260811T150000Z',
+        'END:VEVENT'
+      ].join('\r\n')
+    )
+    expect(parsed.exdates).toHaveLength(2)
   })
 })

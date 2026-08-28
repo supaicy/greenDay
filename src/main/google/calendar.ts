@@ -5,7 +5,7 @@
  * 그래야 동기화 계획(caldav/sync.ts)을 두 제공자가 함께 쓸 수 있다.
  */
 
-import type { CalendarEvent } from '../caldav/ical'
+import { stampList, type CalendarEvent } from '../caldav/ical'
 import type { FetchLike } from './oauth'
 
 const API_BASE = 'https://www.googleapis.com/calendar/v3'
@@ -95,6 +95,20 @@ export function toGoogleEventId(uid: string): string {
   return out
 }
 
+/**
+ * 구글의 `recurrence[]` — RRULE·RDATE·EXDATE를 **RFC 5545 문자열 그대로** 담는 배열이다.
+ *
+ * CalDAV와 같은 헬퍼로 만든다. 두 곳에서 따로 조립하면 한쪽만 종일 형식(`;VALUE=DATE`)을
+ * 틀리는 종류의 어긋남이 생기고, 그 증상은 "회차가 하루씩 밀린다"로만 보인다.
+ */
+function toGoogleRecurrence(event: CalendarEvent): string[] | undefined {
+  const lines: string[] = []
+  if (event.rrule) lines.push(`RRULE:${event.rrule}`)
+  if (event.rdates.length > 0) lines.push(stampList('RDATE', event.rdates, event.allDay))
+  if (event.exdates.length > 0) lines.push(stampList('EXDATE', event.exdates, event.allDay))
+  return lines.length > 0 ? lines : undefined
+}
+
 export function eventToGoogle(event: CalendarEvent): Record<string, unknown> {
   return {
     id: toGoogleEventId(event.uid),
@@ -102,10 +116,38 @@ export function eventToGoogle(event: CalendarEvent): Record<string, unknown> {
     description: event.description || undefined,
     start: toGoogleTime(event.start, event.allDay),
     end: toGoogleTime(event.end, event.allDay),
+    recurrence: toGoogleRecurrence(event),
     // 완료 여부는 구글 일정에 대응 필드가 없다. 우리만 읽는 확장 속성에 싣는다.
     // UID와 마찬가지로 사용자 캘린더에 남는 값이라 키 이름은 함부로 바꾸면 안 된다.
     extendedProperties: { private: { greendayUid: event.uid, greendayCompleted: String(event.completed) } }
   }
+}
+
+/** `recurrence[]`에서 접두사를 떼어 우리 내부 표현으로. 없으면 빈 값. */
+function fromGoogleRecurrence(raw: unknown): Pick<CalendarEvent, 'rrule' | 'rdates' | 'exdates'> {
+  const out: Pick<CalendarEvent, 'rrule' | 'rdates' | 'exdates'> = { rrule: null, rdates: [], exdates: [] }
+  if (!Array.isArray(raw)) return out
+  for (const entry of raw) {
+    if (typeof entry !== 'string') continue
+    // 접두사 뒤에 파라미터가 붙을 수 있다: `EXDATE;VALUE=DATE:20260803`
+    const colon = entry.indexOf(':')
+    if (colon < 0) continue
+    const name = entry.slice(0, colon).split(';')[0].toUpperCase()
+    const value = entry.slice(colon + 1)
+    // **내부 표현의 rrule에는 접두사가 없다.** 예전에는 `recurrence[0]`을 통째로
+    // 넣어서, 되읽은 값이 우리가 만든 값과 형태부터 달랐다.
+    if (name === 'RRULE') out.rrule = value || null
+    else if (name === 'RDATE') out.rdates.push(...splitStamps(value))
+    else if (name === 'EXDATE') out.exdates.push(...splitStamps(value))
+  }
+  return out
+}
+
+function splitStamps(value: string): string[] {
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
 }
 
 export function googleToEvent(raw: Record<string, unknown>): CalendarEvent | null {
@@ -120,7 +162,10 @@ export function googleToEvent(raw: Record<string, unknown>): CalendarEvent | nul
     start: start.value,
     end: end?.value ?? start.value,
     allDay: start.allDay,
-    rrule: Array.isArray(raw.recurrence) ? String(raw.recurrence[0] ?? '') || null : null,
+    ...fromGoogleRecurrence(raw.recurrence),
+    // 구글은 예외 회차를 부모가 아니라 **별도 인스턴스 리소스**로 들고 있다.
+    // 이벤트 하나를 읽는 것만으로는 알 수 없으므로 여기서는 비운다.
+    overrides: [],
     lastModified: typeof raw.updated === 'string' ? raw.updated : null,
     sequence: typeof raw.sequence === 'number' ? raw.sequence : 0,
     completed: extended?.greendayCompleted === 'true'
@@ -185,9 +230,54 @@ export class GoogleCalendarClient {
     } catch (error) {
       if (error instanceof GoogleApiError && error.code === 'not_found') {
         await this.request(`/calendars/${encoded}/events`, { method: 'POST', body })
-        return
+      } else {
+        throw error
       }
-      throw error
+    }
+    // 부모를 쓴 **뒤**에 회차 예외를 얹는다. 인스턴스는 부모의 반복 규칙에서
+    // 파생되므로 부모가 먼저 서 있어야 존재한다.
+    if (event.overrides.length > 0) await this.applyOverrides(encoded, id, event)
+  }
+
+  /**
+   * 옮기거나 늘린 회차를 반영한다.
+   *
+   * **구글에는 RECURRENCE-ID가 없다.** iCalendar는 예외를 같은 리소스 안의 두 번째
+   * VEVENT로 담지만, 구글은 회차마다 별도 인스턴스 리소스를 두고 그것을 고치게 한다.
+   * 그래서 부모를 쓰는 것만으로는 옮긴 회차가 반영되지 않는다 — 이 왕복이 필요하다.
+   *
+   * 인스턴스 id를 직접 조립하지 않고 `originalStart`로 물어본다. 조립 규칙
+   * (`{eventId}_{압축시각}`)은 문서화된 계약이 아니라 관찰된 형태다.
+   *
+   * 회차를 못 찾으면 조용히 넘어간다. 그 상태는 다음 동기화에서 다시 보이고,
+   * 여기서 던지면 나머지 할일까지 못 올린다.
+   */
+  private async applyOverrides(encodedCalendarId: string, eventId: string, event: CalendarEvent): Promise<void> {
+    for (const override of event.overrides) {
+      const query = new URLSearchParams({ originalStart: override.recurrenceId, maxResults: '1' })
+      let instanceId: string | null = null
+      try {
+        const response = await this.request(
+          `/calendars/${encodedCalendarId}/events/${eventId}/instances?${query.toString()}`,
+          { method: 'GET' }
+        )
+        const payload = (await response.json()) as { items?: { id?: unknown }[] }
+        const first = payload.items?.[0]?.id
+        instanceId = typeof first === 'string' && first ? first : null
+      } catch (error) {
+        if (error instanceof GoogleApiError && error.code === 'not_found') continue
+        throw error
+      }
+      if (!instanceId) continue
+
+      // 옮긴 회차는 언제나 시각이 있다 — 시간 블록을 끌어 놓아야 생기는 값이다.
+      await this.request(`/calendars/${encodedCalendarId}/events/${encodeURIComponent(instanceId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          start: toGoogleTime(override.start, false),
+          end: toGoogleTime(override.end, false)
+        })
+      })
     }
   }
 

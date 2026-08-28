@@ -6,6 +6,20 @@
  * 해석하지 않는다 — 해석은 이미 utils/recurrence가 우리 패턴 형식으로 하고 있다.
  */
 
+/**
+ * 반복 회차 하나를 시리즈와 다르게 잡은 것 — RFC 5545의 RECURRENCE-ID 예외.
+ *
+ * 사용자가 이번 주 회차만 다른 시간으로 옮기거나 길이를 바꾸면 여기로 온다.
+ * 예전에는 이 개념 자체가 내보내기에 없어서, 옮긴 회차가 캘린더에 반영되지 않고
+ * 로컬과 조용히 갈라졌다.
+ */
+export interface EventOverride {
+  /** 원래 회차를 가리키는 값. 종일이면 'YYYY-MM-DD', 아니면 UTC ISO. */
+  recurrenceId: string
+  start: string
+  end: string
+}
+
 export interface CalendarEvent {
   uid: string
   summary: string
@@ -15,8 +29,19 @@ export interface CalendarEvent {
   /** 종료. 종일이면 배타적(exclusive) 다음 날짜다 — RFC 5545 규정. */
   end: string
   allDay: boolean
-  /** 서버가 준 값을 그대로 보존한다. 우리가 만들지는 않는다. */
+  /** 반복 규칙(접두사 없는 값). 서버가 준 값도 여기 보존된다. */
   rrule: string | null
+  /**
+   * 규칙에 없는 추가 발생일. 두 자리에서 온다 —
+   * (a) 앱이 말일로 당기는데 RRULE은 건너뛰는 달(`monthly:31`의 2월),
+   * (b) 회차를 원래 발생일이 아닌 날짜로 옮긴 경우.
+   * 종일이면 'YYYY-MM-DD', 아니면 UTC ISO.
+   */
+  rdates: string[]
+  /** 규칙에는 있지만 사용자가 없앤 회차. 값 형식은 rdates와 같다. */
+  exdates: string[]
+  /** 시리즈와 다르게 잡은 회차들. */
+  overrides: EventOverride[]
   /** 마지막 수정 시각(UTC ISO). 서버 값이 없으면 null. */
   lastModified: string | null
   /** 갱신할 때마다 올린다. 일부 서버는 이 값이 줄면 거부한다. */
@@ -95,6 +120,16 @@ export function toDateStamp(yyyyMmDd: string): string {
   return yyyyMmDd.replace(/-/g, '')
 }
 
+/** 쉼표로 이어진 RDATE/EXDATE 값들. 읽지 못한 항목은 버린다. */
+function parseStampList(value: string): string[] {
+  const out: string[] = []
+  for (const part of value.split(',')) {
+    const parsed = parseStamp(part.trim())
+    if (parsed) out.push(parsed)
+  }
+  return out
+}
+
 function parseStamp(value: string): string | null {
   const utc = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/)
   if (utc) {
@@ -144,12 +179,52 @@ export function serializeEvent(event: CalendarEvent, now: string): string {
 
   if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`)
   if (event.rrule) lines.push(`RRULE:${event.rrule}`)
+  // RDATE/EXDATE의 값 형식은 **DTSTART와 같아야 한다**(RFC 5545 §3.8.5.2/§3.8.5.1).
+  // 종일 일정에 UTC 스탬프를 섞으면 서버가 통째로 거부하거나 회차를 엉뚱한 날에 놓는다.
+  if (event.rdates.length > 0) lines.push(stampList('RDATE', event.rdates, event.allDay))
+  if (event.exdates.length > 0) lines.push(stampList('EXDATE', event.exdates, event.allDay))
   // 완료 여부는 VEVENT에 표준 필드가 없다. Calendar.app이 무시하되 우리는 되읽을 수
   // 있도록 X- 속성으로 싣는다.
   lines.push(`X-HARU-COMPLETED:${event.completed ? 'TRUE' : 'FALSE'}`)
-  lines.push('END:VEVENT', 'END:VCALENDAR')
+  lines.push('END:VEVENT')
+
+  // 시리즈와 다르게 잡은 회차들. **같은 UID로 같은 리소스 안에 담는다** — 그게
+  // RFC 5545가 예외를 표현하는 방식이고, 별도 리소스로 쪼개면 서버가 둘을 다른
+  // 일정으로 본다. 회차 예외는 반복하지 않으므로 RRULE을 달지 않는다.
+  for (const override of event.overrides) {
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${escapeText(event.uid)}`,
+      `DTSTAMP:${toUtcStamp(now)}`,
+      `SEQUENCE:${event.sequence}`,
+      `SUMMARY:${escapeText(event.summary)}`,
+      event.allDay
+        ? `RECURRENCE-ID;VALUE=DATE:${toDateStamp(override.recurrenceId)}`
+        : `RECURRENCE-ID:${toUtcStamp(override.recurrenceId)}`,
+      // 옮긴 회차는 언제나 시각이 있다 — 시간 블록을 끌어 놓아야 생기는 값이다.
+      `DTSTART:${toUtcStamp(override.start)}`,
+      `DTEND:${toUtcStamp(override.end)}`
+    )
+    if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`)
+    lines.push(`X-HARU-COMPLETED:${event.completed ? 'TRUE' : 'FALSE'}`)
+    lines.push('END:VEVENT')
+  }
+
+  lines.push('END:VCALENDAR')
 
   return lines.map(foldLine).join(CRLF) + CRLF
+}
+
+/**
+ * RDATE/EXDATE 한 줄. 여러 값은 쉼표로 잇는다(RFC 5545가 허용하는 형태다).
+ *
+ * 구글 쪽 `recurrence[]`도 같은 문자열을 쓰므로 export한다 — 두 곳에서 따로 만들면
+ * 한쪽만 종일 형식을 틀리는 종류의 어긋남이 생긴다.
+ */
+export function stampList(name: 'RDATE' | 'EXDATE', values: string[], allDay: boolean): string {
+  return allDay
+    ? `${name};VALUE=DATE:${values.map(toDateStamp).join(',')}`
+    : `${name}:${values.map(toUtcStamp).join(',')}`
 }
 
 interface RawLine {
@@ -178,31 +253,55 @@ function parseLine(line: string): RawLine | null {
  */
 export function parseEvents(icsText: string): CalendarEvent[] {
   const events: CalendarEvent[] = []
-  let current: (Partial<CalendarEvent> & { allDay?: boolean }) | null = null
+  let current: (Partial<CalendarEvent> & { allDay?: boolean; recurrenceId?: string }) | null = null
 
   for (const raw of unfoldLines(icsText)) {
     const line = parseLine(raw)
     if (!line) continue
 
     if (line.name === 'BEGIN' && line.value === 'VEVENT') {
-      current = { rrule: null, lastModified: null, sequence: 0, completed: false, allDay: false }
+      current = {
+        rrule: null,
+        rdates: [],
+        exdates: [],
+        overrides: [],
+        lastModified: null,
+        sequence: 0,
+        completed: false,
+        allDay: false
+      }
       continue
     }
     if (!current) continue
     if (line.name === 'END' && line.value === 'VEVENT') {
       if (current.uid && current.start) {
-        events.push({
-          uid: current.uid,
-          summary: current.summary ?? '',
-          description: current.description ?? '',
-          start: current.start,
-          end: current.end ?? current.start,
-          allDay: current.allDay ?? false,
-          rrule: current.rrule ?? null,
-          lastModified: current.lastModified ?? null,
-          sequence: current.sequence ?? 0,
-          completed: current.completed ?? false
-        })
+        // **RECURRENCE-ID가 있으면 독립된 일정이 아니라 앞선 시리즈의 예외다.**
+        // 별개 이벤트로 세면 같은 UID가 둘이 되어, 동기화가 그 둘을 서로
+        // 덮어쓰는 두 리소스로 취급한다.
+        const parent = current.recurrenceId ? events.find((e) => e.uid === current?.uid) : undefined
+        if (parent && current.recurrenceId) {
+          parent.overrides.push({
+            recurrenceId: current.recurrenceId,
+            start: current.start,
+            end: current.end ?? current.start
+          })
+        } else {
+          events.push({
+            uid: current.uid,
+            summary: current.summary ?? '',
+            description: current.description ?? '',
+            start: current.start,
+            end: current.end ?? current.start,
+            allDay: current.allDay ?? false,
+            rrule: current.rrule ?? null,
+            rdates: current.rdates ?? [],
+            exdates: current.exdates ?? [],
+            overrides: current.overrides ?? [],
+            lastModified: current.lastModified ?? null,
+            sequence: current.sequence ?? 0,
+            completed: current.completed ?? false
+          })
+        }
       }
       current = null
       continue
@@ -236,6 +335,19 @@ export function parseEvents(icsText: string): CalendarEvent[] {
       case 'RRULE':
         current.rrule = line.value
         break
+      // RDATE/EXDATE는 한 줄에 쉼표로 여러 값이 올 수 있고, 줄 자체가 여러 번
+      // 나올 수도 있다(RFC 5545). 둘 다 받아 이어 붙인다.
+      case 'RDATE':
+        current.rdates = [...(current.rdates ?? []), ...parseStampList(line.value)]
+        break
+      case 'EXDATE':
+        current.exdates = [...(current.exdates ?? []), ...parseStampList(line.value)]
+        break
+      case 'RECURRENCE-ID': {
+        const parsed = parseStamp(line.value)
+        if (parsed) current.recurrenceId = parsed
+        break
+      }
       case 'LAST-MODIFIED':
         current.lastModified = parseStamp(line.value)
         break
