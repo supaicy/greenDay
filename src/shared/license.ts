@@ -33,11 +33,16 @@ export type LicenseStatus = (typeof LICENSE_STATUSES)[number]
  * 문구를 찾으므로, 이미 활성화 실패에 쓰는 그 표가 그대로 답이 된다 —
  * 같은 사실에 두 벌의 문구를 두지 않는다.
  *
- * 둘뿐인 이유: 서버의 판정(`isServerRefusal`) 중 사용자가 **행동을 바꿔야 하는**
- * 것이 이 둘이다. `unknownKey`는 여기 오지 않는다 — 활성화 시점에만 나오고,
+ * 셋뿐인 이유: 서버의 판정(`isServerRefusal`) 중 사용자가 **행동을 바꿔야 하는**
+ * 것이 이들이다. `unknownKey`는 여기 오지 않는다 — 활성화 시점에만 나오고,
  * 그때는 입력한 사람이 그 자리에서 실패 문구로 본다.
+ *
+ *   revoked         환불·취소됐다. 할 일은 문의이지 재구매가 아니다.
+ *   deviceLimit     자리가 꽉 찼다. 할 일은 안 쓰는 기기를 놓는 것이다.
+ *   deviceNotActive 다른 기기에서 이 기기를 놓았다. 할 일은 다시 활성화하는 것이다 —
+ *                   "환불됨"과 뭉치면 멀쩡한 키를 버리게 만든다.
  */
-export const LICENSE_BLOCK_REASONS = ['revoked', 'deviceLimit'] as const
+export const LICENSE_BLOCK_REASONS = ['revoked', 'deviceLimit', 'deviceNotActive'] as const
 export type LicenseBlockReason = (typeof LICENSE_BLOCK_REASONS)[number]
 
 /**

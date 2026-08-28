@@ -1495,3 +1495,56 @@ describe('H11 — 낡은 응답은 착륙해도 아무것도 못 바꾼다', () 
     expect(h.manager.getState().status).toBe('trialExpired')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H10 — 다른 기기에서 놓인 뒤의 재검증
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H10 — 원격 해제가 이 기기에도 도착한다', () => {
+  const licensed = { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) }
+
+  it('device_not_active는 판정이다 — 토큰을 놓고 재시도하지 않는다', async () => {
+    // 서버의 `/v1/validate`가 이제 슬롯을 새로 잡지 않으므로, 이 답은
+    // "다른 기기에서 이 기기를 놓았다"는 확정이다. 못 닿은 것으로 읽으면 놓인
+    // 기기가 유예 끝까지 계속 열려 있고 6시간마다 같은 답을 받는다.
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.token).toBeNull()
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('키는 남긴다 — 여기서 다시 활성화하면 그만이다', async () => {
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.key).toBe(KEY)
+    expect(h.manager.getMaskedKey()).not.toBeNull()
+  })
+
+  it('"환불됨"과 뭉치지 않는다 — 사용자가 할 일이 다르다', async () => {
+    // 앞은 문의, 뒤는 재활성화다. 뭉치면 멀쩡한 키를 버리게 만든다.
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.manager.getBlockedReason()).toBe('deviceNotActive')
+  })
+
+  it('해제 경로에서는 여전히 성공이다 — 이미 놓여 있다는 뜻이다', async () => {
+    // `isServerRefusal`에 넣었다고 해제까지 "거부"가 되면 안 된다. 서버에 그
+    // 슬롯이 이미 없으면 로컬을 지우는 것이 맞는 결말이다.
+    const h = harness({
+      record: licensed,
+      client: { deactivate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    expect(await h.manager.deactivate()).toBeNull()
+    expect(h.record.key).toBeNull()
+    expect(h.record.token).toBeNull()
+  })
+})

@@ -773,14 +773,18 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
       return 'settled'
     }
     // 키는 남긴다. 취소는 서명 없이 도착하므로 잘못된 취소는 재활성화 한 번으로
-    // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다.
+    // 회복 가능한 자리에 있어야 한다 — 진짜 취소는 다시 거부당한다. 다른 기기에서
+    // 놓인 경우는 더더욱 그렇다: 사용자가 여기서 다시 활성화하면 그만이다.
     //
     // 사유를 **먼저** 세운다. `clearLocalLicense`가 커밋하므로 같은 쓰기에 실린다.
     // 이걸 안 남기면 취소된 사용자에게 "체험 기간이 끝났습니다"가 뜬다 — 돈을 낸
     // 사람에게 구매를 권하는 화면이고, 필요한 것은 환불 문의다. 게다가 토큰을 지운
     // 뒤로는 재검증이 서버를 아예 안 부르므로(`runRevalidation`이 그 앞에서 돌아선다)
     // 다시 알아낼 기회도 없다.
-    record.blockedReason = 'revoked'
+    //
+    // **둘을 뭉치지 않는다.** "환불됐다"와 "다른 기기에서 놓았다"는 사용자가 할 일이
+    // 다르다 — 앞은 문의, 뒤는 재활성화다. 뭉치면 멀쩡한 키를 버리게 만든다.
+    record.blockedReason = result.error === 'deviceNotActive' ? 'deviceNotActive' : 'revoked'
     // 못 지웠으면 `settled`라 답하지 않는다. 그러면 6시간을 기다리는데, 그동안
     // 취소된 자격증명이 디스크에 그대로 남아 재시작이 되살린다.
     if (clearLocalLicense(true)) return 'settled'
