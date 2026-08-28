@@ -6,6 +6,7 @@ import {
   DEFAULT_CONFIG,
   type CalendarConfig
 } from './calendar-config'
+import { decodeGoogleConfig, encodeGoogleConfig, DEFAULT_GOOGLE_CONFIG } from './google-config'
 import type { KeyCrypto } from './database'
 
 // 실제 safeStorage처럼 평문을 알아볼 수 없게 만든다. 그래야 "평문이 남지 않는다"는
@@ -263,18 +264,204 @@ describe('M1 — 자격증명 오리진 결속', () => {
     expect(JSON.stringify(publicConfig)).not.toContain('abcd-efgh-ijkl-mnop')
   })
 
-  it('옛 형식(결속 없는 암호문)도 계속 읽는다 — 출하된 설치를 잠그지 않는다', () => {
-    // 결속이 들어오기 전에 저장된 파일. 파일이 스스로 말하는 설정에 결속된 것으로 읽고,
-    // 다음 저장에서 새 형식으로 굳는다.
+  /**
+   * M1은 옛 형식(봉투 없는 맨 암호문)을 받아 주었다 — 출하된 설치를 잠그지 않으려고.
+   * **M3에서 그 관대함을 거둬들였다.** 맨 문자열 비밀은 내용만으로 진짜 앱 암호와
+   * 구별할 방법이 없어서, 받아 주는 한 다른 저장소의 암호문을 여기 붙여 넣는 통로가
+   * 열린 채로 남는다. 대가는 한 번의 재입력이다.
+   */
+  it('봉투 없는 옛 암호문은 더 이상 받지 않는다 (M3에서 의도적으로 바뀐 동작)', () => {
     const legacy = {
       serverUrl: 'https://caldav.icloud.com',
       username: 'user@icloud.com',
       password_enc: workingCrypto.encrypt('abcd-efgh-ijkl-mnop')
     }
     const decoded = decodeConfig(legacy, workingCrypto)
-    expect(decoded.password).toBe('abcd-efgh-ijkl-mnop')
-    // 다시 저장하면 새 형식이 되어 그 다음부터는 바꿔치기가 걸린다.
-    const upgraded = encodeConfig(decoded, workingCrypto) as unknown as Record<string, unknown>
-    expect(decodeConfig({ ...upgraded, serverUrl: 'https://evil.example' }, workingCrypto).password).toBeNull()
+    expect(decoded.password).toBeNull()
+    // 나머지 설정은 살아 있어야 사용자가 비밀번호만 다시 넣으면 된다.
+    expect(decoded.username).toBe('user@icloud.com')
+    expect(decoded.serverUrl).toBe('https://caldav.icloud.com')
+  })
+})
+
+/**
+ * M3 — 혼동 대리인. **재현된 공격이다.**
+ *
+ * `safeStorage` 암호문은 무맥락이라, `userData`에 쓸 수 있는 주체는 **암호화 권한 없이**
+ * 암호문을 옮기는 것만으로 한 비밀을 다른 비밀인 척하게 만들 수 있었다.
+ * `google-config.json`의 `tokens_enc`를 `calendar-config.json`의 `password_enc`로
+ * 옮기면, 복호화된 Google OAuth 토큰 JSON 전체가 CalDAV의 `Authorization: Basic`
+ * 값이 되어 공격자 서버로 나갔다.
+ */
+describe('M3 — 다른 종류의 암호문을 password_enc에 넣으면 거절한다', () => {
+  const CALDAV_ORIGIN = 'https://caldav.icloud.com'
+  const USER = 'user@icloud.com'
+
+  /** 공격자가 옮겨 붙일 수 있는, 앱이 실제로 만드는 암호문들. */
+  function movedCiphertexts(): { name: string; ciphertext: string }[] {
+    const googleTokens = encodeGoogleConfig(
+      {
+        ...DEFAULT_GOOGLE_CONFIG,
+        tokens: { accessToken: 'ya29.SECRET', refreshToken: '1//RT', expiresAt: '2026-08-03T00:00:00.000Z', scope: '' }
+      },
+      workingCrypto
+    ).tokens_enc
+
+    return [
+      // 재현된 경로.
+      { name: 'google-config.json의 tokens_enc', ciphertext: String(googleTokens) },
+      // AI 키는 맨 문자열이라 옛 형식 폴백이 남아 있으면 그대로 통과했다.
+      { name: 'AI API 키 (맨 문자열)', ciphertext: workingCrypto.encrypt('sk-live-abcdef0123456789') },
+      // 봉투를 흉내 냈지만 용도가 다른 값.
+      {
+        name: '용도만 다른 봉투',
+        ciphertext: workingCrypto.encrypt(
+          JSON.stringify({ v: 1, purpose: 'ai.apiKey', account: `${CALDAV_ORIGIN}|${USER}`, secret: 'sk-live-x' })
+        )
+      },
+      // 형식 번호가 다른 봉투 — 모르는 번호는 거절한다.
+      {
+        name: '모르는 형식 번호',
+        ciphertext: workingCrypto.encrypt(
+          JSON.stringify({ v: 99, purpose: 'caldav.password', account: `${CALDAV_ORIGIN}|${USER}`, secret: 'pw' })
+        )
+      }
+    ]
+  }
+
+  for (const { name, ciphertext } of movedCiphertexts()) {
+    it(`거절한다 — ${name}`, () => {
+      const decoded = decodeConfig(
+        { serverUrl: CALDAV_ORIGIN, username: USER, password_enc: ciphertext },
+        workingCrypto
+      )
+      expect(decoded.password).toBeNull()
+      expect(decoded.passwordBinding).toBeNull()
+    })
+  }
+
+  it('옮겨진 값이 Basic 헤더로 나갈 수 없다 — 비밀이 통째로 새어 나오지 않는다', () => {
+    const googleTokens = String(
+      encodeGoogleConfig(
+        {
+          ...DEFAULT_GOOGLE_CONFIG,
+          tokens: {
+            accessToken: 'ya29.SECRET',
+            refreshToken: '1//RT',
+            expiresAt: '2026-08-03T00:00:00.000Z',
+            scope: ''
+          }
+        },
+        workingCrypto
+      ).tokens_enc
+    )
+    const decoded = decodeConfig(
+      { serverUrl: CALDAV_ORIGIN, username: USER, password_enc: googleTokens },
+      workingCrypto
+    )
+    // 토큰 문자열이 설정 어디에도 남지 않는다.
+    expect(JSON.stringify(decoded)).not.toContain('ya29.SECRET')
+    expect(JSON.stringify(decoded)).not.toContain('1//RT')
+  })
+
+  it('진짜 CalDAV 봉투는 그대로 열린다 (검사가 정상 경로를 막지 않는다)', () => {
+    const stored = encodeConfig(
+      config({ serverUrl: CALDAV_ORIGIN, username: USER, password: 'abcd-efgh-ijkl-mnop' }),
+      workingCrypto
+    )
+    expect(decodeConfig(stored as unknown as Record<string, unknown>, workingCrypto).password).toBe(
+      'abcd-efgh-ijkl-mnop'
+    )
+  })
+
+  it('용도와 주인은 암호문 안에 있어 파일 편집으로 못 바꾼다', () => {
+    const stored = encodeConfig(
+      config({ serverUrl: CALDAV_ORIGIN, username: USER, password: 'abcd-efgh-ijkl-mnop' }),
+      workingCrypto
+    )
+    const plain = workingCrypto.decrypt(String(stored.password_enc))
+    expect(JSON.parse(plain)).toMatchObject({
+      v: 1,
+      purpose: 'caldav.password',
+      account: `${CALDAV_ORIGIN}|${USER}`
+    })
+    // 평문 필드로는 어디에도 없다.
+    expect(JSON.stringify(stored)).not.toContain('caldav.password')
+  })
+
+  it('계정에 |가 들어가도 오리진과 계정을 정확히 가른다', () => {
+    // 앞에서 한 번만 잘라야 한다. 뒤에서 자르면 오리진이 잘못 복원돼 결속 검사가
+    // 엉뚱하게 통과하거나 실패한다.
+    const odd = 'user|with|pipes@icloud.com'
+    const stored = encodeConfig(
+      config({ serverUrl: CALDAV_ORIGIN, username: odd, password: 'pw-1' }),
+      workingCrypto
+    )
+    const decoded = decodeConfig(stored as unknown as Record<string, unknown>, workingCrypto)
+    expect(decoded.password).toBe('pw-1')
+    expect(decoded.passwordBinding?.origin).toBe(CALDAV_ORIGIN)
+    expect(decoded.passwordBinding?.username).toBe(odd)
+  })
+})
+
+/**
+ * 반대 방향. 지금까지는 accessToken/expiresAt 모양 검사가 **우연히** 막고 있었다.
+ * 명시적인 용도 검사로 바꾼다.
+ */
+describe('M3 — 다른 종류의 암호문을 tokens_enc에 넣으면 거절한다', () => {
+  it('CalDAV 비밀번호 봉투를 tokens_enc로 옮겨도 토큰이 되지 않는다', () => {
+    const caldav = encodeConfig(
+      config({ serverUrl: 'https://caldav.icloud.com', username: 'user@icloud.com', password: 'app-pw' }),
+      workingCrypto
+    ).password_enc
+    expect(decodeGoogleConfig({ tokens_enc: String(caldav) }, workingCrypto).tokens).toBeNull()
+  })
+
+  it('AI 키(맨 문자열)도 토큰이 되지 않는다', () => {
+    const ciphertext = workingCrypto.encrypt('sk-live-abcdef0123456789')
+    expect(decodeGoogleConfig({ tokens_enc: ciphertext }, workingCrypto).tokens).toBeNull()
+  })
+
+  it('용도만 다른 봉투도 거절한다', () => {
+    const ciphertext = workingCrypto.encrypt(
+      JSON.stringify({
+        v: 1,
+        purpose: 'caldav.password',
+        account: 'google',
+        secret: JSON.stringify({ accessToken: 'ya29.X', expiresAt: '2026-08-03T00:00:00.000Z' })
+      })
+    )
+    expect(decodeGoogleConfig({ tokens_enc: ciphertext }, workingCrypto).tokens).toBeNull()
+  })
+
+  it('새로 저장한 토큰은 봉투에 담기고 그대로 되읽힌다', () => {
+    const tokens = {
+      accessToken: 'ya29.A',
+      refreshToken: '1//R',
+      expiresAt: '2026-08-03T00:00:00.000Z',
+      scope: 'events'
+    }
+    const stored = encodeGoogleConfig({ ...DEFAULT_GOOGLE_CONFIG, tokens }, workingCrypto)
+    expect(JSON.parse(workingCrypto.decrypt(String(stored.tokens_enc)))).toMatchObject({
+      v: 1,
+      purpose: 'google.tokens'
+    })
+    expect(decodeGoogleConfig(stored as unknown as Record<string, unknown>, workingCrypto).tokens).toEqual(tokens)
+  })
+
+  /**
+   * 여기만 옛 형식을 계속 받는다. 비대칭이 의도적이다 — 옛 구글 토큰은
+   * `accessToken`·`expiresAt`을 가진 특정 모양이라 다른 저장소의 어떤 암호문을
+   * 옮겨 와도 그 모양이 되지 않는다(위 세 테스트가 그것을 못 박는다).
+   */
+  it('봉투 이전에 저장된 토큰은 계속 읽는다 — 다시 로그인시키지 않는다', () => {
+    const tokens = {
+      accessToken: 'ya29.OLD',
+      refreshToken: '1//OLD',
+      expiresAt: '2026-08-03T00:00:00.000Z',
+      scope: ''
+    }
+    const legacy = { tokens_enc: workingCrypto.encrypt(JSON.stringify(tokens)) }
+    expect(decodeGoogleConfig(legacy, workingCrypto).tokens).toEqual(tokens)
   })
 })

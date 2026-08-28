@@ -373,3 +373,45 @@ describe('runSync — 입력 상태를 훼손하지 않는다', () => {
     expect(original).toEqual(snapshot)
   })
 })
+
+/**
+ * C1의 실제 도달 경로 — 설정에 저장된 `calendarUrl`이 다른 출처를 가리키는 경우.
+ *
+ * `calendar:select`가 렌더러 문자열을 그대로 저장하므로, 오염된 값은 `runSync`를
+ * 통해 들어온다. 클라이언트 단위 테스트와 별개로 **여기서도** 확인한다 —
+ * 사용자에게 실제로 일어나는 순서가 이것이다.
+ */
+describe('C1 — 설정의 calendarUrl이 다른 출처를 가리켜도 자격증명이 나가지 않는다', () => {
+  it('요청이 한 번도 나가지 않고 실패로 보고된다', async () => {
+    const { requests, client } = fakeServer(() => 201)
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: 'https://evil.example/998877/calendars/home/',
+      tasks: [task()],
+      state: {},
+      now: NOW,
+      client
+    })
+    expect(requests).toHaveLength(0)
+    expect(result.created).toBe(0)
+    expect(result.failures).toHaveLength(1)
+  })
+
+  it('이미 저장된 syncState의 href가 오염돼 있어도 마찬가지다', async () => {
+    // 침해된 서버가 첫 PROPFIND 응답으로 심어 둔 href가 상태에 남은 경우.
+    const { requests, client } = fakeServer(() => 204)
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [],
+      state: {
+        t1: { href: 'https://evil.example/x.ics', etag: '"v1"', fingerprint: 'fp', sequence: 0 }
+      },
+      now: NOW,
+      client
+    })
+    expect(requests).toHaveLength(0)
+    expect(result.deleted).toBe(0)
+    expect(result.failures).toHaveLength(1)
+  })
+})

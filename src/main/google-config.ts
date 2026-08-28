@@ -13,6 +13,19 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { KeyCrypto } from './database'
 import type { SyncState } from './caldav/sync'
 import type { TokenSet } from './google/oauth'
+import { openSecret, sealSecret, type SecretPurpose } from './secret-envelope'
+
+/** 이 파일이 봉인하고 여는 유일한 용도 — 곧 격리 경계다(`secret-envelope.ts`). */
+const GOOGLE_PURPOSE: SecretPurpose = 'google.tokens'
+
+/**
+ * 구글 토큰의 "주인".
+ *
+ * CalDAV는 오리진·계정으로 주인을 가르지만(같은 앱 안에서 서버를 옮길 수 있다),
+ * 구글 연결은 이 파일에 하나뿐이라 가를 것이 없다. 봉투 형식을 맞추기 위한 고정값이고,
+ * 실제 격리는 `purpose`가 한다.
+ */
+const GOOGLE_ACCOUNT = 'google'
 
 export interface GoogleConfig {
   tokens: TokenSet | null
@@ -44,13 +57,12 @@ interface StoredGoogleConfig extends Omit<GoogleConfig, 'tokens'> {
 export function encodeGoogleConfig(config: GoogleConfig, crypto: KeyCrypto): StoredGoogleConfig {
   const { tokens, ...rest } = config
   const stored: StoredGoogleConfig = { ...rest, tokens_enc: null }
-  if (tokens && crypto.available()) {
-    try {
-      stored.tokens_enc = crypto.encrypt(JSON.stringify(tokens))
-    } catch {
-      // 암호화 실패 시 저장하지 않는다. 다시 로그인시키는 편이 평문 보관보다 낫다.
-      stored.tokens_enc = null
-    }
+  if (tokens) {
+    // 용도를 **암호문 안에** 봉인한다. 이 값을 `calendar-config.json`의
+    // `password_enc`로 옮기면 저쪽에서 용도가 달라 거절된다 — 그 이동이
+    // 실제로 Google 토큰을 CalDAV Basic 헤더로 내보내던 경로였다(M3).
+    // 실패하면 저장하지 않는다: 다시 로그인시키는 편이 평문 보관보다 낫다.
+    stored.tokens_enc = sealSecret(JSON.stringify(tokens), GOOGLE_PURPOSE, GOOGLE_ACCOUNT, crypto)
   }
   return stored
 }
@@ -58,21 +70,8 @@ export function encodeGoogleConfig(config: GoogleConfig, crypto: KeyCrypto): Sto
 export function decodeGoogleConfig(raw: Record<string, unknown>, crypto: KeyCrypto): GoogleConfig {
   const stored = raw as Partial<StoredGoogleConfig>
   let tokens: TokenSet | null = null
-  if (typeof stored.tokens_enc === 'string' && stored.tokens_enc && crypto.available()) {
-    try {
-      const parsed = JSON.parse(crypto.decrypt(stored.tokens_enc)) as Partial<TokenSet>
-      if (typeof parsed.accessToken === 'string' && typeof parsed.expiresAt === 'string') {
-        tokens = {
-          accessToken: parsed.accessToken,
-          refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : null,
-          expiresAt: parsed.expiresAt,
-          scope: typeof parsed.scope === 'string' ? parsed.scope : ''
-        }
-      }
-    } catch {
-      // 다른 기기의 키로 암호화됐거나 형식이 깨졌다. 다시 연결받아야 한다.
-      tokens = null
-    }
+  if (typeof stored.tokens_enc === 'string' && stored.tokens_enc) {
+    tokens = readTokens(stored.tokens_enc, crypto)
   }
   return {
     tokens,
@@ -83,6 +82,49 @@ export function decodeGoogleConfig(raw: Record<string, unknown>, crypto: KeyCryp
     lastSyncAt: typeof stored.lastSyncAt === 'string' ? stored.lastSyncAt : null,
     lastError: typeof stored.lastError === 'string' ? stored.lastError : null,
     syncState: isSyncState(stored.syncState) ? stored.syncState : {}
+  }
+}
+
+/** 문자열에서 TokenSet 모양을 읽는다. 모양이 아니면 null. */
+function parseTokens(plain: string): TokenSet | null {
+  let parsed: Partial<TokenSet>
+  try {
+    parsed = JSON.parse(plain) as Partial<TokenSet>
+  } catch {
+    return null
+  }
+  if (typeof parsed?.accessToken !== 'string' || typeof parsed.expiresAt !== 'string') return null
+  return {
+    accessToken: parsed.accessToken,
+    refreshToken: typeof parsed.refreshToken === 'string' ? parsed.refreshToken : null,
+    expiresAt: parsed.expiresAt,
+    scope: typeof parsed.scope === 'string' ? parsed.scope : ''
+  }
+}
+
+/**
+ * 저장된 토큰을 읽는다 — 봉투가 우선, 없으면 옛 형식.
+ *
+ * **CalDAV 쪽과 달리 여기는 옛 형식을 계속 받는다.** 비대칭이 의도적이다:
+ * 옛 Google 토큰은 `accessToken`·`expiresAt`을 가진 특정 모양이라, 다른 저장소의
+ * 어떤 암호문을 옮겨 와도 그 모양이 되지 않는다(CalDAV 비밀번호는 이제 봉투 JSON,
+ * AI 키는 맨 문자열이다). 즉 여기서 옛 형식을 받는 것은 통로를 열지 않는다.
+ * 반대로 CalDAV 쪽의 옛 형식은 "아무 맨 문자열"이라 통로 그 자체였다.
+ *
+ * 그래도 모양 검사에만 기대지는 않는다 — 새로 저장되는 값에는 용도를 봉인하고,
+ * 봉투가 있으면 그쪽을 **먼저** 엄격히 검증한다. 다음 저장에서 옛 형식은 사라진다.
+ */
+function readTokens(ciphertext: string, crypto: KeyCrypto): TokenSet | null {
+  const sealed = openSecret(ciphertext, GOOGLE_PURPOSE, GOOGLE_ACCOUNT, crypto)
+  if (sealed !== null) return parseTokens(sealed)
+
+  // 봉투가 아니다. 옛 형식일 수 있으니 모양으로 한 번 더 본다.
+  if (!crypto.available()) return null
+  try {
+    return parseTokens(crypto.decrypt(ciphertext))
+  } catch {
+    // 다른 기기의 키로 암호화됐거나 형식이 깨졌다. 다시 연결받아야 한다.
+    return null
   }
 }
 

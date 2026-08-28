@@ -9,6 +9,15 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { KeyCrypto } from './database'
 import type { SyncState } from './caldav/sync'
+import { caldavAccount, openSecret, peekAccount, sealSecret, type SecretPurpose } from './secret-envelope'
+
+/**
+ * 이 파일이 봉인하고 여는 유일한 용도.
+ *
+ * 상수로 두는 이유는 오타 방지가 아니라, **이 값이 곧 격리 경계**이기 때문이다.
+ * 다른 저장소(Google 토큰·AI 키)의 암호문을 `password_enc`로 옮겨도 여기서 걸린다.
+ */
+const CALDAV_PURPOSE: SecretPurpose = 'caldav.password'
 
 /**
  * 저장된 비밀번호가 **어디에 대해** 저장된 것인가.
@@ -126,13 +135,6 @@ export function enforceCredentialBinding(config: CalendarConfig): CalendarConfig
   }
 }
 
-/** 암호문 안에 들어가는 봉투. 결속을 **암호문 안**에 두어야 파일 편집으로 못 바꾼다. */
-interface SecretEnvelope {
-  origin: string
-  username: string
-  password: string
-}
-
 export function encodeConfig(config: CalendarConfig, crypto: KeyCrypto): StoredConfig {
   // 저장 직전에 한 번 더 강제한다. 이렇게 해야 **파일에는 결속이 어긋난 비밀번호가
   // 아예 존재하지 않는다** — 읽기 쪽 검사 하나에만 기대면, 그 검사를 지나치는
@@ -140,66 +142,56 @@ export function encodeConfig(config: CalendarConfig, crypto: KeyCrypto): StoredC
   const safe = enforceCredentialBinding(config)
   const { password, passwordBinding, ...rest } = safe
   const stored: StoredConfig = { ...rest, password_enc: null }
-  if (password && passwordBinding && crypto.available()) {
-    try {
-      const envelope: SecretEnvelope = {
-        origin: passwordBinding.origin,
-        username: passwordBinding.username,
-        password
-      }
-      stored.password_enc = crypto.encrypt(JSON.stringify(envelope))
-    } catch {
-      // 암호화에 실패하면 저장하지 않는다. 평문으로 흘리느니 다시 입력받는 편이 낫다.
-      stored.password_enc = null
-    }
+  if (password && passwordBinding) {
+    // 용도(`caldav.password`)와 주인(`오리진|계정`)을 **암호문 안에** 봉인한다.
+    // 암호화가 불가능하거나 실패하면 `sealSecret`이 null을 준다 — 평문으로
+    // 흘리느니 다시 입력받는 편이 낫다.
+    stored.password_enc = sealSecret(
+      password,
+      CALDAV_PURPOSE,
+      caldavAccount(passwordBinding.origin, passwordBinding.username),
+      crypto
+    )
   }
   return stored
 }
 
 /**
- * 암호문을 푼다. 새 형식이면 봉투에서 결속을, 옛 형식이면 결속 없이 비밀번호만.
+ * 암호문을 푼다. **봉투가 아니거나 용도·주인이 어긋나면 아무것도 내주지 않는다.**
  *
- * **옛 형식(맨 문자열)을 계속 받는다.** 이미 출하된 설치에 그 형식으로 저장된
- * 앱 암호가 있고, 형식이 바뀌었다는 이유로 전부 다시 입력하게 만들 이유가 없다.
- * 결속이 없는 값은 호출처가 "파일에 적힌 지금 설정에 결속된 것"으로 취급하고,
- * 다음 저장 때 새 형식으로 올라간다.
+ * 옛 형식(봉투 없는 맨 암호문)은 더 이상 받지 않는다 — 그 관대함이 M3의 통로였다.
+ * `userData`에 쓸 수 있는 주체가 다른 저장소의 암호문을 여기로 옮기면, 복호화된
+ * 값이 그대로 CalDAV의 `Authorization: Basic`에 실려 나갔다. 맨 문자열 비밀
+ * (AI API 키 등)은 내용만으로는 진짜 앱 암호와 구별할 방법이 아예 없다.
+ *
+ * 대가는 봉투 이전에 저장된 앱 암호를 한 번 다시 입력받는 것이고, 자격증명이
+ * 공격자 서버로 나가는 것보다 싸다. 화면에는 "저장됨" 대신 입력 안내가 뜬다.
  */
 function decryptSecret(
   ciphertext: string,
   crypto: KeyCrypto
-): { password: string; binding: Omit<PasswordBinding, 'password'> | null } | null {
-  let plain: string
-  try {
-    plain = crypto.decrypt(ciphertext)
-  } catch {
-    // 다른 기기·다른 키체인에서 복사된 파일. 사용자에게 다시 입력받아야 한다.
-    return null
+): { password: string; binding: Omit<PasswordBinding, 'password'> } | null {
+  // 닭과 달걀: `openSecret`은 주인을 알아야 열어 주는데, M1의 결속 판단에 필요한
+  // 것이 바로 그 주인이다. 그래서 용도만 확인하고 주인을 먼저 꺼낸 뒤,
+  // 그 값으로 정식으로 연다 — 검증을 건너뛰는 것이 아니라 순서를 맞추는 것이다.
+  const account = peekAccount(ciphertext, CALDAV_PURPOSE, crypto)
+  if (account === null) return null
+  const password = openSecret(ciphertext, CALDAV_PURPOSE, account, crypto)
+  if (password === null) return null
+
+  // `오리진|계정`. 계정에 `|`가 들어갈 수 있으므로 **앞에서 한 번만** 자른다.
+  const separator = account.indexOf('|')
+  if (separator < 0) return null
+  return {
+    password,
+    binding: { origin: account.slice(0, separator), username: account.slice(separator + 1) }
   }
-  try {
-    const parsed: unknown = JSON.parse(plain)
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      typeof (parsed as SecretEnvelope).password === 'string' &&
-      typeof (parsed as SecretEnvelope).origin === 'string' &&
-      typeof (parsed as SecretEnvelope).username === 'string'
-    ) {
-      const envelope = parsed as SecretEnvelope
-      return {
-        password: envelope.password,
-        binding: { origin: envelope.origin, username: envelope.username }
-      }
-    }
-  } catch {
-    // 봉투가 아니다 — 옛 형식이거나, 비밀번호 자체가 우연히 JSON처럼 생겼다.
-  }
-  return { password: plain, binding: null }
 }
 
 export function decodeConfig(raw: Record<string, unknown>, crypto: KeyCrypto): CalendarConfig {
   const stored = raw as Partial<StoredConfig>
   const secret =
-    typeof stored.password_enc === 'string' && stored.password_enc && crypto.available()
+    typeof stored.password_enc === 'string' && stored.password_enc
       ? decryptSecret(stored.password_enc, crypto)
       : null
 
@@ -213,11 +205,9 @@ export function decodeConfig(raw: Record<string, unknown>, crypto: KeyCrypto): C
     serverUrl,
     username,
     password: secret?.password ?? null,
-    passwordBinding: secret
-      ? // 옛 형식에는 결속이 없다. 파일이 스스로 말하는 설정에 결속된 것으로 읽는다 —
-        // 그 이상을 알 방법이 없고, 다음 저장에서 새 형식으로 굳는다.
-        { ...(secret.binding ?? { origin: originOf(serverUrl) ?? '', username }), password: secret.password }
-      : null,
+    // 결속은 언제나 봉투에서 온다. 파일이 말하는 serverUrl·username으로 대신
+    // 채우지 않는다 — 그러면 파일을 고쳐 결속을 만들어 낼 수 있어 검사가 무의미해진다.
+    passwordBinding: secret ? { ...secret.binding, password: secret.password } : null,
     calendarUrl: typeof stored.calendarUrl === 'string' ? stored.calendarUrl : null,
     calendarName: typeof stored.calendarName === 'string' ? stored.calendarName : null,
     enabled: Boolean(stored.enabled),

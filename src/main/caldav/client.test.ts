@@ -262,31 +262,59 @@ describe('C1 — href 출처 강제', () => {
    * `listEvents`·`putEvent`·`deleteEvent`는 `absolute()`를 거치지 않고 URL을
    * 그대로 `request()`에 넘겼으므로, 관문은 `request()` 진입부에 있어야 한다.
    */
-  describe('바깥에서 들어온 URL도 request() 진입부에서 걸린다', () => {
+  describe('바깥에서 들어온 URL은 진입점이 무엇이든 걸린다', () => {
+    /**
+     * 렌더러가 `calendar:select`로 준 문자열은 설정에 저장돼 `listEvents`·
+     * `createEvent`·`updateEvent`·`probeEvent`·`deleteEvent`로 흘러든다. 이 중
+     * 하나라도 검사를 건너뛰면 앱 암호가 그 호스트로 나간다.
+     *
+     * **공개 메서드를 통째로 훑는다.** 하나씩 적으면 다음에 추가되는 메서드가
+     * 빠지고, 빠졌다는 사실은 아무것도 알려 주지 않는다.
+     */
     const OUTSIDE = 'https://evil.example/998877/calendars/home/'
 
-    it('listEvents', async () => {
-      const { fetchImpl, calls } = scriptedFetch([{ body: '<multistatus xmlns="DAV:"/>' }])
+    const ENTRY_POINTS: [name: string, run: (c: CalDavClient) => Promise<unknown>][] = [
+      ['listEvents', (c) => c.listEvents(OUTSIDE, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')],
+      ['createEvent', (c) => c.createEvent(`${OUTSIDE}x.ics`, 'ICS')],
+      ['updateEvent (etag 있음)', (c) => c.updateEvent(`${OUTSIDE}x.ics`, 'ICS', '"v1"')],
+      ['updateEvent (etag 없음 — 덮어쓰기)', (c) => c.updateEvent(`${OUTSIDE}x.ics`, 'ICS', null)],
+      ['probeEvent', (c) => c.probeEvent(`${OUTSIDE}x.ics`)],
+      ['deleteEvent', (c) => c.deleteEvent(`${OUTSIDE}x.ics`, null)]
+    ]
+
+    for (const [name, run] of ENTRY_POINTS) {
+      it(`${name}`, async () => {
+        // 응답을 넉넉히 준비해 둔다 — 요청이 나갔다면 성공했을 상황을 만든다.
+        const { fetchImpl, calls } = scriptedFetch([{ status: 200 }, { status: 200 }, { status: 200 }])
+        await expect(run(new CalDavClient(CREDS, fetchImpl))).rejects.toMatchObject({ code: 'protocol' })
+        // 자격증명이 실린 요청이 단 한 번도 나가지 않았다.
+        expect(calls).toHaveLength(0)
+      })
+    }
+
+    it('프로토콜 상대·평문 http로 준 calendarUrl도 같다', async () => {
+      for (const outside of ['//evil.example/c/', 'http://evil.example/c/']) {
+        const { fetchImpl, calls } = scriptedFetch([{ status: 200 }])
+        await expect(
+          new CalDavClient(CREDS, fetchImpl).listEvents(outside, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')
+        ).rejects.toMatchObject({ code: 'protocol' })
+        expect(calls).toHaveLength(0)
+      }
+    })
+
+    it('사용자 정보로 호스트를 감춘 URL도 걸린다', async () => {
+      // `https://caldav.icloud.com@evil.example/`의 호스트는 evil.example이다.
+      const { fetchImpl, calls } = scriptedFetch([{ status: 200 }])
       await expect(
-        new CalDavClient(CREDS, fetchImpl).listEvents(OUTSIDE, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')
+        new CalDavClient(CREDS, fetchImpl).createEvent('https://caldav.icloud.com@evil.example/x.ics', 'ICS')
       ).rejects.toMatchObject({ code: 'protocol' })
       expect(calls).toHaveLength(0)
     })
 
-    it('putEvent', async () => {
-      const { fetchImpl, calls } = scriptedFetch([{ status: 201 }])
-      await expect(
-        new CalDavClient(CREDS, fetchImpl).createEvent(`${OUTSIDE}x.ics`, 'ICS')
-      ).rejects.toMatchObject({ code: 'protocol' })
-      expect(calls).toHaveLength(0)
-    })
-
-    it('deleteEvent', async () => {
-      const { fetchImpl, calls } = scriptedFetch([{ status: 204 }])
-      await expect(
-        new CalDavClient(CREDS, fetchImpl).deleteEvent(`${OUTSIDE}x.ics`, null)
-      ).rejects.toMatchObject({ code: 'protocol' })
-      expect(calls).toHaveLength(0)
+    it('같은 출처의 calendarUrl은 정상 동작한다 (검사가 정상 경로를 막지 않는다)', async () => {
+      const { fetchImpl, calls } = scriptedFetch([{ status: 201, headers: { etag: '"v1"' } }])
+      await new CalDavClient(CREDS, fetchImpl).createEvent('https://caldav.icloud.com/c/x.ics', 'ICS')
+      expect(calls).toHaveLength(1)
     })
   })
 
