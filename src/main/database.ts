@@ -11,11 +11,16 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync
 } from 'node:fs'
+import { constants as fsConstants } from 'node:fs'
 import { open as openFile } from 'node:fs/promises'
 import path from 'node:path'
+import { DB_READ_ONLY } from '../shared/db-errors'
+
+const { O_CREAT, O_NOFOLLOW, O_TRUNC, O_WRONLY } = fsConstants
 
 interface DbData {
   lists: Record<string, unknown>[]
@@ -86,15 +91,9 @@ export function isDatabaseReadOnly(): boolean {
   return dbReadFailed
 }
 
-/**
- * 읽기 실패 세션에서 변경을 시도했을 때의 거절.
- *
- * **문자열을 여기서만 정한다.** 렌더러가 이 이유를 알아보고 "저장되지 않았다"를
- * 말해야 하는데(H1 롤백), 문구를 양쪽에 적으면 한쪽을 바꿨을 때 아무것도 안 깨진
- * 채로 그 분기만 조용히 죽는다 — `shared/license.ts`의 `LICENSE_REQUIRED`가
- * 같은 이유로 shared에 있다.
- */
-export const DB_READ_ONLY = 'db_read_only'
+// 읽기 실패 세션의 거절 이유. 렌더러도 이 문구를 보고 유령 편집을 되돌리므로
+// `shared/db-errors.ts`가 원본이다 — `LICENSE_REQUIRED`와 같은 배치다.
+export { DB_READ_ONLY } from '../shared/db-errors'
 
 /**
  * 읽기 실패 세션에서는 **메모리도 건드리지 않는다.**
@@ -112,6 +111,9 @@ function assertWritable(): void {
 
 /** 연속 변경을 한 번으로 모으는 창. */
 const SAVE_DEBOUNCE_MS = 300
+/** 저장이 실패했을 때 다시 시도하는 간격. 물러서며 늘린다. */
+const SAVE_RETRY_BASE_MS = 500
+const SAVE_RETRY_MAX_MS = 30_000
 
 /**
  * 이 프로세스가 만든 변경의 세대. mutation마다 하나씩 오른다.
@@ -127,6 +129,47 @@ let committedRevision = 0
 /** 비동기 커밋이 진행 중인가. 두 개가 동시에 rename 하지 않게 한다. */
 let draining = false
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+/** 연속 실패 횟수. 재시도 간격을 물린다. */
+let retryStreak = 0
+/** 마지막 저장 실패. 성공하면 지운다. */
+let lastSaveError: string | null = null
+
+/**
+ * 지금 자리에 있는 primary를 믿을 수 있는가.
+ *
+ * `.bak`에서 복구한 세션에서는 false로 시작한다. 그 상태로 회전하면 **우리를
+ * 방금 구해 준 정상본을 손상본이 덮는다** — 검증이 실측했다. 새 primary를
+ * 우리 손으로 커밋한 뒤에야 true로 돌아간다.
+ */
+let primaryTrusted = true
+
+/** 이 세대가 커밋되면 첨부를 걷는다. 0이면 예약 없음. */
+let gcAfterRevision = 0
+
+export interface SaveHealth {
+  /** 디스크가 메모리를 따라잡았는가. */
+  settled: boolean
+  /** 아직 디스크에 닿지 않은 변경이 있는가. */
+  pending: boolean
+  /** 마지막 저장 실패 메시지. 성공하면 null. */
+  lastError: string | null
+}
+
+/**
+ * 저장이 건강한가 — **부팅과 종료가 사용자에게 알리는 데 쓴다.**
+ *
+ * 예전에는 비동기 저장 실패가 콘솔로만 갔다. mutator IPC는 이미 성공으로
+ * 끝난 뒤라, 사용자는 편집이 저장됐다고 믿고 앱을 닫는다. 임시 경로를 디렉터리로
+ * 막아 재현했다: 할일 생성은 성공했는데 450ms 뒤에도 디스크에 없었다.
+ * 조용한 실패는 유령 데이터를 파는 것이고, 그 값은 사용자가 치른다.
+ */
+export function saveHealth(): SaveHealth {
+  return {
+    settled: revision <= committedRevision && lastSaveError === null,
+    pending: revision > committedRevision,
+    lastError: lastSaveError
+  }
+}
 
 function save(): void {
   // 호출처가 이미 `assertWritable()`로 걸러 주지만, 여기 한 겹을 더 둔다 —
@@ -156,15 +199,37 @@ async function drain(): Promise<void> {
       try {
         await writeAtomicAsync(dbPath, json, target)
       } catch (error) {
-        // 다음 `save()`나 종료 플러시가 다시 시도한다. 여기서 committedRevision을
-        // 올리지 않으므로 밀린 변경은 그대로 밀린 채 남는다.
-        console.error('DB 저장 실패:', error)
+        // **물러서며 다시 시도한다.** 예전에는 여기서 로그만 남기고 반환했고,
+        // 그러면 다음 mutation이 올 때까지(또는 영영) 디스크가 메모리를 따라잡지
+        // 못했다. 디스크가 잠깐 가득 차거나 폴더 권한이 바뀐 경우는 스스로 회복된다.
+        noteSaveFailed(error, true)
         return
       }
+      noteSaveSucceeded()
     }
   } finally {
     draining = false
   }
+}
+
+function noteSaveSucceeded(): void {
+  retryStreak = 0
+  lastSaveError = null
+  // 우리가 쓴 것이 자리에 있다. 이제부터는 회전해도 안전하다.
+  primaryTrusted = true
+  runPendingAttachmentGc()
+}
+
+function noteSaveFailed(error: unknown, retry: boolean): void {
+  lastSaveError = error instanceof Error ? error.message : String(error)
+  console.error('DB 저장 실패:', error)
+  if (!retry || saveTimer) return
+  retryStreak += 1
+  const delay = Math.min(SAVE_RETRY_BASE_MS * 2 ** (retryStreak - 1), SAVE_RETRY_MAX_MS)
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    void drain()
+  }, delay)
 }
 
 /** 이 세대의 임시 파일. 세대마다 다른 이름이라 동시 쓰기가 서로의 버퍼를 자르지 않는다. */
@@ -181,14 +246,19 @@ function tempPathFor(file: string, target: number): string {
  */
 async function writeAtomicAsync(file: string, json: string, target: number): Promise<void> {
   const temp = tempPathFor(file, target)
-  const handle = await openFile(temp, 'w')
   try {
-    await handle.writeFile(json, 'utf-8')
-    // rename은 원자적 *교체*이지 내구성 있는 *커밋*이 아니다. 내용이 아직 페이지
-    // 캐시에만 있으면 성공이라 답한 뒤 전원이 끊겼을 때 빈 파일이 제자리에 남는다.
-    await handle.sync()
-  } finally {
-    await handle.close()
+    const handle = await openFile(temp, 'w')
+    try {
+      await handle.writeFile(json, 'utf-8')
+      // rename은 원자적 *교체*이지 내구성 있는 *커밋*이 아니다. 내용이 아직 페이지
+      // 캐시에만 있으면 성공이라 답한 뒤 전원이 끊겼을 때 빈 파일이 제자리에 남는다.
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+  } catch (error) {
+    discardTemp(temp)
+    throw error
   }
   commitTemp(file, temp, target)
 }
@@ -204,16 +274,39 @@ async function writeAtomicAsync(file: string, json: string, target: number): Pro
 function commitTemp(file: string, temp: string, target: number): void {
   if (target <= committedRevision) {
     // 우리보다 새 세대가 이미 디스크에 있다. 물러난다.
-    try {
-      unlinkSync(temp)
-    } catch {
-      /* 종료 플러시가 같은 이름을 이미 옮겼다 */
-    }
+    discardTemp(temp)
     return
   }
   rotateBackup(file)
   renameSync(temp, file)
   committedRevision = target
+  // 파일 내용은 fsync했지만 **디렉터리 엔트리**는 아직이다. POSIX에서 rename의
+  // 내구성은 부모 디렉터리를 fsync해야 보장된다 — 그러지 않으면 성공이라 답한
+  // 직후의 전원 손실에서 새 이름이 사라질 수 있다. APFS에서 실제로 그렇게
+  // 되는지는 확인하지 못했지만, 비용이 무시할 만하고 실패 모드가 파일 전체다.
+  syncDirectory(path.dirname(file))
+}
+
+function discardTemp(temp: string): void {
+  try {
+    unlinkSync(temp)
+  } catch {
+    /* 애초에 안 만들어졌거나, 종료 플러시가 같은 이름을 이미 옮겼다 */
+  }
+}
+
+function syncDirectory(dir: string): void {
+  try {
+    const fd = openSync(dir, 'r')
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+  } catch {
+    // Windows는 디렉터리 핸들을 이렇게 열 수 없다. 그쪽 rename은 메타데이터
+    // 저널에 들어가므로 이 보강이 필요 없다.
+  }
 }
 
 /**
@@ -227,29 +320,23 @@ function commitTemp(file: string, temp: string, target: number): void {
  */
 function rotateBackup(file: string): void {
   if (!existsSync(file)) return
+  // **믿을 수 없는 primary는 절대 `.bak`으로 밀지 않는다.** 이 세션이 `.bak`에서
+  // 복구했다면 지금 자리에 있는 primary는 우리가 못 읽은 그 파일이다. 그걸 밀면
+  // 방금 우리를 구해 준 정상본이 손상본으로 덮인다 — 검증이 실측한 경로다.
+  // (`initDatabase`가 손상본을 격리하므로 대개 위 `existsSync`에서 이미 걸린다.
+  //  격리마저 실패했을 때를 위한 두 번째 겹이다.)
+  if (!primaryTrusted) return
   try {
     renameSync(file, `${file}.bak`)
   } catch (error) {
-    // 백업을 못 만드는 것이 저장을 막을 이유는 아니다. 새 내용이 더 중요하다.
+    // 백업을 못 만드는 것이 저장을 막을 이유는 아니다. 새 내용이 더 중요하고,
+    // 옛 `.bak`은 그대로 남는다.
     console.error('DB 백업 회전 실패:', error)
   }
 }
 
-/**
- * 앱 종료 시의 동기 플러시.
- *
- * **`committedRevision`을 먼저 올린다.** 그래야 아직 날아가는 중인 구형 비동기
- * 쓰기가 `commitTemp`에서 자기가 낡았음을 보고 물러난다. 이 한 줄이 감사가 실측한
- * "종료 뒤 파일이 되돌아간다"를 닫는다.
- */
-function flushSave(): void {
-  if (saveTimer) {
-    clearTimeout(saveTimer)
-    saveTimer = null
-  }
-  if (dbReadFailed) return
-  if (revision <= committedRevision) return
-  const target = revision
+/** 동기 커밋. **던진다** — 복원처럼 결과를 반드시 알아야 하는 호출처가 쓴다. */
+function commitSync(target: number): void {
   const temp = tempPathFor(dbPath, target)
   try {
     const json = JSON.stringify(data)
@@ -262,15 +349,58 @@ function flushSave(): void {
     } finally {
       closeSync(fd)
     }
-    commitTemp(dbPath, temp, target)
   } catch (error) {
-    console.error('DB 종료 플러시 실패:', error)
-    try {
-      unlinkSync(temp)
-    } catch {
-      /* 애초에 안 만들어졌다 */
-    }
+    discardTemp(temp)
+    throw error
   }
+  commitTemp(dbPath, temp, target)
+}
+
+/**
+ * 앱 종료 시의 동기 플러시. **디스크에 확정됐으면 true.**
+ *
+ * `committedRevision`을 먼저 올리는 것이 요점이다. 그래야 아직 날아가는 중인
+ * 구형 비동기 쓰기가 `commitTemp`에서 자기가 낡았음을 보고 물러난다.
+ *
+ * 결과를 **돌려준다.** 예전에는 여기서 오류를 삼켰고, 그러면 마지막 편집을
+ * 잃은 종료와 정상 종료가 호출처에서 구별되지 않았다. 종료를 막을지는 셸이
+ * 정할 일이라 판정만 내보낸다(`main/index.ts`의 `will-quit` — 이 워크트리 밖).
+ */
+function flushSave(): boolean {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  if (dbReadFailed) return true
+  if (revision <= committedRevision) return lastSaveError === null
+  try {
+    commitSync(revision)
+  } catch (error) {
+    // 종료 중이므로 재시도 타이머를 걸지 않는다 — 프로세스가 곧 사라진다.
+    noteSaveFailed(error, false)
+    return false
+  }
+  noteSaveSucceeded()
+  return true
+}
+
+// ── 첨부 GC 예약 ─────────────────────────────────────────────────────────────
+
+/**
+ * 행이 사라졌다 — 그 세대가 **디스크에 확정된 뒤에** 첨부를 걷는다.
+ *
+ * 즉시 걷으면 안 된다. `save()`는 300ms 디바운스인데 GC는 즉시라, 그 창에서
+ * 종료되면 디스크의 할일은 여전히 첨부를 참조하는데 파일은 이미 사라진 상태가
+ * 된다(검증이 실측). 삭제의 내구성이 확보된 뒤에야 그 참조가 진짜로 없는 것이다.
+ */
+function scheduleAttachmentGc(): void {
+  gcAfterRevision = revision
+}
+
+function runPendingAttachmentGc(): void {
+  if (gcAfterRevision === 0 || committedRevision < gcAfterRevision) return
+  gcAfterRevision = 0
+  gcAttachments()
 }
 
 /** 죽은 프로세스가 남긴 임시 파일. 다음 부팅에서 걷어낸다. */
@@ -328,24 +458,50 @@ function shapeData(raw: Record<string, unknown>): DbData {
  * `.bak`까지 못 읽을 때만 던진다. 그때 호출자가 원본을 옆으로 치우고 세션을
  * 읽기 전용으로 내린다.
  */
-function load(): DbData {
+interface LoadResult {
+  data: DbData
+  /** 어디서 읽었는가. `backup`이면 primary는 믿을 수 없다. */
+  source: 'primary' | 'backup' | 'empty'
+  /** primary가 자리에 있는데 못 읽었는가 — 격리 대상이다. */
+  primaryCorrupt: boolean
+}
+
+function load(): LoadResult {
   const primary = readDataFile(dbPath)
-  if (primary.ok) return shapeData(primary.value)
+  if (primary.ok) return { data: shapeData(primary.value), source: 'primary', primaryCorrupt: false }
 
   const backupPath = `${dbPath}.bak`
   const backup = readDataFile(backupPath)
+  const primaryCorrupt = primary.reason === 'corrupt'
   if (backup.ok) {
-    if (primary.reason === 'corrupt') {
+    if (primaryCorrupt) {
       console.error(`[db] ${dbPath}를 읽지 못해 ${backupPath}에서 복구했다`, primary.error)
     }
-    return shapeData(backup.value)
+    // **출처를 들려 보낸다.** 호출자가 손상된 primary를 격리하고 `.bak`을 보호해야
+    // 하는데, 그러려면 "복구했다"는 사실이 반환값에 있어야 한다. 예전에는 없어서
+    // 복구 직후 첫 저장이 손상본을 `.bak` 위로 회전시켰다 — 검증이 실측했다.
+    return { data: shapeData(backup.value), source: 'backup', primaryCorrupt }
   }
 
   // 대상도 백업도 **없는** 것은 새 설치다 — 실패가 아니다.
-  if (primary.reason === 'missing' && backup.reason === 'missing') return emptyData()
+  if (primary.reason === 'missing' && backup.reason === 'missing') {
+    return { data: emptyData(), source: 'empty', primaryCorrupt: false }
+  }
   // 둘 중 하나는 깨진 것이다. 대상 쪽 이유를 우선한다 — 사용자가 잃은 것이 그쪽이다.
   if (primary.reason === 'corrupt') throw primary.error
   throw backup.reason === 'corrupt' ? backup.error : new Error(`${dbPath}를 읽을 수 없다`)
+}
+
+/** 못 읽은 파일을 타임스탬프가 붙은 이름으로 치워 둔다. 치운 경로, 실패하면 null. */
+function quarantine(file: string): string | null {
+  const aside = `${file}.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}`
+  try {
+    renameSync(file, aside)
+    return aside
+  } catch (error) {
+    console.error(`[db] ${file} 격리 실패`, error)
+    return null
+  }
 }
 
 type ReadResult =
@@ -410,10 +566,25 @@ export function initDatabase(): void {
   // 앞선 실행의 committedRevision을 물려받으면 첫 저장이 낡은 것으로 오해받는다.
   revision = 0
   committedRevision = 0
+  lastSaveError = null
+  retryStreak = 0
+  gcAfterRevision = 0
+  primaryTrusted = true
   sweepTempFiles()
   try {
-    data = load()
+    const loaded = load()
+    data = loaded.data
     dbReadFailed = false
+    if (loaded.source === 'backup') {
+      // **손상본을 자리에서 치운다.** 그러지 않으면 곧 이어지는 첫 저장이
+      // `rotateBackup`으로 그것을 `.bak` 위에 밀어, 방금 우리를 구해 준 정상본이
+      // 손상본으로 덮인다(검증이 실측). 치우면 `rotateBackup`이 밀 것을 찾지
+      // 못해 `.bak`이 그대로 살아남고, 새 primary가 커밋된 뒤부터 정상 회전이다.
+      if (loaded.primaryCorrupt) quarantine(dbPath)
+      // 격리가 실패했을 때를 위한 두 번째 겹. 우리 손으로 쓴 primary가
+      // 자리에 앉을 때까지 회전을 막는다.
+      primaryTrusted = false
+    }
   } catch (error) {
     // **원본을 먼저 옆으로 치운다.** 그래야 사용자에게 "덮어쓰지 않았다"고 말할 수
     // 있다 — 다이얼로그를 읽는 동안 백업하라고 부탁하는 것은 약속이 아니다.
@@ -432,13 +603,14 @@ export function initDatabase(): void {
   // 기존 데이터 마이그레이션
   data.tasks.forEach((t) => {
     if (t.deleted_at === undefined) t.deleted_at = null
-    if (t.deleted_with === undefined) {
-      // 이 컬럼이 생기기 전에 버려진 행. 부모와 **같은 시각**에 내려갔으면 그때는
-      // 캐스케이드였다고 본다 — 시계 근사이지만 마이그레이션에서 한 번만 쓰이고,
-      // 틀려도 "부모 복원이 하위작업을 안 데려온다"는 예전 동작으로 떨어질 뿐이다.
-      const parent = t.parent_id ? data.tasks.find((p) => p.id === t.parent_id) : undefined
-      t.deleted_with = t.deleted_at && parent?.deleted_at === t.deleted_at ? t.parent_id : null
-    }
+    // 이 컬럼이 생기기 전에 버려진 행은 **모호하다.** 한때 "부모와 같은 시각에
+    // 내려갔으면 캐스케이드"로 추정했는데, `toISOString()`이 밀리초까지라 따로
+    // 지운 부모와 자식이 같은 값을 갖는 경우가 실제로 있다(검증이 legacy 파일로
+    // 재현). 그러면 사용자가 따로 버린 행이 부모 복원에 **되살아난다** —
+    // 추정이 틀렸을 때의 결과가 "예전 동작"이 아니라 부활이었다.
+    // 확실한 조작 id가 없으므로 null로 둔다: 잃는 것은 옛 휴지통 항목의 편의뿐이고,
+    // 이 컬럼이 붙은 뒤의 삭제부터는 정확하다.
+    if (t.deleted_with === undefined) t.deleted_with = null
     if (t.due_time === undefined) t.due_time = null
     if (t.reminder_at === undefined) t.reminder_at = null
     if (t.attachments === undefined) t.attachments = '[]'
@@ -707,15 +879,18 @@ export function permanentDeleteTask(id: string): void {
   assertWritable()
   data.tasks = data.tasks.filter((t) => t.id !== id && t.parent_id !== id)
   save()
-  // 행이 실제로 사라지는 두 경로 중 하나다 — 첨부를 여기서 걷지 않으면
-  // 아무도 참조하지 않는 사본이 폴더에 영원히 쌓인다.
-  gcAttachments()
+  // 행이 실제로 사라지는 두 경로 중 하나다 — 첨부를 걷지 않으면 아무도 참조하지
+  // 않는 사본이 폴더에 영원히 쌓인다. 다만 **지금 걷지는 않는다**: 삭제가 아직
+  // 디스크에 없다(300ms 디바운스). 그 창에서 종료되면 디스크의 할일은 첨부를
+  // 참조하는데 파일은 사라진 상태가 되고, 다음 부팅에서 "첨부가 있다는데 열리지
+  // 않는" 할일이 남는다. 삭제의 내구성이 확보된 뒤에야 그 참조가 진짜로 없다.
+  scheduleAttachmentGc()
 }
 export function emptyTrash(): void {
   assertWritable()
   data.tasks = data.tasks.filter((t) => !t.deleted_at)
   save()
-  gcAttachments()
+  scheduleAttachmentGc()
 }
 export function reorderTasks(orderedIds: string[]): void {
   assertWritable()
@@ -731,6 +906,11 @@ export function reorderTasks(orderedIds: string[]): void {
 }
 export function batchUpdateTasks(ids: string[], updates: Record<string, unknown>): void {
   assertWritable()
+  // 이 배치 안에 부모도 함께 들어 있는 하위작업은 **한 조작으로 함께 내려간 것**이다.
+  // 그 사실을 `deleted_with`에 적어야 부모 하나만 골라 복원했을 때(휴지통 화면)
+  // 하위작업이 따라 올라온다. 예전에는 전부 null이라 일괄 삭제한 부모를 되살리면
+  // main은 부모만 올리는데 렌더러는 하위작업까지 올려 둘이 갈렸다.
+  const batch = new Set(ids)
   for (const id of ids) {
     const task = data.tasks.find((t) => t.id === id)
     if (!task) continue
@@ -750,7 +930,8 @@ export function batchUpdateTasks(ids: string[], updates: Record<string, unknown>
         task.deleted_with = null
       } else if (!task.deleted_at) {
         task.deleted_at = new Date().toISOString()
-        task.deleted_with = null
+        const parentId = task.parent_id
+        task.deleted_with = typeof parentId === 'string' && batch.has(parentId) ? parentId : null
       }
     }
   }
@@ -955,7 +1136,16 @@ export function copyAttachment(sourcePath: string, destName: string): string {
   if (existing && !isInsideAttachments(destPath)) {
     throw new Error('Attachment destination escapes the attachments directory')
   }
-  copyFileSync(sourcePath, destPath)
+  // **`O_NOFOLLOW`로 연다.** 위 `lstat`과 아래 쓰기는 별개의 syscall이라 그 사이에
+  // 심링크가 놓이면 검사를 통과한 뒤 링크를 따라간다(TOCTOU). 커널이 열기 시점에
+  // 같은 판정을 하게 만들면 그 창이 사라진다 — 검사는 좋은 오류 메시지를 위해 남긴다.
+  const payload = readFileSync(sourcePath)
+  const fd = openSync(destPath, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0o600)
+  try {
+    writeFileSync(fd, payload)
+  } finally {
+    closeSync(fd)
+  }
   return destPath
 }
 
@@ -980,8 +1170,58 @@ function lstatOrNull(target: string): ReturnType<typeof lstatSync> | null {
  * 소프트 삭제된 행을 그대로 들고 있으므로 그것을 통째로 넘기면 된다.
  */
 export function unreferencedAttachments(fileNames: string[], taskRows: Record<string, unknown>[]): string[] {
-  const blob = taskRows.map((t) => String(t.attachments ?? '')).join(' ')
-  return fileNames.filter((name) => name !== '' && !blob.includes(name))
+  const referenced = new Set<string>()
+  /** 읽지 못한 행의 원문. 여기 이름이 **나타나기만 해도** 참조로 친다. */
+  const unparsed: string[] = []
+
+  for (const row of taskRows) {
+    const raw = row.attachments
+    if (raw === undefined || raw === null || raw === '') continue
+    const text = String(raw)
+    let entries: unknown
+    try {
+      entries = JSON.parse(text)
+    } catch {
+      unparsed.push(text)
+      continue
+    }
+    if (!Array.isArray(entries)) {
+      unparsed.push(text)
+      continue
+    }
+    for (const entry of entries) {
+      if (typeof entry !== 'string') {
+        unparsed.push(text)
+        continue
+      }
+      for (const candidate of attachmentNameCandidates(entry)) referenced.add(candidate)
+    }
+  }
+
+  return fileNames.filter(
+    (name) => name !== '' && !referenced.has(name) && !unparsed.some((text) => text.includes(name))
+  )
+}
+
+/**
+ * 한 참조 문자열이 가리킬 수 있는 파일 이름들.
+ *
+ * 인코딩이 `이름|경로`인데 파일명에 `|`가 들어갈 수 있어 어느 조각이 경로인지
+ * 확실하지 않다. 그래서 **가능한 조각을 전부** 이름으로 환산해 둔다.
+ *
+ * 예전에는 컬럼 원문에 파일 이름이 부분 문자열로 나타나는지만 봤는데, 그러면
+ * 참조가 `long-a.txt` 하나뿐일 때 고아인 `a.txt`도 살아남았다(검증이 실측).
+ * 이제는 **이름 단위로 정확히** 맞춘다 — 못 읽은 행에 대해서만 옛 부분 문자열
+ * 규칙으로 떨어진다. 그쪽은 여전히 지우지 않는 쪽으로 기운다.
+ */
+function attachmentNameCandidates(entry: string): string[] {
+  const pieces = new Set<string>([entry])
+  const first = entry.indexOf('|')
+  if (first >= 0) pieces.add(entry.slice(first + 1))
+  const last = entry.lastIndexOf('|')
+  if (last >= 0) pieces.add(entry.slice(last + 1))
+  // 경로 구분자는 양쪽 플랫폼 것을 다 본다 — 백업이 기기를 건너온다.
+  return [...pieces].map((piece) => piece.split(/[\\/]/).pop() || piece)
 }
 
 /**
@@ -1179,13 +1419,20 @@ export function parseArchive(raw: unknown): BackupArchive {
     // 그 필드가 조용히 사라진 채 "복원됐다"고 말하게 된다.
     throw new Error(`지원하지 않는 백업 버전입니다 (${String(o.schemaVersion)}).`)
   }
-  if (typeof o.data !== 'object' || o.data === null || Array.isArray(o.data)) {
-    throw new Error('백업에 데이터가 없습니다.')
-  }
-  const shaped = shapeData(o.data as Record<string, unknown>)
 
+  const data = strictData(o.data)
+
+  if (!Array.isArray(o.chat)) throw new Error('백업의 대화 기록이 손상됐습니다.')
+  for (const message of o.chat) {
+    if (typeof message !== 'object' || message === null || Array.isArray(message)) {
+      throw new Error('백업의 대화 기록이 손상됐습니다.')
+    }
+  }
+
+  if (!Array.isArray(o.attachments)) throw new Error('백업의 첨부 목록이 손상됐습니다.')
   const attachments: BackupAttachment[] = []
-  for (const entry of Array.isArray(o.attachments) ? o.attachments : []) {
+  const seen = new Set<string>()
+  for (const entry of o.attachments) {
     if (typeof entry !== 'object' || entry === null) throw new Error('백업의 첨부 항목이 손상됐습니다.')
     const a = entry as Record<string, unknown>
     if (typeof a.name !== 'string' || typeof a.data !== 'string') {
@@ -1195,6 +1442,11 @@ export function parseArchive(raw: unknown): BackupArchive {
     if (a.name !== path.basename(a.name) || a.name === '' || a.name === '.' || a.name === '..') {
       throw new Error(`백업의 첨부 이름이 올바르지 않습니다: ${a.name}`)
     }
+    if (seen.has(a.name)) throw new Error(`백업에 같은 첨부가 두 번 있습니다: ${a.name}`)
+    seen.add(a.name)
+    // **base64를 지금 확인한다.** `Buffer.from`은 잘못된 글자를 조용히 버리므로,
+    // 쓰기 시점에 확인하면 "복원 성공"이라 답하면서 내용이 잘린 파일이 남는다.
+    if (!isBase64(a.data)) throw new Error(`백업의 첨부 내용이 손상됐습니다: ${a.name}`)
     attachments.push({ name: a.name, data: a.data })
   }
 
@@ -1204,10 +1456,68 @@ export function parseArchive(raw: unknown): BackupArchive {
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : '',
     appVersion: typeof o.appVersion === 'string' ? o.appVersion : '',
     attachmentsDir: typeof o.attachmentsDir === 'string' ? o.attachmentsDir : '',
-    data: shaped,
-    chat: Array.isArray(o.chat) ? (o.chat as Record<string, unknown>[]) : [],
+    data,
+    chat: o.chat as Record<string, unknown>[],
     attachments
   }
+}
+
+/** base64 문자만 있고 길이가 4의 배수인가. `Buffer.from`이 조용히 버리는 것을 먼저 잡는다. */
+function isBase64(value: string): boolean {
+  if (value.length % 4 !== 0) return false
+  return /^[A-Za-z0-9+/]*={0,2}$/.test(value)
+}
+
+/** 컬렉션 이름과 그 안의 행이 반드시 가져야 할 키. */
+type CollectionKey = Exclude<keyof DbData, 'score'>
+const REQUIRED_COLLECTIONS: { key: CollectionKey; requires: string[] }[] = [
+  { key: 'lists', requires: ['id'] },
+  { key: 'tasks', requires: ['id'] },
+  { key: 'habits', requires: ['id'] },
+  { key: 'habitLogs', requires: ['id'] },
+  { key: 'folders', requires: ['id'] },
+  { key: 'pomodoroSessions', requires: ['id'] }
+]
+
+/**
+ * 복원할 데이터를 **엄격하게** 확인한다. `shapeData`와 갈라 두는 것이 요점이다.
+ *
+ * 디스크에서 읽을 때는 관대한 것이 맞다 — 빠진 컬렉션을 빈 배열로 채우면 앱이
+ * 스스로 회복한다. 그런데 그 관대함을 복원에 그대로 쓰면 `{ "data": {} }` 한 줄이
+ * **유효한 백업**이 되고, 복원하면 사용자의 모든 것이 빈 배열로 교체된 뒤 디스크에
+ * 커밋된다(검증이 실측). 복구하려고 만든 기능이 데이터를 지우는 도구가 되는 자리다.
+ *
+ * 그래서 여기서는 채우지 않는다. 없으면 그 파일은 백업이 아니다.
+ */
+function strictData(raw: unknown): DbData {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('백업에 데이터가 없습니다.')
+  }
+  const o = raw as Record<string, unknown>
+  const out = emptyData()
+
+  for (const { key, requires } of REQUIRED_COLLECTIONS) {
+    const value = o[key]
+    if (!Array.isArray(value)) throw new Error(`백업에 ${key}가 없습니다.`)
+    for (const row of value) {
+      if (typeof row !== 'object' || row === null || Array.isArray(row)) {
+        throw new Error(`백업의 ${key} 행이 손상됐습니다.`)
+      }
+      for (const field of requires) {
+        const cell = (row as Record<string, unknown>)[field]
+        if (typeof cell !== 'string' || cell === '') {
+          throw new Error(`백업의 ${key} 행에 ${field}가 없습니다.`)
+        }
+      }
+    }
+    out[key] = value as Record<string, unknown>[]
+  }
+
+  const score = normalizeScore(o.score)
+  if (!score) throw new Error('백업에 점수가 없습니다.')
+  out.score = score
+
+  return out
 }
 
 /**
@@ -1240,28 +1550,69 @@ export function rebaseAttachmentPaths(
  */
 export function createBackupArchive(): string {
   assertWritable()
+
+  // **하나라도 못 담으면 전체를 실패시킨다.** 예전에는 첨부 읽기 실패를 로그로
+  // 넘기고 부분 아카이브를 정상 반환했다. 사용자는 "백업했다"는 답을 받고 원본을
+  // 지울 수 있는데, 그 파일에는 첨부가 빠져 있다 — 백업의 유일한 약속을 어기는
+  // 실패 모드이고, 정직하게 실패하는 것보다 나쁘다.
   const attachments: BackupAttachment[] = []
+  let names: string[]
   try {
-    for (const name of readdirSync(attachmentsDir)) {
-      const full = path.join(attachmentsDir, name)
-      // 심링크는 담지 않는다 — 복원하는 기기에서 그 대상이 있을 리 없고,
-      // 따라가면 첨부 폴더 밖의 파일을 백업에 실어 나르게 된다.
-      if (lstatOrNull(full)?.isFile() !== true) continue
-      attachments.push({ name, data: readFileSync(full).toString('base64') })
-    }
+    names = readdirSync(attachmentsDir)
   } catch (error) {
-    console.error('[db] 첨부를 백업에 담지 못했다', error)
+    throw new Error(`첨부 폴더를 읽지 못해 백업을 만들 수 없습니다: ${describe(error)}`)
   }
+  for (const name of names) {
+    const full = path.join(attachmentsDir, name)
+    const stat = lstatOrNull(full)
+    // 심링크·하위 폴더는 담지 않는다 — 복원하는 기기에서 그 대상이 있을 리 없고,
+    // 따라가면 첨부 폴더 밖의 파일을 백업에 실어 나르게 된다. 앱이 만들지 않는
+    // 모양이므로 건너뛰는 것이지, 읽기 실패를 넘기는 것이 아니다.
+    if (!stat?.isFile()) continue
+    try {
+      attachments.push({ name, data: readFileSync(full).toString('base64') })
+    } catch (error) {
+      throw new Error(`첨부 ${name}을(를) 읽지 못해 백업을 만들 수 없습니다: ${describe(error)}`)
+    }
+  }
+
   return JSON.stringify(
     buildArchive({
       data,
-      chat: getChatHistory(),
+      chat: readChatForBackup(),
       attachments,
       attachmentsDir,
       appVersion: appVersion(),
       createdAt: new Date().toISOString()
     })
   )
+}
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * 백업에 담을 대화 기록. **읽기 실패를 빈 기록으로 바꾸지 않는다.**
+ *
+ * `getChatHistory()`는 화면용이라 못 읽으면 `[]`로 떨어지는 것이 맞다 — 대화가
+ * 안 보이는 것과 앱이 안 뜨는 것 중 앞엣것이 낫다. 그런데 백업에서는 같은 관대함이
+ * `chat: []`인 "성공" 아카이브를 만든다(검증이 손상된 `ai-chat.json`으로 실측).
+ * 사용자는 대화까지 담겼다고 믿고 원본을 지운다.
+ */
+function readChatForBackup(): Record<string, unknown>[] {
+  if (!chatHistoryPath || !existsSync(chatHistoryPath)) return []
+  let raw: unknown
+  try {
+    raw = JSON.parse(readFileSync(chatHistoryPath, 'utf-8'))
+  } catch (error) {
+    throw new Error(`대화 기록을 읽지 못해 백업을 만들 수 없습니다: ${describe(error)}`)
+  }
+  const messages = (raw as { messages?: unknown })?.messages
+  if (!Array.isArray(messages)) {
+    throw new Error('대화 기록 파일의 모양이 올바르지 않아 백업을 만들 수 없습니다.')
+  }
+  return messages as Record<string, unknown>[]
 }
 
 function appVersion(): string {
@@ -1278,17 +1629,36 @@ export interface RestoreSummary {
   attachments: number
 }
 
+/** 복원 중에만 존재하는 스테이징 폴더. 승격 전에는 아무것도 제자리에 없다. */
+function stagingDir(): string {
+  return `${attachmentsDir}.restoring`
+}
+
+function removeTree(target: string): void {
+  try {
+    rmSync(target, { recursive: true, force: true })
+  } catch (error) {
+    console.error(`[db] ${target} 정리 실패`, error)
+  }
+}
+
 /**
  * 아카이브로 현재 상태를 통째로 대체한다.
  *
  * **읽기 실패 세션에서도 돈다.** 데이터 파일이 깨진 그 순간이 사용자가 백업을
  * 꺼내는 순간이라, 여기에 `assertWritable()`을 걸면 복구 경로가 고장의 대상에
- * 묶인다. 성공하면 읽기 전용 상태를 푼다 — 이제 디스크에 있는 것은 우리가 방금
- * 쓴 온전한 파일이다.
+ * 묶인다. 성공하면 읽기 전용 상태를 푼다.
  *
- * 순서가 규칙이다: **먼저 전부 검증하고**(parseArchive), 첨부를 쓰고, 마지막에
- * 메모리를 바꾼 뒤 동기로 커밋한다. 사용자가 결과를 기다리고 있으므로 디바운스에
- * 맡기지 않는다.
+ * **트랜잭션이어야 한다.** 예전에는 첨부를 현재 폴더에 하나씩 덮어쓰다가 중간에
+ * 실패하면 DB는 그대로인데 앞선 첨부만 바뀐 상태가 남았고, DB 플러시가 실패해도
+ * `flushSave()`가 오류를 삼켜 "복원 성공"을 답한 뒤 GC까지 돌았다. 그래서 순서를
+ * 셋으로 나눈다:
+ *
+ *   1. **검증** — `parseArchive`가 쓰기 전에 전부 확인한다.
+ *   2. **스테이징** — 첨부는 옆 폴더에, DB는 임시 파일에 완성하고 fsync한다.
+ *      여기까지 어디서 실패해도 제자리의 것은 하나도 바뀌지 않았다.
+ *   3. **승격** — 준비된 것을 rename으로 갈아끼운다. 각 rename은 원자적이고,
+ *      사이의 창은 마이크로초 단위이며, 실패하면 옛 첨부 폴더를 되돌린다.
  */
 export function restoreBackupArchive(text: string): RestoreSummary {
   let parsed: unknown
@@ -1299,30 +1669,90 @@ export function restoreBackupArchive(text: string): RestoreSummary {
   }
   const archive = parseArchive(parsed)
 
-  if (!existsSync(attachmentsDir)) mkdirSync(attachmentsDir, { recursive: true })
-  let written = 0
-  for (const attachment of archive.attachments) {
-    const target = path.join(attachmentsDir, attachment.name)
-    // 그 자리에 심링크가 놓여 있으면 `writeFileSync`가 따라가 폴더 밖에 쓴다.
-    // `copyAttachment`와 같은 판정이다.
-    if (lstatOrNull(target)?.isSymbolicLink()) unlinkSync(target)
-    writeFileSync(target, Buffer.from(attachment.data, 'base64'))
-    written++
-  }
-
-  data = {
+  // ── 2. 스테이징 ───────────────────────────────────────────────────────────
+  const staging = stagingDir()
+  removeTree(staging)
+  const nextData: DbData = {
     ...archive.data,
     tasks: rebaseAttachmentPaths(archive.data.tasks, archive.attachmentsDir, attachmentsDir)
   }
-  dbReadFailed = false
-  saveChatHistory(archive.chat)
+  const dbTemp = `${dbPath}.restore-tmp`
+  try {
+    mkdirSync(staging, { recursive: true })
+    for (const attachment of archive.attachments) {
+      // 이름은 `parseArchive`가 이미 basename으로 못 박았다.
+      writeFileSync(path.join(staging, attachment.name), Buffer.from(attachment.data, 'base64'))
+    }
+    writeFileWithSync(dbTemp, JSON.stringify(nextData))
+  } catch (error) {
+    removeTree(staging)
+    discardTemp(dbTemp)
+    throw new Error(`백업을 준비하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
+  }
 
-  revision += 1
-  flushSave()
-  gcAttachments()
-  return { tasks: data.tasks.length, lists: data.lists.length, attachments: written }
+  // ── 3. 승격 ───────────────────────────────────────────────────────────────
+  const displaced = `${attachmentsDir}.replaced-${Date.now()}`
+  let movedAside = false
+  try {
+    if (existsSync(attachmentsDir)) {
+      renameSync(attachmentsDir, displaced)
+      movedAside = true
+    }
+    renameSync(staging, attachmentsDir)
+    // DB를 마지막에 올린다. 여기가 "복원됐다"가 참이 되는 순간이다.
+    revision += 1
+    commitTemp(dbPath, dbTemp, revision)
+  } catch (error) {
+    // 첨부만 바뀌고 DB는 안 바뀐 상태로 두지 않는다.
+    if (movedAside) {
+      removeTree(attachmentsDir)
+      try {
+        renameSync(displaced, attachmentsDir)
+      } catch (undoError) {
+        console.error('[db] 복원 실패 후 첨부 폴더를 되돌리지 못했다', undoError)
+      }
+    }
+    removeTree(staging)
+    discardTemp(dbTemp)
+    throw new Error(`백업을 복원하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  data = nextData
+  dbReadFailed = false
+  primaryTrusted = true
+  noteSaveSucceeded()
+  removeTree(displaced)
+
+  // 대화는 별도 파일이라 위 승격에 실려 오지 않는다. 실패해도 이미 복원된 DB를
+  // 되돌리지는 않지만, **조용히 넘기지도 않는다** — 사용자는 대화가 함께 돌아올
+  // 것이라고 안내받았다.
+  try {
+    saveChatHistory(archive.chat)
+  } catch (error) {
+    throw new Error(`할일은 복원했지만 대화 기록을 쓰지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  return { tasks: data.tasks.length, lists: data.lists.length, attachments: archive.attachments.length }
 }
 
-export function closeDatabase(): void {
-  flushSave()
+/** 내용을 쓰고 fsync까지 마친다. 실패는 던진다. */
+function writeFileWithSync(target: string, contents: string): void {
+  const fd = openSync(target, 'w')
+  try {
+    writeFileSync(fd, contents, 'utf-8')
+    fsyncSync(fd)
+  } finally {
+    closeSync(fd)
+  }
+}
+
+/**
+ * 종료 플러시. **디스크에 확정됐으면 true.**
+ *
+ * 판정을 돌려주는 것이 요점이다 — 마지막 편집을 잃은 종료와 정상 종료를 호출처가
+ * 구별할 수 있어야 한다. 무엇을 할지(종료를 막을지, 사용자에게 알릴지)는 셸이
+ * 정한다(`main/index.ts` — 이 워크트리 밖).
+ */
+export function closeDatabase(): boolean {
+  return flushSave()
 }

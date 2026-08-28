@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -142,11 +142,51 @@ describe('복원', () => {
   // 복원은 사용자의 현재 데이터를 통째로 갈아치운다. 절반만 맞는 파일을 받아
   // 절반만 복원하면 원래 있던 것도 잃는다.
   describe('낯선 파일은 쓰기 전에 거절한다', () => {
+    const wrapped = (data: unknown, extra: Record<string, unknown> = {}): string =>
+      JSON.stringify({
+        format: 'greenday-backup',
+        schemaVersion: 1,
+        data,
+        chat: [],
+        attachments: [],
+        ...extra
+      })
+    const full = {
+      lists: [],
+      tasks: [],
+      habits: [],
+      habitLogs: [],
+      folders: [],
+      pomodoroSessions: [],
+      score: { total: 0, events: [], taskNet: {} }
+    }
+
     const cases: [string, string][] = [
       ['JSON이 아니다', 'not json at all'],
       ['우리 형식이 아니다', JSON.stringify({ tasks: [] })],
       ['모르는 스키마 버전', JSON.stringify({ format: 'greenday-backup', schemaVersion: 99, data: {} })],
-      ['data가 없다', JSON.stringify({ format: 'greenday-backup', schemaVersion: 1 })]
+      ['data가 없다', JSON.stringify({ format: 'greenday-backup', schemaVersion: 1 })],
+      // **가장 위험한 것.** 예전에는 `data`가 객체이기만 하면 통과해서, 이 한 줄이
+      // 유효한 백업이 됐다. 복원하면 사용자의 모든 것이 빈 배열로 교체된 뒤
+      // 디스크에 커밋된다 — 복구하려고 만든 기능이 데이터를 지우는 도구가 된다.
+      ['data가 빈 객체다', wrapped({})],
+      ['컬렉션이 하나 빠졌다', wrapped({ ...full, habits: undefined })],
+      ['컬렉션이 배열이 아니다', wrapped({ ...full, tasks: {} })],
+      ['행이 객체가 아니다', wrapped({ ...full, tasks: ['그냥 문자열'] })],
+      ['행에 id가 없다', wrapped({ ...full, tasks: [{ title: '이름만 있다' }] })],
+      ['score가 없다', wrapped({ ...full, score: undefined })],
+      ['chat이 배열이 아니다', wrapped(full, { chat: 'nope' })],
+      ['attachments가 배열이 아니다', wrapped(full, { attachments: 'nope' })],
+      ['첨부 내용이 base64가 아니다', wrapped(full, { attachments: [{ name: 'a.txt', data: '!!! 아님' }] })],
+      [
+        '같은 첨부가 두 번 있다',
+        wrapped(full, {
+          attachments: [
+            { name: 'a.txt', data: 'eA==' },
+            { name: 'a.txt', data: 'eQ==' }
+          ]
+        })
+      ]
     ]
     for (const [label, payload] of cases) {
       it(label, () => {
@@ -204,5 +244,129 @@ describe('rebaseAttachmentPaths', () => {
     // 옛 경로를 모르면(빈 문자열) 갈아끼울 근거가 없다 — 손대지 않고 그대로 돌려준다.
     expect(db.rebaseAttachmentPaths(tasks, '', '/new/att')).toBe(tasks)
     expect(db.rebaseAttachmentPaths(tasks, '/same', '/same')).toBe(tasks)
+  })
+})
+
+/**
+ * 복원은 트랜잭션이어야 한다.
+ *
+ * 예전에는 첨부를 현재 폴더에 하나씩 덮어쓰다가 중간에 실패하면 DB는 그대로인데
+ * 앞선 첨부만 바뀐 상태가 남았고, DB 플러시가 실패해도 오류를 삼켜 "복원 성공"을
+ * 답한 뒤 GC까지 돌았다.
+ */
+describe('복원의 원자성', () => {
+  it('스테이징이 실패하면 제자리의 것을 하나도 건드리지 않는다', () => {
+    seed() // 첨부 내용 = 'PDF-BYTES'
+    const archive = db.createBackupArchive()
+
+    // 백업을 뜬 **뒤에** 첨부 내용과 목록을 바꾼다. 복원이 성공했다면 둘 다
+    // 백업 시점으로 돌아갔을 상태다 — 실패했을 때 그대로여야 한다는 뜻이기도 하다.
+    writeFileSync(join(attachmentsDir, 'uuid-report.pdf'), 'CHANGED-AFTER-BACKUP', 'utf-8')
+    const extra = join(outside, 'extra.txt')
+    writeFileSync(extra, 'EXTRA', 'utf-8')
+    db.copyAttachment(extra, 'uuid-extra.txt')
+
+    // DB 커밋이 쓰려는 임시 경로를 디렉터리로 막는다.
+    mkdirSync(join(root, 'ticktick-data.json.restore-tmp'), { recursive: true })
+
+    expect(() => db.restoreBackupArchive(archive)).toThrow()
+
+    // **내용까지** 손대기 전 그대로여야 한다. 목록만 보면 같은 이름을 덮어쓴
+    // 비트랜잭션 복원을 구별하지 못한다.
+    expect(
+      readFileSync(join(attachmentsDir, 'uuid-report.pdf'), 'utf-8'),
+      '첨부만 백업 시점으로 되돌아가고 DB는 안 바뀐 상태가 남았다'
+    ).toBe('CHANGED-AFTER-BACKUP')
+    expect(readdirSync(attachmentsDir).sort()).toEqual(['uuid-extra.txt', 'uuid-report.pdf'])
+    expect((db.getTasks() as { id: string }[]).map((t) => t.id)).toEqual(['t1'])
+  })
+
+  /**
+   * 복원은 **합치기가 아니라 교체다.**
+   *
+   * 백업에 없는 첨부가 살아남으면 그건 아카이브를 현재 폴더 위에 덧씌운 것이고,
+   * 그때는 중간에 실패했을 때 "첨부만 바뀌고 DB는 안 바뀐" 상태가 남는다.
+   * 폴더를 통째로 갈아끼우면 그 상태가 존재할 수 없다 — 이 단언이 그 구조를 못 박는다.
+   */
+  it('백업에 없던 첨부는 복원 뒤 남지 않는다', () => {
+    seed()
+    const archive = db.createBackupArchive()
+
+    const extra = join(outside, 'extra.txt')
+    writeFileSync(extra, 'EXTRA', 'utf-8')
+    db.copyAttachment(extra, 'uuid-extra.txt')
+    expect(readdirSync(attachmentsDir).sort()).toEqual(['uuid-extra.txt', 'uuid-report.pdf'])
+
+    db.restoreBackupArchive(archive)
+
+    expect(readdirSync(attachmentsDir).sort(), '아카이브를 현재 폴더 위에 덧씌웠다').toEqual([
+      'uuid-report.pdf'
+    ])
+    expect(readFileSync(join(attachmentsDir, 'uuid-report.pdf'), 'utf-8')).toBe('PDF-BYTES')
+  })
+
+  it('실패한 복원은 스테이징 폴더를 남기지 않는다', () => {
+    seed()
+    const archive = db.createBackupArchive()
+    mkdirSync(join(root, 'ticktick-data.json.restore-tmp'), { recursive: true })
+
+    expect(() => db.restoreBackupArchive(archive)).toThrow()
+    expect(existsSync(`${attachmentsDir}.restoring`)).toBe(false)
+  })
+
+  it('성공한 복원도 스테이징·대체 폴더를 남기지 않는다', () => {
+    seed()
+    const archive = db.createBackupArchive()
+    db.restoreBackupArchive(archive)
+
+    const leftovers = readdirSync(root).filter((f) => f.includes('.restoring') || f.includes('.replaced-'))
+    expect(leftovers).toEqual([])
+  })
+})
+
+/**
+ * 백업 생성은 **하나라도 못 담으면 실패한다.**
+ *
+ * 부분 아카이브를 정상 반환하면 사용자는 "백업했다"는 답을 받고 원본을 지울 수
+ * 있는데 그 파일에는 첨부나 대화가 빠져 있다 — 백업의 유일한 약속을 어기는
+ * 실패 모드이고, 정직하게 실패하는 것보다 나쁘다.
+ */
+describe('백업 생성의 정직함', () => {
+  it('첨부를 못 읽으면 백업을 만들지 않는다', () => {
+    seed()
+    // 파일 자리를 읽을 수 없는 디렉터리로 바꾼다.
+    rmSync(join(attachmentsDir, 'uuid-report.pdf'))
+    mkdirSync(join(attachmentsDir, 'uuid-report.pdf', 'inner'), { recursive: true })
+    // 디렉터리는 애초에 첨부가 아니므로 건너뛴다 — 그건 실패가 아니다.
+    expect(() => db.createBackupArchive()).not.toThrow()
+
+    // 진짜 읽기 실패를 만든다: 권한을 없앤다.
+    rmSync(join(attachmentsDir, 'uuid-report.pdf'), { recursive: true })
+    writeFileSync(join(attachmentsDir, 'uuid-report.pdf'), 'X', 'utf-8')
+    chmodSync(join(attachmentsDir, 'uuid-report.pdf'), 0o000)
+    try {
+      expect(() => db.createBackupArchive()).toThrow(/첨부/)
+    } finally {
+      chmodSync(join(attachmentsDir, 'uuid-report.pdf'), 0o600)
+    }
+  })
+
+  // 검증이 손상된 `ai-chat.json`으로 실측했다: `chat: []`인 "성공" 백업이 만들어졌다.
+  it('대화 기록을 못 읽으면 백업을 만들지 않는다', () => {
+    seed()
+    writeFileSync(join(root, 'ai-chat.json'), '{망가진 JSON', 'utf-8')
+    expect(() => db.createBackupArchive()).toThrow(/대화/)
+  })
+
+  it('대화 기록의 모양이 다르면 백업을 만들지 않는다', () => {
+    seed()
+    writeFileSync(join(root, 'ai-chat.json'), JSON.stringify({ version: 1, messages: 'nope' }), 'utf-8')
+    expect(() => db.createBackupArchive()).toThrow(/대화/)
+  })
+
+  it('대화 파일이 아예 없는 것은 정상이다', () => {
+    seed()
+    rmSync(join(root, 'ai-chat.json'))
+    expect(() => db.createBackupArchive()).not.toThrow()
   })
 })

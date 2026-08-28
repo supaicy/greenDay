@@ -917,3 +917,115 @@ describe('점수 원장', () => {
     expect(useStore.getState().score.taskNet).toEqual({ a: 3, b: 2 })
   })
 })
+
+/**
+ * H8의 나머지 절반 — **최종 사용자에게 보이는 유령 편집.**
+ *
+ * 메인을 fail-closed로 만든 것만으로는 부족하다. 렌더러는 낙관적으로 먼저 바꾸고
+ * IPC 거절을 `persist()`에서 로그로 삼켰으므로, 화면에는 편집이 남고 재시작하면
+ * 사라진다. 검증이 `createFolder`로 실측했다: db_read_only로 거절됐는데 폴더가
+ * 화면에 남아 있었다.
+ *
+ * 메인 쪽 테스트는 메인 함수를 직접 부르므로 이 경로를 구조적으로 못 잡는다 —
+ * 여기가 그 자리다.
+ *
+ * 되돌리는 방법이 재적재인 이유: 읽기 전용 세션에서는 **아무것도** 쓸 수 없으므로
+ * 메인의 상태가 곧 디스크의 진실이고 이 세션 내내 변하지 않는다. 연산마다 역연산을
+ * 쓰지 않고도 정확한 롤백이 된다.
+ */
+describe('읽기 전용 세션의 유령 편집', () => {
+  const rejectWith = (message: string) => vi.fn().mockRejectedValue(new Error(message))
+
+  /** 메인이 들고 있는(=디스크의) 진실. 재적재는 여기서 온다. */
+  const mainState = {
+    getLists: vi.fn().mockResolvedValue([{ id: 'inbox', name: '기본함', color: '#fff', icon: 'inbox' }]),
+    getTasks: vi.fn().mockResolvedValue([]),
+    getTrashTasks: vi.fn().mockResolvedValue([]),
+    getHabits: vi.fn().mockResolvedValue([]),
+    getHabitLogs: vi.fn().mockResolvedValue([]),
+    getFolders: vi.fn().mockResolvedValue([]),
+    getPomodoroSessions: vi.fn().mockResolvedValue([]),
+    getScore: vi.fn().mockResolvedValue({ total: 0, events: [], taskNet: {} })
+  }
+
+  const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+
+  beforeEach(() => {
+    vi.stubGlobal('window', {
+      api: {
+        ...mainState,
+        createFolder: rejectWith('Error invoking remote method: Error: db_read_only'),
+        createTask: rejectWith('Error invoking remote method: Error: db_read_only'),
+        updateTask: rejectWith('Error invoking remote method: Error: db_read_only'),
+        addScoreEvent: vi.fn(),
+        addScoreEvents: vi.fn()
+      }
+    })
+    useStore.setState({ folders: [], tasks: [], lists: [], dbReadOnly: false })
+  })
+
+  it('거절된 폴더 생성이 화면에 남지 않는다', async () => {
+    // await하지 않고 낙관적 상태를 먼저 본다 — await하면 거절 처리가 그 사이에
+    // 끼어들어 "먼저 보였다"를 관찰할 수 없다.
+    const pending = useStore.getState().addFolder('유령 폴더')
+    expect(useStore.getState().folders, '전제: 낙관적으로 먼저 보인다').toHaveLength(1)
+
+    await pending
+    await flush()
+    await flush()
+
+    expect(useStore.getState().folders, '거절됐는데 폴더가 화면에 남았다').toEqual([])
+  })
+
+  it('거절된 할일 생성이 화면에 남지 않는다', async () => {
+    const pending = useStore.getState().addTask('유령 할일')
+    expect(useStore.getState().tasks, '전제: 낙관적으로 먼저 보인다').toHaveLength(1)
+
+    await pending
+    await flush()
+    await flush()
+
+    expect(useStore.getState().tasks).toEqual([])
+  })
+
+  it('읽기 전용이라는 사실을 상태에 세워 화면이 말할 수 있게 한다', async () => {
+    await useStore.getState().addFolder('유령 폴더')
+    await flush()
+    await flush()
+    expect(useStore.getState().dbReadOnly).toBe(true)
+  })
+
+  it('메인에서 다시 읽어온 것으로 대체한다', async () => {
+    await useStore.getState().addFolder('유령 폴더')
+    await flush()
+    await flush()
+    expect(useStore.getState().lists.map((l) => l.id)).toEqual(['inbox'])
+    expect(mainState.getTasks).toHaveBeenCalled()
+  })
+
+  // 거절은 무더기로 온다 — 일괄 조작 하나가 IPC를 여럿 쏘고 그 전부가 거절된다.
+  it('거절이 쏟아져도 재적재는 한 번만 돈다', async () => {
+    mainState.getTasks.mockClear()
+    await Promise.all([
+      useStore.getState().addFolder('a'),
+      useStore.getState().addFolder('b'),
+      useStore.getState().addFolder('c')
+    ])
+    await flush()
+    await flush()
+    expect(mainState.getTasks.mock.calls.length).toBe(1)
+  })
+
+  // 라이선스 거절은 다른 경로다 — 그쪽은 게이트를 띄우지 재적재하지 않는다.
+  it('라이선스 거절을 읽기 전용으로 오해하지 않는다', async () => {
+    vi.stubGlobal('window', {
+      api: { ...mainState, createFolder: rejectWith('Error: license_required') }
+    })
+    mainState.getTasks.mockClear()
+    await useStore.getState().addFolder('유료 폴더')
+    await flush()
+    await flush()
+    expect(useStore.getState().dbReadOnly).toBe(false)
+    expect(mainState.getTasks).not.toHaveBeenCalled()
+  })
+})

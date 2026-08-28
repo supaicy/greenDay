@@ -7,6 +7,9 @@ import { todayString, tomorrowString } from '../utils/date'
 import { pointsForTask, POINTS_PER_HABIT, POINTS_PER_POMODORO } from '../utils/score'
 import { refreshLicense } from '../licensing/useLicense'
 import { LICENSE_REQUIRED } from '../../../shared/license'
+// 메인이 읽기 전용 세션에서 던지는 이유. 문구의 단일 출처는 shared다 —
+// 여기 다시 적으면 메인에서 이름을 바꿨을 때 이 분기만 조용히 죽는다.
+import { DB_READ_ONLY } from '../../../shared/db-errors'
 import type {
   Task,
   TaskList,
@@ -61,6 +64,14 @@ interface Store {
   habitLogs: HabitLog[]
   pomodoroSessions: PomodoroSession[]
   score: ScoreSlice
+  /**
+   * 이 세션의 데이터 파일이 읽기 전용인가 (메인이 데이터 파일을 못 읽었다).
+   *
+   * 켜지면 **아무 편집도 저장되지 않는다.** 화면이 그 사실을 말해야 한다 —
+   * 아니면 사용자는 한 세션치를 편집하고 재시작 때 전부 잃는다.
+   * (배너를 그리는 것은 아직 없다. `Settings`/`App` 소유 워크트리의 일이다.)
+   */
+  dbReadOnly: boolean
 
   // UI
   selectedListId: string | SmartList
@@ -356,11 +367,43 @@ function persist(what: string, run: () => unknown): void {
  * 여기서 하는 일은 **상태를 다시 받아오는 것**뿐이다. 그러면 잠금 화면이 즉시
  * 뜨고 사용자가 왜 안 먹히는지 알게 된다. 낙관적 변경을 되돌리는 것은 연산마다
  * 역연산이 필요해 따로 할 일이다(TODOS 참고).
+ *
+ * **읽기 전용 거절은 지금 되돌린다.** 그쪽은 역연산이 필요 없다: 데이터 파일을
+ * 못 읽은 세션에서는 이번 것만이 아니라 **아무것도** 쓸 수 없으므로, 메인에서
+ * 통째로 다시 읽어오는 것이 정확한 롤백이다. 메인의 `data`는 이 세션 내내
+ * 변하지 않으므로 그 재동기화가 화면을 정확히 디스크 상태로 되돌린다.
+ * 이걸 안 하면 메인만 고쳐 놓고(H8) 사용자가 보는 유령 편집은 그대로 남는다 —
+ * 검증이 `createFolder`로 실측했다: db_read_only로 거절됐는데 폴더가 화면에 남았다.
  */
 function report(what: string, error: unknown): void {
   console.error(`[persist] ${what} 실패`, error)
-  if (String((error as { message?: unknown })?.message ?? error).includes(LICENSE_REQUIRED)) {
+  const message = String((error as { message?: unknown })?.message ?? error)
+  if (message.includes(LICENSE_REQUIRED)) {
     void refreshLicense()
+    return
+  }
+  if (message.includes(DB_READ_ONLY)) {
+    useStore.setState({ dbReadOnly: true })
+    void resyncFromMain()
+  }
+}
+
+/**
+ * 메인에서 다시 읽어와 낙관적 변경을 버린다. **한 번에 하나만 돈다.**
+ *
+ * 거절은 무더기로 온다 — 일괄 완료 하나가 IPC를 여럿 쏘고 그 전부가 거절된다.
+ * 매번 전체 재적재를 걸면 같은 일을 수십 번 한다.
+ */
+let resyncing = false
+async function resyncFromMain(): Promise<void> {
+  if (resyncing) return
+  resyncing = true
+  try {
+    await useStore.getState().loadData()
+  } catch (error) {
+    console.error('[persist] 재동기화 실패', error)
+  } finally {
+    resyncing = false
   }
 }
 
@@ -459,6 +502,7 @@ export const useStore = create<Store>((set, get) => ({
   habitLogs: [],
   pomodoroSessions: [],
   score: { total: 0, events: [], taskNet: {} },
+  dbReadOnly: false,
   selectedListId: 'today',
   selectedTaskId: null,
   viewType: 'tasks',

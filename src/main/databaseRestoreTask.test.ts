@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -88,5 +88,93 @@ describe('restoreTask는 deleteTask의 거울이다', () => {
     db.deleteTask('c1')
     db.restoreTask('c1')
     expect(activeIds().sort()).toEqual(['c1', 'c2', 'p'])
+  })
+})
+
+/**
+ * `deleted_with` 마이그레이션 — 이 컬럼이 생기기 전에 버려진 행.
+ *
+ * 한때 "부모와 같은 시각에 내려갔으면 캐스케이드"로 추정했다. 그런데
+ * `toISOString()`이 밀리초까지라 **따로 지운** 부모와 자식이 같은 값을 갖는
+ * 경우가 실제로 있고(검증이 legacy 파일로 재현), 그러면 사용자가 따로 버린 행이
+ * 부모 복원에 되살아난다 — 추정이 틀렸을 때의 결과가 "예전 동작"이 아니라 부활이었다.
+ */
+describe('deleted_with 마이그레이션', () => {
+  const legacyFile = (tasks: Record<string, unknown>[]): void => {
+    writeFileSync(
+      join(root, 'ticktick-data.json'),
+      JSON.stringify({
+        lists: [{ id: 'inbox', name: '기본함' }],
+        tasks,
+        habits: [],
+        habitLogs: [],
+        folders: [],
+        pomodoroSessions: [],
+        score: { total: 0, events: [] }
+      }),
+      'utf-8'
+    )
+  }
+
+  it('같은 밀리초에 따로 지워진 부모·자식을 묶지 않는다', () => {
+    const sameMs = '2026-08-28T00:00:00.000Z'
+    legacyFile([
+      { id: 'p', title: '부모', list_id: 'inbox', deleted_at: sameMs },
+      { id: 'c', title: '자식', list_id: 'inbox', parent_id: 'p', deleted_at: sameMs }
+    ])
+    db.initDatabase()
+
+    db.restoreTask('p')
+    expect(activeIds(), '따로 지운 자식이 부모 복원에 되살아났다').toEqual(['p'])
+    expect(trashIds()).toEqual(['c'])
+  })
+
+  it('마이그레이션은 모호한 행을 전부 null로 둔다', () => {
+    legacyFile([
+      { id: 'p', title: '부모', list_id: 'inbox', deleted_at: '2026-08-28T00:00:00.000Z' },
+      { id: 'c', title: '자식', list_id: 'inbox', parent_id: 'p', deleted_at: '2026-08-28T00:00:00.000Z' }
+    ])
+    db.initDatabase()
+    const rows = db.getTrashTasks() as Record<string, unknown>[]
+    expect(rows.every((r) => r.deleted_with === null)).toBe(true)
+  })
+
+  // 잃는 것은 옛 휴지통 항목의 편의뿐이다. 이 컬럼이 붙은 뒤의 삭제부터는 정확하다.
+  it('마이그레이션 뒤 새로 지운 것은 정확하게 묶인다', () => {
+    legacyFile([{ id: 'p', title: '부모', list_id: 'inbox' }])
+    db.initDatabase()
+    db.createTask({ id: 'c', title: '자식', listId: 'inbox', parentId: 'p' })
+
+    db.deleteTask('p')
+    db.restoreTask('p')
+    expect(activeIds().sort()).toEqual(['c', 'p'])
+  })
+})
+
+/**
+ * 일괄 삭제도 "한 조작"이다 — 배치 안에 부모가 함께 있으면 그 자식은 캐스케이드다.
+ *
+ * 예전에는 전부 null이라, 일괄 삭제한 부모를 휴지통에서 하나만 골라 복원하면
+ * main은 부모만 올리는데 렌더러는 같은 삭제 시각의 자식까지 올려 둘이 갈렸다.
+ */
+describe('일괄 삭제와 복원', () => {
+  it('배치에 부모가 함께 있으면 자식을 캐스케이드로 표시한다', () => {
+    db.createTask({ id: 'p', title: '부모', listId: 'inbox' })
+    db.createTask({ id: 'c', title: '자식', listId: 'inbox', parentId: 'p' })
+    db.batchUpdateTasks(['p', 'c'], { deleted: true })
+
+    db.restoreTask('p')
+    expect(activeIds().sort()).toEqual(['c', 'p'])
+  })
+
+  it('자식만 일괄 삭제했으면 부모 복원에 딸려 오지 않는다', () => {
+    db.createTask({ id: 'p', title: '부모', listId: 'inbox' })
+    db.createTask({ id: 'c', title: '자식', listId: 'inbox', parentId: 'p' })
+    db.batchUpdateTasks(['c'], { deleted: true })
+    db.batchUpdateTasks(['p'], { deleted: true })
+
+    db.restoreTask('p')
+    expect(activeIds()).toEqual(['p'])
+    expect(trashIds()).toEqual(['c'])
   })
 })
