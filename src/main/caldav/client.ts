@@ -92,9 +92,25 @@ function statusToError(status: number, context: string): CalDavError {
   return new CalDavError('server', `${context}: 서버 오류 (${status})`, status)
 }
 
+/**
+ * 리다이렉트를 몇 번까지 따라가는가.
+ *
+ * 같은 출처로만 따라가므로 자격증명이 새지는 않지만, 자기 자신을 가리키는 301은
+ * `request()`의 재귀를 무한히 돌려 메인 프로세스를 세운다. 실제로 필요한 것은
+ * `.well-known` → 실제 경로 한 번뿐이라 3이면 넉넉하다.
+ */
+const MAX_REDIRECTS = 3
+
 export class CalDavClient {
   private readonly credentials: CalDavCredentials
   private readonly fetchImpl: FetchLike
+  /**
+   * 설정된 서버 주소 **전체**(경로 포함). 상대 href의 해석 기준이자 discovery 시작점이다.
+   *
+   * origin만 들고 있으면 `https://cloud.example/remote.php/dav` 같은 경로 기반
+   * endpoint에서 discovery가 `/`부터 시작해 principal을 못 찾는다.
+   */
+  private readonly base: URL
   private readonly origin: string
 
   constructor(credentials: CalDavCredentials, fetchImpl?: FetchLike) {
@@ -105,12 +121,54 @@ export class CalDavClient {
     }
     this.credentials = credentials
     this.fetchImpl = fetchImpl ?? ((u, init) => fetch(u, init))
+    this.base = url
     this.origin = url.origin
   }
 
-  /** 상대 경로(서버가 돌려주는 href)를 절대 URL로. 이미 절대면 그대로. */
-  private absolute(href: string): string {
-    return href.startsWith('http') ? href : new URL(href, this.origin).toString()
+  /**
+   * href를 절대 URL로 바꾸면서 **출처를 강제한다.**
+   *
+   * 여기 들어오는 문자열은 신뢰할 수 없고, 두 갈래로 들어온다:
+   *   1. **서버 응답 본문의 href** — `discoverCalendars`가 principal·home-set·
+   *      컬렉션 경로를 전부 서버가 준 XML에서 읽는다. 침해된 CalDAV 서버는 첫
+   *      PROPFIND 응답 한 번으로 다음 요청지를 자기가 정할 수 있다. 그 href는
+   *      설정 파일에 저장되므로 오염이 지속된다.
+   *   2. **렌더러가 준 `calendarUrl`** — `calendar:select`가 문자열을 그대로 저장하고
+   *      `listEvents`가 그대로 요청 URL로 쓴다.
+   *
+   * 그리고 그 URL로 나가는 모든 요청에는 `Authorization: Basic`으로 **iCloud 앱
+   * 암호**가 실린다 — 사용자의 캘린더·연락처 전체에 대한 자격증명이다.
+   *
+   * 예전 구현은 `href.startsWith('http') ? href : new URL(href, origin)`이었고
+   * **두 갈래가 둘 다 출처를 벗어났다**(감사 실측):
+   *
+   *   "https://evil.example/steal" -> https://evil.example/steal  (절대 URL 그대로)
+   *   "http://evil.example/steal"  -> http://evil.example/steal   (평문 HTTP까지)
+   *   "//evil.example/x"           -> https://evil.example/x      (프로토콜 상대)
+   *
+   * 생성자의 https 검사는 최초 `serverUrl`에만, 3xx 방어는 리다이렉트 헤더에만
+   * 걸려서 본문 안의 href는 어느 쪽도 지나지 않았다.
+   *
+   * 그래서 **분기를 없앤다.** 절대든 상대든 항상 `new URL(href, base)`로 해석하고
+   * origin이 다르면 던진다. 같은 출처의 절대 URL은 정상적인 서버 응답이므로
+   * 그대로 통과한다.
+   */
+  private absolute(href: string, context: string): string {
+    let url: URL
+    try {
+      url = new URL(href, this.base)
+    } catch {
+      throw new CalDavError('protocol', `${context}: 서버가 해석할 수 없는 주소를 돌려줬습니다.`)
+    }
+    if (url.origin !== this.origin) {
+      // 출처 자체는 비밀이 아니라 메시지에 담는다 — 없으면 침해된 서버를 만난
+      // 사용자가 무엇이 잘못됐는지 알 방법이 없다. 자격증명은 담지 않는다.
+      throw new CalDavError(
+        'protocol',
+        `${context}: 서버가 연동 대상이 아닌 주소(${url.origin})를 가리켰습니다.`
+      )
+    }
+    return url.toString()
   }
 
   private authHeader(): string {
@@ -121,11 +179,17 @@ export class CalDavClient {
   private async request(
     url: string,
     method: string,
-    init: { body?: string; headers?: Record<string, string>; context: string }
+    init: { body?: string; headers?: Record<string, string>; context: string },
+    redirectsLeft = MAX_REDIRECTS
   ): Promise<Response> {
+    // **여기가 유일한 관문이다.** 호출처마다 `absolute()`를 부르게 하면 하나만
+    // 빠져도 조용히 뚫린다 — 실제로 `listEvents`가 렌더러가 준 `calendarUrl`을
+    // 검사 없이 그대로 넘기고 있었다. 자격증명이 붙는 자리에서 한 번 더 본다.
+    const target = this.absolute(url, init.context)
+
     let response: Response
     try {
-      response = await this.fetchImpl(url, {
+      response = await this.fetchImpl(target, {
         method,
         headers: {
           Authorization: this.authHeader(),
@@ -148,14 +212,21 @@ export class CalDavClient {
       throw error
     }
 
-    // 같은 출처 안에서의 리다이렉트만 한 번 따라간다 (.well-known → 실제 경로).
+    // 같은 출처 안에서의 리다이렉트만 따라간다 (.well-known → 실제 경로).
+    // 다른 출처를 가리키면 아래 `request()`의 `absolute()`가 던진다 — 그 던짐이 방어다.
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location')
-      if (location) {
-        const target = this.absolute(location)
-        if (new URL(target).origin === this.origin) {
-          return this.request(target, method, init)
+      if (location && redirectsLeft > 0) {
+        // **Location은 `base`가 아니라 방금 요청한 URL 기준으로 푼다**(RFC 9110 §10.2.2).
+        // `base` 기준으로 풀면 상대 Location(`sub/`)이 엉뚱한 경로가 되고, 경로 기반
+        // 서버에서 그 오차가 조용한 404로만 나타난다.
+        let resolved: string
+        try {
+          resolved = new URL(location, target).toString()
+        } catch {
+          throw new CalDavError('protocol', `${init.context}: 예기치 않은 리다이렉트`, response.status)
         }
+        return this.request(resolved, method, init, redirectsLeft - 1)
       }
       throw new CalDavError('protocol', `${init.context}: 예기치 않은 리다이렉트`, response.status)
     }
@@ -173,21 +244,29 @@ export class CalDavClient {
     return parseMultistatus(await response.text())
   }
 
-  /** 로그인 → principal → calendar-home → 캘린더 목록. */
+  /**
+   * 로그인 → principal → calendar-home → 캘린더 목록.
+   *
+   * **설정된 주소에서 시작한다 — origin의 `/`가 아니다.** 예전에는 `absolute('/')`로
+   * 시작해서 `serverUrl`의 경로를 통째로 버렸다. iCloud(`https://caldav.icloud.com`)는
+   * 경로가 없어 우연히 같았지만, Nextcloud처럼 `https://cloud.example/remote.php/dav`를
+   * 쓰는 서버에서는 principal 조회가 `/`로 나가 아무것도 못 찾았다. "직접 입력(CalDAV)"을
+   * 화면에 내놓는 이상, 넣은 주소를 그대로 쓰는 것이 최소 계약이다.
+   */
   async discoverCalendars(): Promise<CalendarCollection[]> {
-    const rootResponses = await this.propfind(this.absolute('/'), '0', PROP_PRINCIPAL, '사용자 확인')
+    const rootResponses = await this.propfind(this.base.toString(), '0', PROP_PRINCIPAL, '사용자 확인')
     const principalHref = textOf(rootResponses[0]?.props.get('current-user-principal') ?? null, 'href')
     if (!principalHref) {
       throw new CalDavError('protocol', '사용자 정보를 찾지 못했습니다. 서버 주소를 확인하세요.')
     }
 
-    const homeResponses = await this.propfind(this.absolute(principalHref), '0', PROP_HOME, '캘린더 위치 확인')
+    const homeResponses = await this.propfind(principalHref, '0', PROP_HOME, '캘린더 위치 확인')
     const homeHref = textOf(homeResponses[0]?.props.get('calendar-home-set') ?? null, 'href')
     if (!homeHref) {
       throw new CalDavError('protocol', '캘린더 위치를 찾지 못했습니다.')
     }
 
-    const calendarResponses = await this.propfind(this.absolute(homeHref), '1', PROP_CALENDARS, '캘린더 목록')
+    const calendarResponses = await this.propfind(homeHref, '1', PROP_CALENDARS, '캘린더 목록')
 
     const calendars: CalendarCollection[] = []
     for (const response of calendarResponses) {
@@ -203,7 +282,7 @@ export class CalDavClient {
         : true
 
       calendars.push({
-        url: this.absolute(response.href),
+        url: this.absolute(response.href, '캘린더 목록'),
         displayName: textOf(response.props.get('displayname') ?? null) || '(이름 없음)',
         supportsEvents,
         color: textOf(response.props.get('calendar-color') ?? null) || null,
@@ -244,7 +323,7 @@ export class CalDavClient {
       if (!calendarData) continue
       for (const event of parseEvents(calendarData)) {
         results.push({
-          href: this.absolute(item.href),
+          href: this.absolute(item.href, '일정 조회'),
           etag: textOf(item.props.get('getetag') ?? null) || null,
           event
         })
@@ -254,23 +333,76 @@ export class CalDavClient {
   }
 
   /**
-   * 일정 생성/갱신. etag를 주면 그 사이 서버가 바뀌지 않은 경우에만 쓴다(If-Match).
-   * etag가 null이면 새로 만드는 것으로 보고, 이미 있으면 실패시킨다(If-None-Match).
+   * **새** 일정. 그 경로에 이미 뭔가 있으면 실패한다(`If-None-Match: *`).
+   *
+   * 예전에는 생성과 갱신이 `putEvent(href, ics, etag)` 하나였고 `etag === null`이
+   * "새로 만든다"를 뜻했다. 그런데 갱신 경로에도 etag가 null이 되는 자리가 있다 —
+   * 충돌을 만난 `runSync`가 "다음엔 If-Match 없이 덮어쓰자"며 etag를 비웠다.
+   * 그 null이 여기서 `If-None-Match: *`로 번역돼, **이미 있는 리소스에 대고 계속
+   * 412를 받는 영구 실패 상태**가 됐다. 뜻이 둘인 인자 하나를 두 연산으로 나눈다.
    */
-  async putEvent(href: string, ics: string, etag: string | null): Promise<string | null> {
-    const response = await this.request(this.absolute(href), 'PUT', {
+  async createEvent(href: string, ics: string): Promise<string | null> {
+    const response = await this.request(href, 'PUT', {
+      body: ics,
+      headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'If-None-Match': '*' },
+      context: '일정 저장'
+    })
+    return response.headers.get('etag')
+  }
+
+  /**
+   * **기존** 일정 갱신. etag를 주면 그 사이 서버가 바뀌지 않은 경우에만 쓴다(If-Match).
+   *
+   * etag가 null이면 조건 없이 덮어쓴다 — 여기서만 그 뜻이다. `createEvent`와 갈라
+   * 뒀으므로 "덮어쓰기"가 "새로 만들기"로 새지 않는다.
+   */
+  async updateEvent(href: string, ics: string, etag: string | null): Promise<string | null> {
+    const response = await this.request(href, 'PUT', {
       body: ics,
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
-        ...(etag ? { 'If-Match': etag } : { 'If-None-Match': '*' })
+        ...(etag ? { 'If-Match': etag } : {})
       },
       context: '일정 저장'
     })
     return response.headers.get('etag')
   }
 
+  /**
+   * 그 경로에 지금 무엇이 있는가 — 충돌에서 빠져나오는 유일한 길.
+   *
+   * 412를 받았다는 것은 "내가 아는 etag가 낡았다"이지 "무엇이 있는지 안다"가 아니다.
+   * 서버의 현재 etag와 UID를 다시 읽어야 (a) 그냥 낡은 것인지 (b) 우리가 만든 적
+   * 없는 남의 일정이 그 자리에 있는지 가를 수 있다. 없으면 null.
+   */
+  async probeEvent(href: string): Promise<{ etag: string | null; uid: string | null } | null> {
+    let responses: DavResponse[]
+    try {
+      responses = await this.propfind(
+        href,
+        '0',
+        `<?xml version="1.0" encoding="utf-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop><d:getetag/><c:calendar-data/></d:prop>
+</d:propfind>`,
+        '일정 확인'
+      )
+    } catch (error) {
+      // 그 사이 사라졌다면 충돌이 아니라 "다시 만들면 된다"이다.
+      if (error instanceof CalDavError && error.code === 'not_found') return null
+      throw error
+    }
+    const item = responses[0]
+    if (!item) return null
+    const calendarData = textOf(item.props.get('calendar-data') ?? null)
+    return {
+      etag: textOf(item.props.get('getetag') ?? null) || null,
+      uid: calendarData ? (parseEvents(calendarData)[0]?.uid ?? null) : null
+    }
+  }
+
   async deleteEvent(href: string, etag: string | null): Promise<void> {
-    await this.request(this.absolute(href), 'DELETE', {
+    await this.request(href, 'DELETE', {
       headers: etag ? { 'If-Match': etag } : {},
       context: '일정 삭제'
     })
