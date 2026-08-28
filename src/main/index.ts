@@ -78,9 +78,14 @@ function createWindow(): void {
   // 지나지 않는다. 그리고 넘어간 문서에서 preload가 다시 돌아 `window.api`가 통째로
   // 노출된다(Electron 40에서 실측: 79개 키).
   //
-  // **두 이벤트 다 건다.** `will-navigate`는 최상위 프레임만 보고,
-  // `will-frame-navigate`는 하위 프레임까지 본다(그리고 최상위에서는 이쪽이 먼저
-  // 발화한다). 오늘 이 앱에 iframe이 없다는 것은 방어가 아니라 우연이다.
+  // **세 이벤트 다 건다.**
+  //   - `will-navigate`      최상위 프레임의 시작 네비게이션
+  //   - `will-frame-navigate` 하위 프레임까지 (최상위에서는 이쪽이 먼저 발화한다).
+  //                          오늘 iframe이 없다는 것은 방어가 아니라 우연이다.
+  //   - `will-redirect`      **서버가 주는 3xx.** 앞의 둘은 리다이렉트 홉에서 발화하지
+  //                          않는다 — 허용된 URL로 출발해 302 한 번이면 가드를 넘어
+  //                          다른 오리진에 착륙하고, 그 문서가 `window.api`를 물려받는다.
+  //                          Electron 40에서 실측했다(79개 키). 홉마다 다시 검사한다.
   const blockForeignNavigation = (details: { url: string; preventDefault: () => void }): void => {
     if (isAppDocumentUrl(details.url, startUrl)) return
     details.preventDefault()
@@ -88,6 +93,7 @@ function createWindow(): void {
   }
   mainWindow.webContents.on('will-navigate', blockForeignNavigation)
   mainWindow.webContents.on('will-frame-navigate', blockForeignNavigation)
+  mainWindow.webContents.on('will-redirect', blockForeignNavigation)
 
   // 가드가 비교할 기준과 실제로 로드하는 값이 **같은 문자열**이어야 한다. 예전처럼
   // `loadFile(경로)`가 URL을 스스로 만들면 기준을 손으로 한 번 더 조립하게 되고,

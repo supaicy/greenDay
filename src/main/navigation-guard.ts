@@ -10,8 +10,8 @@
  * 그리고 라이선스가 살아 있는 동안 모든 `paid` 채널을 그냥 부른다.
  *
  * 넘어가는 길이 여럿이다: 창에 **파일을 떨어뜨리기**(Electron 기본 동작), `location.href`,
- * `target=_self` 링크, 폼 제출, `window.open` 뒤의 리다이렉트. `setWindowOpenHandler`는
- * **새 창**만 보므로 이 중 하나도 막지 못한다.
+ * `target=_self` 링크, 폼 제출, 그리고 **서버가 주는 3xx 리다이렉트**.
+ * `setWindowOpenHandler`는 **새 창**만 보므로 이 중 하나도 막지 못한다.
  *
  * 판정을 여기 순수 함수로 두는 이유는 `index.ts`를 테스트에서 import할 수 없기
  * 때문이다 — 그 파일은 import만으로 `app.requestSingleInstanceLock()`부터 돈다.
@@ -38,14 +38,16 @@ export function appDocumentUrl(rendererDevUrl: string | undefined, indexHtmlPath
  * 의미가 없다 — WHATWG URL은 모든 `file:` URL의 origin을 `'null'`로 만들어서, 그걸로
  * 비교하면 `file://evil.example/x`가 그대로 통과한다. `host`는 그 자리에서 갈린다.
  *
- * 경로 판정은 두 갈래다.
- *   - **출하 빌드(`file:`)**: 문서가 `index.html` 하나뿐이라 경로까지 못 박는다.
- *     같은 폴더에 떨어진 파일도, `..`로 올라가는 경로도 여기서 걸린다(`new URL`이
- *     `..`를 먼저 정규화하므로 문자열 장난이 안 통한다).
- *   - **개발 서버(`http:`)**: 오리진만 본다. HMR과 Vite 오버레이가 같은 오리진 안에서
- *     자유롭게 움직이고, `ELECTRON_RENDERER_URL`이 경로 없이 오는지(`http://host:5173`)
- *     `/index.html`까지 오는지가 도구 버전에 달려 있다. 경로를 못 박으면 그 차이 하나로
- *     개발 환경이 첫 리로드에 죽는다. 개발 서버는 로컬이고 출하되지 않는다.
+ * 경로는 **양쪽 다 못 박는다.** 출하 빌드(`file:`)는 문서가 `index.html` 하나뿐이고,
+ * 개발 서버(`http:`)도 진입 문서는 하나다. 한때 개발 쪽은 오리진만 봤는데, 그러면
+ * 개발 서버에 놓인(또는 개발 서버가 서빙하는 프로젝트 트리 안의) 아무 HTML로나
+ * 넘어갈 수 있고 그 문서가 preload를 물려받는다.
+ *
+ * 개발 쪽에서 `/`와 `/index.html`을 같게 보는 이유는 `ELECTRON_RENDERER_URL`이
+ * 경로 없이 오는지(`http://host:5173`) `/index.html`까지 오는지가 도구 버전에 달려
+ * 있기 때문이다. 그 둘만 같게 보면 되고, 그 이상 열 이유가 없다 — HMR과 Vite
+ * 오버레이는 네비게이션이 아니라 서브리소스/DOM이라 여기 오지 않는다(전체 리로드만
+ * 오고, 그건 같은 진입 경로다).
  */
 export function isAppDocumentUrl(candidate: string, appUrl: string): boolean {
   let target: URL
@@ -60,8 +62,17 @@ export function isAppDocumentUrl(candidate: string, appUrl: string): boolean {
   }
   if (target.protocol !== base.protocol) return false
   if (target.host !== base.host) return false
-  if (target.protocol !== 'file:') return true
-  return decodePath(target.pathname) === decodePath(base.pathname)
+  if (target.protocol === 'file:') return decodePath(target.pathname) === decodePath(base.pathname)
+  return entryPath(decodePath(target.pathname)) === entryPath(decodePath(base.pathname))
+}
+
+/**
+ * 진입 문서 경로를 한 모양으로 만든다 — 끝의 `index.html`을 떼고 슬래시로 끝낸다.
+ * `/`와 `/index.html`은 같은 문서이고, 그 둘 말고는 진입 문서가 없다.
+ */
+function entryPath(pathname: string): string {
+  const withoutIndex = pathname.replace(/(^|\/)index\.html$/, '$1')
+  return withoutIndex.endsWith('/') ? withoutIndex : `${withoutIndex}/`
 }
 
 /**

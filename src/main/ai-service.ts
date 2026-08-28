@@ -30,8 +30,19 @@ const DEFAULT_CONFIG: AiConfig = {
 
 let config: AiConfig = { ...DEFAULT_CONFIG }
 
-function getChatUrl(): string {
-  return `${config.baseUrl}/v1/chat/completions`
+/**
+ * 요청 하나가 쓸 설정을 **한 번 찍는다.**
+ *
+ * `setAiConfig`와 `hydrateFromDisk`는 `config`에 **새 객체를 대입**하지, 들고 있는
+ * 객체를 고치지 않는다. 그래서 여기서 잡아 둔 참조는 그 뒤 무슨 일이 있어도 안 변한다.
+ *
+ * 이게 필요한 이유: 요청 경로는 `await`으로 여러 조각이 나 있고, 그 사이에 `ai:set-config`
+ * IPC가 도착할 수 있다. 조각마다 전역을 다시 읽으면 **검사한 주소·실어 보내는 키·모델이
+ * 서로 다른 시점의 값**으로 조합된다 — 오리진 A에 결속된 키가 B로 나가는 것이 그 조합
+ * 중 하나이고, 관문을 통과한 주소 대신 검사받지 않은 주소로 나가는 것도 그렇다.
+ */
+function snapshot(): AiConfig {
+  return config
 }
 
 // ── API 키의 봉투 ─────────────────────────────────────────────────────────────
@@ -179,17 +190,22 @@ function ipv4Octets(value: string): number[] | null {
   return octets.every((o) => o <= 255) ? octets : null
 }
 
-function classifyIpv4([a, b]: number[]): 'loopback' | 'blocked' | 'public' {
+function classifyIpv4([a, b, c]: number[]): 'loopback' | 'blocked' | 'public' {
   if (a === 127) return 'loopback'
-  // 0.0.0.0/8 · 10/8 · 100.64/10(CGNAT) · 169.254/16(링크로컬·메타데이터) ·
-  // 172.16/12 · 192.0.0/24 · 192.168/16 · 198.18/15(벤치마크) · 224/4 이상(멀티캐스트·예약)
+  // IANA IPv4 Special-Purpose Address Registry 중 "Globally Reachable = False"인 것들.
+  // 0.0.0.0/8 · 10/8 · 100.64/10(CGNAT) · 169.254/16(링크로컬·메타데이터) · 172.16/12 ·
+  // 192.0.0/16(프로토콜 할당 + 문서용) · 192.88.99/24(6to4 릴레이) · 192.168/16 ·
+  // 198.18/15(벤치마크) · 198.51.100/24·203.0.113/24(문서용) · 224/4 이상(멀티캐스트·예약)
   if (a === 0 || a === 10) return 'blocked'
   if (a === 100 && b >= 64 && b <= 127) return 'blocked'
   if (a === 169 && b === 254) return 'blocked'
   if (a === 172 && b >= 16 && b <= 31) return 'blocked'
   if (a === 192 && b === 0) return 'blocked'
+  if (a === 192 && b === 88 && c === 99) return 'blocked'
   if (a === 192 && b === 168) return 'blocked'
   if (a === 198 && (b === 18 || b === 19)) return 'blocked'
+  if (a === 198 && b === 51 && c === 100) return 'blocked'
+  if (a === 203 && b === 0 && c === 113) return 'blocked'
   if (a >= 224) return 'blocked'
   return 'public'
 }
@@ -244,19 +260,39 @@ function hexGroup(part: string): number | null {
   return /^[0-9a-fA-F]{1,4}$/.test(part) ? Number.parseInt(part, 16) : null
 }
 
+/**
+ * IPv6는 **차단 목록이 아니라 허용 목록으로** 판정한다.
+ *
+ * 특수 용도 접두사를 하나씩 지워 나가면 반드시 빠뜨린다 — 실제로 `fec0::/10`(사이트
+ * 로컬), `100::/64`(discard-only), `::ffff:0:0/96`(IPv4 변환)이 전부 `public`으로
+ * 새어 나갔다. IANA IPv6 Special-Purpose 레지스트리에서 "Globally Reachable = True"인
+ * 것은 사실상 전역 유니캐스트(`2000::/3`)뿐이므로, 그 밖은 전부 닫고 안에서 몇 개를
+ * 다시 판다.
+ *
+ * 감싼 IPv4를 **먼저** 꺼낸다. 그 주소가 진짜 목적지이고, 꺼내지 않으면
+ * `::ffff:93.184.216.34` 같은 정상 주소까지 `2000::/3` 밖이라고 막힌다.
+ */
 function classifyIpv6(g: number[]): 'loopback' | 'blocked' | 'public' {
   const embeddedV4 = (hi: number, lo: number): number[] => [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff]
-  const topFiveZero = g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0
-  // ::ffff:a.b.c.d (IPv4 매핑) 과 ::a.b.c.d (구형 IPv4 호환) — 실제 목적지는 IPv4다.
-  if (topFiveZero && g[5] === 0xffff) return classifyIpv4(embeddedV4(g[6], g[7]))
-  if (topFiveZero && g[5] === 0 && (g[6] !== 0 || g[7] > 1)) return classifyIpv4(embeddedV4(g[6], g[7]))
-  if (g.every((x) => x === 0)) return 'blocked' // ::  (unspecified)
-  if (topFiveZero && g[5] === 0 && g[6] === 0 && g[7] === 1) return 'loopback' // ::1
-  if ((g[0] & 0xfe00) === 0xfc00) return 'blocked' // fc00::/7 ULA — 감사 실측 우회 fd00::1
-  if ((g[0] & 0xffc0) === 0xfe80) return 'blocked' // fe80::/10 링크로컬
-  if ((g[0] & 0xff00) === 0xff00) return 'blocked' // ff00::/8 멀티캐스트
-  if (g[0] === 0x2002) return classifyIpv4(embeddedV4(g[1], g[2])) // 6to4 — 사설 v4를 감쌀 수 있다
-  if (g[0] === 0x0064 && g[1] === 0xff9b) return classifyIpv4(embeddedV4(g[6], g[7])) // NAT64
+  const zeros = (upTo: number): boolean => g.slice(0, upTo).every((x) => x === 0)
+
+  // ── 감싼 IPv4 ──
+  if (zeros(5) && g[5] === 0xffff) return classifyIpv4(embeddedV4(g[6], g[7])) // ::ffff:a.b.c.d 매핑
+  if (zeros(4) && g[4] === 0xffff && g[5] === 0) return classifyIpv4(embeddedV4(g[6], g[7])) // ::ffff:0:a.b.c.d 변환
+  if (zeros(6) && (g[6] !== 0 || g[7] > 1)) return classifyIpv4(embeddedV4(g[6], g[7])) // ::a.b.c.d 구형 호환
+  if (g[0] === 0x2002) return classifyIpv4(embeddedV4(g[1], g[2])) // 2002::/16 6to4
+  if (g[0] === 0x0064 && g[1] === 0xff9b) return classifyIpv4(embeddedV4(g[6], g[7])) // 64:ff9b::/96 NAT64
+
+  // ── 특수 주소 ──
+  if (g.every((x) => x === 0)) return 'blocked' // ::  unspecified
+  if (zeros(7) && g[7] === 1) return 'loopback' // ::1
+
+  // ── 전역 유니캐스트 안인가 ──
+  if ((g[0] & 0xe000) !== 0x2000) return 'blocked' // 2000::/3 밖: fc00::/7 ULA · fe80::/10 ·
+  // fec0::/10 사이트로컬 · ff00::/8 멀티캐스트 · 100::/64 discard · 그 밖 전부
+  if (g[0] === 0x2001 && g[1] === 0x0000) return 'blocked' // 2001::/32 Teredo — 임의 v4를 감싼다
+  if (g[0] === 0x2001 && g[1] === 0x0002) return 'blocked' // 2001:2::/48 벤치마크
+  if (g[0] === 0x2001 && g[1] === 0x0db8) return 'blocked' // 2001:db8::/32 문서용
   return 'public'
 }
 
@@ -305,13 +341,15 @@ function bareHost(hostname: string): string {
  * 판정은 호스트 문자열이 아니라 **해석된 주소**로 한다. 이름이 루프백/사설로 풀리는
  * 경우(DNS 리바인딩, `metadata.google.internal`)가 문자열 검사로는 안 보인다.
  *
- * 남는 틈: 여기서 해석한 주소와 `fetch`가 실제로 붙는 주소가 다를 수 있다(TOCTOU).
- * 완전히 닫으려면 해석한 IP를 소켓에 고정해야 하는데, 그러면 https의 SNI/인증서가
- * 깨진다. 남은 공격은 "사용자가 직접 설정에 입력한 이름의 DNS를 공격자가 쥐고 있는"
- * 경우로 좁혀지고, 그 경우 키 유출은 아래 오리진 결속이 따로 막는다.
+ * 그리고 **해석한 주소를 그대로 쓴다.** 예전에는 검사에만 쓰고 버려서, `fetch`가 연결
+ * 시점에 호스트명을 다시 해석했다 — 검사한 주소와 붙는 주소가 다를 수 있는 TOCTOU다.
+ * 돌려주는 URL이 어디로 요청해야 하는지까지 담는다(`pinnedUrl`).
+ *
+ * 설정은 **호출처가 스냅샷으로 넘긴다.** 모듈 전역 `config`를 여기서 읽으면, `await`
+ * 중에 도착한 `ai:set-config`가 판정 대상을 바꿔 놓는다.
  */
-export async function assertEgressAllowed(url: string): Promise<void> {
-  if (config.localOnly && !isLocalAiConfig(config)) {
+export async function assertEgressAllowed(url: string, cfg: AiConfig): Promise<string> {
+  if (cfg.localOnly && !isLocalAiConfig(cfg)) {
     throw new Error('로컬 전용 모드: 외부 제공자 호출이 차단되었습니다')
   }
   let parsed: URL
@@ -327,11 +365,12 @@ export async function assertEgressAllowed(url: string): Promise<void> {
   const host = bareHost(parsed.hostname)
   // 사용자가 "로컬"이라고 쓴 이름과 리터럴만 루프백을 얻는다. **이름이 루프백으로
   // 해석되는 것은 통과시키지 않는다** — 그게 DNS 리바인딩이다.
-  if (isLoopbackName(host)) return
+  if (isLoopbackName(host)) return url
   const literal = classifyAddress(host)
   if (literal !== null) {
+    // 이미 IP다 — DNS도, 고정도 필요 없다.
     if (literal === 'blocked') throw new Error(`허용되지 않은 서버 주소입니다: ${host}`)
-    return
+    return url
   }
 
   let resolved: { address: string }[]
@@ -341,18 +380,88 @@ export async function assertEgressAllowed(url: string): Promise<void> {
     // 주소를 못 얻으면 닫는 쪽으로 떨어진다. 어차피 요청도 못 나간다.
     throw new Error(`서버 주소를 확인할 수 없습니다: ${host}`)
   }
+  if (resolved.length === 0) throw new Error(`서버 주소를 확인할 수 없습니다: ${host}`)
   for (const { address } of resolved) {
     // 이름이 루프백으로 풀리는 것도 막는다 — 위 주석 참고.
     if (classifyAddress(address) !== 'public') {
       throw new Error(`허용되지 않은 서버 주소입니다: ${host} → ${address}`)
     }
   }
+  return pinnedUrl(parsed, resolved[0].address)
 }
 
-/** 관문을 지나야만 나간다. 이 모듈의 모든 요청이 여기를 거친다. */
-async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
-  await assertEgressAllowed(url)
-  return fetch(url, init)
+/**
+ * 검증한 주소로 **실제 연결을 고정한다.**
+ *
+ * `http:`는 URL의 호스트를 IP로 바꿔 버린다. 재바인딩이 끼어들 자리가 없어진다.
+ * (`fetch`의 `Host` 헤더 override는 undici가 금지 헤더로 버린다 — 실측 확인했다. 그래서
+ * 서버는 `Host: <IP>`를 본다. Ollama·LM Studio·llama.cpp 같은 로컬/직결 엔드포인트는
+ * Host를 보지 않으므로 영향이 없고, 평문 HTTP로 가상호스팅하는 AI 엔드포인트만 영향을
+ * 받는다 — 그런 구성은 IP나 https로 적으면 된다. 그 드문 불편과 재바인딩을 맞바꾼다.)
+ *
+ * `https:`는 **이름을 그대로 둔다.** IP로 바꾸면 SNI가 IP가 되어 인증서 검증이 깨지고,
+ * 그러면 모든 정상 제공자가 죽는다. 대신 여기서는 TLS 자체가 고정 역할을 한다 —
+ * 재바인딩으로 내부 주소에 붙어도 그 호스트명의 유효한 인증서를 내놓지 못하면
+ * 핸드셰이크가 실패한다.
+ *
+ * (완전한 고정은 소켓 커넥터에 `lookup`을 주입해야 하고, 그건 `undici` Agent가 필요하다 —
+ * 이 저장소의 직접 의존이 아니라 `package.json` 변경이 선행되어야 한다.)
+ */
+function pinnedUrl(parsed: URL, address: string): string {
+  if (parsed.protocol !== 'http:') return parsed.href
+  const pinned = new URL(parsed.href)
+  pinned.hostname = address.includes(':') ? `[${address}]` : address
+  return pinned.href
+}
+
+/** 따라갈 수 있는 3xx. 308·307은 메서드를 보존하므로 본문 있는 요청에서 특히 위험하다. */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
+const MAX_REDIRECTS = 5
+
+/**
+ * 관문을 지나야만 나간다. 이 모듈의 모든 요청이 여기를 거친다.
+ *
+ * **리다이렉트를 자동으로 따라가지 않는다.** 기본 `fetch`는 3xx를 조용히 따라가고,
+ * 그 홉은 관문을 지나지 않는다 — 실측했다: 허용된 주소가 `302 Location: http://[fd00::1]/`
+ * 하나만 주면 요청이 그 주소까지 도달한다(`EHOSTUNREACH`), `169.254.169.254`도 마찬가지다.
+ * 관문이 첫 홉만 검사하면 검사가 아니다. 그래서 `manual`로 받고 홉마다 다시 검사한다.
+ * (라이선스 클라이언트는 `redirect: 'error'`, CalDAV는 `'manual'`이다. AI만 기본값이었다.)
+ *
+ * **본문이 있는 요청은 따라가지 않는다.** 프롬프트와 `Authorization`을 두 번째 호스트로
+ * 다시 보내는 셈이고, 그건 홉을 검사해도 여전히 "A에 결속된 키가 B로 간다"는 유출이다.
+ * 3xx를 그대로 돌려주면 호출처가 `!res.ok`로 받아 실패로 다룬다.
+ *
+ * **오리진이 바뀌면 `Authorization`을 떼고 간다.** 브라우저가 교차 오리진 리다이렉트에서
+ * 하는 것과 같다. 오늘 본문 없는 요청(`checkConnection`)만 여기 오지만, 그 요청도 키를
+ * 싣는다.
+ */
+async function guardedFetch(rawUrl: string, cfg: AiConfig, init?: RequestInit): Promise<Response> {
+  const hasBody = init?.body != null
+  let target = rawUrl
+  let headers = init?.headers as Record<string, string> | undefined
+
+  for (let hop = 0; ; hop++) {
+    const pinned = await assertEgressAllowed(target, cfg)
+    const response = await fetch(pinned, { ...init, headers, redirect: 'manual' })
+    if (!REDIRECT_STATUSES.has(response.status)) return response
+
+    const location = response.headers.get('location')
+    if (!location || hasBody) return response
+    if (hop >= MAX_REDIRECTS) throw new Error('리다이렉트가 너무 많습니다')
+
+    const next = new URL(location, pinned).href
+    if (new URL(next).origin !== new URL(pinned).origin) headers = withoutAuthorization(headers)
+    // 소켓을 돌려준다 — 따라갈 응답의 본문은 읽지 않는다.
+    void response.body?.cancel().catch(() => {})
+    target = next
+  }
+}
+
+function withoutAuthorization(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return headers
+  const { Authorization, ...rest } = headers
+  void Authorization
+  return rest
 }
 
 export function setAiConfig(updates: Partial<AiConfig>): void {
@@ -385,9 +494,10 @@ export function setAiConfig(updates: Partial<AiConfig>): void {
 }
 
 export async function checkConnection(): Promise<{ connected: boolean; models?: string[] }> {
+  const cfg = snapshot()
   try {
-    if (config.provider === 'ollama') {
-      const res = await guardedFetch(`${config.baseUrl}/api/tags`, { signal: AbortSignal.timeout(5000) })
+    if (cfg.provider === 'ollama') {
+      const res = await guardedFetch(`${cfg.baseUrl}/api/tags`, cfg, { signal: AbortSignal.timeout(5000) })
       if (!res.ok) return { connected: false }
       const data = await res.json()
       const models = (data.models || []).map((m: { name: string }) => m.name)
@@ -395,8 +505,8 @@ export async function checkConnection(): Promise<{ connected: boolean; models?: 
     }
     // OpenAI/Custom: 연결 확인은 간단히 models 엔드포인트
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
-    const res = await guardedFetch(`${config.baseUrl}/v1/models`, { headers, signal: AbortSignal.timeout(5000) })
+    if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
+    const res = await guardedFetch(`${cfg.baseUrl}/v1/models`, cfg, { headers, signal: AbortSignal.timeout(5000) })
     return { connected: res.ok }
   } catch {
     // 막힌 것도 못 닿은 것도 사용자에게는 "연결 안 됨"이다. 막힌 이유는 관문이 던지는
@@ -413,7 +523,7 @@ export async function warmupModel(): Promise<void> {
   const cfg = getAiConfigInternal()
   if (cfg.provider !== 'ollama') return
   try {
-    await guardedFetch(`${cfg.baseUrl}/api/generate`, {
+    await guardedFetch(`${cfg.baseUrl}/api/generate`, cfg, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: cfg.model, prompt: '', keep_alive: '30m' }),
@@ -493,7 +603,7 @@ export async function pullModel(
   }
 
   try {
-    const res = await guardedFetch(`${cfg.baseUrl}/api/pull`, {
+    const res = await guardedFetch(`${cfg.baseUrl}/api/pull`, cfg, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, stream: true }),
@@ -626,19 +736,17 @@ function getToday(): string {
 }
 
 async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: boolean): Promise<AiResult> {
-  // 관문은 **재시도 루프 밖**이다. 안에 두면 막힌 주소를 세 번 다시 물어보고
-  // 그때마다 DNS를 한 번씩 더 친다. 답은 바뀌지 않는다.
-  //
-  // **검사한 URL을 그대로 들고 간다.** 루프 안에서 `getChatUrl()`을 다시 부르면
-  // 그 사이에 도착한 `ai:set-config` IPC가 `config.baseUrl`을 바꿔, 검사받지 않은
-  // 주소로 재시도가 나간다 — 관문을 통째로 우회하는 경합이다.
-  const chatUrl = getChatUrl()
-  await assertEgressAllowed(chatUrl)
+  // **설정을 한 번 찍고 그것만 쓴다.** 아래 `await`들은 전부 중단점이고, 그 사이에
+  // 도착한 `ai:set-config`가 전역 `config`를 갈아 끼운다. 조각마다 다시 읽으면
+  // 검사한 주소·실어 보내는 키·모델이 서로 다른 시점의 값으로 조합된다 —
+  // A에 결속된 키가 B로 나가는 것이 그 조합 중 하나다.
+  const cfg = snapshot()
+  const chatUrl = `${cfg.baseUrl}/v1/chat/completions`
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
+  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
 
   const body: Record<string, unknown> = {
-    model: config.model,
+    model: cfg.model,
     messages: [
       { role: 'system', content: systemPrompt.replace('{today}', getToday()) },
       { role: 'user', content: userMessage }
@@ -659,7 +767,7 @@ async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: b
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
 
-      const res = await fetch(chatUrl, {
+      const res = await guardedFetch(chatUrl, cfg, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -815,16 +923,12 @@ export async function streamChat(
   onDone: () => void,
   onError: (error: string) => void
 ): Promise<void> {
-  // 관문은 재시도 루프 밖이고, 검사한 URL을 그대로 들고 간다 — `callLlm`과 같은 이유.
-  const chatUrl = getChatUrl()
-  try {
-    await assertEgressAllowed(chatUrl)
-  } catch (err) {
-    onError(err instanceof Error ? err.message : '허용되지 않은 서버 주소입니다')
-    return
-  }
+  // 설정을 한 번 찍고 그것만 쓴다 — `callLlm`과 같은 이유. 스트리밍은 응답이 수십 초
+  // 이어지므로 그 사이 설정이 바뀔 창이 특히 넓다.
+  const cfg = snapshot()
+  const chatUrl = `${cfg.baseUrl}/v1/chat/completions`
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
+  if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`
 
   const summary = summarizeTasks(existingTasks)
   const systemPrompt = chatPromptBase(summary)
@@ -833,7 +937,7 @@ export async function streamChat(
   const priorTurns = normalizeChatHistory(history)
 
   const body = {
-    model: config.model,
+    model: cfg.model,
     messages: [{ role: 'system', content: systemPrompt }, ...priorTurns, { role: 'user', content: userMessage }],
     temperature: 0.3,
     max_tokens: MAX_RESPONSE_TOKENS,
@@ -870,7 +974,7 @@ export async function streamChat(
     }
 
     try {
-      const res = await fetch(chatUrl, {
+      const res = await guardedFetch(chatUrl, cfg, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),

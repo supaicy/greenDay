@@ -81,11 +81,33 @@ describe('isAppDocumentUrl — 출하 빌드(file:)', () => {
 })
 
 describe('isAppDocumentUrl — 개발 서버(http:)', () => {
-  it('같은 오리진 안은 자유롭다 (HMR·Vite 오버레이)', () => {
+  it('진입 문서는 통과한다 — `/`와 `/index.html`은 같은 것이다', () => {
     expect(isAppDocumentUrl(DEV, DEV)).toBe(true)
     expect(isAppDocumentUrl(`${DEV}/`, DEV)).toBe(true)
     expect(isAppDocumentUrl(`${DEV}/index.html`, DEV)).toBe(true)
-    expect(isAppDocumentUrl(`${DEV}/@vite/client`, DEV)).toBe(true)
+  })
+
+  it('기준이 /index.html로 와도 같게 본다 — 도구 버전에 따라 갈린다', () => {
+    const base = `${DEV}/index.html`
+    expect(isAppDocumentUrl(DEV, base)).toBe(true)
+    expect(isAppDocumentUrl(`${DEV}/`, base)).toBe(true)
+    expect(isAppDocumentUrl(base, base)).toBe(true)
+  })
+
+  /**
+   * 예전에는 개발 오리진 안이면 **아무 경로나** 통과시켰다. 개발 서버는 프로젝트
+   * 트리를 서빙하므로, 그 안의 아무 HTML로나 넘어가면 그 문서가 preload를 물려받는다.
+   */
+  it('같은 오리진이어도 다른 경로는 막는다', () => {
+    expect(isAppDocumentUrl(`${DEV}/evil.html`, DEV)).toBe(false)
+    expect(isAppDocumentUrl(`${DEV}/src/anything.html`, DEV)).toBe(false)
+    expect(isAppDocumentUrl(`${DEV}/@vite/client`, DEV)).toBe(false)
+    expect(isAppDocumentUrl(`${DEV}/index.html/../evil.html`, DEV)).toBe(false)
+  })
+
+  it('쿼리와 해시는 문서를 바꾸지 않는다', () => {
+    expect(isAppDocumentUrl(`${DEV}/?t=1`, DEV)).toBe(true)
+    expect(isAppDocumentUrl(`${DEV}/index.html#/today`, DEV)).toBe(true)
   })
 
   it('포트만 달라도 다른 오리진이다', () => {
@@ -98,5 +120,14 @@ describe('isAppDocumentUrl — 개발 서버(http:)', () => {
 
   it('다른 호스트는 막는다', () => {
     expect(isAppDocumentUrl('http://evil.example/', DEV)).toBe(false)
+  })
+
+  /**
+   * 302 우회의 착륙 지점이 정확히 이 모양이다 — 허용된 진입 경로에서 출발해
+   * 다른 오리진(포트만 달라도 된다)으로 리다이렉트된다. `index.ts`가 이 판정을
+   * `will-redirect`에도 걸어야 실제로 막힌다.
+   */
+  it('리다이렉트가 데려가려는 다른 오리진도 같은 판정에서 걸린다', () => {
+    expect(isAppDocumentUrl('http://127.0.0.1:52665/pwned', DEV)).toBe(false)
   })
 })

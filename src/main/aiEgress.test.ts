@@ -249,6 +249,204 @@ describe('localOnly는 요청을 보내는 자리 전부에서 강제된다', ()
   })
 })
 
+/**
+ * 웨이브 1.5 — 관문이 **첫 홉만** 검사하던 것.
+ *
+ * 기본 `fetch`는 3xx를 조용히 따라간다. 실측: 허용된 주소가
+ * `302 Location: http://[fd00::1]:8080/` 하나만 줘도 요청이 그 주소까지 도달했고
+ * (`EHOSTUNREACH`), `169.254.169.254`도 마찬가지였다(4초 타임아웃 = 연결 시도).
+ * 관문을 지나지 않는 홉이 하나라도 있으면 관문이 아니다.
+ */
+describe('리다이렉트 — 홉마다 다시 검사한다', () => {
+  const redirect = (location: string, status = 302) => ({
+    status,
+    ok: false,
+    headers: { get: (name: string) => (name.toLowerCase() === 'location' ? location : null) },
+    body: null
+  })
+  const ok = (json: unknown = { models: [] }) => ({
+    status: 200,
+    ok: true,
+    json: async () => json,
+    headers: { get: () => null },
+    body: null
+  })
+
+  it('자동 추적을 끈다 — 모든 요청이 redirect:manual 이다', async () => {
+    const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
+    mockFetch.mockResolvedValueOnce(ok())
+    await ai.checkConnection()
+    expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: 'manual' })
+  })
+
+  it.each([
+    ['http://[fd00::1]:8080/', 'IPv6 ULA'],
+    ['http://169.254.169.254/latest/meta-data/', '메타데이터'],
+    ['http://10.0.0.5/', '사설망']
+  ])('차단 대상(%s)으로 가는 302는 따라가지 않는다', async (location) => {
+    const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
+    mockFetch.mockResolvedValueOnce(redirect(location))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch.mock.calls.map((c) => c[0])).not.toContain(location)
+  })
+
+  it('이름으로 오는 302도 해석해서 판정한다', async () => {
+    dns.set('internal.corp.example', ['10.1.2.3'])
+    const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
+    mockFetch.mockResolvedValueOnce(redirect('http://internal.corp.example/'))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('허용되는 곳으로 가는 302는 따라간다 (본문 없는 요청)', async () => {
+    dns.set('mirror.example', ['93.184.216.34'])
+    const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
+    mockFetch.mockResolvedValueOnce(redirect('http://mirror.example/api/tags'))
+    mockFetch.mockResolvedValueOnce(ok({ models: [{ name: 'llama3.2:latest' }] }))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: true, models: ['llama3.2:latest'] })
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
+  /** 오리진 A에 결속된 키가 B로 따라가면 C3(a)를 리다이렉트로 되돌리는 셈이다. */
+  it('오리진이 바뀌면 Authorization을 떼고 간다', async () => {
+    dns.set('api.openai.com', ['93.184.216.34'])
+    dns.set('mirror.example', ['93.184.216.35'])
+    const ai = await loadAiService()
+    ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com', apiKey: 'sk-real-secret' })
+    mockFetch.mockResolvedValueOnce(redirect('https://mirror.example/v1/models'))
+    mockFetch.mockResolvedValueOnce(ok())
+
+    await ai.checkConnection()
+
+    expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-real-secret')
+    expect(mockFetch.mock.calls[1][1].headers.Authorization).toBeUndefined()
+  })
+
+  it('같은 오리진 안에서는 Authorization을 유지한다', async () => {
+    dns.set('api.openai.com', ['93.184.216.34'])
+    const ai = await loadAiService()
+    ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com', apiKey: 'sk-real-secret' })
+    mockFetch.mockResolvedValueOnce(redirect('https://api.openai.com/v1/models/'))
+    mockFetch.mockResolvedValueOnce(ok())
+
+    await ai.checkConnection()
+
+    expect(mockFetch.mock.calls[1][1].headers.Authorization).toBe('Bearer sk-real-secret')
+  })
+
+  /**
+   * 본문을 두 번째 호스트로 다시 보내는 것은 홉을 검사해도 유출이다 — 프롬프트와 키가
+   * 함께 간다. 3xx를 그대로 돌려주면 호출처가 실패로 다룬다.
+   */
+  it('본문이 있는 요청은 302를 따라가지 않는다', async () => {
+    dns.set('mirror.example', ['93.184.216.34'])
+    const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
+    mockFetch.mockResolvedValueOnce(redirect('http://mirror.example/api/pull'))
+
+    const onError = vi.fn()
+    await ai.pullModel('exaone3.5', vi.fn(), vi.fn(), onError)
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('302'))
+  })
+
+  it('리다이렉트 고리는 상한에서 끊는다', async () => {
+    dns.set('loop.example', ['93.184.216.34'])
+    const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
+    mockFetch.mockResolvedValue(redirect('http://loop.example/loop'))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+    expect(mockFetch.mock.calls.length).toBeLessThanOrEqual(7)
+  })
+})
+
+/**
+ * 웨이브 1.5 — 해석한 주소를 검사에만 쓰고 버리면, `fetch`가 연결 시점에 이름을 다시
+ * 해석한다(DNS 재바인딩). 검사한 주소로 실제 연결을 고정한다.
+ */
+describe('검증한 주소로 연결을 고정한다', () => {
+  it('http는 URL의 호스트를 검증된 IP로 바꿔 보낸다', async () => {
+    dns.set('ollama.example', ['93.184.216.34'])
+    const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://ollama.example:11434' })
+    mockFetch.mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ models: [] }), body: null })
+
+    await ai.checkConnection()
+
+    expect(mockFetch.mock.calls[0][0]).toBe('http://93.184.216.34:11434/api/tags')
+  })
+
+  it('IPv6로 풀리면 대괄호를 씌운다', async () => {
+    dns.set('ollama.example', ['2001:4860:4860::8888'])
+    const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://ollama.example:11434' })
+    mockFetch.mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ models: [] }), body: null })
+
+    await ai.checkConnection()
+
+    expect(mockFetch.mock.calls[0][0]).toBe('http://[2001:4860:4860::8888]:11434/api/tags')
+  })
+
+  /**
+   * https는 이름을 유지한다 — IP로 바꾸면 SNI가 IP가 되어 인증서 검증이 깨지고 정상
+   * 제공자가 전부 죽는다. 대신 TLS 자체가 고정 역할을 한다.
+   */
+  it('https는 호스트명을 그대로 둔다 (SNI·인증서)', async () => {
+    dns.set('api.openai.com', ['93.184.216.34'])
+    const ai = await withStoredConfig({ provider: 'openai', baseUrl: 'https://api.openai.com' })
+    mockFetch.mockResolvedValueOnce({ status: 200, ok: true, body: null })
+
+    await ai.checkConnection()
+
+    expect(mockFetch.mock.calls[0][0]).toBe('https://api.openai.com/v1/models')
+  })
+
+  it('이미 IP면 DNS도 고정도 없이 그대로 간다', async () => {
+    const ai = await withStoredConfig({ baseUrl: 'http://127.0.0.1:11434' })
+    mockFetch.mockResolvedValueOnce({ status: 200, ok: true, json: async () => ({ models: [] }), body: null })
+
+    await ai.checkConnection()
+
+    expect(mockFetch.mock.calls[0][0]).toBe('http://127.0.0.1:11434/api/tags')
+  })
+})
+
+/**
+ * 웨이브 1.5 — `await` 중에 설정이 바뀌면 검사한 주소·키·모델이 서로 다른 시점의
+ * 값으로 조합된다. 요청 하나는 시작할 때 찍은 스냅샷만 쓴다.
+ */
+describe('요청 하나는 설정 스냅샷 하나만 쓴다', () => {
+  it('재시도 중에 설정이 바뀌어도 원래 목적지·키로 간다', async () => {
+    dns.set('api.openai.com', ['93.184.216.34'])
+    dns.set('evil.example', ['93.184.216.35'])
+    const ai = await loadAiService()
+    ai.setAiConfig({ provider: 'openai', baseUrl: 'https://api.openai.com', apiKey: 'sk-real-secret' })
+
+    mockFetch.mockImplementationOnce(async () => {
+      // 첫 시도가 실패하는 동안 렌더러가 목적지를 자기 서버로 돌려놓는다.
+      ai.setAiConfig({ baseUrl: 'https://evil.example', apiKey: 'sk-attacker' })
+      throw new Error('boom')
+    })
+    mockFetch.mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"action":"chat_response","message":"hi"}' } }] }),
+      body: null
+    })
+
+    await ai.createTaskFromNL('회의 잡아줘', []).catch(() => {})
+
+    const urls = mockFetch.mock.calls.map((c) => c[0])
+    expect(urls.every((u: string) => u.startsWith('https://api.openai.com/'))).toBe(true)
+    for (const call of mockFetch.mock.calls) {
+      expect(call[1].headers.Authorization).toBe('Bearer sk-real-secret')
+    }
+  })
+})
+
 describe('classifyAddress', () => {
   const cases: [string, 'loopback' | 'blocked' | 'public' | null][] = [
     // IPv4
@@ -267,6 +465,10 @@ describe('classifyAddress', () => {
     ['198.18.0.1', 'blocked'],
     ['224.0.0.1', 'blocked'],
     ['255.255.255.255', 'blocked'],
+    // 웨이브 1.5에서 더한 special-use 대역
+    ['192.88.99.1', 'blocked'], // 6to4 릴레이 애니캐스트
+    ['198.51.100.1', 'blocked'], // 문서용
+    ['203.0.113.1', 'blocked'], // 문서용
     ['93.184.216.34', 'public'],
     ['8.8.8.8', 'public'],
     // IPv6
@@ -283,6 +485,18 @@ describe('classifyAddress', () => {
     ['2002:a00:5::1', 'blocked'], // 6to4가 감싼 10.0.0.5
     ['64:ff9b::a00:5', 'blocked'], // NAT64가 감싼 10.0.0.5
     ['2001:4860:4860::8888', 'public'],
+    // 웨이브 1.5 — 차단 목록에서 새어 나가던 것들. 이제 2000::/3 허용 목록으로 판정한다.
+    ['fec0::1', 'blocked'], // 사이트로컬(폐기됨) — 예전엔 public이었다
+    ['100::1', 'blocked'], // discard-only — 예전엔 public이었다
+    ['::ffff:0:10.0.0.5', 'blocked'], // IPv4 변환 ::ffff:0:0/96 — 예전엔 public이었다
+    ['::ffff:0:a00:5', 'blocked'], // 같은 것을 URL이 정규화한 모양
+    ['::ffff:0:93.184.216.34', 'public'], // 감싼 v4가 공개면 통과한다
+    ['2001::1', 'blocked'], // Teredo — 임의 v4를 감싼다
+    ['2001:db8::1', 'blocked'], // 문서용
+    ['2001:2::1', 'blocked'], // 벤치마크
+    ['3000::1', 'public'], // 2000::/3 안
+    ['1000::1', 'blocked'], // 2000::/3 밖
+    ['4000::1', 'blocked'], // 2000::/3 밖
     // IP가 아닌 것 — null은 "이름이라 DNS를 봐야 한다"이지 허용이 아니다
     ['example.com', null],
     ['metadata.google.internal', null],
