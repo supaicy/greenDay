@@ -8,6 +8,45 @@ Greenday를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍�
 
 ---
 
+## 재확인 — 2026-08-29
+
+한 달 전 상태로 적혀 있던 것을 오늘 전부 다시 쟀다. **네 항목이 바뀌었다.**
+
+| 항목 | 문서에 적힌 상태 | 오늘 실측 |
+|---|---|---|
+| 인증서 2종 | ⬜ 미발급 (`Apple Development`·`Developer ID`뿐) | ✅ **발급됨** — `Apple Distribution: MINSEOK SHIN (32R6RHXU36)` + 설치 패키지 서명 인증서 |
+| 프로비저닝 프로파일 | ⬜ 미발급 | ✅ **있음** — `haru MAS`, App ID `32R6RHXU36.com.supaicy.haru`, macOS, 2027-07-30까지 |
+| Bundle ID 등록 | ⬜ | ✅ 프로파일이 그 App ID로 발급됐으므로 등록돼 있다 |
+| 개인정보처리방침 URL | ✅ 200 확인 | ⚠️ **지금 404다** — 저장소 이름이 `haru` → `greenDay`로 바뀌면서 Pages 주소가 옮겨졌다 |
+
+### 개인정보처리방침 URL이 바뀌었다 — 제출 전 반드시 고칠 것
+
+```
+옛 주소  https://supaicy.github.io/greenDay/privacy.html      → 404
+새 주소  https://supaicy.github.io/greenDay/privacy.html  → 200
+```
+
+**대소문자가 맞아야 한다.** `greenday`(소문자 d)는 404다. GitHub Pages 경로는
+저장소 이름을 그대로 쓰고, 저장소는 `greenDay`다.
+
+개인정보처리방침 URL이 안 열리면 심사에서 바로 반려된다 — 이 문서 8절이 "자주
+걸리는 지점" 1번으로 꼽아 둔 바로 그것이다.
+
+### MAS 빌드 사전 점검은 이제 자동이다
+
+`scripts/mas-preflight.sh`가 인증서·프로파일·샌드박스 권한·MAS에서 꺼져야 하는
+기능·번들 ID 일관성 다섯 가지를 확인한다. **오늘 실행 결과 전부 통과.**
+
+```
+npm run mas:preflight
+```
+
+빌드 명령은 이 문서 7절이 `npm run package:mas`라고 적어 뒀는데, **`mas:build`를
+쓰는 편이 낫다** — 그쪽이 preflight를 먼저 돌리고 universal로 빌드한다.
+(`package:mas`는 끝이 `--config`로 잘려 있어 값이 비어 있다.)
+
+---
+
 ## 0. 진행 순서 (의존 관계 순)
 
 ```
@@ -37,8 +76,9 @@ Greenday를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍�
     **이게 없으면 MAS 빌드가 실패합니다.**
   - 두 개 다 발급 후 더블클릭해서 이 맥 Keychain에 설치
 
-  > 현재 보유: `Apple Development`, `Developer ID Application` — **둘 다 App Store에는 못 씁니다.**
-  > `Developer ID Application`은 웹사이트 직접 배포 전용입니다.
+  > **2026-08-29 기준 둘 다 발급 완료.** `Apple Distribution: MINSEOK SHIN (32R6RHXU36)`과
+  > 설치 패키지 서명 인증서가 이 맥 Keychain에 있다(`npm run mas:preflight`로 확인).
+  > `Developer ID Application`도 있지만 그건 웹사이트 직접 배포 전용이라 별개다.
 
 - ⬜ **프로비저닝 프로파일** — [Profiles](https://developer.apple.com/account/resources/profiles/list) → `+` → **Mac App Store Connect**
   - App ID: `com.supaicy.haru`, 인증서: 방금 만든 Apple Distribution
@@ -154,14 +194,15 @@ https://github.com/supaicy/haru/issues
 
 **마케팅 URL** (선택)
 ```
-https://supaicy.github.io/haru/
+https://supaicy.github.io/greenDay/
 ```
 
 **개인정보처리방침 URL** (필수)
 ```
-https://supaicy.github.io/haru/privacy.html
+https://supaicy.github.io/greenDay/privacy.html
 ```
-> ✅ 게시 완료 — 이 주소는 지금 열립니다 (HTTP 200 확인). 원본은 `docs/privacy.html`.
+> ✅ 2026-08-29 재확인: 200. 원본은 `docs/privacy.html`. **옛 `/haru/` 주소는 404이니
+> 어딘가에 남아 있으면 같이 고칠 것.**
 
 **저작권**
 ```
@@ -310,7 +351,7 @@ MAC APP STORE BUILD DIFFERENCES
 The in-app updater and global shortcuts are disabled via a process.mas guard, since the
 App Store handles updates and the sandbox does not permit global shortcuts.
 
-Privacy policy: https://supaicy.github.io/haru/privacy.html
+Privacy policy: https://supaicy.github.io/greenDay/privacy.html
 ```
 
 ### ⬜ 캘린더 동기화가 App Privacy 답안을 바꾸는가 — 아니오 (근거)
@@ -361,8 +402,9 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 
 | URL | 상태 |
 |---|---|
-| `https://supaicy.github.io/haru/` | ✅ 200 |
-| `https://supaicy.github.io/haru/privacy.html` | ✅ 200 ← **이 주소를 심사에 제출** |
+| `https://supaicy.github.io/greenDay/` | ✅ 200 (2026-08-29 재확인) |
+| `https://supaicy.github.io/greenDay/privacy.html` | ✅ 200 ← **이 주소를 심사에 제출** |
+| ~~`https://supaicy.github.io/haru/privacy.html`~~ | ❌ 404 — 저장소 개명으로 죽은 주소 |
 
 > 방침을 고치면 `main:docs/privacy.html`을 먼저 고치고 `gh-pages` 브랜치로 복사하세요.
 
@@ -416,8 +458,10 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 
 - ⬜ 인증서 2종 + 프로파일이 준비된 뒤:
   ```
-  NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection" npm run package:mas
+  npm run mas:build
   ```
+  (preflight를 먼저 돌리고 universal로 빌드한다. 문서 초판이 적어 둔 `package:mas`는
+   끝이 `--config`로 잘려 있으니 쓰지 말 것.)
   결과: `dist/mas/Greenday-<버전>.pkg`
 
 - ⬜ **Transporter** 앱(App Store에서 무료)으로 `.pkg` 업로드
@@ -458,7 +502,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 | MAS에서 updater/전역단축키 비활성 | ✅ `process.mas` 가드 |
 | 아이콘 | ✅ 원본 1920×1920 (1024 요구 충족) |
 | 카테고리 | ✅ `public.app-category.productivity` |
-| 개인정보처리방침 | ✅ 게시됨 https://supaicy.github.io/haru/privacy.html |
+| 개인정보처리방침 | ✅ 게시됨 https://supaicy.github.io/greenDay/privacy.html |
 | 메타데이터 텍스트 | 🤖 이 문서 3절 |
 | App Privacy 답안 + 심사 노트 | 🤖 이 문서 4절 |
 | 스크린샷 6장 (2880×1800) | ✅ `docs/app-store/screenshots/` |
