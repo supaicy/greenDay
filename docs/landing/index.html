@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Greenday — 데이터가 맥을 벗어나지 않는 할 일 관리</title>
+<meta name="description" content="할 일·캘린더·습관을 한 곳에서. 계정도 로그인도 없고, 데이터는 내 맥에만 저장됩니다. macOS용 무료 다운로드.">
+<meta property="og:title" content="Greenday — 데이터가 맥을 벗어나지 않는 할 일 관리">
+<meta property="og:description" content="계정 없음. 로그인 없음. 할 일과 메모는 내 맥에만 저장됩니다.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://supaicy.github.io/greenDay/">
+<link rel="icon" href="icon-128.png">
+<style>
+/* ── Greenday 랜딩 ─────────────────────────────────────────────────────
+   결제 페이지(pay.begreen.dev)와 같은 강조색 #0E7C4A를 쓴다 — 같은 제품이
+   같은 색으로 보여야 한다. 구조색에는 초록을 넣지 않는다: 배경까지 초록으로
+   기울면 화면 전체가 한 가지 인상만 남는다.
+
+   한글은 word-break 기본값에서 음절 사이 아무 데나 끊긴다("테스트" → "테스/트").
+   keep-all로 어절에서만 끊고, 끊을 수 없는 긴 토큰을 위해 overflow-wrap을 함께 준다. */
+:root{
+  --bg:#FCFCFD; --surface:#FFFFFF; --sunk:#F4F5F7;
+  --ink:#15171B; --ink2:#484D57; --ink3:#767B85; --line:#E4E6EA;
+  --go:#0E7C4A; --go-dark:#0B6039; --go-tint:#EFF6F2; --go-line:#CFE4D9;
+  --sans:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;
+  --mono:'SF Mono','JetBrains Mono',Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1114; --surface:#171A1E; --sunk:#1D2126;
+  --ink:#E8EAEE; --ink2:#AFB5BF; --ink3:#868D97; --line:#282D34;
+  --go:#4FBE8B; --go-dark:#6BD0A0; --go-tint:#15251D; --go-line:#274036;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1114; --surface:#171A1E; --sunk:#1D2126;
+  --ink:#E8EAEE; --ink2:#AFB5BF; --ink3:#868D97; --line:#282D34;
+  --go:#4FBE8B; --go-dark:#6BD0A0; --go-tint:#15251D; --go-line:#274036;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.7;
+  word-break:keep-all;overflow-wrap:break-word;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+
+/* ── 히어로 ── */
+.hero{padding:78px 0 0;text-align:center}
+.mark{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:15px;
+  color:var(--ink2);margin-bottom:34px}
+.mark img{width:26px;height:26px;border-radius:6px}
+h1{font-size:clamp(31px,5.4vw,52px);line-height:1.15;letter-spacing:-.03em;font-weight:800;
+  margin-bottom:18px;text-wrap:balance}
+h1 em{font-style:normal;color:var(--go)}
+.lede{font-size:clamp(16px,2.2vw,19px);color:var(--ink2);max-width:38ch;margin:0 auto;text-wrap:pretty}
+
+/* ── 다운로드 ── */
+.dl{margin:36px auto 0;display:flex;flex-direction:column;align-items:center;gap:11px}
+.dl-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.btn{display:inline-block;padding:13px 24px;border-radius:10px;font-size:15.5px;font-weight:700;
+  text-decoration:none;border:1px solid transparent;transition:background .12s}
+.btn-go{background:var(--go);color:#fff}
+.btn-go:hover{background:var(--go-dark)}
+.btn-ghost{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.btn-ghost:hover{background:var(--sunk)}
+.dl-note{font-size:13px;color:var(--ink3)}
+.dl-note b{color:var(--ink2);font-weight:600}
+.dl-note code{font-family:var(--mono);font-size:12px}
+
+/* ── 스크린샷 ── */
+.shot{margin:52px auto 0;max-width:840px;border-radius:13px;overflow:hidden;
+  border:1px solid var(--line);box-shadow:0 18px 44px -22px rgba(0,0,0,.35)}
+.shot img{display:block;width:100%;height:auto}
+
+/* ── 섹션 ── */
+section{padding:78px 0 0}
+h2{font-size:clamp(22px,3.2vw,29px);letter-spacing:-.022em;font-weight:750;margin-bottom:12px;
+  text-wrap:balance}
+.sub{color:var(--ink2);max-width:58ch;margin-bottom:30px;text-wrap:pretty}
+
+.grid{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;grid-template-columns:repeat(auto-fit,minmax(232px,1fr))}
+/* 특성이 여섯이다. 자동 배치에 맡기면 넓은 화면에서 4열이 되어 두 칸이 빈다. */
+@media (min-width:880px){.grid{grid-template-columns:repeat(3,1fr)}}
+.cell{background:var(--surface);padding:22px 22px 24px}
+.cell h3{font-size:16px;font-weight:700;margin-bottom:6px;letter-spacing:-.01em}
+.cell p{font-size:14.5px;color:var(--ink2);text-wrap:pretty}
+
+/* ── 프라이버시 ── */
+.privacy{background:var(--go-tint);border:1px solid var(--go-line);border-radius:14px;
+  padding:30px 30px 32px;margin-top:14px}
+.privacy h2{margin-bottom:10px}
+.privacy ul{list-style:none;margin-top:18px;display:grid;gap:10px 26px;
+  grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.privacy li{font-size:14.5px;color:var(--ink2);padding-left:19px;position:relative}
+.privacy li::before{content:"—";color:var(--go);font-weight:700;position:absolute;left:0;top:0}
+
+/* ── 갤러리 ── */
+.gal{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.gal figure{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--surface)}
+.gal img{display:block;width:100%;height:auto}
+.gal figcaption{font-size:13px;color:var(--ink3);padding:10px 14px;border-top:1px solid var(--line)}
+
+/* ── 푸터 ── */
+footer{margin-top:86px;border-top:1px solid var(--line);padding:30px 0 70px;
+  font-size:13.5px;color:var(--ink3)}
+footer nav{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px}
+footer a{color:var(--ink2);text-decoration:none}
+footer a:hover{color:var(--go)}
+:focus-visible{outline:2px solid var(--go);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="hero">
+    <span class="mark"><img src="icon-128.png" alt="">Greenday</span>
+    <h1>할 일이 <em>내 맥을 벗어나지 않습니다</em></h1>
+    <p class="lede">계정도 로그인도 없습니다. 할 일과 메모는 이 맥에만 저장되고, 어떤 서버로도 올라가지 않습니다.</p>
+
+    <div class="dl">
+      <div class="dl-row" id="dl-row">
+        <!-- 최신 릴리스를 GitHub API로 읽어 채운다. 실패하면 아래 폴백이 그대로 남는다.
+             자산 이름에 버전과 아키텍처가 박혀 있어(Greenday-2.0.2-arm64.dmg) 고정
+             주소를 만들 수 없다 — 옛 랜딩이 걸어 둔 haru.dmg가 그래서 404였다. -->
+        <a class="btn btn-go" href="https://github.com/supaicy/greenDay/releases/latest">macOS용 다운로드</a>
+      </div>
+      <p class="dl-note" id="dl-note">macOS 12 이상 · 무료</p>
+    </div>
+
+    <div class="shot">
+      <img src="shot-01.jpg" width="1440" height="900" alt="오늘 할 일 목록 — 마감일, 우선순위, 태그가 붙어 있다">
+    </div>
+  </header>
+
+  <section>
+    <h2>같은 할 일을 여섯 가지 방식으로</h2>
+    <p class="sub">목적에 맞는 화면을 고릅니다. 데이터는 하나입니다.</p>
+    <div class="grid">
+      <div class="cell"><h3>목록</h3><p>오늘·내일·다음 7일·기본함으로 자동 정리됩니다.</p></div>
+      <div class="cell"><h3>캘린더</h3><p>월·주·일 단위로 보고, 시간 블록으로 일정을 배치합니다.</p></div>
+      <div class="cell"><h3>칸반 보드</h3><p>진행 상태로 옮겨 가며 관리합니다.</p></div>
+      <div class="cell"><h3>타임라인</h3><p>며칠에 걸친 작업을 한눈에 봅니다.</p></div>
+      <div class="cell"><h3>아이젠하워</h3><p>중요도와 긴급도 네 칸으로 나눕니다.</p></div>
+      <div class="cell"><h3>통계</h3><p>완료 추이와 점수를 봅니다.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="privacy">
+      <h2>데이터가 기기를 벗어나지 않습니다</h2>
+      <p class="sub" style="margin-bottom:0">가입도 로그인도 없습니다. 개발자가 운영하는 서버가 <strong>존재하지 않습니다.</strong></p>
+      <ul>
+        <li>할 일과 메모는 이 맥 안에만 저장됩니다</li>
+        <li>분석·추적 코드를 넣지 않았습니다</li>
+        <li>AI는 Ollama로 <strong>내 컴퓨터 안에서</strong> 돕니다</li>
+        <li>언제든 JSON·CSV로 내보낼 수 있습니다</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>집중과 습관</h2>
+    <p class="sub">할 일을 적는 것과 실제로 하는 것은 다릅니다.</p>
+    <div class="gal">
+      <figure><img src="shot-05.jpg" width="1440" height="900" alt="습관 화면 — 주간 체크와 연속 기록">
+        <figcaption>습관 — 주간 체크와 연속 기록</figcaption></figure>
+      <figure><img src="shot-02.jpg" width="1440" height="900" alt="주간 캘린더 — 시간 블록으로 배치한 일정">
+        <figcaption>캘린더 — 시간 블록 배치</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>폰에서도 봅니다</h2>
+    <p class="sub">날짜가 있는 할 일을 iCloud나 Google 캘린더에 올리면 폰의 캘린더 앱에 그대로 나타납니다. 연결은 <strong>선택이고 기본은 꺼져 있습니다.</strong> Greenday가 만든 일정만 다루므로 기존 일정은 읽지도, 건드리지도 않습니다.</p>
+    <div class="gal">
+      <figure><img src="shot-06.jpg" width="1440" height="900" alt="설정 화면 — 로컬 전용 잠금과 로컬 AI">
+        <figcaption>설정 — 로컬 전용 잠금</figcaption></figure>
+      <figure><img src="shot-04.jpg" width="1440" height="900" alt="아이젠하워 매트릭스 — 중요도와 긴급도 네 칸">
+        <figcaption>아이젠하워 — 중요도·긴급도</figcaption></figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>받아서 바로 씁니다</h2>
+    <p class="sub">설치하고 열면 끝입니다. 만들 계정이 없습니다.</p>
+    <div class="dl" style="align-items:flex-start;margin-top:0">
+      <div class="dl-row" id="dl-row-2">
+        <a class="btn btn-go" href="https://github.com/supaicy/greenDay/releases/latest">macOS용 다운로드</a>
+        <a class="btn btn-ghost" href="https://github.com/supaicy/greenDay/releases">모든 버전</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <nav>
+      <a href="privacy.html">개인정보처리방침</a>
+      <a href="https://github.com/supaicy/greenDay/releases">릴리스</a>
+      <a href="https://github.com/supaicy/greenDay/issues">문의·버그 신고</a>
+    </nav>
+    <p>© 2026 supaicy · macOS 12 Monterey 이상</p>
+  </footer>
+
+</div>
+
+<script>
+/* 최신 릴리스를 읽어 버튼을 채운다.
+
+   왜 API를 부르나: 자산 이름에 버전과 아키텍처가 들어간다
+   (`Greenday-2.0.2-arm64.dmg`). `/releases/latest/download/<이름>` 형태의 고정
+   주소를 만들 수 없다 — 옛 랜딩이 걸어 둔 `haru.dmg`가 그래서 404였다.
+
+   실패하면 아무것도 하지 않는다. HTML에 이미 릴리스 페이지로 가는 링크가
+   들어 있어서, 스크립트가 죽어도 다운로드는 계속 된다. */
+(async () => {
+  const row  = document.getElementById("dl-row");
+  const row2 = document.getElementById("dl-row-2");
+  const note = document.getElementById("dl-note");
+  try {
+    const res = await fetch("https://api.github.com/repos/supaicy/greenDay/releases/latest");
+    if (!res.ok) return;
+    const rel = await res.json();
+    const dmg = (rel.assets ?? []).filter((a) => a.name.endsWith(".dmg"));
+    const arm = dmg.find((a) => /arm64|aarch64|universal/i.test(a.name));
+    const x64 = dmg.find((a) => /x64|intel|universal/i.test(a.name));
+    if (!arm && !x64) return;
+
+    /* 유니버설 하나면 버튼도 하나다. 아키텍처를 고르라고 묻는 것은
+       "본인 맥이 무엇인지 아십니까"를 묻는 것이고, 대부분 모른다. */
+    const universal = arm && x64 && arm === x64;
+    const mk = (a, label) =>
+      `<a class="btn btn-go" href="${a.browser_download_url}" download>${label}</a>`;
+    const html = universal
+      ? mk(arm, "macOS용 다운로드")
+      : [arm && mk(arm, "Apple Silicon"), x64 && mk(x64, "Intel")].filter(Boolean).join("");
+    if (row)  row.innerHTML  = html;
+    if (row2) row2.innerHTML = html +
+      `<a class="btn btn-ghost" href="https://github.com/supaicy/greenDay/releases">모든 버전</a>`;
+    if (note) {
+      const ver = (rel.tag_name ?? "").replace(/^v/, "");
+      const when = rel.published_at ? rel.published_at.slice(0, 10) : "";
+      note.innerHTML = `macOS 12 이상 · 무료 · <b>${ver}</b>` + (when ? ` · ${when}` : "") +
+        (universal ? "" : ` · <span>Apple 메뉴 ▸ 이 Mac에 관하여</span>에서 칩을 확인하세요`);
+    }
+  } catch {
+    /* 네트워크·CORS 실패. HTML의 폴백 링크가 그대로 남는다. */
+  }
+})();
+</script>
+</body>
+</html>
