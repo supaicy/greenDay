@@ -35,7 +35,13 @@
   --console:#C08FE0; --console-bg:#221730;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+/* 한글은 기본값(word-break:normal)에서 **음절 사이 아무 데나** 끊긴다 —
+   "테스트"가 "테스 / 트"로, "시작일조차"가 "시작일조 / 차"로 갈린다.
+   라틴은 단어 사이에서만 끊기므로 이 문제가 없어 눈에 잘 안 띈다.
+   keep-all은 띄어쓰기에서만 끊는다. 대신 끊을 수 없는 긴 토큰(URL·식별자)이
+   그대로 넘칠 수 있어 overflow-wrap을 함께 준다. */
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;
+  word-break:keep-all;overflow-wrap:break-word}
 .wrap{max-width:980px;margin:0 auto;padding:0 26px 110px}
 
 header.mast{padding:56px 0 28px;border-bottom:2px solid var(--ink)}
@@ -61,6 +67,10 @@ th{font-family:var(--sans);font-size:11.5px;font-weight:600;letter-spacing:0;col
 td.sym{font-weight:600;width:25%}
 
 .step{display:grid;grid-template-columns:56px 1fr;gap:0 22px;padding:28px 0;border-bottom:1px solid var(--rule-soft)}
+/* 그리드 자식은 기본이 min-width:auto라 **내용보다 작아지지 않는다.** 안에 있는
+   표(min-width:620px)가 칸을 밀어내서, 좁은 화면에서 .tw의 overflow-x가 아무
+   일도 못 하고 문서 전체가 옆으로 스크롤된다(420px에서 실측). */
+.step > *,.check li > *{min-width:0}
 .stepno{font-family:var(--mono);font-size:15px;font-weight:700;line-height:1.5;color:var(--ink-mute);font-variant-numeric:tabular-nums;position:sticky;top:18px;align-self:start;letter-spacing:-.02em}
 .step.gate .stepno{color:var(--stop)}
 .step h3{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;line-height:1.35;text-wrap:balance}
@@ -91,7 +101,10 @@ pre.val{border-left-color:var(--console)}
 .check li{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--rule-soft);font-size:15px;align-items:start}
 .check li::before{content:"\2610";font-family:var(--mono);font-size:17px;color:var(--ink-mute);line-height:1.4}
 .check li b{font-weight:650}
-.check li .why{display:block;font-size:13.5px;color:var(--ink-mute);margin-top:3px;line-height:1.55}
+/* **2열로 못박는다.** li는 `24px 1fr` 그리드이고 항목이 셋이다(::before, <b>,
+   .why). 자동 배치에 맡기면 셋째가 둘째 줄 **첫 열(24px)**로 밀려나서, 설명이
+   폭 24px 세로 기둥으로 2글자씩 쌓인다(실측: 폭 24px). */
+.check li .why{grid-column:2;display:block;font-size:13.5px;color:var(--ink-mute);margin-top:3px;line-height:1.55}
 
 footer{margin-top:68px;padding-top:24px;border-top:2px solid var(--ink);font-size:14px;color:var(--ink-mute);max-width:76ch}
 footer p{margin:0 0 11px}
