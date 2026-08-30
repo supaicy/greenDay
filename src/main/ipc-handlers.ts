@@ -39,6 +39,25 @@ function csvCell(value: unknown): string {
   return `"${safe}"`
 }
 
+/**
+ * 자격증명이 따라가도 되는 범위 — 스킴·호스트·포트를 정규화한 오리진.
+ *
+ * 파싱되지 않거나 http(s)가 아니면 `null`이고, `null`은 **어떤 것과도 같지 않게**
+ * 다룬다(`null !== null`이 아니므로 호출처가 따로 확인한다). 문자열 비교로는
+ * `https://caldav.icloud.com`과 `https://CalDAV.iCloud.com:443/`이 달라 보이고,
+ * `https://evil.example#caldav.icloud.com` 같은 것이 접두사 검사를 통과한다.
+ */
+function normalizedOrigin(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null
+    return parsed.origin
+  } catch {
+    return null
+  }
+}
+
 async function safeOpenExternal(url: string): Promise<void> {
   try {
     const parsed = new URL(url)
@@ -280,13 +299,35 @@ export function setupIpcHandlers(): void {
     'paid',
     (_, input: { serverUrl?: string; username?: string; password?: string }) => {
       const config = loadCalendarConfig()
+      const serverUrl = String(input?.serverUrl || config.serverUrl || DEFAULT_CONFIG.serverUrl)
+      const username = String(input?.username ?? config.username)
+      // 빈 문자열이 오면 "비밀번호는 건드리지 않는다"는 뜻이다 — UI가 값을 되채우지
+      // 않기 때문에 사용자가 다른 항목만 고칠 때 비밀번호가 지워지면 안 된다.
+      const supplied = input?.password ? String(input.password) : null
+
+      // **자격증명은 저장될 때의 오리진·계정을 벗어나지 않는다** (M1의 IPC 절반).
+      //
+      // 이 핸들러가 하는 일이 정확히 `{...config, serverUrl: 새것}` 스프레드라, 예전에는
+      // 이전 서버의 비밀번호가 그대로 딸려 갔다. 그 값은 다음 동기화에서 새 오리진으로
+      // `Authorization: Basic`에 실린다 — 렌더러 한 줄로 iCloud 앱 암호를 임의 서버에
+      // 보낼 수 있었다.
+      //
+      // 결속이 끊기면 **고른 캘린더와 동기화 상태도 함께 버린다.** 그것들은 이전 서버의
+      // 리소스를 가리키는 값이라, 남겨 두면 `calendar:sync-now`가 새 자격증명을 들고
+      // 예전 주소로 간다 — 아래 `calendar:select`의 오리진 검사를 순서만 바꿔 우회하는
+      // 길이 된다.
+      //
+      // (wt-sync가 `calendar-config` 층에서 같은 불변식을 암호문 안쪽에 걸었다. 여기는
+      //  그 값이 애초에 파일에 쓰이지 않게 하는 바깥쪽 겹이다 — 한쪽만으로도 막히지만,
+      //  둘 중 하나를 지나치는 경로가 생기는 순간 조용히 뚫린다.)
+      const rebound = normalizedOrigin(serverUrl) !== normalizedOrigin(config.serverUrl) || username !== config.username
+
       const next: CalendarConfig = {
         ...config,
-        serverUrl: String(input?.serverUrl || config.serverUrl || DEFAULT_CONFIG.serverUrl),
-        username: String(input?.username ?? config.username),
-        // 빈 문자열이 오면 기존 비밀번호를 유지한다 — UI가 값을 되채우지 않기 때문에
-        // 사용자가 다른 항목만 고칠 때 비밀번호가 지워지면 안 된다.
-        password: input?.password ? String(input.password) : config.password,
+        serverUrl,
+        username,
+        password: supplied ?? (rebound ? null : config.password),
+        ...(rebound ? { calendarUrl: null, calendarName: null, enabled: false, syncState: {} } : {}),
         lastError: null
       }
       storeCalendarConfig(next)
@@ -318,12 +359,25 @@ export function setupIpcHandlers(): void {
 
   handle('calendar:select', 'paid', (_, url: string, name: string) => {
     const config = loadCalendarConfig()
+    const target = String(url)
+    // **고를 수 있는 캘린더는 설정된 서버 안에 있는 것뿐이다** (C1의 렌더러 절반).
+    //
+    // 예전에는 렌더러가 준 문자열을 스킴도 출처도 안 보고 그대로 저장했다. 그 값은
+    // `calendar:sync-now`가 `Authorization: Basic`을 붙여 요청하는 주소가 되므로,
+    // 렌더러 한 줄이면 iCloud 앱 암호가 임의 호스트로 나갔다.
+    //
+    // 정상 UI는 여기 걸릴 수 없다 — 목록은 설정된 서버에 대한 `discoverCalendars()`에서
+    // 오고, wt-sync가 응답 안의 href를 그 오리진 안으로 강제했다. 여기 걸리는 호출은
+    // UI를 거치지 않은 것뿐이라 조용히 무시하지 않고 던진다(`open-attachment`와 같다).
+    if (normalizedOrigin(target) === null || normalizedOrigin(target) !== normalizedOrigin(config.serverUrl)) {
+      throw new Error('Calendar URL outside the configured CalDAV server')
+    }
     // 다른 캘린더로 옮기면 이전 캘린더의 동기화 상태는 의미가 없다. 남겨 두면 새
     // 캘린더에서 존재하지 않는 리소스를 갱신하려다 매번 실패한다.
-    const changed = config.calendarUrl !== url
+    const changed = config.calendarUrl !== target
     const next: CalendarConfig = {
       ...config,
-      calendarUrl: String(url),
+      calendarUrl: target,
       calendarName: String(name),
       enabled: true,
       syncState: changed ? {} : config.syncState
