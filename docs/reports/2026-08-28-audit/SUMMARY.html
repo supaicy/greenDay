@@ -1,0 +1,1390 @@
+<title>Greenday 코드베이스 감사</title>
+<style>
+:root {
+  --ground: #FAFAFC;
+  --surface: #FFFFFF;
+  --surface-sunk: #F1F2F7;
+  --ink: #14161F;
+  --ink-soft: #40465A;
+  --ink-mute: #6E7488;
+  --rule: #E2E4EC;
+  --rule-soft: #EDEEF4;
+  --accent: #383D9E;
+  --accent-soft: #EDEEFA;
+  --crit: #C2382C;
+  --crit-bg: #FBEDEB;
+  --high: #9A5B0C;
+  --high-bg: #FBF2E4;
+  --med: #2F6BB0;
+  --med-bg: #EAF1FA;
+  --low: #64697D;
+  --low-bg: #EFF0F4;
+  --ok: #2C7A56;
+  --ok-bg: #E9F4EF;
+
+  --mono: 'SF Mono', 'JetBrains Mono', 'IBM Plex Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo',
+          'Malgun Gothic', system-ui, 'Segoe UI', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0F1117;
+    --surface: #161923;
+    --surface-sunk: #1B1F2B;
+    --ink: #E6E8F0;
+    --ink-soft: #B8BDCE;
+    --ink-mute: #8E94A8;
+    --rule: #272B39;
+    --rule-soft: #1F2330;
+    --accent: #9AA0FF;
+    --accent-soft: #1D2040;
+    --crit: #FF7565;
+    --crit-bg: #2B1714;
+    --high: #E0A24A;
+    --high-bg: #2A2013;
+    --med: #74AEEC;
+    --med-bg: #14202F;
+    --low: #949AB0;
+    --low-bg: #1D202B;
+    --ok: #5FC494;
+    --ok-bg: #12261D;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #0F1117;
+  --surface: #161923;
+  --surface-sunk: #1B1F2B;
+  --ink: #E6E8F0;
+  --ink-soft: #B8BDCE;
+  --ink-mute: #8E94A8;
+  --rule: #272B39;
+  --rule-soft: #1F2330;
+  --accent: #9AA0FF;
+  --accent-soft: #1D2040;
+  --crit: #FF7565;
+  --crit-bg: #2B1714;
+  --high: #E0A24A;
+  --high-bg: #2A2013;
+  --med: #74AEEC;
+  --med-bg: #14202F;
+  --low: #949AB0;
+  --low-bg: #1D202B;
+  --ok: #5FC494;
+  --ok-bg: #12261D;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 28px 120px;
+}
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  padding: 64px 0 36px;
+  border-bottom: 2px solid var(--ink);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0 0 18px;
+}
+
+h1 {
+  font-size: clamp(34px, 5.2vw, 54px);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  font-weight: 700;
+  margin: 0 0 22px;
+  text-wrap: balance;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 18px 30px;
+  margin-top: 30px;
+}
+
+.meta-item .k {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: block;
+  margin-bottom: 5px;
+}
+
+.meta-item .v {
+  font-size: 14px;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+}
+
+/* ---------- thesis ---------- */
+
+.thesis {
+  margin: 40px 0 0;
+  padding: 26px 30px;
+  background: var(--ok-bg);
+  border-left: 3px solid var(--ok);
+}
+
+.thesis .line {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ok);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.thesis p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+/* ---------- stats ---------- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  margin: 40px 0 0;
+}
+
+.stat {
+  background: var(--surface);
+  padding: 20px 18px;
+}
+
+.stat .n {
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  display: block;
+}
+
+.stat .l {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-top: 9px;
+  display: block;
+}
+
+.stat.s-crit .n { color: var(--crit); }
+.stat.s-high .n { color: var(--high); }
+.stat.s-med  .n { color: var(--med); }
+.stat.s-low  .n { color: var(--low); }
+.stat.s-both .n { color: var(--accent); }
+
+/* ---------- filter bar ---------- */
+
+.filters {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--ground);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 0;
+  margin: 46px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px 34px;
+  align-items: center;
+}
+
+.fgroup {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.fgroup > .flabel {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background .12s, border-color .12s, color .12s;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip:hover { border-color: var(--ink-mute); }
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--ground);
+}
+
+.chip.c-crit[aria-pressed="true"] { background: var(--crit); border-color: var(--crit); color: #fff; }
+.chip.c-high[aria-pressed="true"] { background: var(--high); border-color: var(--high); color: #fff; }
+.chip.c-med[aria-pressed="true"]  { background: var(--med);  border-color: var(--med);  color: #fff; }
+.chip.c-low[aria-pressed="true"]  { background: var(--low);  border-color: var(--low);  color: #fff; }
+
+.fcount {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- section headers ---------- */
+
+.sec {
+  margin: 66px 0 0;
+}
+
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 4px;
+}
+
+.sec-head h2 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.sec-head .tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.sec-note {
+  font-size: 14.5px;
+  color: var(--ink-mute);
+  margin: 14px 0 0;
+  max-width: 68ch;
+}
+
+/* ---------- register entries ---------- */
+
+.entry {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 0 30px;
+  padding: 30px 0;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.entry[hidden] { display: none; }
+
+.entry-rail {
+  position: sticky;
+  top: 74px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.eid {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry[data-sev="critical"] .eid { color: var(--crit); }
+.entry[data-sev="high"]     .eid { color: var(--high); }
+.entry[data-sev="medium"]   .eid { color: var(--med); }
+.entry[data-sev="low"]      .eid { color: var(--low); }
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.b-crit { background: var(--crit-bg); color: var(--crit); }
+.b-high { background: var(--high-bg); color: var(--high); }
+.b-med  { background: var(--med-bg);  color: var(--med); }
+.b-low  { background: var(--low-bg);  color: var(--low); }
+.b-both { background: var(--accent-soft); color: var(--accent); }
+.b-one  { background: var(--surface-sunk); color: var(--ink-mute); }
+
+.entry-body h3 {
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+  margin: 0 0 12px;
+  text-wrap: balance;
+}
+
+.loc {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-mute);
+  margin: 0 0 16px;
+  word-break: break-word;
+}
+
+.entry-body p {
+  margin: 0 0 13px;
+  max-width: 74ch;
+  text-wrap: pretty;
+}
+
+.entry-body p:last-child { margin-bottom: 0; }
+
+.entry-body ol,
+.entry-body ul {
+  max-width: 74ch;
+  margin: 0 0 13px;
+  padding-left: 22px;
+}
+
+.entry-body li { margin-bottom: 7px; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: var(--surface-sunk);
+  padding: 1.5px 5px;
+  border-radius: 2px;
+  word-break: break-word;
+}
+
+pre {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  background: var(--surface-sunk);
+  border-left: 2px solid var(--rule);
+  padding: 15px 18px;
+  overflow-x: auto;
+  margin: 0 0 15px;
+}
+
+pre code { background: none; padding: 0; font-size: inherit; }
+
+.fix {
+  margin-top: 15px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  font-size: 14.5px;
+  line-height: 1.62;
+  max-width: 74ch;
+}
+
+.fix .fl {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.caution {
+  margin: 0 0 15px;
+  padding: 13px 17px;
+  background: var(--crit-bg);
+  border-left: 2px solid var(--crit);
+  font-size: 14.5px;
+  line-height: 1.6;
+  max-width: 74ch;
+}
+
+.aside {
+  margin: 0 0 15px;
+  padding: 12px 17px;
+  background: var(--surface-sunk);
+  border-left: 2px solid var(--rule);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  max-width: 74ch;
+}
+
+/* ---------- tables ---------- */
+
+.tw { overflow-x: auto; margin: 0 0 15px; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+  min-width: 480px;
+}
+
+th, td {
+  text-align: left;
+  padding: 9px 14px 9px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+
+th {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+td.num, th.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+
+/* ---------- compact register (M / L) ---------- */
+
+.compact {
+  display: grid;
+  grid-template-columns: 62px 1fr 240px 46px;
+  gap: 0 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  align-items: baseline;
+  font-size: 15px;
+}
+
+.compact[hidden] { display: none; }
+
+.compact .cid {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.compact[data-sev="medium"] .cid { color: var(--med); }
+.compact[data-sev="low"]    .cid { color: var(--low); }
+
+.compact .cloc {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-mute);
+  word-break: break-word;
+}
+
+.compact .csrc {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: right;
+  color: var(--ink-mute);
+}
+
+.compact .csrc.both { color: var(--accent); font-weight: 600; }
+
+.compact .ctxt { text-wrap: pretty; }
+
+/* ---------- prose blocks ---------- */
+
+.prose { max-width: 76ch; }
+.prose p { margin: 0 0 14px; text-wrap: pretty; }
+.prose h3 {
+  font-size: 17px;
+  font-weight: 650;
+  margin: 28px 0 10px;
+  letter-spacing: -0.008em;
+}
+.prose ul, .prose ol { padding-left: 22px; margin: 0 0 14px; }
+.prose li { margin-bottom: 8px; }
+
+.order {
+  display: grid;
+  gap: 1px;
+  background: var(--rule);
+  border: 1px solid var(--rule);
+  margin-top: 20px;
+}
+
+.order-row {
+  background: var(--surface);
+  padding: 18px 22px;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.order-row .on {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-mute);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.order-row .oh {
+  font-weight: 650;
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+
+.order-row .op {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 8px;
+  word-break: break-word;
+}
+
+.order-row .oq {
+  font-size: 14px;
+  color: var(--ink-mute);
+  margin: 0;
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+.passed {
+  columns: 2;
+  column-gap: 42px;
+  max-width: none;
+  padding-left: 20px;
+  margin: 18px 0 0;
+}
+
+.passed li {
+  break-inside: avoid;
+  margin-bottom: 10px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.passed li strong { color: var(--ink); font-weight: 600; }
+
+footer {
+  margin-top: 78px;
+  padding-top: 26px;
+  border-top: 2px solid var(--ink);
+  font-size: 14px;
+  color: var(--ink-mute);
+  max-width: 76ch;
+}
+
+footer p { margin: 0 0 12px; }
+
+@media (max-width: 860px) {
+  .entry { grid-template-columns: 1fr; gap: 14px; }
+  .entry-rail { position: static; flex-direction: row; align-items: center; gap: 10px; }
+  .compact { grid-template-columns: 50px 1fr; gap: 4px 16px; }
+  .compact .cloc { grid-column: 2; }
+  .compact .csrc { grid-column: 2; text-align: left; }
+  .passed { columns: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">감사 리포트 · 8개 워커 통합</p>
+  <h1>Greenday 코드베이스 감사</h1>
+
+  <div class="meta-grid">
+    <div class="meta-item"><span class="k">대상</span><span class="v">supaicy/coordinate @ 1ccf433</span></div>
+    <div class="meta-item"><span class="k">일자</span><span class="v">2026-08-28</span></div>
+    <div class="meta-item"><span class="k">구성</span><span class="v">Electron 40 + React + TS</span></div>
+    <div class="meta-item"><span class="k">감사자</span><span class="v">관심사 4 × 엔진 2</span></div>
+  </div>
+</header>
+
+<div class="thesis">
+  <p class="line">tsc --build 0 · biome lint 0 · vitest 915 passed / 59 files</p>
+  <p>아래 96건은 전부 그 초록불 <em>아래</em>에 있다. 테스트가 통과한다는 사실이 이것들을 잡지 못했다는 뜻이다. 앱 코드는 고치지 않았다 — 이것은 감사다.</p>
+</div>
+
+<div class="stats">
+  <div class="stat s-crit"><span class="n">8</span><span class="l">Critical</span></div>
+  <div class="stat s-high"><span class="n">19</span><span class="l">High</span></div>
+  <div class="stat s-med"><span class="n">42</span><span class="l">Medium</span></div>
+  <div class="stat s-low"><span class="n">27</span><span class="l">Low</span></div>
+  <div class="stat s-both"><span class="n">40</span><span class="l">교차 확인</span></div>
+</div>
+
+<nav class="filters" aria-label="발견 필터">
+  <div class="fgroup" role="group" aria-label="심각도">
+    <span class="flabel">심각도</span>
+    <button class="chip c-crit" data-sev="critical" aria-pressed="true">Critical 8</button>
+    <button class="chip c-high" data-sev="high" aria-pressed="true">High 19</button>
+    <button class="chip c-med" data-sev="medium" aria-pressed="true">Medium 42</button>
+    <button class="chip c-low" data-sev="low" aria-pressed="true">Low 27</button>
+  </div>
+  <div class="fgroup" role="group" aria-label="출처">
+    <span class="flabel">출처</span>
+    <button class="chip" data-src="both" aria-pressed="true">교차 확인 40</button>
+    <button class="chip" data-src="claude" aria-pressed="true">claude만 25</button>
+    <button class="chip" data-src="codex" aria-pressed="true">codex만 31</button>
+  </div>
+  <span class="fcount" id="fcount" aria-live="polite">96건 표시</span>
+</nav>
+
+<!-- =================== READING GUIDE =================== -->
+
+<section class="sec">
+  <div class="sec-head"><h2>이 문서를 읽는 법</h2><span class="tag">범례</span></div>
+  <div class="prose">
+    <p>같은 결함을 두 엔진이 각각 찾은 경우가 많다. 각 항목에 출처를 달았다.</p>
+    <ul>
+      <li><span class="badge b-both">교차 확인</span> — claude와 codex가 독립적으로 같은 결함에 도달했다. 오탐 가능성이 가장 낮다.</li>
+      <li><span class="badge b-one">claude</span> / <span class="badge b-one">codex</span> — 한쪽만 찾았다. <strong>단일 출처라고 덜 진짜인 것은 아니다</strong> — 아래 <a href="#single">단일 출처가 중요한 이유</a>를 볼 것.</li>
+    </ul>
+    <p>심각도는 <strong>통합 심각도</strong>다. 두 엔진의 평가가 갈린 경우 높은 쪽을 취하고 <a href="#split">심각도가 갈린 항목</a>에 따로 적었다.</p>
+    <p>제외한 것(지시대로): <code>IS_ENFORCED = false</code> 자체, "설정 폴더를 지우면 트라이얼이 리셋된다".</p>
+  </div>
+</section>
+
+<!-- =================== CRITICAL =================== -->
+
+<section class="sec" id="critical">
+  <div class="sec-head"><h2>Critical</h2><span class="tag">출하를 막는 것 · 8건</span></div>
+
+  <article class="entry" data-sev="critical" data-src="both">
+    <div class="entry-rail">
+      <span class="eid">C1</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-both">교차 확인</span>
+    </div>
+    <div class="entry-body">
+      <h3>CalDAV 응답 안의 href가 그대로 요청 URL이 되고, 그 요청에 iCloud 앱 암호가 실린다</h3>
+      <p class="loc">src/main/caldav/client.ts:112-114 (claude) · :128 (codex)</p>
+      <p><code>absolute()</code>가 <code>href.startsWith('http') ? href : new URL(href, origin)</code>이다. <strong>두 갈래가 둘 다 출처를 벗어난다.</strong> claude 실측:</p>
+      <pre><code>"https://evil.example/steal" -> https://evil.example/steal   (절대 URL 그대로)
+"http://evil.example/steal"  -> http://evil.example/steal    (평문 HTTP까지)
+"//evil.example/x"           -> https://evil.example/x       (프로토콜 상대)</code></pre>
+      <p>그 결과가 <code>request()</code>로 들어가고, <code>request()</code>는 URL이 무엇이든 <code>Authorization</code> 헤더를 붙인다(<code>:131</code>). 생성자의 https 강제는 <strong>최초 <code>serverUrl</code>에만</strong> 걸리고, 3xx 방어는 리다이렉트에만 걸린다 — 본문 안의 href는 어느 쪽도 지나지 않는다.</p>
+      <p>도달 경로가 둘이다:</p>
+      <ol>
+        <li><strong>원격 서버</strong> — <code>discoverCalendars</code>가 principal → home-set → 컬렉션 href를 전부 서버 응답에서 읽어 <code>absolute()</code>에 넣는다. 침해된 CalDAV 서버가 첫 PROPFIND 응답 한 번으로 다음 요청을 자기 호스트로 보낸다. 그 href가 <code>calendar-config.json</code>에 저장되므로 <strong>오염이 지속된다.</strong></li>
+        <li><strong>렌더러</strong> — <code>calendar:select</code>는 <code>calendarUrl: String(url)</code>로 스킴도 출처도 검사하지 않는다. 렌더러 한 줄로 앱 암호를 임의 호스트에 흘릴 수 있다.</li>
+      </ol>
+      <p>iCloud 앱 암호는 사용자의 캘린더·연락처 전체에 대한 자격증명이다. 이 파일은 자격증명이 새지 않게 하려고 이미 두 군데를 막아 뒀는데, 정작 가장 넓은 입구가 열려 있다.</p>
+      <div class="fix"><span class="fl">고치는 법</span><code>absolute()</code>가 <strong>항상</strong> <code>new URL(href, this.origin)</code>로 해석하고 <code>origin !== this.origin</code>이면 던진다. 같은 검사를 <code>request()</code> 진입부에 한 번 더 둬 <code>listEvents</code>/<code>putEvent</code>처럼 밖에서 들어오는 URL도 걸리게 한다. <code>calendar:select</code>에서도 저장된 <code>serverUrl</code>과 같은 출처인지 확인한다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="claude">
+    <div class="entry-rail">
+      <span class="eid">C2</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-one">claude</span>
+    </div>
+    <div class="entry-body">
+      <h3>창에 파일을 떨어뜨리면 그 페이지가 <code>window.api</code> 전부를 물려받는다</h3>
+      <p class="loc">src/main/index.ts:36-74 + src/main/ipc-gate.ts:70-82</p>
+      <p><code>createWindow()</code>에 <code>setWindowOpenHandler</code>만 있고 <code>will-navigate</code>/<code>will-frame-navigate</code>가 없다(grep 0건). 렌더러의 drop 핸들러는 할일 목록·캘린더 셀 같은 특정 요소에만 붙어 있고 <code>document</code>/<code>window</code> 수준 <code>dragover</code>+<code>drop</code> <code>preventDefault</code>가 없다(grep 0건). 사이드바·헤더·빈 공간에 떨어뜨리면 Electron 기본 동작(그 파일로 네비게이트)이 그대로 산다.</p>
+      <p>그 뒤가 문제다. preload는 그 webContents가 <strong>어떤 페이지를 로드하든</strong> 다시 실행되므로 <code>exposeInMainWorld('api', api)</code>가 새 문서에도 걸린다. <code>index.html</code>의 CSP는 옛 문서의 메타 태그라 새 문서에 적용되지 않는다. 그리고 <strong><code>ipc-gate.ts</code>의 <code>handle()</code>이 <code>event.senderFrame</code>을 보지 않는다</strong> — 어떤 출처가 부르든 등급만 본다. <em>(이 절반은 codex도 <code>ipc-gate.ts:70</code>에서 독립적으로 지적했다.)</em></p>
+      <p>결과: HTML 파일 하나를 창에 떨어뜨리면 그 페이지가 <code>export-data</code>, <code>open-attachment</code>, <code>open-external</code>, <code>license:activate</code>, <code>calendar:select</code>(→ <strong>C1과 결합해 앱 암호 탈취</strong>), 그리고 라이선스가 살아 있는 동안 모든 <code>paid</code> 채널을 호출한다. 렌더러에 XSS 싱크가 없다는 사실이 방어가 되지 않는다 — 코드 실행 발판이 필요 없고 드래그 한 번이면 된다.</p>
+      <div class="aside"><strong>claude 표기</strong> — 가드가 없다는 것은 코드로 확인. "떨어뜨리면 네비게이트한다"는 Electron 문서화된 기본 동작이며 이 감사에서 GUI로 재현하지는 않았다.</div>
+      <div class="fix"><span class="fl">고치는 법</span>세 겹으로 — ① <code>will-navigate</code>/<code>will-frame-navigate</code>에서 시작 URL 외 차단, ② <code>main.tsx</code>에서 문서 수준 <code>dragover</code>/<code>drop</code> <code>preventDefault</code>, ③ <code>ipc-gate.handle()</code>에서 <code>event.senderFrame.url</code>이 앱 문서인지 확인. <code>free</code>/<code>paid</code> 양쪽 모두에 걸어야 의미가 있다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="both">
+    <div class="entry-rail">
+      <span class="eid">C3</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-both">교차 확인</span>
+    </div>
+    <div class="entry-body">
+      <h3>렌더러가 엔드포인트만 바꾸면 메인이 보관한 AI 키가 공격자 서버로 나간다</h3>
+      <p class="loc">src/main/ai-service.ts:81 (codex) · :53-70, :94-111 (claude)</p>
+      <p><strong>codex의 각도</strong> — 마스킹된 API 키를 받으면 기존 원본 키를 유지하면서 <code>baseUrl</code>·<code>provider</code> 변경은 허용한다. 렌더러가 엔드포인트만 공격자 서버로 바꾼 뒤 연결 확인이나 AI 요청을 부르면 메인이 보관한 키가 <code>Bearer</code> 헤더로 유출된다.</p>
+      <p><strong>claude의 각도</strong> — 차단 목록 <code>isAllowedUrl</code>이 IPv6와 DNS 이름을 전혀 보지 않고, 검사가 <strong>저장할 때만</strong> 걸린다. 실측:</p>
+      <pre><code>http://[fd00::1]/                 -> true   (IPv6 ULA, 사설망)
+http://[::ffff:10.0.0.5]/         -> true   (IPv4 매핑 → 10.0.0.5)
+http://metadata.google.internal/  -> true   (DNS 이름 → 169.254.169.254)
+http://169.254.169.253/           -> true   (링크로컬 — .254 하나만 막혀 있다)</code></pre>
+      <p>더 큰 문제는 <strong>적용 지점</strong>이다. <code>setAiConfig</code>만 검사하고, 요청을 실제로 보내는 <code>checkConnection</code> · <code>warmupModel</code> · <code>callLlm</code> · <code>streamChat</code> 중 어느 것도 <code>isAllowedUrl</code>을 부르지 않는다. 응답 본문이 렌더러로 돌아가므로 <strong>읽기까지 되는 SSRF</strong>다.</p>
+      <p>덧붙여 <code>checkConnection</code>은 <code>localOnly</code> 잠금도 건너뛴다 — 설정 화면의 자물쇠 문구는 "외부 AI 제공자를 차단해 데이터가 기기를 벗어나지 않습니다"인데(<code>ko.json:350</code>), <strong>연결 확인 버튼이 그 약속을 깬다.</strong></p>
+      <div class="fix"><span class="fl">고치는 법</span>키를 provider와 정규화한 오리진에 결속하고 둘이 바뀌면 기존 키를 지운다. 차단은 호스트 문자열이 아니라 <strong>해석된 주소</strong>로 판정하고(<code>dns.lookup</code> 결과가 사설/루프백/링크로컬/ULA/IPv4매핑이면 거절), 그 검사를 요청을 보내는 공통 지점에 둔다. <code>localOnly</code> 검사도 같은 자리로 합친다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="both">
+    <div class="entry-rail">
+      <span class="eid">C4</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-both">교차 확인</span>
+    </div>
+    <div class="entry-body">
+      <h3>저장이 원자적이지 않고 세대가 직렬화되지 않아, 조용한 데이터 손실 경로가 둘 있다</h3>
+      <p class="loc">src/main/database.ts:81 · :84 (codex critical) · :81-102 (claude low)</p>
+      <div class="caution"><strong>두 엔진의 심각도가 가장 크게 갈린 항목이다</strong> — codex는 critical, claude는 low. claude는 "느린 디스크에서만 나는 종류"로 봤고, codex는 <strong>지연 주입으로 실제 재현했다.</strong></div>
+      <ol>
+        <li><strong>세대 미직렬화</strong> — A 저장 진행 중 B를 추가하고 <code>closeDatabase()</code>로 <code>[A,B]</code>를 쓴 뒤, A 콜백이 착륙하자 파일이 <strong><code>[A]</code>로 되돌아갔다</strong>(codex 재현). 구형 콜백이 새 저장의 <code>savePending</code>까지 <code>false</code>로 만들 수 있다. macOS는 <code>window-all-closed</code>에서 앱이 끝나지 않으므로 이 창이 실제로 살아남는다.</li>
+        <li><strong>비원자적 전체 쓰기</strong> — 유일한 할일 DB를 대상 파일에 직접 잘라 쓴다. 프로세스 종료·전원 손실·동시 <code>writeFile</code> 하나가 전체 JSON을 훼손하고, 되돌릴 이전 정상본이 없다. <code>license.json</code>은 temp+rename을 쓰는데 훨씬 큰 <code>ticktick-data.json</code>은 안 쓴다 — <strong>비대칭이다.</strong></li>
+      </ol>
+      <div class="fix"><span class="fl">고치는 법</span>revision을 가진 단일 저장 큐로 쓰기를 직렬화하고, 종료 시 in-flight 쓰기를 drain한 뒤 최신 revision만 커밋한다. 같은 볼륨 임시 파일에 완전히 쓰고 <code>fsync</code> 후 <code>rename</code>하며 이전 정상본을 보존한다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="both">
+    <div class="entry-rail">
+      <span class="eid">C5</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-both">교차 확인</span>
+    </div>
+    <div class="entry-body">
+      <h3>출하되는 모든 빌드에서 Google 캘린더 연동이 죽어 있다</h3>
+      <p class="loc">.github/workflows/release.yml:58 (claude) · electron.vite.config.ts:11 (codex)</p>
+      <p>릴리스 워크플로의 <code>npx electron-vite build</code>에 <code>GOOGLE_OAUTH_CLIENT_ID</code>가 없다. 빈 문자열이 박히고, <code>ipc-handlers.ts:386</code>의 폴백 <code>process.env.*</code>도 Finder/Dock으로 띄운 macOS 앱에 셸 환경이 상속되지 않아 역시 빈 값이다. claude 실측: 빌드 산출물 <code>out/main/index.js:3372</code>에서 빌드타임 상수가 이미 접혀 사라졌다. codex는 <code>release.sh:49</code>와 <code>mas-preflight.sh:184</code> 어느 쪽도 값을 요구하지 않음을 확인했다.</p>
+      <p>결과: <code>GoogleSyncSection.tsx:136-137</code>이 화면 전체를 "이 빌드에는 Google 연동이 설정되어 있지 않습니다" 한 줄로 대체한다. 버튼도 안내도 없는 완전한 막다른 골목이다. OAuth·PKCE·토큰 갱신·동기화 계획은 전부 구현돼 있고 유닛테스트도 통과하는데 <strong>사용자가 그 코드에 닿을 방법이 없다.</strong></p>
+      <p>그런데 <code>TODOS.md:226-234</code>의 확정 가격 정책은 "iCloud와 Google 캘린더 모두 지원"을 <strong>판매 문구로 쓴다</strong>고 못 박았고, <code>app-store-submission.md:120</code>은 심사에도 그렇게 답했다. <strong>파는 것과 출하하는 것이 다르다.</strong></p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="codex">
+    <div class="entry-rail">
+      <span class="eid">C6</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-one">codex</span>
+    </div>
+    <div class="entry-body">
+      <h3>클라이언트 ID를 넣어도 Google 로그인은 끝까지 갈 수 없다</h3>
+      <p class="loc">src/shared/app-id.ts:27 · src/main/google/oauth.ts:25</p>
+      <p><strong>C5를 고쳐도 남는 결함이다.</strong> codex만 잡았고, 외부 계약 문서를 대조해 확인했다.</p>
+      <ol>
+        <li><strong>redirect 방식</strong> — 코드는 <code>com.supaicy.haru:/oauth2redirect</code> custom URL scheme에 전적으로 의존하는데, Google의 현행 native-app redirect 계약은 custom URI scheme을 <strong>더 이상 지원하지 않는다</strong>고 명시하고 macOS desktop에는 loopback IP를 권장한다. 저장소는 이를 "iOS bundle ID"로 우회하려 하지만 Electron macOS 앱을 iOS client로 등록하는 것은 지원되는 구성이 아니다.</li>
+        <li><strong>scope 불일치</strong> — 앱은 <code>calendar.app.created</code> 하나만 요청한 뒤 <code>google/calendar.ts:162</code>에서 <code>GET /users/me/calendarList</code>를 호출하는데, Google의 CalendarList.list 계약은 이 scope를 허용하지 않아 <strong>403</strong>이 난다. 게다가 그 scope는 앱이 만든 보조 캘린더에 한정되는데, 코드는 보조 캘린더를 만들지 않고 사용자의 기존 캘린더를 고르게 한다.</li>
+      </ol>
+      <div class="fix"><span class="fl">고치는 법</span>Desktop client + PKCE + 임의 포트 <code>127.0.0.1</code> listener로 바꾸고 MAS에는 <code>network.server</code> entitlement와 심사 설명을 추가한다. scope는 목록용 + 의도한 범위의 events scope를 함께 받거나, 최소 scope를 유지하려면 앱 전용 보조 캘린더를 만들어 그 ID만 쓰도록 흐름을 다시 설계한다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="both">
+    <div class="entry-rail">
+      <span class="eid">C7</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-both">교차 확인</span>
+    </div>
+    <div class="entry-body">
+      <h3>공개된 개인정보처리방침이 라이선스 서버를 부정한다</h3>
+      <p class="loc">docs/privacy.html:60,69,78,249 (claude) · :58 (codex)</p>
+      <p>심사에 제출된 방침(최종 수정 2026-07-29)이 "서버가 없고, 계정도 없고"(:60), "개발자가 운영하는 서버가 없습니다"(:69), 영문 "There is no server"(:249)라고 적고, <strong>하지 않는 것</strong> 목록에 "기기 지문"(:78)을 명시한다.</p>
+      <p>실제로는 2026-08-18에 들어온 <code>src/main/licensing/</code>이 <code>pay.begreen.dev</code>로 <strong>라이선스 키 원문</strong>, <code>IOPlatformUUID</code>에서 파생한 기기 해시, <code>os.hostname()</code>을 보낸다. claude 실측: <code>grep -c "pay.begreen|라이선스 키" docs/privacy.html</code> = <strong>0</strong>.</p>
+      <p><code>os.hostname()</code>은 macOS에서 대개 소유자 실명을 담고("철수의 MacBook Pro"), 앱은 그 사실을 화면에 고지까지 한다 — <strong>앱이 사용자에게 말하는 것과 법적 문서가 말하는 것이 정면으로 다르다.</strong> 지금 <code>IS_ENFORCED=false</code>라 활성화를 누르지 않으면 트래픽이 안 나가지만, 키 입력 UI는 직판·개발 빌드에서 이미 살아 있어 <strong>오늘도 도달 가능한 경로</strong>다. Apple App Privacy 신고와도 어긋난다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="critical" data-src="both">
+    <div class="entry-rail">
+      <span class="eid">C8</span>
+      <span class="badge b-crit">Critical</span>
+      <span class="badge b-both">교차 확인</span>
+    </div>
+    <div class="entry-body">
+      <h3>앱이 서버에 없는 제품 slug를 가리킨다</h3>
+      <p class="loc">src/main/licensing/endpoints.ts:30 (claude) · bicmac-license/migrations/0001_initial.sql:28 (codex)</p>
+      <p>앱은 <code>PRODUCT_SLUG = 'greenday'</code>로 구매 URL을 만들고 토큰의 <code>prod</code> 클레임을 검사한다. 레퍼런스 서버의 유일한 마이그레이션은 <code>products</code>에 <strong><code>bicmac</code> 한 줄만</strong> INSERT한다 — <code>greenday</code> 행이 없다.</p>
+      <p><code>GET /v1/products/greenday</code>는 404가 되고, 구매 페이지가 그 응답으로 이름·가격·결제 레일을 채우므로 <strong><code>/buy?product=greenday</code>가 렌더되지 않는다.</strong> 키 발급도 <code>products.key_prefix</code>에 묶여 있어 <code>GREENDAY-</code> 키 자체가 존재할 수 없다. enforcement를 켜는 날 "결제하러 갔더니 빈 페이지"가 된다.</p>
+      <p>codex가 덧붙인 것: README의 수동 INSERT 예시는 확정 가격 <code>TODOS.md:225</code>의 ₩19,000과 달리 <strong>₩9,000/$5.99</strong>이고, <code>wrangler.toml:37</code>의 D1 ID도 placeholder다.</p>
+      <div class="caution"><strong>주의</strong> — 서버는 읽기 전용 레퍼런스이고 운영 D1에는 올바르게 들어가 있을 수 있다. 단정할 수 없지만, <strong>저장소 기준 배포는 product lookup·가격·<code>GREENDAY-</code> 활성화 중 최소 하나가 어긋난다.</strong> 실결제 → 키 메일 → activate → validate → deactivate 왕복을 live smoke-test하기 전에는 enforcement를 켜면 안 된다. CLAUDE.md가 "<code>greenday</code> slug는 출시 후 못 바꾼다"고 못 박은 그 값이다.</div>
+    </div>
+  </article>
+</section>
+
+<!-- =================== HIGH =================== -->
+
+<section class="sec" id="high">
+  <div class="sec-head"><h2>High</h2><span class="tag">19건</span></div>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H1</span><span class="badge b-high">High</span><span class="badge b-both">3중 확인</span></div>
+    <div class="entry-body">
+      <h3>거절된 낙관적 편집이 되돌려지지 않는다</h3>
+      <p class="loc">useStore.ts:333-365 (bug-claude) · :333 (bug-codex) · :356 (feature-codex)</p>
+      <p>모든 변경 액션이 <code>set(...)</code>으로 화면을 먼저 바꾸고 <code>persist(...)</code>로 IPC를 쏜다. <code>persist</code>는 거절을 <code>report</code>로 넘기고, <code>report</code>는 <strong>로그 + <code>refreshLicense()</code>가 전부다.</strong> 낙관적 변경은 그대로 남는다. 주석이 이 사실을 인정하며 롤백을 TODO로 미뤄 뒀다.</p>
+      <p>codex 재현: <code>updateTask</code>를 <code>license_required</code>로 거절시켰더니 제목은 계속 <code>ghost</code>였고 라이선스 상태만 새로고침됐다.</p>
+      <p><code>IS_ENFORCED</code>를 켜는 날, 트라이얼이 닫힌 사용자의 <strong>첫 편집</strong>이 이 경로다 — 모든 사용자가 반드시 한 번은 지난다. 사용자가 보는 것은 "할일이 만들어졌다 / 완료됐다 / 삭제됐다"이고, 재시작하면 전부 없다.</p>
+      <p>점수는 더 나쁘다 — <code>addScore</code>는 <code>score.total</code>을 렌더러에서 직접 계산해 올리므로 게이트가 거절하면 화면 총점이 디스크와 <strong>그 세션 내내 영구히</strong> 갈린다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H2</span><span class="badge b-high">High</span><span class="badge b-both">4중 확인</span></div>
+    <div class="entry-body">
+      <h3>시계 되돌리기로 트라이얼·만료·재검증을 무기한 피할 수 있다</h3>
+      <p class="loc">licenseManager.ts:677 · :413 · :442,613 · :599,618-624</p>
+      <p>네 워커가 각각 다른 각도에서 같은 뿌리에 도달했다: <strong>단조 시간의 경과가 내구성 있게 전진하지 않는다.</strong></p>
+      <ul>
+        <li><strong>codex 재현</strong> — 5시간 경과 후 <code>allowsPaidFeatures()</code>를 불러도 디스크 <code>lastSeenMs</code>가 그대로였고, 시계를 원래 값으로 되돌려 manager를 재생성하자 다시 <code>licensed</code>였다. 재실행은 <code>setTimeout</code>의 단조 경과도 함께 버린다.</li>
+        <li><strong>claude (bug)</strong> — <code>refresh()</code>가 <code>before</code>를 <strong>await 앞에서</strong> 잡는다. 그 15초 동안 마감 타이머가 깨어 <code>advanceClockFloor</code>가 래칫을 올리고 <code>persist()</code>하는데, 커밋이 실패하면 그 값을 await 이전으로 <strong>덮어써서 래칫을 내린다.</strong> <code>activate()</code>는 같은 함정을 피해 간다 — <strong>두 함수가 비대칭이다.</strong></li>
+        <li><strong>claude (feature)</strong> — 반대 방향: 로컬 시계가 30일 넘게 <strong>앞서면</strong> 라이선스가 영영 복구되지 않는다.</li>
+      </ul>
+      <div class="fix"><span class="fl">고치는 법</span>프로세스 단조 시계와 OS 부팅 식별자·uptime을 체크포인트로 저장해 종료/재실행을 이어 계산한다. 롤백은 <code>record.token</code> 하나로 줄여 래칫은 <code>advanceClockFloor</code>로만 움직이게 한다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="codex">
+    <div class="entry-rail"><span class="eid">H3</span><span class="badge b-high">High</span><span class="badge b-one">codex 2중</span></div>
+    <div class="entry-body">
+      <h3>쓰기 불가 저장소에서 트라이얼이 무한히 갱신된다</h3>
+      <p class="loc">licenseManager.ts:309 (bug-codex) · :303 (feature-codex)</p>
+      <p><code>evaluateTrial()</code>이 <code>persist()</code>의 boolean 결과를 버리고 trial을 반환한다. codex 재현: <code>store.write=false</code>인 같은 빈 디스크 레코드로 manager를 두 번 만들자 <strong>둘 다 새 30일 <code>trial</code>을 받았고</strong> <code>trialStartMs</code>는 계속 <code>null</code>이었다.</p>
+      <div class="caution"><strong>이것은 제외하기로 한 "설정 파일을 지우는" 트레이드오프가 아니다</strong> — 한 번 만든 권한/파일시스템 조건으로 계속 유지되는 우회다.</div>
+      <p>관련(codex): <code>licenseManager.ts:282</code> — 라이선스로 먼저 시작한 설치는 trial 시계를 전혀 시작하지 않아, token 만료 → 30일 grace 다음에 만료가 아니라 <strong>새 30일 trial</strong>로 넘어간다. 오프라인 사용이 서명 token 잔여 + 30일 grace + 30일 trial까지 늘어난다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H4</span><span class="badge b-high">High</span><span class="badge b-both">4중 확인</span></div>
+    <div class="entry-body">
+      <h3>활성화/해제 IPC가 거절되면 두 버튼이 영구히 잠긴다</h3>
+      <p class="loc">useActivation.ts:39-51 + LicenseSection.tsx:67-75</p>
+      <p><strong>네 워커 전부가 찾았다</strong> — 최다 합의 항목이다. 두 흐름 다 <code>finally</code>가 없다:</p>
+      <pre><code>setBusy(true)
+const failure = await window.api.licenseActivate(key)   // 여기서 reject되면
+setBusy(false)                                          // 이 줄에 도달하지 못한다</code></pre>
+      <p><code>busy = activation.busy || releasing</code>이 <strong>두 버튼을 모두</strong> 잠그므로, 한 번의 거절로 사용자는 활성화도 해제도 못 하는 화면에 갇힌다. 잠금 화면에서는 <code>canSubmit</code>이 영영 false가 되어 <strong>유일한 탈출구가 막힌다.</strong> 게다가 호출처가 <code>void activate()</code>라 그 거절은 unhandled rejection으로 사라진다.</p>
+      <p>codex가 실행 가능한 재현 테스트를 만들었다: IPC rejection이 그대로 escape하고 <code>busy === true</code>가 영구 유지됨을 확인.</p>
+      <div class="fix"><span class="fl">고치는 법</span>두 자리 모두 <code>try { … } finally { setBusy(false) }</code>로 감싸고, catch에서 사용자에게 보여 줄 실패 코드를 세운다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H5</span><span class="badge b-high">High</span><span class="badge b-both">교차 확인</span></div>
+    <div class="entry-body">
+      <h3>하위작업이 있는 할일을 삭제하고 되돌리면 하위작업이 영영 휴지통에 남는다</h3>
+      <p class="loc">useStore.ts:687-693, 901-907 + database.ts:402-408 (claude) · database.ts:403 (codex)</p>
+      <p>삭제는 하위작업까지 함께 하는데(<code>t.id === id || t.parent_id === id</code>), 되돌리기는 부모 하나만 되살린다. main의 <code>restoreTask</code>가 <strong>그 한 행만</strong> 찾아 <code>deleted_at = null</code>을 놓는다 — <code>deleteTask</code>와 대칭이 아니다.</p>
+      <p>codex 재현 테스트: <code>deleteTask(parent)</code> → <code>restoreTask(parent)</code> 후 부모만 active로 돌아오고 child는 <code>getTrashTasks()</code>에 남음을 확인.</p>
+      <p>Cmd+Z 한 번이 "부모는 살아났는데 하위작업 셋은 휴지통에 남은" 상태를 만든다. 화면에서는 하위작업이 통째로 사라진 것으로 보인다. <strong>같은 파일의 <code>batchDelete</code>는 이 함정을 이미 피해 간다</strong> — 단건 경로만 빠졌다. 휴지통 화면의 개별 '복원'도 같은 비대칭.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="claude">
+    <div class="entry-rail"><span class="eid">H6</span><span class="badge b-high">High</span><span class="badge b-one">claude</span></div>
+    <div class="entry-body">
+      <h3>날짜를 UTC로 파싱해, 음수 오프셋 지역에서 모든 마감일 판정이 하루씩 앞당겨진다</h3>
+      <p class="loc">src/renderer/src/utils/date.ts:29,48,54,59,64,79</p>
+      <p><code>formatDueDate</code>·<code>isOverdue</code>·<code>isDueToday</code>·<code>isDueTomorrow</code>·<code>isDueInNext7Days</code>가 전부 <code>new Date('YYYY-MM-DD')</code>를 쓴다. ES 명세상 날짜만 있는 형식은 <strong>UTC 자정</strong>으로 파싱된다. KST(+9)에서는 우연히 맞고, 음수 오프셋에서는 전날이 된다. 실측:</p>
+      <pre><code>TZ=America/New_York  '2026-08-28'
+  -> Thu Aug 27 2026 20:00:00 GMT-0400     로컬 날짜가 27일</code></pre>
+      <p><strong>저장하는 쪽은 이미 로컬로 고쳐져 있다</strong> — <code>shared/date.ts:9</code>의 <code>toLocalDateString</code>이 그 목적이고 <code>recurrence.ts:10</code>은 아예 "인수 없는 <code>new Date()</code> 금지"를 못 박는다. <strong>읽는 쪽인 <code>date.ts</code>만 규약 밖이다.</strong> 개발자 시간대가 KST라 테스트에서도 보이지 않는다.</p>
+      <p>뉴욕에서 오늘 마감인 할일 하나가 동시에: 빨간 '지연'으로 칠해지고, <strong>"어제"</strong>라고 쓰이고, <code>next7days</code>·<code>summary</code> 스마트 리스트에서 <strong>사라지고</strong>, '내일' 뷰에는 모레 할일이 뜬다.</p>
+      <div class="fix"><span class="fl">고치는 법</span>로컬 파서를 하나 두고 여섯 자리가 전부 거치게 한다. 날짜 대 날짜 비교는 <code>todayString()</code>과의 <strong>문자열 비교</strong>가 더 안전하다 — <code>smartLists.ts:55-59</code>가 이미 그 방식이다. 테스트는 <code>TZ=America/New_York</code>을 걸어야 재현된다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="claude">
+    <div class="entry-rail"><span class="eid">H7</span><span class="badge b-high">High</span><span class="badge b-one">claude</span></div>
+    <div class="entry-body">
+      <h3>AI 설정이 시작 시 하이드레이트되지 않아, 첫 연결 확인이 항상 localhost로 나간다</h3>
+      <p class="loc">src/main/ai-service.ts:30,94-110,333-342,511-535</p>
+      <p>모듈 <code>config</code>는 <code>getAiConfig()</code>·<code>getAiConfigInternal()</code>·<code>setAiConfig()</code> <strong>안에서만</strong> 교체된다. <code>checkConnection</code>·<code>callLlm</code>·<code>streamChat</code>·<code>getChatUrl</code>은 디스크를 읽지 않고 모듈 변수를 그대로 쓴다. <code>warmupModel</code>과 <code>pullModel</code>만 <code>getAiConfigInternal()</code>을 부른다 — <strong>같은 파일 안에서 규약이 갈려 있다.</strong></p>
+      <p><code>App.tsx:65</code>가 마운트 직후 <code>aiCheckConnection()</code>을 부르는데 그 시점 <code>config</code>는 <code>DEFAULT_CONFIG</code>(ollama, localhost)다. OpenAI/커스텀 사용자는 매 실행 첫 확인이 localhost를 두드리고 <code>connected:false</code>를 받는다. 그리고 <code>AiChatPanel</code>은 <code>aiConnected === null</code>일 때만 재확인하는데 이미 <code>false</code>가 박혀 있어 <strong>AI 패널을 열어도 재확인되지 않는다.</strong></p>
+      <p><code>App.tsx:63-64</code> 주석이 "첫 실행에 AI 버튼이 안 보이던 것"을 고치려 넣은 호출인데, <strong>정확히 그 증상이 남아 있다.</strong></p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H8</span><span class="badge b-high">High</span><span class="badge b-both">교차 확인</span></div>
+    <div class="entry-body">
+      <h3>읽기 실패 세션이 유령 데이터를 만들고, '내보내기'가 빈 백업을 덮어쓴다</h3>
+      <p class="loc">database.ts:78 (codex) · :60-65,651-653 + ipc-handlers.ts:154-198 (claude)</p>
+      <p><code>load()</code>가 던지면 <code>dbReadFailed = true</code>가 서고 <code>data</code>는 빈 기본값으로 남는다.</p>
+      <ul>
+        <li><strong>codex</strong> — 쓰기는 <code>save()</code>가 막지만 <strong>mutator는 메모리를 먼저 바꾸고</strong> <code>save()</code>만 조용히 반환해 IPC가 성공한 유령 데이터를 만든다. 사용자는 오류 대화상자 뒤 빈 앱에서 한 세션치 편집을 하고 재시작 때 전부 잃는다.</li>
+        <li><strong>claude</strong> — <code>exportData()</code>는 그 빈 <code>data</code>를 그대로 직렬화하고 <code>export-data</code>는 <strong>무료 채널이라 잠금 화면에서도 눌린다.</strong> 사용자가 경로를 고르면 <code>{"lists":[],"tasks":[],…}</code>가 그 경로에 쓰인다 — 하필 기존 백업 위에 저장하면 <strong>진짜 백업까지 덮인다.</strong></li>
+        <li><code>isDatabaseReadOnly()</code>는 주석에 "부팅이 사용자에게 알리는 데 쓴다"고 적혀 있지만 <strong>소비자가 하나도 없다</strong>(테스트 밖 grep = 선언부만).</li>
+      </ul>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H9</span><span class="badge b-high">High</span><span class="badge b-both">3중 확인</span></div>
+    <div class="entry-body">
+      <h3>서버의 거절 사유가 버려져 유료 사용자에게 "체험 기간이 끝났습니다"가 뜬다</h3>
+      <p class="loc">licenseManager.ts:645 · :629</p>
+      <p>revoked 계열은 토큰을 지우고 trial로 떨어뜨리며, device-limit은 이유를 버린다. <code>PublicLicenseState</code>에 원인 필드가 없고, UI의 최종 fallback은 "Your trial has ended"다. <strong>취소·한도로 잠긴 사람이 자기 상태를 알 수도, 복구 행동을 안내받을 수도 없다.</strong></p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H10</span><span class="badge b-high">High</span><span class="badge b-both">교차 확인</span></div>
+    <div class="entry-body">
+      <h3>기기 한도에 걸린 사용자에게 출구가 없고, 원격 해제가 지속되지 않는다</h3>
+      <p class="loc">licenseClient.ts:49 · licenseManager.ts:431,489 · bicmac-license/src/index.ts:68</p>
+      <p>클라이언트 계약은 activate/validate/<strong>current-device</strong> deactivate뿐이고 UI도 현재 기기만 해제한다. 서버 레퍼런스에도 <code>/v1/devices</code>가 없는데, 문구는 <code>en.json:492</code>에서 존재하지 않는 "your device list"를 약속한다.</p>
+      <p><strong>더 나쁜 것</strong>(codex): 서버에서 다른 기기를 해제해도 <strong>그 기기가 켜져 있으면 다음 검증이 슬롯을 되찾는다.</strong> <code>/v1/validate</code>가 별도 검증이 아니라 <code>handleActivate</code>로 연결되고, <code>activateDevice()</code>는 활성 행이 없고 빈자리가 있으면 새 행을 INSERT한다. 해제 대상 클라이언트는 키·토큰을 그대로 가진 채 6시간마다 validate한다. 기기별 tombstone이 없으므로 <strong>분실·양도한 온라인 기기가 빈 슬롯을 되찾는다.</strong></p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="codex">
+    <div class="entry-rail"><span class="eid">H11</span><span class="badge b-high">High</span><span class="badge b-one">codex</span></div>
+    <div class="entry-body">
+      <h3>낡은 재검증 응답이 더 새 활성화를 취소한다</h3>
+      <p class="loc">licenseManager.ts:632</p>
+      <p>codex 재현: 지연된 옛 <code>/validate</code>를 걸어 둔 뒤 같은 키로 새 토큰을 활성화하고 옛 <code>revoked</code> 응답을 착륙시키자 <strong>키 비교가 통과해 새 토큰이 삭제되고 <code>trialExpired</code>가 됐다.</strong> 키만 비교하고 generation을 보지 않는다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H12</span><span class="badge b-high">High</span><span class="badge b-both">둘 다 실측</span></div>
+    <div class="entry-body">
+      <h3>성능: 스토어 쓰기 1회가 O(N×M)이고, <code>memo</code>가 통째로 무력화돼 있다</h3>
+      <p class="loc">TaskItem.tsx:26 / :25 · TaskList.tsx:112 / TaskItem.tsx:48</p>
+
+      <p><strong>H12a — <code>TaskItem</code>의 하위작업 카운트 셀렉터.</strong> <code>useSubtaskCount</code>가 셀렉터 안에서 <code>s.tasks</code>를 <strong>행마다 두 번</strong> 완주한다. Zustand는 <code>useSyncExternalStore</code> 기반이라 <strong>모든 <code>set()</code>마다 마운트된 모든 구독자의 셀렉터를 다시 실행한다</strong> — 리렌더가 생략돼도 셀렉터는 돈다. 즉 쓰기 1회당 <code>2 × N × M</code> 순회다.</p>
+
+      <div class="tw">
+      <table>
+        <thead><tr><th>구성</th><th class="num">claude (쓰기 1회)</th><th class="num">codex</th></tr></thead>
+        <tbody>
+          <tr><td>N=500, M=500</td><td class="num">1.14 ms</td><td class="num">—</td></tr>
+          <tr><td>N=1000, M=1000</td><td class="num">4.43 ms</td><td class="num">5.25 ms (p95 13.31)</td></tr>
+          <tr><td>N=2000, M=2000</td><td class="num"><strong>17.95 ms</strong></td><td class="num">—</td></tr>
+          <tr><td>N=5000, M=5000</td><td class="num">—</td><td class="num"><strong>121.0 ms</strong></td></tr>
+          <tr><td>N=10000, M=50</td><td class="num">1.96 ms</td><td class="num">—</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <p>두 엔진이 독립적으로 측정했고 <strong>수치가 일치한다.</strong> 화면에 50행만 보여도 N에 선형으로 비싸진다. 이 비용은 리렌더가 아니라 <strong>구독 평가</strong>라서 <code>memo</code>로도 <code>useMemo</code>로도 막히지 않는다.</p>
+
+      <p><strong>H12b — <code>handleDrop</code>이 <code>filteredTasks</code>에 묶여 있다.</strong> <code>useCallback</code> deps에 <code>filteredTasks</code>가 있어 <code>tasks</code>·<code>searchQuery</code>·<code>sortBy</code> 중 하나만 바뀌어도 새 함수가 되고, 그 함수가 모든 행에 <code>onDrop</code>으로 내려간다. <code>TaskItem</code>은 <code>memo</code>인데 <strong>한 번도 적중하지 못한다.</strong></p>
+
+      <div class="tw">
+      <table>
+        <thead><tr><th>행 수</th><th class="num">onDrop 안정</th><th class="num">현재 코드</th></tr></thead>
+        <tbody>
+          <tr><td>M=500</td><td class="num">0.2 ms</td><td class="num"><strong>37.2 ms</strong></td></tr>
+          <tr><td>M=1000</td><td class="num">0.2 ms</td><td class="num"><strong>73.0 ms</strong></td></tr>
+          <tr><td>M=2000</td><td class="num">0.4 ms</td><td class="num"><strong>145.1 ms</strong></td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <p>체크박스 하나 토글, 검색창 한 타, 정렬 토글이 전부 이 경로다. 할일 1000개면 <strong>체크박스 한 번에 73 ms</strong>(60fps 예산의 4.4배). 정렬이 걸려 있으면 <code>canReorder</code>가 false라 memo가 살아나므로 증상이 <strong>기본 정렬에서만</strong> 나타나 재현이 헷갈린다.</p>
+
+      <div class="caution"><strong>두 항목은 서로를 증폭한다.</strong> perf-claude 권고: 하나씩 재보지 말고 둘 다 고친 뒤 다시 잴 것.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H13</span><span class="badge b-high">High</span><span class="badge b-both">교차 확인</span></div>
+    <div class="entry-body">
+      <h3>성능: 할일 하나를 고쳐도 데이터 파일 전체를 다시 쓴다</h3>
+      <p class="loc">database.ts:71 (perf-claude) · :83 (perf-codex)</p>
+      <p><code>save()</code>는 300 ms 배치 뒤 <code>JSON.stringify(data)</code> + 파일 전체 갈아엎기다. claude 측정: 20k 할일 = 10.15 MB, 저장 1회당 메인 스레드 <strong>10.5 ms 블록</strong> + 10.15 MB 쓰기. codex 측정: 합성 5만 태스크 stringify 중앙값 30.39 ms, 지속 변경 시 <strong>약 3.3회/초</strong> 직렬화·전체 쓰기.</p>
+      <p>가장 아픈 것은 <strong>쓰기 증폭</strong>: 상세 패널 메모는 렌더러에서 400 ms 디바운스되고 그 뒤 DB가 300 ms 배치를 건다 — 긴 메모를 타이핑하는 동안 <strong>약 700 ms마다 10 MB가 SSD로 나간다</strong>(≈14 MB/s 지속).</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="codex">
+    <div class="entry-rail"><span class="eid">H14</span><span class="badge b-high">High</span><span class="badge b-one">codex</span></div>
+    <div class="entry-body">
+      <h3>성능: 첨부 복사가 메인 프로세스를 무제한으로 세운다</h3>
+      <p class="loc">database.ts:568</p>
+      <p><code>copyFileSync</code>로 한 개씩 복사하는데 <code>ipc-handlers.ts:120-136</code>이 <strong>크기 제한 없는 복수 선택</strong>을 허용한다. 대용량 파일이나 느린 볼륨에서는 복사 전체 시간 동안 창 이벤트와 모든 IPC가 정지하며 지연 상한이 없다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="codex">
+    <div class="entry-rail"><span class="eid">H15</span><span class="badge b-high">High</span><span class="badge b-one">codex</span></div>
+    <div class="entry-body">
+      <h3>"백업"이 복원 불가능하고 첨부·대화를 담지 않는다</h3>
+      <p class="loc">database.ts:651 · ipc-handlers.ts:169</p>
+      <p>JSON은 <code>DbData</code>만 직렬화하고 첨부는 절대 경로 문자열만 남으며, AI 대화는 별도 <code>ai-chat.json</code>이다. <strong>preload에 export만 있고 import가 없다.</strong> 그런데 UI는 이를 "Back up", 방침은 "export everything"이라고 안내하므로 <strong>사용자가 복구 가능하다고 믿고 원본을 지울 수 있다.</strong></p>
+      <p>CSV는 더 손실이 크다 — 휴지통·habits·pomodoro·score·폴더 정보와 task의 due time, reminder, tags, attachments, parent 관계, 반복, scheduled override를 모두 버리는 9개 열이다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="codex">
+    <div class="entry-rail"><span class="eid">H16</span><span class="badge b-high">High</span><span class="badge b-one">codex</span></div>
+    <div class="entry-body">
+      <h3>CalDAV·Google 동기화의 구조적 결함</h3>
+      <p class="loc">calendar-sync.ts:82 · caldav/sync.ts:11 · CalendarSyncSection.tsx:75</p>
+      <ul>
+        <li><strong>ETag 충돌이 영구 실패가 된다</strong> — 충돌 시 ETag를 <code>null</code>로 만들지만 <code>caldav/client.ts:256</code>은 <code>null</code>을 강제 update가 아니라 <strong>신규 생성</strong>으로 해석해 <code>If-None-Match: *</code>를 보낸다. 기존 href에는 다시 412가 난다. 연결 해제 후 재연결, 같은 캘린더 재선택도 같은 충돌을 만든다.</li>
+        <li><strong>반복 할일이 단일 고정 일정으로 나간다</strong> — 동기화용 <code>TaskRow</code>에 <code>is_recurring</code>·<code>recurring_pattern</code>·<code>scheduled_overrides</code>가 없고 <code>rrule: null</code>이다. 반면 실제 캘린더 화면은 회차별 override를 우선한다. Google도 같은 <code>planSync</code>를 공유한다.</li>
+        <li><strong>CalDAV provider UI가 없다</strong> <span class="badge b-both">교차 확인</span> — 모델·번역 키는 있지만 UI에 provider/server URL 입력이 없어 iCloud 이외 서버로 갈 수 없다. 설령 외부에서 넣어도 <code>caldav/client.ts:178</code>이 <code>serverUrl</code>의 <strong>경로를 버리고</strong> origin의 <code>/</code>부터 discovery해 Nextcloud 같은 경로 기반 endpoint가 깨진다.</li>
+      </ul>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="codex">
+    <div class="entry-rail"><span class="eid">H17</span><span class="badge b-high">High</span><span class="badge b-one">codex</span></div>
+    <div class="entry-body">
+      <h3>enforcement 플래그 전환이 이미 설치된 앱에 도달하지 않는다</h3>
+      <p class="loc">licensing/service.ts:33</p>
+      <p>enforcement는 <strong>빌드에 박힌 상수</strong>이고 direct updater도 <code>autoDownload = false</code>라 사용자가 다운로드하지 않으면 현재 무료 판정이 <strong>영구히</strong> 남는다. 서버 배포나 새 버전의 플래그 변경만으로 기존 설치를 유료 상태 기계로 옮길 수 없다.</p>
+      <div class="caution"><strong>기존 설치를 grandfather할지 지금 결정해야 한다.</strong> 아니라면 이 빌드를 배포하기 <strong>전에</strong> 서명된 최소 지원 버전 정책과 실패 안전한 강제 업데이트 경로를 넣어야 한다.</div>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="both">
+    <div class="entry-rail"><span class="eid">H18</span><span class="badge b-high">High</span><span class="badge b-both">교차 확인</span></div>
+    <div class="entry-body">
+      <h3>영어 사용자에게 한국어 오류 문구가 그대로 나간다</h3>
+      <p class="loc">ipc-handlers.ts:273,383 (claude) · :121 (codex)</p>
+      <p><code>locales.test.ts</code>가 ko/en 키 대칭을 못 박고 있지만, <strong>그 테스트가 보지 않는 경로</strong>가 있다: 첨부 선택기의 native dialog filter 이름, CalDAV·Google이 IPC로 보내는 한국어 오류 문자열, AI의 한국어 오류, <code>ai-config.ts:34</code>의 "알 수 없음". 렌더러는 그것을 영문 접두사에 그대로 붙인다.</p>
+    </div>
+  </article>
+
+  <article class="entry" data-sev="high" data-src="claude">
+    <div class="entry-rail"><span class="eid">H19</span><span class="badge b-high">High</span><span class="badge b-one">claude</span></div>
+    <div class="entry-body">
+      <h3>라이선스 파일이 깨져도 사용자에게 아무 말도 하지 않는다</h3>
+      <p class="loc">licenseStore.ts:140-149</p>
+    </div>
+  </article>
+</section>
+
+<!-- =================== MEDIUM =================== -->
+
+<section class="sec" id="medium">
+  <div class="sec-head"><h2>Medium</h2><span class="tag">42건</span></div>
+  <p class="sec-note">보안·기능·정확성 31건에 이어 성능 11건. 출처 열의 <strong>교차</strong>는 두 엔진이 독립적으로 도달했다는 뜻이다.</p>
+
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M1</span><span class="ctxt">CalDAV serverUrl/사용자명이 바뀌어도 저장된 비밀번호를 재사용 — 공격자 오리진으로 Basic 전송</span><span class="cloc">ipc-handlers.ts:289 / :281</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M2</span><span class="ctxt">첨부 폴더 안 <strong>끊어진</strong> 심링크가 봉쇄를 통과하고 <code>copyFileSync</code>가 따라가 폴더 밖에 쓴다</span><span class="cloc">database.ts:565 / :540</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M3</span><span class="ctxt">무맥락 safeStorage 암호문을 AI 키·CalDAV 암호·Google 토큰이 <strong>공용</strong> — 파일을 옮겨 OAuth 토큰을 CalDAV 암호로 전송 가능(confused deputy)</span><span class="cloc">database.ts:596</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M4</span><span class="ctxt"><code>UID:</code>가 이스케이프되지 않고 task id는 "빈 문자열 아님"만 검사 → 사용자 캘린더에 임의 iCalendar 속성 주입</span><span class="cloc">caldav/ical.ts:123 + validate.ts:85-87</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M5</span><span class="ctxt">라이선스 키·토큰을 평문 0644로 저장 (다른 모든 자격증명은 safeStorage)</span><span class="cloc">licenseStore.ts:91-121 / :95</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M6</span><span class="ctxt"><code>disable-library-validation</code> entitlement이 켜져 있는데 이 앱은 네이티브 모듈이 없다</span><span class="cloc">entitlements.mac.plist:9</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M7</span><span class="ctxt">Google 토큰 갱신의 <strong>모든</strong> 오류가 refresh token 삭제 — 일시적 네트워크 장애가 영구 로그아웃</span><span class="cloc">ipc-handlers.ts:411 / :399</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M8</span><span class="ctxt">완료 이벤트가 200개 창 밖으로 밀리면 완료 취소가 점수를 회수하지 못한다(순증, 반복 가능)</span><span class="cloc">useStore.ts:996 + database.ts:496</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M9</span><span class="ctxt">내보내기 실패가 세 호출처 어디에서도 잡히지 않는다 (잠금 화면의 유일한 탈출구 포함)</span><span class="cloc">useStore.ts:1004-1006, Settings.tsx:392</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M10</span><span class="ctxt"><code>autoUpdater</code>에 <code>error</code> 리스너가 없어 오프라인이면 <strong>매시간 unhandled rejection</strong></span><span class="cloc">index.ts:197-198 + app-ipc.ts:25-28</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M11</span><span class="ctxt">업데이트 확인 실패 시 화면이 "확인 중…"에서 영원히 멈춘다 (dev/error 구분 없음)</span><span class="cloc">index.ts:162-207, Settings.tsx:670</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M12</span><span class="ctxt">입력 필드 포커스 가드가 Cmd 단축키보다 <strong>아래</strong> — 타이핑 중 Cmd+Z가 네이티브 undo를 막고 삭제한 할일을 되살린다</span><span class="cloc">useKeyboardShortcuts.ts:95-116</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M13</span><span class="ctxt"><code>pick-attachment</code> 거절이 아무 데서도 안 잡힌다 → 무반응 + 잠금 화면도 안 뜬다</span><span class="cloc">TaskDetail.tsx:414-417</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M14</span><span class="ctxt">벽시계가 앞으로 뛰면 게이트는 거절하는데 공개 <code>state</code>는 <code>licensed</code>로 남아 방송이 없다</span><span class="cloc">licenseManager.ts:693</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M15</span><span class="ctxt">할일 완료 하나가 4개의 독립 유료 IPC로 쪼개져 절반짜리 결과가 남는다(완료됐는데 점수 없음 등)</span><span class="cloc">useStore.ts:656</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M16</span><span class="ctxt">일괄 완료가 미래 <code>scheduledOverrides</code>를 완료본과 spawn <strong>양쪽에</strong> 남긴다(단건 경로는 제거함)</span><span class="cloc">useStore.ts:817</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M17</span><span class="ctxt">첨부 복사본이 참조 제거·영구 삭제·휴지통 비우기 <strong>어느 경로에서도</strong> 삭제되지 않는다</span><span class="cloc">database.ts:409</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M18</span><span class="ctxt">캘린더·Google 유료 IPC가 게이트 rejection을 잡지 않아 unhandled rejection</span><span class="cloc">CalendarSyncSection.tsx:79</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M19</span><span class="ctxt">포모도로 deadline·점수가 조정 가능한 벽시계에만 의존 — 되돌리면 음수 elapsed, 앞당기면 즉시 완료+점수</span><span class="cloc">usePomodoroStore.ts:78</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M20</span><span class="ctxt">safeStorage 불가 시 비밀번호를 조용히 버리면서 저장은 성공처럼 끝난다</span><span class="cloc">calendar-config.ts:49 / :4</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M21</span><span class="ctxt">계정 변경/재연결이 이전 계정의 calendar target·sync state를 보존해 "연결됨"과 실제 권한이 갈린다</span><span class="cloc">ipc-handlers.ts:281</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M22</span><span class="ctxt">CalDAV·Google 네트워크 요청에 <strong>시간 제한이 없다</strong>(라이선스 클라이언트는 15초를 이미 둔다)</span><span class="cloc">google/calendar.ts:139</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M23</span><span class="ctxt">동기화 실패 상세(taskId/message)를 계산해 놓고 UI는 건수만 보여 준다</span><span class="cloc">CalendarSyncSection.tsx:271</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M24</span><span class="ctxt">날짜 있는 <strong>하위</strong> 할일을 알리지 않고 전부 제외(문서는 "날짜가 있는 할일"이라고만 말한다)</span><span class="cloc">caldav/sync.ts:153</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M25</span><span class="ctxt">완료 상태가 Calendar.app·Google에서 <strong>보이지 않는</strong> 사설 metadata로만 들어간다(문서는 게시된다고 약속)</span><span class="cloc">caldav/ical.ts:139</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M26</span><span class="ctxt">잠긴 앱이 계속 리마인더 알림을 띄운다("전면 잠금" 정책과 모순)</span><span class="cloc">index.ts:152-159 / :150</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M27</span><span class="ctxt">라이선스 모듈 초기화 실패가 "잠시 후 다시 시도해 주세요"로 나온다</span><span class="cloc">ipc-handlers.ts:60-66</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M28</span><span class="ctxt">실패 문구에 행동 경로가 없다(<code>noDevice</code>·<code>badToken</code>·<code>revoked</code>) / "문의해 주세요"인데 문의 수단이 없다</span><span class="cloc">en.json:478, :480,484,487</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M29</span><span class="ctxt">키 입력칸에서 Enter가 아무것도 하지 않는다 / "이 기기 해제"에 확인도 경고도 없다</span><span class="cloc">LicenseGate.tsx:50, LicenseSection.tsx:98,142-152</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M30</span><span class="ctxt"><code>enabled</code>·<code>account</code>·<code>lastError</code>·<code>syncedCount</code>를 저장·전송하지만 <strong>아무도 읽거나 그리지 않는다</strong></span><span class="cloc">calendar-config.ts:22, google-config.ts:22,23</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M31</span><span class="ctxt">캘린더 동기화 두 기능이 README에 아예 없다</span><span class="cloc">README.md:36-53</span><span class="csrc">claude</span></div>
+
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M32</span><span class="ctxt"><strong>성능</strong> · AI 스트리밍이 <strong>토큰 하나당 스토어 쓰기 1회</strong>(30–80 tok/s × H12a 비용)</span><span class="cloc">useStore.ts:1140</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M33</span><span class="ctxt"><strong>성능</strong> · 목록에 가상화가 없다 — M=1000 마운트 171 ms, M=2000 391 ms</span><span class="cloc">TaskList.tsx:229</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M34</span><span class="ctxt"><strong>성능</strong> · <code>electron-updater</code>를 최상단에서 무조건 로드 — 스토어/dev 빌드에서 완전한 사장 코드 (33.7–35.9 / 37.29 ms)</span><span class="cloc">index.ts:4</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M35</span><span class="ctxt"><strong>성능</strong> · <code>initDatabase()</code>가 무조건 <code>save()</code> — 아무것도 안 바뀐 실행에서도 전체 파일 재작성(20k=10.15 MB)</span><span class="cloc">database.ts:242</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M36</span><span class="ctxt"><strong>성능</strong> · CSV 내보내기가 <strong>방금 자기가 만든 문자열을 다시 파싱한다</strong>(20k에서 30.9 ms 낭비)</span><span class="cloc">ipc-handlers.ts:166</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M37</span><span class="ctxt"><strong>성능</strong> · 라이선스 초기화가 <code>ready-to-show</code>를 막는다(ioreg 17.7 ms + fsync 3 ms)</span><span class="cloc">index.ts:144 / service.ts:166</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="codex"><span class="cid">M38</span><span class="ctxt"><strong>성능</strong> · <code>reorder-tasks</code>·<code>batch-update-tasks</code>가 ID마다 전체 <code>find</code> → O(K×N) (1만에서 92 ms)</span><span class="cloc">database.ts:417</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M39</span><span class="ctxt"><strong>성능</strong> · <code>optimizer.watchWindowShortcuts</code>가 <strong>모든 키 입력</strong>을 메인으로 끌어온다(하는 일은 단축키 2개 차단)</span><span class="cloc">index.ts:110</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M40</span><span class="ctxt"><strong>성능</strong> · 즉시 청크 642.67 kB에 로케일 두 벌 + 안 쓰는 뷰 전부</span><span class="cloc">App.tsx:6, electron.vite.config.ts:29</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="medium" data-src="claude"><span class="cid">M41</span><span class="ctxt"><strong>성능</strong> · 상세 패널도 셀렉터 안에서 전체 할일을 훑는다</span><span class="cloc">TaskDetail.tsx:67</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="medium" data-src="both"><span class="cid">M42</span><span class="ctxt"><strong>성능</strong> · Ollama 다운로드 진행률이 <strong>줄 단위로</strong> 스토어를 때린다(초당 수십~수백)</span><span class="cloc">useStore.ts:1046</span><span class="csrc both">교차</span></div>
+</section>
+
+<!-- =================== LOW =================== -->
+
+<section class="sec" id="low">
+  <div class="sec-head"><h2>Low</h2><span class="tag">27건</span></div>
+
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L1</span><span class="ctxt"><code>open-attachment</code>가 <strong>무료 채널</strong>인데 첨부 폴더 안이면 <code>.command</code>/<code>.app</code>도 그대로 실행한다</span><span class="cloc">ipc-handlers.ts:147-151</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L2</span><span class="ctxt"><code>license:activate</code>가 무료 채널이고 로컬 속도 제한이 없다(키 열거 → 서버 로그·워커 비용)</span><span class="cloc">ipc-handlers.ts:60-66</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L3</span><span class="ctxt">토큰을 앱이 거절해도(<code>badToken</code>) 이미 소모된 활성화 슬롯을 되돌리지 않는다</span><span class="cloc">licenseManager.ts:438-444</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L4</span><span class="ctxt">CSP에 <code>base-uri</code>·<code>form-action</code>이 없고 <code>connect-src</code>의 <code>ws:</code>가 호스트 제한 없이 열려 있다</span><span class="cloc">renderer/index.html:7-10</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L5</span><span class="ctxt">범위 밖 숫자 문자 참조가 <code>RangeError</code>를 던져 동기화 전체를 세운다</span><span class="cloc">caldav/dav-xml.ts:29-42</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L6</span><span class="ctxt">같은-origin 리다이렉트 재귀에 hop 제한이 없다("한 번만 따른다"는 주석과 다르다)</span><span class="cloc">caldav/client.ts:157</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="both"><span class="cid">L7</span><span class="ctxt">state가 틀린 콜백이 진행 중인 OAuth를 종료 — 외부에서 로그인 취소 DoS / 콜백 두 번이면 성공한 인증도 거절</span><span class="cloc">google-auth-flow.ts:105 / :88-108</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L8</span><span class="ctxt">저장된 키가 5조각이 아니면 <code>maskKey</code>가 <strong>원문 전체</strong>를 반환해 렌더러로 내려간다</span><span class="cloc">licenseManager.ts:726</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L9</span><span class="ctxt">리마인더 watermark를 뒤로 간 벽시계로 갱신해 이미 보낸 알림을 다시 보낸다</span><span class="cloc">index.ts:157</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="both"><span class="cid">L10</span><span class="ctxt">트라이얼 첫날에 "29일 남음"이라 쓴다(<code>Math.floor</code>)</span><span class="cloc">useLicense.ts:84-86</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L11</span><span class="ctxt"><code>addScores</code>가 <code>get()</code>/<code>set()</code> 사이 동시 점수 쓰기를 덮어쓴다(같은 파일 <code>addScore</code>는 안 그런다)</span><span class="cloc">useStore.ts:980-991</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="both"><span class="cid">L12</span><span class="ctxt">파일명에 <code>|</code>가 있으면 첨부를 영영 열 수 없다(<code>name|path</code> 인코딩, 첫 구분자로 자름)</span><span class="cloc">AttachmentList.tsx:5-16</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L13</span><span class="ctxt">되돌리기 직후 토스트가 <strong>이전</strong> 항목으로 다시 뜬다 → 한 번 더 누르면 의도치 않은 것을 되돌린다</span><span class="cloc">UndoToast.tsx:15-43</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L14</span><span class="ctxt"><code>app.whenReady().then(...)</code>에 <code>.catch</code>가 없다 — 하나만 던지면 창도 IPC도 없이 조용히 멈춘다</span><span class="cloc">index.ts:99-201</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L15</span><span class="ctxt"><code>revalidateIfNeeded()</code>가 재진입에 무방비(겹치면 타이머 취소 + 백오프 어긋남)</span><span class="cloc">licenseManager.ts:529-540</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L16</span><span class="ctxt"><code>capabilities()</code> 거절이 처리되지 않아 실패 시 <strong>라이선스 칸이 통째로 사라진다</strong></span><span class="cloc">Settings.tsx:259</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L17</span><span class="ctxt">스토어 빌드에서 <code>licenseOpenPurchase</code> IPC가 살아 있다(렌더러 회귀 하나면 MAS에서 외부 결제 페이지)</span><span class="cloc">ipc-handlers.ts:72</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L18</span><span class="ctxt">Google 캘린더 목록 pagination 무시 — 100개 넘는 계정은 뒤쪽을 못 고른다</span><span class="cloc">google/calendar.ts:162</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L19</span><span class="ctxt">동기화 대상을 바꾸면 이전 캘린더 일정이 예고 없이 고아로 남고 새 캘린더에 중복 생성</span><span class="cloc">ipc-handlers.ts:319</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L20</span><span class="ctxt">가드는 <code>||</code>, 인자는 <code>??</code> — <code>refreshToken</code>이 빈 문자열이면 <code>''</code>를 그대로 보낸다 <strong>[추측]</strong></span><span class="cloc">ipc-handlers.ts:501-502</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L21</span><span class="ctxt">영어 카피가 복수형·번역투·내부 용어를 노출("{{days}} day streak", "device slot")</span><span class="cloc">en.json:239</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L22</span><span class="ctxt">내보내기 기본 파일명이 아직 <code>ticktick-backup-*</code></span><span class="cloc">ipc-handlers.ts:158</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L23</span><span class="ctxt">AI 채팅 <code>taskAdds</code> Map이 trim/clear와 함께 제거되지 않고 앱 수명 동안 유지</span><span class="cloc">AiChatPanel.tsx:28</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L24</span><span class="ctxt">사이드바가 태스크 변경마다 smart count 전체 스캔을 여러 번 O(N×L)</span><span class="cloc">Sidebar.tsx:101</span><span class="csrc">codex</span></div>
+  <div class="compact" data-sev="low" data-src="both"><span class="cid">L25</span><span class="ctxt">초기 hydration이 8개 데이터셋을 한꺼번에 복제(20k=9.0 MB, 메인+렌더러 두 벌 상주)</span><span class="cloc">useStore.ts:411</span><span class="csrc both">교차</span></div>
+  <div class="compact" data-sev="low" data-src="claude"><span class="cid">L26</span><span class="ctxt">검색 판별식이 할일마다 질의를 다시 정규화(병목은 아님 — 20k에서 1.83 ms)</span><span class="cloc">search.ts:8</span><span class="csrc">claude</span></div>
+  <div class="compact" data-sev="low" data-src="codex"><span class="cid">L27</span><span class="ctxt">AI 채팅 전체를 응답 완료마다 pretty JSON으로 동기 쓰기(바이트 상한 없음)</span><span class="cloc">database.ts:25</span><span class="csrc">codex</span></div>
+</section>
+
+<!-- =================== SPLIT SEVERITY =================== -->
+
+<section class="sec" id="split">
+  <div class="sec-head"><h2>심각도가 갈린 항목</h2><span class="tag">판단이 필요한 곳</span></div>
+  <p class="sec-note">두 엔진의 평가가 갈린 곳은 판단이 필요하다. 이 문서가 어느 쪽을 왜 취했는지 남긴다.</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>항목</th><th>claude</th><th>codex</th><th>이 문서</th><th>근거</th></tr></thead>
+      <tbody>
+        <tr><td>저장 세대 미직렬화 <code>database.ts:81</code></td><td>low</td><td><strong>critical</strong></td><td><strong>critical</strong></td><td>codex가 지연 주입으로 실제 손실을 재현했다. macOS <code>window-all-closed</code>가 앱을 끝내지 않아 창이 실제로 열려 있다</td></tr>
+        <tr><td><code>handleDrop</code> 불안정 <code>TaskList.tsx:112</code></td><td><strong>critical</strong></td><td>medium</td><td><strong>high</strong></td><td>claude 측정(M=1000에서 73 ms)이고 한 줄 수정으로 0.2 ms가 된다. 가장 값싼 큰 이득이지만 데이터 손실은 아니다</td></tr>
+        <tr><td>활성화 UI 영구 잠금</td><td>medium / <strong>high</strong></td><td>medium / low</td><td><strong>high</strong></td><td>잠금 화면에서 <strong>유일한 탈출구</strong>가 막힌다. 네 워커 전부가 찾은 최다 합의 항목</td></tr>
+        <tr><td>거절 사유 유실 <code>:645</code></td><td><strong>high</strong></td><td>low / medium</td><td><strong>high</strong></td><td>돈 낸 사용자가 "체험 기간이 끝났습니다"를 보는 것은 지원 부담이자 환불 사유다</td></tr>
+        <tr><td>Google client ID 누락</td><td><strong>critical</strong></td><td>high</td><td><strong>critical</strong></td><td>판매 문구가 약속한 기능이 출하 빌드에서 100% 죽어 있다</td></tr>
+        <tr><td>트라이얼 시작 저장 실패</td><td>—</td><td><strong>high</strong> ×2</td><td><strong>high</strong></td><td>codex 둘이 독립적으로 재현했다. 제외 대상인 "설정 폴더 삭제"와 다른 종류의 우회다</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- =================== SINGLE SOURCE =================== -->
+
+<section class="sec" id="single">
+  <div class="sec-head"><h2>단일 출처가 중요한 이유</h2><span class="tag">한쪽만 돌렸다면</span></div>
+  <div class="prose">
+    <p>codex 리포트는 claude보다 짧지만(5.9k–43.6k vs 25k–48k), <strong>claude가 전혀 못 본 결함군을 통째로 가져왔다.</strong> 반대도 마찬가지다. 한쪽만 돌렸다면 아래를 놓쳤다.</p>
+
+    <h3>codex만 찾은 것 중 무거운 것</h3>
+    <ul>
+      <li><strong>C6</strong> Google OAuth custom scheme + scope 불일치 — C5를 고쳐도 남는다. 외부 계약 문서를 대조해야 보인다</li>
+      <li><strong>M3</strong> safeStorage 암호문 공용 → confused deputy로 OAuth 토큰을 CalDAV 비밀번호로 전송</li>
+      <li><strong>H10</strong> 서버 <code>/v1/validate</code>가 <code>handleActivate</code>로 연결돼 원격 해제가 지속되지 않는다 — 교차 저장소 추적</li>
+      <li><strong>H17</strong> enforcement 플래그가 이미 설치된 앱에 도달하지 않는다 — 배포 정책의 문제</li>
+      <li><strong>H11</strong> 낡은 재검증 응답이 새 활성화를 취소 / <strong>H3</strong> 쓰기 불가 저장소의 무한 트라이얼</li>
+      <li><strong>H16</strong> ETag 충돌 영구 실패, 반복 할일이 단일 일정으로 나감</li>
+      <li><strong>M19</strong> 포모도로가 벽시계에만 의존</li>
+    </ul>
+
+    <h3>claude만 찾은 것 중 무거운 것</h3>
+    <ul>
+      <li><strong>C2</strong> 드롭 → <code>window.api</code> 탈취 (Electron 기본 동작 + preload 재실행 + 게이트의 sender 미검증 3단 결합)</li>
+      <li><strong>H6</strong> 날짜 UTC 파싱 — 음수 오프셋 지역 사용자 전원에게 매일 보이는 결함</li>
+      <li><strong>H7</strong> AI 설정 미하이드레이트 — 주석이 고치려던 증상이 그대로 남아 있다</li>
+      <li><strong>M4</strong> <code>UID:</code> 미이스케이프 iCalendar 주입 — 이 저장소가 <strong>이미 막기로 한</strong> 위협인데 <code>id</code>만 빠졌다</li>
+      <li><strong>M6</strong> 불필요한 <code>disable-library-validation</code>, <strong>M12</strong> 단축키 가드 순서, <strong>L1</strong> 무료 채널의 실행 원시연산</li>
+    </ul>
+
+    <h3>두 엔진의 스타일 차이</h3>
+    <p>claude는 실측 표와 인용을 붙인 서술형(측정·재현 위주), codex는 한 줄에 증상/근거/수정을 압축한 목록형(외부 계약·교차 저장소·경합 재현 위주). <strong>중복 제거 시 codex 항목이 claude의 긴 서술에 묻히기 쉬우므로</strong> 출처 표시를 별도로 유지했다 — 위 필터에서 "codex만"으로 좁혀 볼 수 있다.</p>
+  </div>
+</section>
+
+<!-- =================== PASSED =================== -->
+
+<section class="sec" id="passed">
+  <div class="sec-head"><h2>양쪽이 확인한 "문제 없음"</h2><span class="tag">역행 방지용</span></div>
+  <p class="sec-note">거짓 안심을 막되, 다음 감사가 같은 곳을 다시 파헤치는 낭비도 막기 위해 기록한다.</p>
+  <ul class="passed">
+    <li><strong>ed25519 검증은 디코드된 원바이트 위에서 한다.</strong> 재직렬화 후 검증하는 흔한 실수가 없다. 두 엔진 모두 확인</li>
+    <li><strong>제품 격리가 실제로 작동한다</strong> — <code>payload.prod !== PRODUCT_SLUG</code> 검사가 있고 키 접두사 검사가 네트워크 전에 이중으로 막는다. CLAUDE.md가 "<code>prod</code> 검사가 제품 격리의 전부"라고 한 그 검사가 살아 있다</li>
+    <li><strong>유료 IPC 핫패스에 ed25519 재검증이 없다</strong> — claude 실측 34 µs/회, codex 실측 35.38 µs/회. 주석의 판단이 정확하다</li>
+    <li><strong>서버가 준 <code>expiresAt</code>(서명 밖 숫자)은 권한 계산에 쓰이지 않는다.</strong> 마감은 토큰의 <code>exp</code>에서만 나온다</li>
+    <li><strong><code>KNOWN_REFUSALS</code>와 서버 계약이 정확히 일치한다</strong> — CLAUDE.md가 경고한 "409와 봉투 있는 404"로 넓히는 실수가 없다</li>
+    <li><strong>PKCE·state 검증·기본 브라우저 사용</strong>이 모두 올바르다. 임베디드 웹뷰가 아니다</li>
+    <li><strong>셀렉터 없는 <code>useStore()</code> 구독이 0건이다</strong>(claude 202개 호출 전수, codex 정적 검색). 문제는 셀렉터 <em>내부</em>의 O(N)이다</li>
+    <li><strong>자격증명은 렌더러로 내려가지 않는다</strong> — <code>toPublicConfig</code>·<code>PublicLicenseState</code>·<code>getAiConfig</code> 전부 확인 (단 L8의 <code>maskKey</code> 예외)</li>
+    <li><strong>렌더러에 HTML 주입 싱크가 없다</strong> — <code>dangerouslySetInnerHTML</code>/<code>innerHTML</code> 0건</li>
+    <li><strong>XXE 없음</strong>, Google URL 조립 안전, <code>safeOpenExternal</code>이 비-http 스킴 차단</li>
+    <li><strong><code>__IS_DEV_BUILD__</code> 주입은 안전하다</strong> — <code>electron-vite build</code>가 설정 로드 <em>전에</em> <code>NODE_ENV='production'</code>을 세팅한다(claude가 내부까지 추적)</li>
+    <li><strong>스토어 빌드에서 잠금 화면이 뜨지 않는다</strong> — Apple 3.1.1 위험 없음. <code>capabilities.test.ts</code>의 판정표가 코드와 일치</li>
+    <li><strong><code>locales.test.ts</code>가 ko/en 키·보간 변수·실패 코드를 대칭으로 고정한다</strong>(단 H18의 main 전용 문구는 이 테스트 밖)</li>
+    <li><strong>기기 id는 지연 + 프로세스당 1회 캐시.</strong> 트라이얼 설치는 <code>ioreg</code>를 한 번도 안 돌린다</li>
+    <li><strong>되돌리기 스택 20건 캡, 채팅 히스토리 캡, AI 컨텍스트 48건 캡</strong> — 무한히 잡아 두는 클로저 없음</li>
+    <li><strong>캘린더 블록 리사이즈는 mousemove마다 스토어를 쓰지 않는다</strong>(DOM만 만지고 mouseup에서 커밋)</li>
+  </ul>
+</section>
+
+<!-- =================== ORDER =================== -->
+
+<section class="sec" id="order">
+  <div class="sec-head"><h2>권장 처리 순서</h2><span class="tag">의존 관계가 있는 실제 순서</span></div>
+
+  <div class="order">
+    <div class="order-row">
+      <span class="on">0</span>
+      <div>
+        <p class="oh">enforcement를 켜기 전에 반드시 <span class="badge b-crit">블로커</span></p>
+        <p class="op">C8 제품 slug·가격·D1 → C7 개인정보처리방침 → H17 플래그 전환 도달 → H1 낙관적 롤백 → H4 활성화 잠금</p>
+        <p class="oq"><strong>C8과 C7은 코드 문제가 아니다.</strong> 서버 운영과 문서 게시가 선행돼야 하고, 실결제 → 키 메일 → activate → validate → deactivate 왕복을 live smoke-test하기 전에는 <code>IS_ENFORCED</code>를 켤 수 없다.</p>
+      </div>
+    </div>
+    <div class="order-row">
+      <span class="on">1</span>
+      <div>
+        <p class="oh">자격증명 유출 — 즉시</p>
+        <p class="op">C1 CalDAV href → C3 AI 키·SSRF → C2 네비게이션·드롭·sender 검증 → M1 → M3</p>
+        <p class="oq">C1과 C2는 <strong>결합하면 더 나쁘다</strong> — 드롭한 페이지가 <code>calendar:select</code>를 불러 앱 암호를 가져간다. 셋 다 "URL/호출자를 신뢰 경계에서 검사하지 않는다"는 같은 뿌리다.</p>
+      </div>
+    </div>
+    <div class="order-row">
+      <span class="on">2</span>
+      <div>
+        <p class="oh">데이터 손실 — 즉시</p>
+        <p class="op">C4 원자적 저장 + 저장 큐 → H8 읽기 실패 세션 → H5 하위작업 복원 → M17 첨부 고아 → H15 복원 가능한 백업</p>
+      </div>
+    </div>
+    <div class="order-row">
+      <span class="on">3</span>
+      <div>
+        <p class="oh">시계·라이선스 무결성</p>
+        <p class="op">H2 단조 시계 체크포인트 → H3 트라이얼 저장 실패 fail-closed → H11 generation 가드 → H10 기기 해제</p>
+      </div>
+    </div>
+    <div class="order-row">
+      <span class="on">4</span>
+      <div>
+        <p class="oh">성능 — 두 항목을 함께, 그 뒤 다시 측정</p>
+        <p class="op">H12a + H12b 동시 수정 후 재측정 → M32 AI 스트리밍 rAF 배칭 → M34·M35 스타트업 46 ms 회수 → M33 가상화</p>
+        <p class="oq">perf-claude의 권고: 두 항목은 서로를 증폭하므로 하나씩 재보지 말 것. 앞의 둘을 먼저 하면 M32와 M33의 우선순위가 내려갈 수 있으니, 그때 다시 재고 결정한다.</p>
+      </div>
+    </div>
+    <div class="order-row">
+      <span class="on">5</span>
+      <div>
+        <p class="oh">출하 기능 완결</p>
+        <p class="op">C5 → C6(둘은 같은 기능의 앞뒤다) → H16 CalDAV 동기화 → H18 한국어 문구 → H9·M28 실패 문구에 행동 경로</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== APPENDIX =================== -->
+
+<section class="sec" id="appendix">
+  <div class="sec-head"><h2>부록</h2><span class="tag">개별 리포트 · 범위 밖</span></div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>파일</th><th>워커</th><th class="num">크기</th><th>특징</th></tr></thead>
+      <tbody>
+        <tr><td><code>security-claude.md</code></td><td>gd-sec-cc</td><td class="num">25k</td><td>"통과한 것" 절을 먼저 둔 서술형. 실측 로그 다수</td></tr>
+        <tr><td><code>security-codex.md</code></td><td>gd-sec-cx</td><td class="num">5.9k</td><td>최단. 자격증명 유출 경로 3건을 새로 잡았다</td></tr>
+        <tr><td><code>feature-claude.md</code></td><td>gd-feat-cc</td><td class="num">48k</td><td>최장. 문서·정책·판매 문구와 코드를 대조</td></tr>
+        <tr><td><code>feature-codex.md</code></td><td>gd-feat-cx</td><td class="num">30k</td><td>외부 계약(Google·서버 레퍼런스) 대조가 강점</td></tr>
+        <tr><td><code>bug-claude.md</code></td><td>gd-bug-cc</td><td class="num">27k</td><td>인용 + 실측. "결함이 아니었던 것" 절 있음</td></tr>
+        <tr><td><code>bug-codex.md</code></td><td>gd-bug-cx</td><td class="num">13k</td><td>경합·순서 재현이 강점. 실행 가능한 테스트 3개 작성</td></tr>
+        <tr><td><code>perf-claude.md</code></td><td>gd-perf-cc</td><td class="num">29k</td><td>측정 표 + 권장 순서. 역행 방지 기록 상세</td></tr>
+        <tr><td><code>perf-codex.md</code></td><td>gd-perf-cx</td><td class="num">15k</td><td>측정 방법과 한계를 명시. 합성 벤치 위주</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose" style="margin-top:26px">
+    <h3>codex가 작성한 재현 테스트</h3>
+    <p>리포 밖 스크래치(<code>/private/tmp/</code>)에 있다 — <code>greenday-audit-license-ui.test.tsx</code>(H4) · <code>greenday-audit-attachment.test.ts</code>(M17) · <code>greenday-audit-restore.test.ts</code>(H5)</p>
+
+    <h3>감사 범위 밖이라 확인하지 못한 것</h3>
+    <p>실제 Google OAuth client, iCloud 계정, 결제·활성화 운영 환경, 운영 D1의 실제 내용, 패키지 Electron에서의 시작 시간 실측, GUI 드롭 재현.</p>
+  </div>
+</section>
+
+<footer>
+  <p><strong>Greenday 코드베이스 감사</strong> · 2026-08-28 · supaicy/coordinate @ 1ccf433</p>
+  <p>8개 워커(관심사 4 × 엔진 2)의 발견을 중복 제거해 통합했다. 앱 코드는 수정하지 않았다. 원본 리포트는 <code>docs/reports/2026-08-28-audit/</code>에 있다.</p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var sev = { critical: true, high: true, medium: true, low: true };
+  var src = { both: true, claude: true, codex: true };
+  var items = Array.prototype.slice.call(document.querySelectorAll('[data-sev][data-src]'));
+  var countEl = document.getElementById('fcount');
+
+  function apply() {
+    var shown = 0;
+    items.forEach(function (el) {
+      var ok = sev[el.dataset.sev] && src[el.dataset.src];
+      el.hidden = !ok;
+      if (ok) shown++;
+    });
+    countEl.textContent = shown + '건 표시';
+
+    // Hide a section header when every entry under it is filtered out.
+    document.querySelectorAll('section.sec').forEach(function (s) {
+      var own = s.querySelectorAll('[data-sev][data-src]');
+      if (!own.length) return;
+      var any = Array.prototype.some.call(own, function (e) { return !e.hidden; });
+      s.hidden = !any;
+    });
+  }
+
+  document.querySelectorAll('.chip').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var on = btn.getAttribute('aria-pressed') !== 'true';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (btn.dataset.sev) sev[btn.dataset.sev] = on;
+      if (btn.dataset.src) src[btn.dataset.src] = on;
+      apply();
+    });
+  });
+
+  apply();
+})();
+</script>
