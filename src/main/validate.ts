@@ -1,10 +1,32 @@
 // IPC 경계 입력 검증 — 렌더러 페이로드를 DB에 넘기기 전 최소 방어
+
+/**
+ * 할일 id로 받아들이는 모양.
+ *
+ * 예전에는 "빈 문자열이 아니다"만 봤다. 그런데 이 값은 CalDAV로 나갈 때
+ * `UID:greenday-<id>@…` 한 줄에 그대로 실린다 — **개행이 섞인 id 하나면
+ * 사용자의 캘린더에 임의 iCalendar 속성을 끼워 넣을 수 있다.** 같은 파일이
+ * 날짜를 정규식으로 못 박는 이유(아래 `validateRangeAndPin`)가 정확히 그
+ * 위협인데, 정작 id만 그 방어에서 빠져 있었다.
+ *
+ * 앱이 만드는 id는 전부 uuid v4라(`uuid()` — 렌더러의 모든 생성 경로) 이
+ * 문자 집합이 기존 데이터를 전부 통과시킨다. 128은 uuid(36)에 넉넉한 여유다.
+ *
+ * (`ical.ts`의 UID 이스케이프는 별도로 필요하다 — 방어는 두 겹이어야 한다.
+ *  그쪽은 이 워크트리 소유가 아니다.)
+ */
+const TASK_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+export function isValidTaskId(value: unknown): value is string {
+  return typeof value === 'string' && TASK_ID.test(value)
+}
+
 export function validateTaskInput(input: unknown): Record<string, unknown> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     throw new Error('Invalid task payload')
   }
   const obj = input as Record<string, unknown>
-  if (typeof obj.id !== 'string' || obj.id.length === 0) {
+  if (!isValidTaskId(obj.id)) {
     throw new Error('Invalid task payload')
   }
   if (typeof obj.title !== 'string') {
@@ -82,7 +104,7 @@ export function validateTaskUpdate(input: unknown): Record<string, unknown> {
     throw new Error('Invalid task payload')
   }
   const obj = input as Record<string, unknown>
-  if (typeof obj.id !== 'string' || obj.id.length === 0) {
+  if (!isValidTaskId(obj.id)) {
     throw new Error('Invalid task payload')
   }
   if ('title' in obj && typeof obj.title !== 'string') {

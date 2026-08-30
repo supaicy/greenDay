@@ -158,3 +158,37 @@ describe('validateTaskUpdate — 날짜 필드가 iCal로 새지 않게', () => 
     expect(validateTaskUpdate({ id: 't1', sortOrder: 3.5 })).toBeTruthy()
   })
 })
+
+// M4의 절반. 날짜는 이미 정규식으로 못 박혀 있었는데(위 describe) **id만 그
+// 방어에서 빠져 있었다** — "빈 문자열이 아니다"만 봤다. 이 값은 CalDAV로 나갈 때
+// `UID:greenday-<id>@…` 한 줄에 그대로 실린다.
+describe('task id — iCalendar 주입 방어', () => {
+  it('개행이 섞인 id를 거부한다 — UID 줄에 임의 속성을 끼워 넣을 수 있다', () => {
+    const evil = 'abc\r\nX-EVIL:1'
+    expect(() => validateTaskInput({ id: evil, title: 'x' })).toThrow()
+    expect(() => validateTaskUpdate({ id: evil, title: 'x' })).toThrow()
+  })
+
+  it('UID 줄을 끊거나 파라미터를 붙이는 문자를 거부한다', () => {
+    for (const id of ['a b', 'a;b', 'a:b', 'a,b', 'a"b', 'a@b', 'a\tb', 'a\\b', 'a\nb']) {
+      expect(() => validateTaskInput({ id, title: 'x' }), `${JSON.stringify(id)}가 통과했다`).toThrow()
+    }
+  })
+
+  it('빈 id와 문자열이 아닌 id도 그대로 거부한다', () => {
+    expect(() => validateTaskInput({ id: '', title: 'x' })).toThrow()
+    expect(() => validateTaskInput({ id: 42, title: 'x' })).toThrow()
+    expect(() => validateTaskUpdate({ id: null })).toThrow()
+  })
+
+  it('길이 상한이 있다', () => {
+    expect(() => validateTaskInput({ id: 'a'.repeat(129), title: 'x' })).toThrow()
+    expect(validateTaskInput({ id: 'a'.repeat(128), title: 'x' })).toBeTruthy()
+  })
+
+  // 앱이 만드는 id는 전부 uuid v4다. 이 규칙이 기존 데이터를 전부 통과시켜야 한다.
+  it('uuid v4는 통과한다', () => {
+    expect(validateTaskInput({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', title: 'x' })).toBeTruthy()
+    expect(validateTaskUpdate({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' })).toBeTruthy()
+  })
+})
