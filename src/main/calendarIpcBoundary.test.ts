@@ -10,7 +10,7 @@
  * 것과 배선이 된 것은 따로 깨진다.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import type { CalendarConfig } from './calendar-config'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
@@ -48,10 +48,23 @@ vi.mock('./calendar-config', async (importOriginal) => {
 const { setupIpcHandlers } = await import('./ipc-handlers')
 setupIpcHandlers()
 
+/* 앱 문서 URL을 **이 테스트가 아는 값**으로 고정한다. 번들 경로에 기대면
+   실행 위치에 따라 답이 달라진다(ipc-gate.test.ts와 같은 방식). */
+const APP_ORIGIN = 'http://localhost:5173'
+const APP_DOCUMENT = `${APP_ORIGIN}/index.html`
+const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
+beforeAll(() => {
+  process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
+})
+
+/* 우리 문서에서 온 호출. **발신자 검사가 생긴 뒤로 `{}`는 통과하지 않는다** —
+   C2가 창을 앱 문서에 묶으면서, 넘어간 페이지가 window.api를 물려받던 경로를
+   닫았다. 여기 테스트는 그 검사 이후 화면(calendar:select의 오리진 검사)을
+   보는 것이므로, 신뢰된 발신자로 들어가야 그 자리까지 닿는다. */
 function invoke(channel: string, ...args: unknown[]): unknown {
   const handler = handlers.get(channel)
   if (!handler) throw new Error(`등록되지 않은 채널: ${channel}`)
-  return handler({}, ...args)
+  return handler({ senderFrame: { url: APP_DOCUMENT } }, ...args)
 }
 
 const ICLOUD = 'https://caldav.icloud.com'
@@ -60,6 +73,15 @@ const CONNECTED: CalendarConfig = {
   serverUrl: ICLOUD,
   username: 'me@icloud.com',
   password: 'app-specific-password',
+  /* 저장된 비밀번호는 **어느 오리진·계정에 대한 것인지** 함께 봉인된다(M3).
+     이 필드 없이 만든 설정은 "새로 입력한 값"으로 읽혀서, 서버나 계정이 바뀌어도
+     옛 암호를 재사용하던 바로 그 경로로 되돌아간다. 연결된 상태를 흉내 내려면
+     실제 저장본과 같은 모양이어야 한다. */
+  passwordBinding: {
+    origin: new URL(ICLOUD).origin,
+    username: 'me@icloud.com',
+    password: 'app-specific-password',
+  },
   calendarUrl: `${ICLOUD}/123/calendars/home/`,
   calendarName: '집',
   enabled: true,
