@@ -64,14 +64,25 @@ export function LicenseSection({
     if (await activation.activate()) setDone('activated')
   }
 
+  /**
+   * `finally`가 없으면 IPC 거절 한 번이 **두 버튼을 다 잠근다** — 아래 `busy`가
+   * `releasing`을 품고 있어서, 해제가 거절된 사용자는 활성화도 못 하게 된다.
+   * `useActivation.activate`가 같은 이유로 같은 모양이다.
+   */
   async function deactivate(): Promise<void> {
     setReleasing(true)
     resetOutcome()
-    const failure = await window.api.licenseDeactivate()
-    setReleasing(false)
-    if (failure) return setReleaseError(failure)
-    setDone('deactivated')
-    await refreshLicense()
+    try {
+      const failure = await window.api.licenseDeactivate()
+      if (failure) return setReleaseError(failure)
+      setDone('deactivated')
+      await refreshLicense()
+    } catch (error) {
+      console.error('[license] 해제 요청이 거절됐다', error)
+      setReleaseError('network')
+    } finally {
+      setReleasing(false)
+    }
   }
 
   const button = `px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50 ${focusRing}`
@@ -128,6 +139,14 @@ export function LicenseSection({
         <p className={`text-xs ${hintText}`}>
           {t('license.deviceNameNotice')}: <code>{license.deviceName}</code>
         </p>
+      )}
+
+      {/* 서버가 말해 준 이유. **아직 쓸 수 있을 때도 뜬다** — `deviceLimit`은 토큰이
+          살아 있는 채로 붙고, 그때 알려 줘야 웹에서 슬롯을 정리할 시간이 있다.
+          잠긴 뒤에는 위의 `StatusLine`이 같은 문구를 상태 자리에서 말하므로,
+          여기서는 아직 허용 중인 동안만 그린다(두 줄이 같은 말을 하지 않게). */}
+      {license.blockedReason && license.allowsPaidFeatures && (
+        <p className={`text-xs ${errorText}`}>{t(`license.error.${license.blockedReason}`)}</p>
       )}
 
       {error && <p className={`text-xs ${errorText}`}>{t(`license.error.${error}`)}</p>}
@@ -223,5 +242,9 @@ function StatusLine({
     if (days === 0) return <span>{t('license.trialLastDay')}</span>
     return <span>{days === 1 ? t('license.trialOneDay') : t('license.trial', { days })}</span>
   }
+  // **취소·한도로 막힌 사람에게 "체험 기간이 끝났습니다"는 거짓말이다.** 그 사람은
+  // 돈을 냈고, 필요한 안내는 환불 문의나 슬롯 정리이지 구매가 아니다. 서버가
+  // 말해 준 이유가 있으면 그걸 쓴다 — 문구는 활성화 실패와 같은 표를 쓴다.
+  if (license.blockedReason) return <span>{t(`license.error.${license.blockedReason}`)}</span>
   return <span>{t('license.trialExpired')}</span>
 }

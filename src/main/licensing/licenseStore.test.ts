@@ -28,7 +28,9 @@ describe('createFileStore — 읽기', () => {
       key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9',
       token: 'tok.sig',
       lastSeenMs: 1_800_000_000_000,
-      trialStartMs: 1_790_000_000_000
+      trialStartMs: 1_790_000_000_000,
+      monotonic: { bootId: 'boot-1', uptimeMs: 42_000 },
+      blockedReason: null
     }
     const store = createFileStore(path)
     store.write(record)
@@ -49,6 +51,37 @@ describe('createFileStore — 읽기', () => {
 
   it('파일이 아예 없을 때는 사본을 만들지 않는다', () => {
     expect(createFileStore(path).read()).toEqual(EMPTY_RECORD)
+    expect(readdirSync(dir).filter((f) => f.includes('.corrupt-'))).toHaveLength(0)
+  })
+
+  it('**깨졌다는 사실을 호출처에 알린다** — 사용자에게 말할 수 있어야 한다', () => {
+    // 예전에는 `console.error` 한 줄이 전부였다. 사용자에게는 유료 라이선스가
+    // 조용히 사라지고 잠금 화면만 뜬다 — 옆에 `.corrupt-` 사본이 있다는 것도,
+    // 지원 메일 한 통으로 복구된다는 것도 알 방법이 없었다.
+    write('{"key":"GREENDAY-A2B3')
+    const store = createFileStore(path)
+    store.read()
+    expect(store.lastReadSalvaged()).toBe(true)
+  })
+
+  it('멀쩡한 파일과 없는 파일은 알리지 않는다 — 위 단언이 공짜로 참이 아니다', () => {
+    const missing = createFileStore(path)
+    missing.read()
+    expect(missing.lastReadSalvaged()).toBe(false)
+
+    write(JSON.stringify({ ...EMPTY_RECORD, lastSeenMs: 5 }))
+    const fine = createFileStore(path)
+    fine.read()
+    expect(fine.lastReadSalvaged()).toBe(false)
+  })
+
+  it('손으로 고쳐 타입이 어긋난 것은 "깨진 파일"이 아니다', () => {
+    // 파싱은 됐다 — 값만 이상하다. 그건 `parseRecord`가 조용히 되돌리는 일이고,
+    // 사용자를 놀라게 할 사건이 아니다. 사본도 만들지 않는다.
+    write(JSON.stringify({ lastSeenMs: 'soon' }))
+    const store = createFileStore(path)
+    store.read()
+    expect(store.lastReadSalvaged()).toBe(false)
     expect(readdirSync(dir).filter((f) => f.includes('.corrupt-'))).toHaveLength(0)
   })
 
@@ -92,6 +125,28 @@ describe('createFileStore — 손으로 고쳐진 값', () => {
     write(JSON.stringify({ key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9' }))
     expect(createFileStore(path).read()).toEqual({ ...EMPTY_RECORD, key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9' })
   })
+
+  it('모르는 거절 사유는 버린다', () => {
+    // 화면이 `license.error.<이름>`으로 문구를 찾으므로, 통과시키면 사용자가
+    // 그 키 문자열을 날것으로 본다.
+    write(JSON.stringify({ blockedReason: 'somethingNew' }))
+    expect(createFileStore(path).read().blockedReason).toBeNull()
+    write(JSON.stringify({ blockedReason: 'revoked' }))
+    expect(createFileStore(path).read().blockedReason).toBe('revoked')
+  })
+
+  it('반쪽짜리 체크포인트는 통째로 버린다', () => {
+    // uptime만 살리고 bootId가 깨진 것을 남겨 두면, 다른 부팅을 같은 부팅으로
+    // 읽어 경과를 **과소평가**한다 — 시계를 되돌린 사용자에게 유리한 방향이다.
+    // 통째로 버리면 잃는 것은 한 구간이고, 그건 벽시계 관측이 덮는다.
+    for (const bad of [{ uptimeMs: 5 }, { bootId: 'a' }, { bootId: 42, uptimeMs: 5 }, { bootId: 'a', uptimeMs: -1 }]) {
+      write(JSON.stringify({ monotonic: bad }))
+      expect(createFileStore(path).read().monotonic, JSON.stringify(bad)).toBeNull()
+    }
+    // 식별자 없는 온전한 체크포인트는 정상이다 — Windows가 그 모양이다.
+    write(JSON.stringify({ monotonic: { bootId: null, uptimeMs: 5 } }))
+    expect(createFileStore(path).read().monotonic).toEqual({ bootId: null, uptimeMs: 5 })
+  })
 })
 
 describe('createFileStore — 쓰기', () => {
@@ -119,7 +174,14 @@ describe('createFileStore — 쓰기', () => {
     // 제자리 쓰기는 전원이 끊긴 순간 깨진 JSON을 남기고, 그걸 parseRecord가
     // 빈 레코드로 읽는다 — 돈 낸 사람의 활성화가 조용히 사라진다.
     const store = createFileStore(path)
-    const good: LicenseRecord = { key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9', token: 'tok', lastSeenMs: 7, trialStartMs: 3 }
+    const good: LicenseRecord = {
+      key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9',
+      token: 'tok',
+      lastSeenMs: 7,
+      trialStartMs: 3,
+      monotonic: null,
+      blockedReason: null
+    }
     store.write(good)
 
     // 임시 파일에 쓰고 rename하는지 — 쓰기 도중의 내용이 본 파일에 닿지 않는다.
@@ -144,7 +206,9 @@ describe.each([[false], [true]])('createFileStore — 쓰기 (durable=%s)', (dur
     key: 'GREENDAY-A2B3-C4D5-E6F7-G8H9',
     token: 'tok.sig',
     lastSeenMs: 1_800_000_000_000,
-    trialStartMs: 1_700_000_000_000
+    trialStartMs: 1_700_000_000_000,
+    monotonic: { bootId: 'boot-1', uptimeMs: 9_000 },
+    blockedReason: 'revoked'
   }
 
   it('쓴 것을 그대로 다시 읽는다', () => {

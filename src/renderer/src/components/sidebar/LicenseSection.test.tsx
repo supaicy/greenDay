@@ -41,7 +41,8 @@ const BASE: PublicLicenseState = {
   allowsPaidFeatures: true,
   enforced: false,
   maskedKey: null,
-  deviceName: 'supaicy의 MacBook'
+  deviceName: 'supaicy의 MacBook',
+  blockedReason: null
 }
 
 function mountWith(state: Partial<PublicLicenseState>, api: Record<string, unknown> = {}): void {
@@ -208,6 +209,41 @@ describe('공유된 활성화 흐름', () => {
     land(null)
   })
 
+  it('활성화 IPC가 **거절**돼도 버튼이 다시 열린다', async () => {
+    // 거절은 실패 코드가 아니라 던짐으로 온다(게이트의 senderFrame 거절, 매니저
+    // 초기화 실패, 메인의 예외). `setBusy(false)`가 `await` 다음 줄이던 동안
+    // 그 줄에 도달하지 못해 `busy`가 영원히 참으로 남았고, `busy`가 두 버튼을
+    // 함께 잠그므로 사용자는 활성화도 해제도 못 하는 화면에 갇혔다.
+    mountWith(
+      { enforced: true, status: 'trialExpired', maskedKey: MASKED },
+      { licenseActivate: vi.fn(() => Promise.reject(new Error('Error invoking remote method'))) }
+    )
+    const field = await screen.findByLabelText(i18n.t('license.keyLabel'))
+    await userEvent.type(field, 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
+    await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
+
+    // 거절을 삼키면 "눌렀는데 아무 일도 안 일어난다"가 된다 — 문구가 있어야 한다.
+    await screen.findByText(i18n.t('license.error.network'))
+    expect(screen.getByRole('button', { name: i18n.t('license.activate') })).toBeEnabled()
+    expect(screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivate')) })).toBeEnabled()
+  })
+
+  it('해제 IPC가 **거절**돼도 버튼이 다시 열린다', async () => {
+    // 반대 방향. `releasing`이 참으로 굳으면 활성화 버튼까지 같이 잠긴다.
+    mountWith(
+      { enforced: true, status: 'trialExpired', maskedKey: MASKED },
+      { licenseDeactivate: vi.fn(() => Promise.reject(new Error('Error invoking remote method'))) }
+    )
+    await userEvent.click(await screen.findByRole('button', { name: new RegExp(i18n.t('license.deactivate')) }))
+
+    await screen.findByText(i18n.t('license.error.network'))
+    expect(screen.getByRole('button', { name: new RegExp(i18n.t('license.deactivate')) })).toBeEnabled()
+
+    const field = screen.getByLabelText(i18n.t('license.keyLabel'))
+    await userEvent.type(field, 'GREENDAY-A2B3-C4D5-E6F7-G8H9')
+    expect(screen.getByRole('button', { name: i18n.t('license.activate') })).toBeEnabled()
+  })
+
   it('새 시도를 시작하면 지난 결과가 사라진다', async () => {
     // `resetOutcome()`은 이번 라운드에 뽑아낸 것인데 두 호출처 중 어느 쪽을
     // 지워도 테스트가 전부 통과했다. 지우면 패널이 서로 다른 두 시도의 흔적을
@@ -228,5 +264,52 @@ describe('공유된 활성화 흐름', () => {
     await userEvent.click(screen.getByRole('button', { name: i18n.t('license.activate') }))
     expect(screen.queryByText(i18n.t('license.error.network'))).not.toBeInTheDocument()
     land(null)
+  })
+})
+
+/**
+ * H9 — 서버가 말해 준 이유가 화면까지 온다.
+ *
+ * 이유를 버리면 취소·한도로 막힌 사람이 "체험 기간이 끝났습니다"를 본다.
+ * 그 사람은 돈을 냈고, 그 문구가 권하는 행동(구매)은 정확히 틀렸다.
+ */
+describe('막힌 이유', () => {
+  it('취소된 키에는 "체험 기간이 끝났습니다"가 아니라 환불 안내가 뜬다', async () => {
+    mountWith({ enforced: true, status: 'trialExpired', allowsPaidFeatures: false, blockedReason: 'revoked' })
+    await screen.findByText(i18n.t('license.error.revoked'))
+    expect(screen.queryByText(i18n.t('license.trialExpired'))).not.toBeInTheDocument()
+  })
+
+  it('이유가 없으면 원래대로 체험 만료다', async () => {
+    // 위 단언이 공짜로 참이 아님을 보이는 대조군.
+    mountWith({ enforced: true, status: 'trialExpired', allowsPaidFeatures: false, blockedReason: null })
+    await screen.findByText(i18n.t('license.trialExpired'))
+  })
+
+  it('기기 한도는 **아직 쓸 수 있을 때** 뜬다 — 정리할 시간을 준다', async () => {
+    mountWith({
+      enforced: true,
+      status: 'licensed',
+      allowsPaidFeatures: true,
+      maskedKey: MASKED,
+      blockedReason: 'deviceLimit'
+    })
+    // 상태 줄은 여전히 "활성"이다 — 실제로 아직 열려 있으니까.
+    await screen.findByText(i18n.t('license.licensed'))
+    // 그런데 이유도 같이 보인다.
+    expect(screen.getByText(i18n.t('license.error.deviceLimit'))).toBeInTheDocument()
+  })
+
+  it('잠긴 뒤에는 같은 말을 두 번 하지 않는다', async () => {
+    // 상태 줄이 이미 이유를 말하고 있으므로, 아래 줄까지 그리면 화면에 같은
+    // 문장이 두 번 뜬다.
+    mountWith({
+      enforced: true,
+      status: 'trialExpired',
+      allowsPaidFeatures: false,
+      maskedKey: MASKED,
+      blockedReason: 'deviceLimit'
+    })
+    await waitFor(() => expect(screen.getAllByText(i18n.t('license.error.deviceLimit'))).toHaveLength(1))
   })
 })

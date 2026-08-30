@@ -27,9 +27,16 @@ import type { ClientError } from '../../shared/license'
  * 실행하는 경로에서 도달 불가다. 반대로 워커가 요청 스키마를 조이면 완벽한 JSON
  * 봉투와 함께 400이 오고, 그걸 판정으로 읽으면 유료 사용자 전원이 한꺼번에
  * 라이선스를 잃는다.
+ *
+ * `deviceNotActive`는 **재검증 경로에서** 판정이다. 서버의 `/v1/validate`가 이제
+ * 활성 슬롯을 갱신만 하고 새로 잡지 않으므로(그러지 않으면 원격 해제가 지속되지
+ * 않는다), 이 답은 "다른 기기에서 이 기기를 놓았다"는 확정이다. 못 닿은 것으로
+ * 읽으면 놓인 기기가 유예가 끝날 때까지 계속 열려 있고, 6시간마다 같은 답을 받는다.
+ * (해제 경로에서는 이 코드가 판정이 아니라 **성공**이다 — 이미 놓여 있다는 뜻이라,
+ * `licenseManager.deactivate`가 이 함수를 묻기 전에 먼저 걸러낸다.)
  */
 export function isServerRefusal(error: ClientError): boolean {
-  return error === 'unknownKey' || error === 'revoked' || error === 'deviceLimit'
+  return error === 'unknownKey' || error === 'revoked' || error === 'deviceLimit' || error === 'deviceNotActive'
 }
 
 export interface Activation {

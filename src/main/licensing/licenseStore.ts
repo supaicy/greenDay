@@ -26,6 +26,9 @@ import {
   writeFileSync
 } from 'node:fs'
 
+import type { MonotonicCheckpoint } from './bootSession'
+import { LICENSE_BLOCK_REASONS, type LicenseBlockReason } from '../../shared/license'
+
 export interface LicenseRecord {
   /** 사용자가 입력한 키. 재검증에 다시 보낸다. */
   key: string | null
@@ -35,6 +38,24 @@ export interface LicenseRecord {
   lastSeenMs: number
   /** 트라이얼이 열린 시각(ms). enforcement가 켜진 뒤에만 기록된다. */
   trialStartMs: number | null
+  /**
+   * 벽시계와 무관한 시간 경과의 관측 지점(`bootSession.ts`).
+   *
+   * 이것도 `lastSeenMs`처럼 권한을 **제한만** 한다 — 값을 고쳐 봐야 래칫이 덜
+   * 오르거나 더 오를 뿐이고, 덜 오르는 쪽은 벽시계 관측이 메우고 더 오르는 쪽은
+   * 창을 일찍 닫는다.
+   */
+  monotonic: MonotonicCheckpoint | null
+  /**
+   * 서버가 마지막으로 말해 준 거절 사유. **표시 전용이다.**
+   *
+   * 여기 무엇이 적혀 있어도 권한은 1밀리초도 늘거나 줄지 않는다 — 이 파일의 규칙
+   * 그대로다. 그런데도 디스크에 남기는 이유는, 취소된 토큰을 지운 뒤에는 재검증이
+   * 서버를 아예 부르지 않기 때문이다(`runRevalidation`이 토큰 없으면 그 자리에서
+   * 돌아선다). 기억해 두지 않으면 재시작 한 번에 "환불된 키"가 "체험 기간이
+   * 끝났습니다"로 바뀐다.
+   */
+  blockedReason: LicenseBlockReason | null
 }
 
 export interface LicenseStore {
@@ -45,14 +66,35 @@ export interface LicenseStore {
    * `durable`은 **전원이 끊겨도 살아남아야 하는 쓰기**에만 준다. 아래 fsync 설명 참고.
    */
   write(record: LicenseRecord, durable?: boolean): boolean
+  /**
+   * 마지막 `read()`가 **깨진 파일을 옆으로 치우고** 빈 레코드로 시작했는가.
+   *
+   * 그 사건은 로그에만 남아 있었다. 사용자에게는 유료 라이선스가 조용히 사라지고
+   * "체험 기간이 끝났습니다"만 뜬다 — 옆에 `.corrupt-` 사본이 있다는 것도,
+   * 지원 메일 한 통으로 복구된다는 것도 알 방법이 없었다.
+   */
+  lastReadSalvaged(): boolean
 }
 
-export const EMPTY_RECORD: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: null }
+export const EMPTY_RECORD: LicenseRecord = {
+  key: null,
+  token: null,
+  lastSeenMs: 0,
+  trialStartMs: null,
+  monotonic: null,
+  blockedReason: null
+}
 
 export function createFileStore(filePath: string): LicenseStore {
   const tempPath = `${filePath}.tmp`
+  let salvaged = false
   return {
-    read: () => parseRecord(readRaw(filePath)),
+    read: () => {
+      const raw = readRaw(filePath)
+      salvaged = raw === CORRUPT
+      return parseRecord(raw === CORRUPT ? null : raw)
+    },
+    lastReadSalvaged: () => salvaged,
     /**
      * **임시 파일에 쓰고 rename으로 바꿔 끼운다.** 제자리에서 자르면 그 사이에
      * 전원이 끊겼을 때 파일이 깨진 JSON으로 남고, `parseRecord`가 그걸 빈
@@ -131,8 +173,11 @@ export function createFileStore(filePath: string): LicenseStore {
  * 넣은 방어를 여기 빠뜨렸다 — 더 작지만 더 되돌리기 어려운 파일인데.
  *
  * 못 읽으면 원본을 옆으로 복사해 두고 빈 레코드로 시작한다. 사본이 있으면
- * 지원 메일 한 통으로 복구된다.
+ * 지원 메일 한 통으로 복구된다 — **그 사실을 사용자에게 말해야** 그 메일이 온다.
+ * 그래서 "없다"(null)와 "못 읽는다"(CORRUPT)를 호출처까지 갈라 보낸다.
  */
+const CORRUPT = Symbol('license-file-corrupt')
+
 function readRaw(filePath: string): unknown {
   if (!existsSync(filePath)) return null
   try {
@@ -145,7 +190,7 @@ function readRaw(filePath: string): unknown {
     } catch (copyError) {
       console.error('[license] 읽기 실패, 원본 복사도 실패', error, copyError)
     }
-    return null
+    return CORRUPT
   }
 }
 
@@ -162,6 +207,25 @@ function parseRecord(raw: unknown): LicenseRecord {
     key: typeof o.key === 'string' ? o.key : null,
     token: typeof o.token === 'string' ? o.token : null,
     lastSeenMs: typeof o.lastSeenMs === 'number' && Number.isFinite(o.lastSeenMs) ? o.lastSeenMs : 0,
-    trialStartMs: typeof o.trialStartMs === 'number' && Number.isFinite(o.trialStartMs) ? o.trialStartMs : null
+    trialStartMs: typeof o.trialStartMs === 'number' && Number.isFinite(o.trialStartMs) ? o.trialStartMs : null,
+    monotonic: parseCheckpoint(o.monotonic),
+    // 모르는 이름은 버린다. 남겨 두면 렌더러가 `license.error.<그 이름>`을 조회해
+    // 사용자에게 날문자열을 보여 준다.
+    blockedReason: LICENSE_BLOCK_REASONS.find((r) => r === o.blockedReason) ?? null
   }
+}
+
+/**
+ * 체크포인트는 **통째로** 온전해야 쓴다.
+ *
+ * 반쪽(uptime만 있고 bootId가 깨진 경우)을 살려 두면 다른 부팅을 같은 부팅으로
+ * 읽어 경과를 과소평가한다. 통째로 버리면 이번 관측이 새 기준이 될 뿐이라,
+ * 잃는 것은 한 구간이고 그 구간은 벽시계 관측이 덮는다.
+ */
+function parseCheckpoint(raw: unknown): MonotonicCheckpoint | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  if (typeof o.uptimeMs !== 'number' || !Number.isFinite(o.uptimeMs) || o.uptimeMs < 0) return null
+  if (o.bootId !== null && typeof o.bootId !== 'string') return null
+  return { bootId: o.bootId, uptimeMs: o.uptimeMs }
 }

@@ -11,13 +11,14 @@ import { currentCapabilities } from '../capabilities'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { hostname } from 'node:os'
+import { hostname, uptime } from 'node:os'
 import { join } from 'node:path'
 import { importRawPublicKey, PRODUCTION_PUBLIC_KEY_BASE64 } from './activationToken'
 import { createLicenseClient } from './licenseClient'
 import { createLicenseManager, type LicenseManager } from './licenseManager'
-import { createFileStore } from './licenseStore'
+import { createFileStore, type LicenseStore } from './licenseStore'
 import { resolveDeviceId } from './deviceIdentity'
+import { readBootId, uptimeMsOf, type BootSession } from './bootSession'
 import { LICENSE_BASE_URL } from './endpoints'
 import { UNKNOWN_LICENSE_STATE, type PublicLicenseState } from '../../shared/license'
 
@@ -53,6 +54,7 @@ function enforcementActive(): boolean {
 }
 
 let manager: LicenseManager | null = null
+let store: LicenseStore | null = null
 
 export function initLicensing(): void {
   if (manager) return
@@ -72,14 +74,18 @@ export function initLicensing(): void {
   // 창이 아직 구독하지 않았다는 순서 하나뿐이고, enforcement를 켜면 거의 매
   // 실행에서 발화한다. 그래서 알림을 한 박자 미루고, 대입 뒤에 직접 한 번 쏜다.
   let ready = false
+  // 손잡이를 들고 있어야 `lastReadSalvaged()`를 물어볼 수 있다 — 매니저는
+  // 스토어를 감추기 때문이다.
+  store = createFileStore(join(app.getPath('userData'), 'license.json'))
   manager = createLicenseManager({
     client: createLicenseClient({ baseUrl: LICENSE_BASE_URL }),
-    store: createFileStore(join(app.getPath('userData'), 'license.json')),
+    store,
     publicKey,
     device: currentDeviceId,
     deviceName: deviceLabel(),
     enforced: enforcementActive(),
     now: () => Date.now(),
+    bootSession: currentBootSession,
     setTimer: (ms, fn) => {
       const handle = setTimeout(fn, ms)
       return () => clearTimeout(handle)
@@ -113,8 +119,22 @@ export function publicLicenseState(): PublicLicenseState {
     allowsPaidFeatures: manager.allowsPaidFeatures(),
     enforced: enforcementActive(),
     maskedKey: manager.getMaskedKey(),
-    deviceName: deviceLabel()
+    deviceName: deviceLabel(),
+    blockedReason: manager.getBlockedReason()
   }
+}
+
+/**
+ * 시작할 때 라이선스 파일이 깨져 있어 **옆으로 치웠는가**.
+ *
+ * 그 사건은 `console.error` 한 줄로만 남았다. 사용자에게는 유료 라이선스가
+ * 조용히 사라지고 잠금 화면만 뜬다 — 옆에 `.corrupt-` 사본이 있다는 것도,
+ * 지원 메일 한 통으로 복구된다는 것도 알 방법이 없었다.
+ *
+ * `initLicensing()`이 읽기를 딱 한 번 하므로 이 답은 프로세스 수명 동안 고정이다.
+ */
+export function licenseStoreSalvaged(): boolean {
+  return store?.lastReadSalvaged() === true
 }
 
 /** 상태는 타이머로도 스스로 움직인다 — 화면이 그걸 모르면 만료된 것을 "활성"이라 말한다. */
@@ -136,12 +156,55 @@ function broadcast(): void {
 export function disposeLicensing(): void {
   manager?.dispose()
   manager = null
+  store = null
+  cachedBootId = undefined
   cachedDeviceId = null
   // **`null`이 아니라 `undefined`다.** 두 캐시의 "아직 안 읽음"이 서로 다른데,
   // 그게 일부러다(각각의 선언부 주석 참고). 여기서 위 줄을 복사해 `null`을 쓰면
   // `deviceLabel()`이 "읽었는데 없더라"로 읽어, 이 프로세스가 끝날 때까지
   // 기기 이름이 영영 null이 된다 — 조용하고, 테스트가 잡지 못한다.
   cachedDeviceLabel = undefined
+}
+
+// ── 부팅 세션 ────────────────────────────────────────────────────────────────
+
+/**
+ * 부팅 식별자는 **프로세스당 한 번만** 읽는다 — 서브프로세스(`sysctl`)가 필요한데,
+ * 이 값이 바뀌려면 재부팅해야 하고 그러면 이 프로세스도 없다.
+ *
+ * `null`(못 읽음)과 `undefined`(아직 안 읽음)를 가른다. 기기 id 캐시가
+ * 반대로 하는 이유는 그쪽 선언부에 적혀 있다 — 여기서는 못 읽는 상황이
+ * 플랫폼 때문(Windows)이라 매번 다시 시도해 봐야 서브프로세스만 태운다.
+ */
+let cachedBootId: string | null | undefined
+
+/**
+ * uptime은 **매번 새로 읽는다.** 그게 이 값의 존재 이유다 — 부를 때마다 커져야
+ * "그 사이에 시간이 흘렀다"를 말할 수 있다. 식별자만 캐시한다.
+ */
+function currentBootSession(): BootSession {
+  if (cachedBootId === undefined) cachedBootId = readBootId(bootProbes)
+  return { id: cachedBootId, uptimeMs: uptimeMsOf(uptime()) }
+}
+
+/** 부팅 식별자를 읽는 방법. `readDeviceId`와 같은 계약을 쓴다. */
+const bootProbes = {
+  platform: process.platform,
+  runCommand: (command: string, args: string[]): string | null => {
+    try {
+      return execFileSync(command, args, { encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] })
+    } catch {
+      return null
+    }
+  },
+  readTextFile: (path: string): string | null => {
+    try {
+      return readFileSync(path, 'utf-8')
+    } catch {
+      return null
+    }
+  },
+  uptimeSeconds: uptime
 }
 
 // ── 기기 식별 ────────────────────────────────────────────────────────────────

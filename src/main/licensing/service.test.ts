@@ -14,7 +14,10 @@ vi.mock('node:os', () => ({
   hostname: () => {
     hostnameReads += 1
     return hostname
-  }
+  },
+  // 부팅 세션의 uptime. 이 파일은 배선만 보므로 고정값이면 충분하다 —
+  // 실제 시간 경과 판정은 `bootSession.test.ts`와 `clockAttacks.test.ts`가 본다.
+  uptime: () => 1234
 }))
 
 /** 방송을 실제로 받아 보는 가짜 창. 창이 없으면 첫 방송이 무엇인지 볼 수 없다. */
@@ -56,7 +59,8 @@ describe('publicLicenseState', () => {
       allowsPaidFeatures: true,
       enforced: false,
       maskedKey: null,
-      deviceName: null
+      deviceName: null,
+      blockedReason: null
     })
   })
 

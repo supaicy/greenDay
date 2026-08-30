@@ -69,6 +69,8 @@ function harness(
     token: null,
     lastSeenMs: 0,
     trialStartMs: null,
+    monotonic: null,
+    blockedReason: null,
     ...over.record
   }
   let current = over.now ?? NOW
@@ -117,7 +119,8 @@ function harness(
         if (!storeWritable) return false
         Object.assign(record, next)
         return true
-      }
+      },
+      lastReadSalvaged: () => false
     },
     publicKey,
     device: () => {
@@ -127,6 +130,10 @@ function harness(
     deviceName: 'test-machine',
     enforced: over.enforced ?? true,
     now: () => current,
+    // 이 하네스의 시간은 `now`가 전부다 — 단조 증거는 여기서 시험하지 않는다
+    // (그건 clockAttacks.test.ts가 부팅 세션을 흘려 가며 본다). 고정된 세션을
+    // 주면 `elapsedSinceCheckpoint`가 늘 0을 내, 벽시계만 남는다.
+    bootSession: () => ({ id: 'boot-fixed', uptimeMs: 0 }),
     onChange: (next) => {
       changes.push(next)
       if (throwOnChange) throw new Error('webContents가 정리됐다')
@@ -614,7 +621,14 @@ describe('활성화·해제의 실패 경로 — 전부 사용자 문구가 있�
     // 여기서 성공이라고 답하면 사용자는 활성화됐다고 믿는데 앱은 잠긴 채다.
     // 오류도 없고 다시 해볼 것도 없는, 가장 나쁜 침묵이다.
     let reads = 0
-    const stored: LicenseRecord = { key: null, token: null, lastSeenMs: 0, trialStartMs: NOW - 40 * DAY }
+    const stored: LicenseRecord = {
+      key: null,
+      token: null,
+      lastSeenMs: 0,
+      trialStartMs: NOW - 40 * DAY,
+      monotonic: null,
+      blockedReason: null
+    }
     const manager = createLicenseManager({
       client: {
         activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }),
@@ -626,9 +640,11 @@ describe('활성화·해제의 실패 경로 — 전부 사용자 문구가 있�
         write: (next) => {
           Object.assign(stored, next)
           return true
-        }
+        },
+        lastReadSalvaged: () => false
       },
       publicKey,
+      bootSession: () => ({ id: 'boot-fixed', uptimeMs: 0 }),
       // 활성화는 기기를 한 번 읽고(1회), 뒤이은 settle이 다시 읽는다(2회).
       // 두 번째에서 하드웨어 조회가 실패하면 토큰은 멀쩡한데 상태가 안 선다.
       device: () => (++reads <= 1 ? DEVICE : null),
@@ -1297,5 +1313,238 @@ describe('enforcement가 꺼져 있으면', () => {
     })
     expect(await h.manager.activate(KEY)).toBeNull()
     expect(h.manager.getState().status).toBe('licensed')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H3 — 쓸 수 없는 저장소에서 트라이얼이 무한히 갱신되던 것
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H3 — 트라이얼 시작일을 못 적으면 창을 열어 주지 않는다', () => {
+  it('쓰기가 실패하면 그 자리에서 만료다', () => {
+    // `persist()`의 답을 버리던 동안, 읽기 전용 마운트·권한 제거·가득 찬 디스크
+    // 어느 것이든 `trialStartMs`를 영원히 null로 남겼다. 그러면 실행마다
+    // `resolveTrialStart`가 "지금"을 새 시작으로 도출해 **매번 온전한 30일**을 준다.
+    const h = harness({ storeWritable: false })
+    expect(h.manager.getState().status).toBe('trialExpired')
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+    // 디스크에도 메모리에도 시작일이 안 남는다 — 다음 실행이 다시 시도한다.
+    expect(h.record.trialStartMs).toBeNull()
+  })
+
+  it('매니저를 몇 번을 새로 만들어도 새 창이 안 열린다', () => {
+    // 감사 재현: 같은 빈 레코드로 두 번 만들었더니 **둘 다** 새 30일을 받았다.
+    for (let run = 0; run < 5; run++) {
+      const h = harness({ storeWritable: false })
+      expect(h.manager.allowsPaidFeatures(), `${run}번째 실행이 창을 받았다`).toBe(false)
+    }
+  })
+
+  it('같은 프로세스 안에서 다시 물어도 답이 안 바뀐다', () => {
+    // 프로세스당 한 번 메모하는 `trialStartedAt`을 안 되돌리면, 첫 호출이
+    // 실패로 답한 뒤에도 두 번째 호출이 "이미 도출했다"며 그냥 통과한다.
+    const h = harness({ storeWritable: false })
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+    h.setNow(NOW + 60_000)
+    h.fireDueTimers()
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('이미 시작일이 있으면 쓰기 실패가 창을 뺏지 않는다', () => {
+    // fail-closed는 **새로 여는 창**에만 건다. 이미 디스크에 정직한 시작일이
+    // 있는 사람은 디스크가 잠깐 아파도 자기 창을 계속 써야 한다.
+    const h = harness({ storeWritable: false, record: { trialStartMs: NOW - 10 * DAY } })
+    expect(h.manager.getState().status).toBe('trial')
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+  })
+
+  it('쓸 수 있으면 물론 창이 열린다 — 위 단언들이 공짜로 참이 아니다', () => {
+    const h = harness({})
+    expect(h.manager.getState().status).toBe('trial')
+    expect(h.record.trialStartMs).toBe(NOW)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H9 — 서버의 거절 사유가 버려져 유료 사용자에게 "체험 기간이 끝났습니다"가 뜨던 것
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H9 — 왜 막혔는지를 잃지 않는다', () => {
+  const licensed = { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) }
+
+  it('취소된 키는 그 사실을 남긴다', async () => {
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'revoked' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    // 토큰은 지워지고 트라이얼로 떨어진다 — 그건 그대로다.
+    expect(h.record.token).toBeNull()
+    expect(h.manager.getState().status).toBe('trialExpired')
+    // **이유가 남아야 한다.** 없으면 화면이 "체험 기간이 끝났습니다"를 띄우는데,
+    // 그 사람은 돈을 냈고 필요한 안내는 환불 문의다.
+    expect(h.manager.getBlockedReason()).toBe('revoked')
+    expect(h.record.blockedReason).toBe('revoked')
+  })
+
+  it('재시작해도 이유가 살아 있다', () => {
+    // 토큰을 지운 뒤로는 재검증이 서버를 아예 안 부르므로(`runRevalidation`이
+    // 그 앞에서 돌아선다) 다시 알아낼 기회가 없다. 디스크에 남겨야 하는 이유다.
+    const h = harness({ record: { key: KEY, trialStartMs: NOW - 40 * DAY, blockedReason: 'revoked' } })
+    expect(h.manager.getBlockedReason()).toBe('revoked')
+  })
+
+  it('기기 한도는 **아직 쓸 수 있을 때** 알려 준다', async () => {
+    // 유예가 끝난 뒤에 말하면 그건 통보다. 토큰이 살아 있는 동안 알려 줘야
+    // 웹에서 슬롯을 정리할 시간이 있다.
+    const h = harness({
+      record: licensed,
+      client: { validate: async () => ({ ok: false, error: 'deviceLimit' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.manager.getState().status).toBe('licensed')
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+    expect(h.manager.getBlockedReason()).toBe('deviceLimit')
+    // 상태가 안 바뀌었어도 화면은 알아야 한다 — `apply()`의 변화 감지로는 안 나간다.
+    expect(h.changes.length).toBeGreaterThan(0)
+  })
+
+  it('활성화에 성공하면 이유가 지워진다', async () => {
+    const h = harness({
+      record: { key: KEY, trialStartMs: NOW - 40 * DAY, blockedReason: 'revoked' },
+      client: { activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }) }
+    })
+    expect(h.manager.getBlockedReason()).toBe('revoked')
+    expect(await h.manager.activate(KEY)).toBeNull()
+    expect(h.manager.getBlockedReason()).toBeNull()
+  })
+
+  it('재검증에 성공해도 이유가 지워진다 — 슬롯을 정리하고 온 경우다', async () => {
+    const h = harness({
+      record: { ...licensed, blockedReason: 'deviceLimit' },
+      client: {
+        validate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } })
+      }
+    })
+    // 반감기를 넘긴 토큰이라 폴이 실제로 서버를 친다.
+    await h.manager.revalidateIfNeeded()
+    expect(h.calls).toContain('validate')
+    expect(h.manager.getBlockedReason()).toBeNull()
+  })
+
+  it('못 닿은 것은 이유가 아니다', async () => {
+    // 기차 터널 한 번이 "환불된 키입니다"가 되면 안 된다.
+    const h = harness({ record: licensed, client: { validate: async () => ({ ok: false, error: 'network' }) } })
+    await h.manager.revalidateIfNeeded()
+    expect(h.manager.getBlockedReason()).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H11 — 낡은 재검증 응답이 더 새 활성화를 취소하던 것
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H11 — 낡은 응답은 착륙해도 아무것도 못 바꾼다', () => {
+  it('**같은 키**로 재활성화한 뒤 도착한 revoked가 새 토큰을 지우지 않는다', async () => {
+    // 키 비교로는 이 경우를 못 본다 — `record.key`가 내내 같은 값이라 가드가
+    // 통과하고, 15초 전에 떠난 응답이 방금 만들어진 라이선스를 지운다.
+    // 감사 재현: 지연된 옛 `/validate`를 착륙시키자 `trialExpired`가 됐다.
+    let land: (r: ClientResult<never>) => void = () => {}
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) },
+      client: {
+        validate: () => new Promise((resolve) => (land = resolve)),
+        activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } })
+      }
+    })
+
+    const pending = h.manager.revalidateIfNeeded()
+    // 그 사이 사용자가 **같은 키를** 다시 넣는다.
+    expect(await h.manager.activate(KEY)).toBeNull()
+    expect(h.manager.getState().status).toBe('licensed')
+
+    land({ ok: false, error: 'revoked' })
+    await pending
+
+    expect(h.manager.getState().status).toBe('licensed')
+    expect(h.record.token).not.toBeNull()
+    expect(h.manager.getBlockedReason()).toBeNull()
+  })
+
+  it('해제한 뒤 도착한 성공 응답이 라이선스를 되살리지 않는다', async () => {
+    // 슬롯은 서버에서 풀렸는데 로컬이 되살아나면, 다른 기기가 가져갈 수 있는
+    // 자리 위에서 라이선스가 서 있게 된다.
+    let land: (r: ClientResult<{ token: string; expiresAtMs: number }>) => void = () => {}
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }), trialStartMs: NOW - 40 * DAY },
+      client: {
+        validate: () => new Promise((resolve) => (land = resolve)),
+        deactivate: async () => ({ ok: true, value: undefined })
+      }
+    })
+
+    const pending = h.manager.revalidateIfNeeded()
+    expect(await h.manager.deactivate()).toBeNull()
+    expect(h.record.key).toBeNull()
+
+    land({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } })
+    await pending
+
+    expect(h.record.key).toBeNull()
+    expect(h.record.token).toBeNull()
+    expect(h.manager.getState().status).toBe('trialExpired')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H10 — 다른 기기에서 놓인 뒤의 재검증
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H10 — 원격 해제가 이 기기에도 도착한다', () => {
+  const licensed = { key: KEY, token: token({ iatMs: NOW - 20 * DAY, expMs: NOW + 10 * DAY }) }
+
+  it('device_not_active는 판정이다 — 토큰을 놓고 재시도하지 않는다', async () => {
+    // 서버의 `/v1/validate`가 이제 슬롯을 새로 잡지 않으므로, 이 답은
+    // "다른 기기에서 이 기기를 놓았다"는 확정이다. 못 닿은 것으로 읽으면 놓인
+    // 기기가 유예 끝까지 계속 열려 있고 6시간마다 같은 답을 받는다.
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.token).toBeNull()
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('키는 남긴다 — 여기서 다시 활성화하면 그만이다', async () => {
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.record.key).toBe(KEY)
+    expect(h.manager.getMaskedKey()).not.toBeNull()
+  })
+
+  it('"환불됨"과 뭉치지 않는다 — 사용자가 할 일이 다르다', async () => {
+    // 앞은 문의, 뒤는 재활성화다. 뭉치면 멀쩡한 키를 버리게 만든다.
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY },
+      client: { validate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    await h.manager.revalidateIfNeeded()
+    expect(h.manager.getBlockedReason()).toBe('deviceNotActive')
+  })
+
+  it('해제 경로에서는 여전히 성공이다 — 이미 놓여 있다는 뜻이다', async () => {
+    // `isServerRefusal`에 넣었다고 해제까지 "거부"가 되면 안 된다. 서버에 그
+    // 슬롯이 이미 없으면 로컬을 지우는 것이 맞는 결말이다.
+    const h = harness({
+      record: licensed,
+      client: { deactivate: async () => ({ ok: false, error: 'deviceNotActive' }) }
+    })
+    expect(await h.manager.deactivate()).toBeNull()
+    expect(h.record.key).toBeNull()
+    expect(h.record.token).toBeNull()
   })
 })

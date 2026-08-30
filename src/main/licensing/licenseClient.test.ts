@@ -219,31 +219,44 @@ describe('deactivate', () => {
   it('이미 해제된 기기는 device_not_active', async () => {
     const { client } = clientReplying(json(404, { error: 'device_not_active' }))
     expect(await client.deactivate(KEY, DEVICE)).toEqual({ ok: false, error: 'deviceNotActive' })
-    expect(isServerRefusal('deviceNotActive')).toBe(false)
+    // **이 코드는 이제 판정이다.** 서버의 `/v1/validate`가 활성 슬롯을 갱신만 하고
+    // 새로 잡지 않게 되면서(그러지 않으면 원격 해제가 지속되지 않는다), 재검증에서
+    // 오는 이 답은 "다른 기기에서 이 기기를 놓았다"는 확정이 됐다. 예전 서버는
+    // validate가 곧 activate라 그 경로에서 이 답이 아예 나오지 않았고, 그래서
+    // 판정이 아니었다.
+    //
+    // 해제 경로에서 이 값이 여전히 **성공**인 것과 모순되지 않는다 —
+    // `licenseManager.deactivate`가 이 함수를 묻기 전에 먼저 걸러낸다.
+    expect(isServerRefusal('deviceNotActive')).toBe(true)
   })
 })
 
 describe('KNOWN_REFUSALS — 서버 어휘의 사본', () => {
-  it('권위 있는 세 코드가 표에 살아 있다', () => {
+  it('권위 있는 네 코드가 표에 살아 있다', () => {
     // 이 표는 서버(`bicmac-license`)의 어휘를 클라이언트에 베껴 둔 것이라 드리프트가
     // 가능하다. 대부분의 드리프트는 안전한 쪽으로 떨어진다 — 모르는 코드는
     // `network`가 되고 라이선스는 산다.
     //
-    // 위험한 방향은 하나뿐이다: 이 셋 중 하나의 **이름이 서버에서 바뀌면**
+    // 위험한 방향은 하나뿐이다: 이 넷 중 하나의 **이름이 서버에서 바뀌면**
     // `isServerRefusal`이 발화하지 않아 취소된 라이선스가 유예 끝까지 살아 있는다.
     // 서버 코드를 고치는 사람이 여기서 멈추도록 이름 그대로 못 박는다.
     expect(KNOWN_REFUSALS['404:unknown_key']).toBe('unknownKey')
     expect(KNOWN_REFUSALS['404:revoked']).toBe('revoked')
     expect(KNOWN_REFUSALS['409:device_limit']).toBe('deviceLimit')
-    for (const error of ['unknownKey', 'revoked', 'deviceLimit'] as const) {
+    // 넷째는 `/v1/validate`가 `handleActivate`에서 분리되면서 판정이 됐다.
+    expect(KNOWN_REFUSALS['404:device_not_active']).toBe('deviceNotActive')
+    for (const error of ['unknownKey', 'revoked', 'deviceLimit', 'deviceNotActive'] as const) {
       expect(isServerRefusal(error)).toBe(true)
     }
   })
 
   it('표의 나머지는 권위가 없다', () => {
-    // 한도·형식·이미 해제됨은 "라이선스가 유효하지 않다"는 답이 아니다.
+    // 한도와 형식은 "라이선스가 유효하지 않다"는 답이 아니다 — 앞은 슬롯을 얼마나
+    // 자주 옮길 수 있는지에 대한 것이고, 뒤는 워커가 요청 스키마를 조였을 때
+    // 완벽한 봉투와 함께 오므로 판정으로 읽으면 유료 사용자 전원이 잠긴다.
+    const authoritative = ['unknownKey', 'revoked', 'deviceLimit', 'deviceNotActive']
     for (const error of Object.values(KNOWN_REFUSALS)) {
-      if (error === 'unknownKey' || error === 'revoked' || error === 'deviceLimit') continue
+      if (authoritative.includes(error)) continue
       expect(isServerRefusal(error), `${error}가 판정으로 취급된다`).toBe(false)
     }
   })
