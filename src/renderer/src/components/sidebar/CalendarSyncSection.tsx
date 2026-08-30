@@ -4,6 +4,23 @@ import { RefreshCw, Loader2, CheckCircle2, AlertTriangle, ExternalLink, Unlink }
 
 const APP_PASSWORD_URL = 'https://account.apple.com/account/manage'
 
+/**
+ * iCloud를 골랐을 때 쓰는 주소. 메인의 `DEFAULT_CONFIG.serverUrl`과 같은 값이다.
+ *
+ * provider는 별도로 저장하지 않는다 — 무엇에 연결했는지는 결국 주소가 정하므로,
+ * 두 값이 어긋날 수 없게 주소 하나에서 파생시킨다(`calendar-config.ts`의 `providerFor`).
+ */
+const ICLOUD_URL = 'https://caldav.icloud.com'
+
+/** 두 주소가 같은 서비스를 가리키는가. 파싱할 수 없으면 다르다고 본다. */
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a.trim()).origin === new URL(b).origin
+  } catch {
+    return false
+  }
+}
+
 export interface CalendarPublicConfig {
   provider: 'icloud' | 'caldav'
   serverUrl: string
@@ -54,6 +71,10 @@ export function CalendarSyncSection({
   const [config, setConfig] = useState<CalendarPublicConfig | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  // **모델도 번역 키도 처음부터 있었는데 입력 자리가 없었다.** `calendarSync.provider*`와
+  // `calendarSync.serverUrl`은 소스에서 한 번도 참조되지 않았고, 그래서 "직접 입력
+  // (CalDAV)"이라고 적힌 문구가 있는데도 iCloud 말고는 어떤 서버에도 연결할 수 없었다.
+  const [serverUrl, setServerUrl] = useState(ICLOUD_URL)
   const [calendars, setCalendars] = useState<RemoteCalendar[]>([])
   const [busy, setBusy] = useState<'connect' | 'sync' | null>(null)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
@@ -64,6 +85,7 @@ export function CalendarSyncSection({
     if (!loaded) return
     setConfig(loaded)
     setUsername(loaded.username)
+    setServerUrl(loaded.serverUrl)
   }, [])
 
   useEffect(() => {
@@ -72,12 +94,24 @@ export function CalendarSyncSection({
 
   if (!config) return null
 
+  // provider는 별도 상태가 아니라 **지금 입력칸에 있는 주소**가 정한다. 저장된
+  // `config.provider`를 보면 라디오를 눌러도 저장하기 전까지 화면이 안 바뀐다.
+  // 메인의 `providerFor`와 같은 기준(오리진 비교)을 쓴다.
+  const isCustom = !sameOrigin(serverUrl, ICLOUD_URL)
+
+  /** iCloud ↔ 직접 입력 전환. 주소를 바꾸는 것이 곧 서비스를 바꾸는 것이다. */
+  const pickProvider = (next: 'icloud' | 'caldav'): void => {
+    setMessage(null)
+    // 직접 입력으로 갈 때 iCloud 주소를 남겨 두면 무엇을 고쳐야 하는지가 안 보인다.
+    setServerUrl(next === 'icloud' ? ICLOUD_URL : serverUrl === ICLOUD_URL ? '' : serverUrl)
+  }
+
   const handleConnect = async (): Promise<void> => {
     setBusy('connect')
     setMessage(null)
     try {
       await window.api.calendarSaveCredentials?.({
-        serverUrl: config.serverUrl,
+        serverUrl: serverUrl.trim() || ICLOUD_URL,
         username,
         password
       })
@@ -138,6 +172,56 @@ export function CalendarSyncSection({
       <p className={`text-xs ${hintText}`}>{t('calendarSync.desc')}</p>
 
       <div>
+        <span className={`text-xs ${labelText}`}>{t('calendarSync.provider')}</span>
+        <div className="mt-1 flex gap-2">
+          {(['icloud', 'caldav'] as const).map((option) => {
+            const selected = option === (isCustom ? 'caldav' : 'icloud')
+            return (
+              <button
+                type="button"
+                key={option}
+                aria-pressed={selected}
+                onClick={() => pickProvider(option)}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-sm transition-colors ${focusRing} ${
+                  selected
+                    ? isDark
+                      ? 'bg-primary-500/20 text-primary-200'
+                      : 'bg-primary-50 text-primary-800'
+                    : isDark
+                      ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                {t(option === 'icloud' ? 'calendarSync.providerIcloud' : 'calendarSync.providerCustom')}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {isCustom && (
+        <div>
+          <label htmlFor="cal-server" className={`text-xs ${labelText}`}>
+            {t('calendarSync.serverUrl')}
+          </label>
+          <input
+            id="cal-server"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            value={serverUrl}
+            onChange={(e) => setServerUrl(e.target.value)}
+            placeholder="https://cloud.example.com/remote.php/dav"
+            className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${fieldSurface}`}
+          />
+        </div>
+      )}
+
+      <div>
+        {/* TODO(i18n, wt-shell 소유): 직접 입력 서버에서는 "Apple ID"가 틀린 이름이다.
+            `calendarSync.username`(계정) 키가 필요하다 — 로케일 파일은 이 워크트리
+            소유가 아니라 여기서 추가하지 않았고, 오케스트레이터에 보고했다. */}
         <label htmlFor="cal-username" className={`text-xs ${labelText}`}>
           {t('calendarSync.appleId')}
         </label>
@@ -165,24 +249,31 @@ export function CalendarSyncSection({
           placeholder={config.hasPassword ? t('calendarSync.appPasswordSaved') : 'xxxx-xxxx-xxxx-xxxx'}
           className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${fieldSurface}`}
         />
-        <p className={`text-xs mt-1 ${hintText}`}>
-          <Trans i18nKey="calendarSync.appPasswordHint" components={{ strong: <strong /> }} />
-        </p>
-        <button
-          type="button"
-          onClick={() => window.api.openExternal(APP_PASSWORD_URL)}
-          className={`mt-1 inline-flex items-center gap-1 text-xs rounded ${focusRing} ${
-            isDark ? 'text-primary-300 hover:text-primary-200' : 'text-primary-700 hover:text-primary-800'
-          }`}
-        >
-          <ExternalLink size={11} /> {t('calendarSync.appPasswordLink')}
-        </button>
+        {/* 앱 암호 안내와 발급 링크는 **애플 것이다.** 직접 넣은 CalDAV 서버에
+            account.apple.com을 안내하면 사용자를 엉뚱한 데로 보낸다. */}
+        {!isCustom && (
+          <>
+            <p className={`text-xs mt-1 ${hintText}`}>
+              <Trans i18nKey="calendarSync.appPasswordHint" components={{ strong: <strong /> }} />
+            </p>
+            <button
+              type="button"
+              onClick={() => window.api.openExternal(APP_PASSWORD_URL)}
+              className={`mt-1 inline-flex items-center gap-1 text-xs rounded ${focusRing} ${
+                isDark ? 'text-primary-300 hover:text-primary-200' : 'text-primary-700 hover:text-primary-800'
+              }`}
+            >
+              <ExternalLink size={11} /> {t('calendarSync.appPasswordLink')}
+            </button>
+          </>
+        )}
       </div>
 
       <button
         type="button"
         onClick={handleConnect}
-        disabled={busy !== null || !username}
+        // 직접 입력에서는 주소가 있어야 연결을 시도할 이유가 있다.
+        disabled={busy !== null || !username || (isCustom && !serverUrl.trim())}
         className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-40 transition-colors ${focusRing}`}
       >
         {busy === 'connect' ? t('calendarSync.connecting') : t('calendarSync.connect')}

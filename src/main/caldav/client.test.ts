@@ -169,6 +169,198 @@ describe('리다이렉트 처리', () => {
     expect(calls).toHaveLength(1)
     expect(calls.some((c) => c.url.includes('evil.example.com'))).toBe(false)
   })
+
+  it('리다이렉트가 자기 자신을 가리켜도 무한히 따라가지 않는다', async () => {
+    // 같은 출처라 자격증명은 안 새지만, 상한이 없으면 request()의 재귀가
+    // 메인 프로세스를 그대로 세운다.
+    const { fetchImpl, calls } = scriptedFetch(
+      Array.from({ length: 20 }, () => ({ status: 301, headers: { location: '/loop/' } }))
+    )
+    await expect(new CalDavClient(CREDS, fetchImpl).discoverCalendars()).rejects.toMatchObject({
+      code: 'protocol'
+    })
+    expect(calls.length).toBeLessThanOrEqual(4) // 최초 1회 + MAX_REDIRECTS(3)
+  })
+
+  it('상대 Location은 base가 아니라 방금 요청한 URL 기준으로 푼다', async () => {
+    const { fetchImpl, calls } = scriptedFetch([
+      { status: 301, headers: { location: 'principal/' } },
+      { body: PRINCIPAL_XML },
+      { body: HOME_XML },
+      { body: CALENDARS_XML }
+    ])
+    await new CalDavClient(
+      { ...CREDS, serverUrl: 'https://cloud.example/remote.php/dav/' },
+      fetchImpl
+    ).discoverCalendars()
+    expect(calls[1].url).toBe('https://cloud.example/remote.php/dav/principal/')
+  })
+})
+
+/**
+ * C1 — 응답 본문 안의 href가 그대로 요청 URL이 되던 구멍.
+ *
+ * 이 요청들에는 iCloud 앱 암호가 Basic 헤더로 실린다. 감사에서 실측한 우회 세 가지를
+ * 여기서 통째로 못 박는다. `absolute()`의 분기 하나만 되살려도 셋 중 하나는 반드시 빨개진다.
+ */
+describe('C1 — href 출처 강제', () => {
+  /** principal href만 갈아끼운 응답. 나머지 흐름은 정상이다. */
+  const principalPointingAt = (href: string): string => `<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:"><response><href>/</href><propstat>
+  <prop><current-user-principal><href>${href}</href></current-user-principal></prop>
+  <status>HTTP/1.1 200 OK</status>
+</propstat></response></multistatus>`
+
+  const BYPASSES: [name: string, href: string][] = [
+    ['절대 URL을 그대로 요청하던 갈래', 'https://evil.example/steal'],
+    ['평문 HTTP까지 통과하던 갈래', 'http://evil.example/steal'],
+    ['프로토콜 상대 href가 origin만 갈아끼우던 갈래', '//evil.example/steal']
+  ]
+
+  for (const [name, href] of BYPASSES) {
+    it(`서버가 준 href가 다른 출처면 요청하지 않는다 — ${name}`, async () => {
+      const { fetchImpl, calls } = scriptedFetch([{ body: principalPointingAt(href) }])
+      await expect(new CalDavClient(CREDS, fetchImpl).discoverCalendars()).rejects.toMatchObject({
+        code: 'protocol'
+      })
+      // 자격증명이 실린 요청이 단 한 번도 그쪽으로 나가지 않았다.
+      expect(calls).toHaveLength(1)
+      expect(calls.every((c) => c.url.startsWith('https://caldav.icloud.com/'))).toBe(true)
+    })
+  }
+
+  it('calendar-home-set의 href도 같은 검사를 받는다', async () => {
+    const HOME_EVIL = `<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+<response><href>/998877/principal/</href><propstat>
+  <prop><C:calendar-home-set><href>https://evil.example/c/</href></C:calendar-home-set></prop>
+  <status>HTTP/1.1 200 OK</status>
+</propstat></response></multistatus>`
+    const { fetchImpl, calls } = scriptedFetch([{ body: PRINCIPAL_XML }, { body: HOME_EVIL }])
+    await expect(new CalDavClient(CREDS, fetchImpl).discoverCalendars()).rejects.toMatchObject({
+      code: 'protocol'
+    })
+    expect(calls).toHaveLength(2)
+    expect(calls.some((c) => c.url.includes('evil.example'))).toBe(false)
+  })
+
+  it('컬렉션 목록의 href도 같은 검사를 받는다 (설정 파일에 저장되는 값이다)', async () => {
+    const CAL_EVIL = `<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+<response><href>https://evil.example/998877/calendars/home/</href><propstat>
+  <prop><displayname>집</displayname><resourcetype><collection/><C:calendar/></resourcetype></prop>
+  <status>HTTP/1.1 200 OK</status>
+</propstat></response></multistatus>`
+    const { fetchImpl } = scriptedFetch([{ body: PRINCIPAL_XML }, { body: HOME_XML }, { body: CAL_EVIL }])
+    await expect(new CalDavClient(CREDS, fetchImpl).discoverCalendars()).rejects.toMatchObject({
+      code: 'protocol'
+    })
+  })
+
+  /**
+   * 두 번째 도달 경로 — 렌더러가 `calendar:select`로 준 문자열.
+   * `listEvents`·`putEvent`·`deleteEvent`는 `absolute()`를 거치지 않고 URL을
+   * 그대로 `request()`에 넘겼으므로, 관문은 `request()` 진입부에 있어야 한다.
+   */
+  describe('바깥에서 들어온 URL은 진입점이 무엇이든 걸린다', () => {
+    /**
+     * 렌더러가 `calendar:select`로 준 문자열은 설정에 저장돼 `listEvents`·
+     * `createEvent`·`updateEvent`·`probeEvent`·`deleteEvent`로 흘러든다. 이 중
+     * 하나라도 검사를 건너뛰면 앱 암호가 그 호스트로 나간다.
+     *
+     * **공개 메서드를 통째로 훑는다.** 하나씩 적으면 다음에 추가되는 메서드가
+     * 빠지고, 빠졌다는 사실은 아무것도 알려 주지 않는다.
+     */
+    const OUTSIDE = 'https://evil.example/998877/calendars/home/'
+
+    const ENTRY_POINTS: [name: string, run: (c: CalDavClient) => Promise<unknown>][] = [
+      ['listEvents', (c) => c.listEvents(OUTSIDE, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')],
+      ['createEvent', (c) => c.createEvent(`${OUTSIDE}x.ics`, 'ICS')],
+      ['updateEvent (etag 있음)', (c) => c.updateEvent(`${OUTSIDE}x.ics`, 'ICS', '"v1"')],
+      ['updateEvent (etag 없음 — 덮어쓰기)', (c) => c.updateEvent(`${OUTSIDE}x.ics`, 'ICS', null)],
+      ['probeEvent', (c) => c.probeEvent(`${OUTSIDE}x.ics`)],
+      ['deleteEvent', (c) => c.deleteEvent(`${OUTSIDE}x.ics`, null)]
+    ]
+
+    for (const [name, run] of ENTRY_POINTS) {
+      it(`${name}`, async () => {
+        // 응답을 넉넉히 준비해 둔다 — 요청이 나갔다면 성공했을 상황을 만든다.
+        const { fetchImpl, calls } = scriptedFetch([{ status: 200 }, { status: 200 }, { status: 200 }])
+        await expect(run(new CalDavClient(CREDS, fetchImpl))).rejects.toMatchObject({ code: 'protocol' })
+        // 자격증명이 실린 요청이 단 한 번도 나가지 않았다.
+        expect(calls).toHaveLength(0)
+      })
+    }
+
+    it('프로토콜 상대·평문 http로 준 calendarUrl도 같다', async () => {
+      for (const outside of ['//evil.example/c/', 'http://evil.example/c/']) {
+        const { fetchImpl, calls } = scriptedFetch([{ status: 200 }])
+        await expect(
+          new CalDavClient(CREDS, fetchImpl).listEvents(outside, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')
+        ).rejects.toMatchObject({ code: 'protocol' })
+        expect(calls).toHaveLength(0)
+      }
+    })
+
+    it('사용자 정보로 호스트를 감춘 URL도 걸린다', async () => {
+      // `https://caldav.icloud.com@evil.example/`의 호스트는 evil.example이다.
+      const { fetchImpl, calls } = scriptedFetch([{ status: 200 }])
+      await expect(
+        new CalDavClient(CREDS, fetchImpl).createEvent('https://caldav.icloud.com@evil.example/x.ics', 'ICS')
+      ).rejects.toMatchObject({ code: 'protocol' })
+      expect(calls).toHaveLength(0)
+    })
+
+    it('같은 출처의 calendarUrl은 정상 동작한다 (검사가 정상 경로를 막지 않는다)', async () => {
+      const { fetchImpl, calls } = scriptedFetch([{ status: 201, headers: { etag: '"v1"' } }])
+      await new CalDavClient(CREDS, fetchImpl).createEvent('https://caldav.icloud.com/c/x.ics', 'ICS')
+      expect(calls).toHaveLength(1)
+    })
+  })
+
+  it('같은 출처의 절대 URL은 정상 응답이므로 통과한다', async () => {
+    const PRINCIPAL_ABS = principalPointingAt('https://caldav.icloud.com/998877/principal/')
+    const { fetchImpl, calls } = scriptedFetch([
+      { body: PRINCIPAL_ABS },
+      { body: HOME_XML },
+      { body: CALENDARS_XML }
+    ])
+    await new CalDavClient(CREDS, fetchImpl).discoverCalendars()
+    expect(calls[1].url).toBe('https://caldav.icloud.com/998877/principal/')
+  })
+
+  it('오류 메시지에 자격증명을 담지 않는다', async () => {
+    const { fetchImpl } = scriptedFetch([{ body: principalPointingAt('https://evil.example/steal') }])
+    const error = await new CalDavClient(CREDS, fetchImpl).discoverCalendars().catch((e) => e)
+    expect(String(error.message)).not.toContain(CREDS.password)
+    expect(String(error.message)).not.toContain(CREDS.username)
+  })
+})
+
+/** H16c — 경로 기반 CalDAV endpoint(Nextcloud 등)에서 discovery가 경로를 버리지 않는다. */
+describe('경로가 있는 serverUrl', () => {
+  it('설정된 경로에서 discovery를 시작한다 (origin의 /가 아니다)', async () => {
+    const { fetchImpl, calls } = scriptedFetch([{ body: PRINCIPAL_XML }, { body: HOME_XML }, { body: CALENDARS_XML }])
+    await new CalDavClient(
+      { ...CREDS, serverUrl: 'https://cloud.example/remote.php/dav' },
+      fetchImpl
+    ).discoverCalendars()
+    expect(calls[0].url).toBe('https://cloud.example/remote.php/dav')
+  })
+
+  it('상대 href는 설정된 경로를 기준으로 푼다', async () => {
+    const RELATIVE_PRINCIPAL = `<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:"><response><href>/</href><propstat>
+  <prop><current-user-principal><href>principals/users/me/</href></current-user-principal></prop>
+  <status>HTTP/1.1 200 OK</status>
+</propstat></response></multistatus>`
+    const { fetchImpl, calls } = scriptedFetch([{ body: RELATIVE_PRINCIPAL }, { body: HOME_XML }, { body: CALENDARS_XML }])
+    await new CalDavClient(
+      { ...CREDS, serverUrl: 'https://cloud.example/remote.php/dav/' },
+      fetchImpl
+    ).discoverCalendars()
+    expect(calls[1].url).toBe('https://cloud.example/remote.php/dav/principals/users/me/')
+  })
 })
 
 describe('listEvents', () => {
@@ -222,13 +414,12 @@ END:VCALENDAR</C:calendar-data>
   })
 })
 
-describe('putEvent / deleteEvent', () => {
+describe('createEvent / updateEvent / deleteEvent', () => {
   it('새 일정은 If-None-Match로 덮어쓰기를 막는다', async () => {
     const { fetchImpl, calls } = scriptedFetch([{ status: 201, headers: { etag: '"new"' } }])
-    const etag = await new CalDavClient(CREDS, fetchImpl).putEvent(
+    const etag = await new CalDavClient(CREDS, fetchImpl).createEvent(
       '/998877/calendars/home/haru-1.ics',
-      'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n',
-      null
+      'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n'
     )
     expect(calls[0].method).toBe('PUT')
     expect(calls[0].headers['If-None-Match']).toBe('*')
@@ -239,15 +430,61 @@ describe('putEvent / deleteEvent', () => {
 
   it('갱신은 If-Match로 낙관적 잠금을 건다', async () => {
     const { fetchImpl, calls } = scriptedFetch([{ status: 204, headers: { etag: '"v2"' } }])
-    await new CalDavClient(CREDS, fetchImpl).putEvent('/c/haru-1.ics', 'ICS', '"v1"')
+    await new CalDavClient(CREDS, fetchImpl).updateEvent('/c/haru-1.ics', 'ICS', '"v1"')
     expect(calls[0].headers['If-Match']).toBe('"v1"')
     expect(calls[0].headers['If-None-Match']).toBeUndefined()
   })
 
+  /**
+   * H16a — etag를 모른 채 갱신하는 것은 **덮어쓰기**이지 새로 만들기가 아니다.
+   * 한 함수의 `etag === null`이 두 뜻을 겸하던 시절, 충돌 뒤 비워 둔 etag가
+   * `If-None-Match: *`로 번역돼 같은 412를 영원히 다시 받았다.
+   */
+  it('etag 없는 갱신은 조건 헤더 없이 덮어쓴다 (If-None-Match를 붙이지 않는다)', async () => {
+    const { fetchImpl, calls } = scriptedFetch([{ status: 204, headers: { etag: '"v3"' } }])
+    await new CalDavClient(CREDS, fetchImpl).updateEvent('/c/haru-1.ics', 'ICS', null)
+    expect(calls[0].headers['If-None-Match']).toBeUndefined()
+    expect(calls[0].headers['If-Match']).toBeUndefined()
+  })
+
   it('412(선점됨)는 conflict로 구분해 던진다', async () => {
     const { fetchImpl } = scriptedFetch([{ status: 412 }])
-    await expect(new CalDavClient(CREDS, fetchImpl).putEvent('/c/haru-1.ics', 'ICS', '"stale"')).rejects.toMatchObject({
-      code: 'conflict'
+    await expect(
+      new CalDavClient(CREDS, fetchImpl).updateEvent('/c/haru-1.ics', 'ICS', '"stale"')
+    ).rejects.toMatchObject({ code: 'conflict' })
+  })
+
+  describe('probeEvent — 충돌에서 빠져나오는 길', () => {
+    const PROBE_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+<response><href>/c/haru-1.ics</href><propstat><prop>
+  <getetag>"server-v9"</getetag>
+  <C:calendar-data>BEGIN:VCALENDAR&#13;
+BEGIN:VEVENT&#13;
+UID:greenday-t1@supaicy.github.io&#13;
+DTSTART:20260803T030000Z&#13;
+END:VEVENT&#13;
+END:VCALENDAR</C:calendar-data>
+</prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>`
+
+    it('서버의 현재 etag와 UID를 읽어 온다', async () => {
+      const { fetchImpl, calls } = scriptedFetch([{ body: PROBE_XML }])
+      const probe = await new CalDavClient(CREDS, fetchImpl).probeEvent('/c/haru-1.ics')
+      expect(calls[0].method).toBe('PROPFIND')
+      expect(calls[0].headers.Depth).toBe('0')
+      expect(probe).toEqual({ etag: '"server-v9"', uid: 'greenday-t1@supaicy.github.io' })
+    })
+
+    it('그 사이 사라졌으면 null — 충돌이 아니라 다시 만들면 되는 상태다', async () => {
+      const { fetchImpl } = scriptedFetch([{ status: 404 }])
+      expect(await new CalDavClient(CREDS, fetchImpl).probeEvent('/c/haru-1.ics')).toBeNull()
+    })
+
+    it('404가 아닌 오류는 삼키지 않는다', async () => {
+      const { fetchImpl } = scriptedFetch([{ status: 401 }])
+      await expect(new CalDavClient(CREDS, fetchImpl).probeEvent('/c/haru-1.ics')).rejects.toMatchObject({
+        code: 'unauthorized'
+      })
     })
   })
 

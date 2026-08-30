@@ -18,11 +18,36 @@ export const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 export const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 
 /**
- * 요청하는 권한. 캘린더 전체가 아니라 '앱이 만든 일정'만 다루는 범위를 쓴다.
- * calendar.events 는 사용자의 기존 일정까지 읽고 고칠 수 있어 구글의 민감 범위
- * 심사 대상이고, 우리에게 필요하지도 않다.
+ * 요청하는 권한.
+ *
+ * 예전에는 `calendar.app.created` 하나였고, **그것으로는 이 앱이 하는 일을 할 수 없었다.**
+ * 그 범위는 "앱이 만든 캘린더"에만 닿는데, 앱은 캘린더를 만들지 않고 사용자의 기존
+ * 캘린더를 고르게 한다. 그래서 `GET /users/me/calendarList`가 403으로 떨어졌다 —
+ * 클라이언트 ID를 넣어도 캘린더 목록에서 더 갈 수 없었다.
+ *
+ * 그래서 둘을 받는다. **둘 다 필요하고, 각자 최소다:**
+ *
+ *   - `calendar.calendarlist.readonly` — 캘린더 **목록**만 읽는다. 일정 내용에는
+ *     닿지 않는다. 사용자가 어디로 내보낼지 고르려면 이 목록이 있어야 한다.
+ *     (`calendar.readonly`는 모든 일정 내용까지 읽어서 여기엔 과하다.)
+ *   - `calendar.events` — 고른 캘린더에 일정을 쓴다. 구글에는 "이 캘린더 하나에만
+ *     쓴다"는 범위가 없으므로, 사용자가 기존 캘린더를 고르는 이상 이것이 최소다.
+ *
+ * **대안을 고르지 않은 이유.** `calendar.app.created`를 유지하려면 앱 전용 보조
+ * 캘린더를 만들어 거기에만 써야 하는데, 그러면 캘린더 선택 UI가 사라지고 "내가 쓰던
+ * 캘린더에 올라온다"는 지금의 약속이 깨진다. 제품 결정이라 코드로 몰래 바꾸지 않았다.
+ *
+ * **`calendar.events`는 구글의 민감 범위다.** production 클라이언트에는 심사가
+ * 필요하고, 심사 전에는 등록된 테스트 사용자만 로그인할 수 있다.
+ *
+ * **문구를 함께 고쳐야 한다.** `googleSync.scopeNote`가 "Greenday가 만든 일정만
+ * 접근합니다. 기존 캘린더 일정은 읽지 않습니다"라고 말하는데 이 조합에서는 참이
+ * 아니다. 로케일 파일은 이 워크트리 소유가 아니라 여기서 고치지 않았고, 보고했다.
  */
-export const SCOPES = ['https://www.googleapis.com/auth/calendar.app.created']
+export const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  'https://www.googleapis.com/auth/calendar.events'
+]
 
 export interface PkcePair {
   verifier: string

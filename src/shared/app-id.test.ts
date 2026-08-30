@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { APP_BUNDLE_ID, OAUTH_REDIRECT_URI, isAppScheme, findAppSchemeArg } from './app-id'
+import {
+  APP_BUNDLE_ID,
+  OAUTH_LOOPBACK_HOST,
+  OAUTH_LOOPBACK_PATH,
+  loopbackRedirectUri,
+  isAppScheme,
+  findAppSchemeArg
+} from './app-id'
 
 /**
  * 2026-08-06 plan-eng-review에서 만든 테스트.
@@ -12,9 +19,9 @@ import { APP_BUNDLE_ID, OAUTH_REDIRECT_URI, isAppScheme, findAppSchemeArg } from
 const CALLBACK = `${APP_BUNDLE_ID}:/oauth2redirect?code=abc123&state=xyz`
 
 describe('isAppScheme', () => {
-  it('accepts our own callback URL', () => {
+  it('accepts our own scheme URL', () => {
     expect(isAppScheme(CALLBACK)).toBe(true)
-    expect(isAppScheme(OAUTH_REDIRECT_URI)).toBe(true)
+    expect(isAppScheme(`${APP_BUNDLE_ID}:/anything`)).toBe(true)
   })
 
   it('rejects other schemes', () => {
@@ -78,5 +85,30 @@ describe('findAppSchemeArg', () => {
   it('survives non-string entries and non-array input', () => {
     expect(findAppSchemeArg(['exe', undefined as unknown as string, CALLBACK])).toBe(CALLBACK)
     expect(findAppSchemeArg(undefined as unknown as string[])).toBeNull()
+  })
+})
+
+/**
+ * C6 — 구글 콜백은 커스텀 스킴이 아니라 루프백으로 온다.
+ *
+ * 구글의 현행 native-app 계약이 custom URI scheme을 받지 않는다. 스킴 자체는
+ * `index.ts`의 배선 때문에 남아 있지만, OAuth와는 무관해졌다.
+ */
+describe('loopbackRedirectUri', () => {
+  it('OS가 준 포트로 루프백 주소를 만든다', () => {
+    expect(loopbackRedirectUri(51234)).toBe('http://127.0.0.1:51234/oauth2redirect')
+  })
+
+  it('localhost가 아니라 127.0.0.1이다 — localhost는 ::1로 먼저 풀릴 수 있다', () => {
+    expect(OAUTH_LOOPBACK_HOST).toBe('127.0.0.1')
+    expect(new URL(loopbackRedirectUri(1)).hostname).toBe('127.0.0.1')
+  })
+
+  it('경로가 상수와 일치한다 (리스너가 이 경로만 처리한다)', () => {
+    expect(new URL(loopbackRedirectUri(1)).pathname).toBe(OAUTH_LOOPBACK_PATH)
+  })
+
+  it('더 이상 앱 스킴이 아니다', () => {
+    expect(isAppScheme(loopbackRedirectUri(51234))).toBe(false)
   })
 })

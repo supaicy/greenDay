@@ -7,7 +7,10 @@ import {
   eventUid,
   eventHref,
   type TaskRow,
-  type SyncState, localToIso } from './sync'
+  type SyncState,
+  localToIso
+} from './sync'
+import type { CalendarEvent } from './ical'
 
 const CALENDAR = 'https://caldav.icloud.com/998877/calendars/home/'
 
@@ -287,5 +290,185 @@ describe('taskToEvent — 기간', () => {
       scheduled_end: '2026-08-19T10:00:00'
     })
     expect(ev?.allDay).toBe(false)
+  })
+})
+
+/**
+ * `taskToEvent`가 null이 아님을 확인하고 좁힌다.
+ *
+ * 반복 테스트는 전부 "올릴 수 있는 할일"을 전제로 하므로, 그 전제가 깨지면
+ * 뒤이은 단언이 아니라 여기서 터지는 편이 진단이 빠르다.
+ */
+function eventOf(task: TaskRow): CalendarEvent {
+  const event = taskToEvent(task)
+  if (!event) throw new Error('캘린더에 올릴 수 없는 할일이다 — 테스트 전제가 틀렸다')
+  return event
+}
+
+/**
+ * H16b — 반복 할일이 **한 번짜리 고정 일정 하나**로 나가던 것.
+ *
+ * `TaskRow`에 반복 세 열이 아예 없어서 `rrule: null`이 박혔다. 화면은 이미
+ * 회차별 오버라이드를 우선해 그리고 있었으므로, 로컬과 내보낸 캘린더가 조용히 갈라졌다.
+ */
+describe('H16b — 반복 할일 내보내기', () => {
+  function recurring(overrides: Partial<TaskRow> = {}): TaskRow {
+    return {
+      id: 't1',
+      title: '주간 회의',
+      due_date: '2026-08-03', // 월요일
+      due_time: '10:00',
+      is_recurring: 1,
+      recurring_pattern: 'weekly:1',
+      ...overrides
+    }
+  }
+
+  it('반복 할일에 RRULE이 붙는다', () => {
+    expect(eventOf(recurring()).rrule).toBe('FREQ=WEEKLY;BYDAY=MO')
+  })
+
+  it('반복이 아니면 규칙을 붙이지 않는다', () => {
+    expect(eventOf(recurring({ is_recurring: 0 })).rrule).toBeNull()
+    expect(eventOf(recurring({ recurring_pattern: null })).rrule).toBeNull()
+  })
+
+  it('is_recurring이 0/1 정수여도 읽는다 (DB가 그렇게 준다)', () => {
+    expect(eventOf(recurring({ is_recurring: 1 })).rrule).toBe('FREQ=WEEKLY;BYDAY=MO')
+    expect(eventOf(recurring({ is_recurring: 0 })).rrule).toBeNull()
+  })
+
+  it('없앤 회차는 EXDATE로 나간다', () => {
+    const event = taskToEvent(
+      recurring({ scheduled_overrides: JSON.stringify({ '2026-08-10': null }) })
+    )
+    // 로컬 10:00을 UTC로 옮긴 값이어야 한다 — UTC 시각을 로컬 날짜에 붙이면
+    // 날짜 경계 근처에서 회차가 하루씩 어긋난다.
+    expect(event?.exdates).toEqual([localToIso('2026-08-10', '10:00')])
+    expect(event?.overrides).toEqual([])
+  })
+
+  it('발생일이 아닌 날의 삭제 표시는 무시한다 — 뺄 것이 없다', () => {
+    const event = taskToEvent(
+      recurring({ scheduled_overrides: JSON.stringify({ '2026-08-11': null }) }) // 화요일
+    )
+    expect(event?.exdates).toEqual([])
+  })
+
+  it('옮긴 회차는 RECURRENCE-ID 예외로 나간다', () => {
+    const event = taskToEvent(
+      recurring({
+        scheduled_start: '2026-08-03T10:00:00',
+        scheduled_end: '2026-08-03T11:00:00',
+        scheduled_overrides: JSON.stringify({
+          '2026-08-10': { start: '2026-08-10T14:00:00', end: '2026-08-10T15:30:00' }
+        })
+      })
+    )
+    expect(event?.overrides).toHaveLength(1)
+    expect(event?.overrides[0].start).toBe(new Date('2026-08-10T14:00:00').toISOString())
+    expect(event?.overrides[0].end).toBe(new Date('2026-08-10T15:30:00').toISOString())
+  })
+
+  it('발생일이 아닌 날로 옮긴 회차는 RDATE로 자리를 만들고 그 자리를 지목한다', () => {
+    const event = taskToEvent(
+      recurring({
+        scheduled_start: '2026-08-03T10:00:00',
+        scheduled_end: '2026-08-03T11:00:00',
+        // 8/12는 수요일 — 이 반복(월요일)의 발생일이 아니다.
+        scheduled_overrides: JSON.stringify({
+          '2026-08-12': { start: '2026-08-12T09:00:00', end: '2026-08-12T10:00:00' }
+        })
+      })
+    )
+    const moved = new Date('2026-08-12T09:00:00').toISOString()
+    expect(event?.rdates).toContain(moved)
+    expect(event?.overrides[0].recurrenceId).toBe(moved)
+  })
+
+  it('오버라이드는 객체로 와도 읽는다 (렌더러를 거친 값)', () => {
+    const event = taskToEvent(recurring({ scheduled_overrides: { '2026-08-10': null } }))
+    expect(event?.exdates).toEqual([localToIso('2026-08-10', '10:00')])
+  })
+
+  it('망가진 오버라이드는 동기화를 멈추지 않는다', () => {
+    for (const broken of ['not json', '[]', '{"2026-08-10":{"start":1}}', null, 42]) {
+      expect(() => taskToEvent(recurring({ scheduled_overrides: broken }))).not.toThrow()
+    }
+  })
+
+  it('클램프되는 달은 RDATE로 메운다 (RRULE이 건너뛰는 자리)', () => {
+    const event = taskToEvent(
+      recurring({ due_date: '2026-01-31', recurring_pattern: 'monthly:31' })
+    )
+    expect(event?.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=31')
+    expect(event?.rdates.some((d) => d.startsWith('2026-02-28'))).toBe(true)
+  })
+
+  it('종일 반복은 날짜 형식으로 낸다', () => {
+    const event = taskToEvent(recurring({ due_time: null, scheduled_overrides: JSON.stringify({ '2026-08-10': null }) }))
+    expect(event?.allDay).toBe(true)
+    expect(event?.exdates).toEqual(['2026-08-10'])
+  })
+
+  it('같은 입력이면 항상 같은 값이다 — 지문이 흔들리면 매번 다시 올린다', () => {
+    const t = recurring({ recurring_pattern: 'monthly:31', due_date: '2026-01-31' })
+    expect(fingerprint(eventOf(t))).toBe(fingerprint(eventOf(t)))
+  })
+})
+
+/**
+ * 회차를 옮기면 바뀌는 것은 `scheduledOverrides`뿐이고 템플릿의 start/end는 그대로다.
+ * 지문이 그 셋만 보던 동안에는 **재업로드를 시도조차 하지 않았다.**
+ */
+describe('H16b — 지문이 반복 변화를 잡는다', () => {
+  const base: TaskRow = {
+    id: 't1',
+    title: '주간 회의',
+    due_date: '2026-08-03',
+    due_time: '10:00',
+    scheduled_start: '2026-08-03T10:00:00',
+    scheduled_end: '2026-08-03T11:00:00',
+    is_recurring: 1,
+    recurring_pattern: 'weekly:1'
+  }
+
+  it('회차를 옮기면 지문이 바뀐다', () => {
+    const before = fingerprint(eventOf(base))
+    const after = fingerprint(
+      eventOf({
+        ...base,
+        scheduled_overrides: JSON.stringify({
+          '2026-08-10': { start: '2026-08-10T14:00:00', end: '2026-08-10T15:00:00' }
+        })
+      })
+    )
+    expect(after).not.toBe(before)
+  })
+
+  it('회차를 없애도 지문이 바뀐다', () => {
+    const before = fingerprint(eventOf(base))
+    const after = fingerprint(eventOf({ ...base, scheduled_overrides: JSON.stringify({ '2026-08-10': null }) }))
+    expect(after).not.toBe(before)
+  })
+
+  it('반복 패턴을 바꾸면 지문이 바뀐다', () => {
+    const before = fingerprint(eventOf(base))
+    const after = fingerprint(eventOf({ ...base, recurring_pattern: 'weekly:1,3' }))
+    expect(after).not.toBe(before)
+  })
+
+  it('planSync가 그 변화를 갱신 대상으로 잡는다', () => {
+    const event = eventOf(base)
+    const state: SyncState = {
+      t1: { href: eventHref('https://c/', 't1'), etag: '"v1"', fingerprint: fingerprint(event), sequence: 0 }
+    }
+    const moved = {
+      ...base,
+      scheduled_overrides: JSON.stringify({
+        '2026-08-10': { start: '2026-08-10T14:00:00', end: '2026-08-10T15:00:00' }
+      })
+    }
+    expect(planSync([moved], state, 'https://c/').updates).toHaveLength(1)
   })
 })

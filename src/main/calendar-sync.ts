@@ -7,10 +7,10 @@
  */
 
 import { CalDavClient, CalDavError, type CalDavCredentials } from './caldav/client'
-import { serializeEvent } from './caldav/ical'
+import { serializeEvent, type CalendarEvent } from './caldav/ical'
 // fingerprint는 sync.ts 것을 그대로 쓴다. 여기서 다시 정의하면 두 계산이 어긋나는
 // 순간 모든 항목이 매번 다시 올라간다.
-import { fingerprint, planSync, type SyncState, type TaskRow } from './caldav/sync'
+import { eventUid, fingerprint, planSync, type SyncState, type TaskRow } from './caldav/sync'
 
 export interface SyncResult {
   created: number
@@ -51,39 +51,69 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
     state
   }
 
+  /** 성공한 쓰기 하나를 상태에 반영한다. 세 자리가 같은 필드를 쓰므로 한곳에 둔다. */
+  const record = (taskId: string, href: string, etag: string | null, event: CalendarEvent): void => {
+    state[taskId] = { href, etag, fingerprint: fingerprint(event), sequence: event.sequence }
+  }
+
   for (const item of plan.creates) {
+    const ics = serializeEvent(item.event, options.now)
     try {
-      const etag = await client.putEvent(item.href, serializeEvent(item.event, options.now), null)
-      state[item.taskId] = {
-        href: item.href,
-        etag,
-        fingerprint: fingerprint(item.event),
-        sequence: item.event.sequence
-      }
+      record(item.taskId, item.href, await client.createEvent(item.href, ics), item.event)
       result.created++
     } catch (error) {
       if (isFatal(error)) throw error
-      result.failures.push({ taskId: item.taskId, message: messageOf(error) })
+      // **그 자리에 이미 뭔가 있다.** 우리 상태에는 없는데 서버에는 있는 경우는
+      // 흔하다 — 연동을 해제했다가 같은 캘린더를 다시 고르면 syncState만 비고
+      // 서버의 일정은 그대로다. 예전에는 여기서 그냥 실패로 세고 끝나 그 할일이
+      // 영원히 다시 올라가지 못했다.
+      if (!isConflict(error)) {
+        result.failures.push({ taskId: item.taskId, message: messageOf(error) })
+        continue
+      }
+      try {
+        const adopted = await adopt(client, item.taskId, item.href, ics)
+        if (adopted) {
+          record(item.taskId, item.href, adopted.etag, item.event)
+          result.created++
+          continue
+        }
+        result.failures.push({ taskId: item.taskId, message: FOREIGN_EVENT_MESSAGE })
+      } catch (retryError) {
+        if (isFatal(retryError)) throw retryError
+        result.failures.push({ taskId: item.taskId, message: messageOf(retryError) })
+      }
     }
   }
 
   for (const item of plan.updates) {
+    const ics = serializeEvent(item.event, options.now)
     try {
-      const etag = await client.putEvent(item.href, serializeEvent(item.event, options.now), item.etag)
-      state[item.taskId] = {
-        href: item.href,
-        etag,
-        fingerprint: fingerprint(item.event),
-        sequence: item.event.sequence
-      }
+      record(item.taskId, item.href, await client.updateEvent(item.href, ics, item.etag), item.event)
       result.updated++
     } catch (error) {
       if (isFatal(error)) throw error
-      // 충돌은 다음 동기화에서 다시 시도하도록 etag만 비운다(다음엔 If-Match 없이 덮어씀).
-      if (error instanceof CalDavError && error.code === 'conflict') {
-        state[item.taskId] = { ...state[item.taskId], etag: null }
+      if (!isConflict(error)) {
+        result.failures.push({ taskId: item.taskId, message: messageOf(error) })
+        continue
       }
-      result.failures.push({ taskId: item.taskId, message: messageOf(error) })
+      // **충돌은 "내 etag가 낡았다"이지 "무엇이 있는지 안다"가 아니다.**
+      //
+      // 예전에는 여기서 `etag: null`만 남기고 다음 동기화로 미뤘는데, 그 null이
+      // 생성 경로의 `If-None-Match: *`로 번역돼 **같은 412를 영원히 다시 받았다**.
+      // 이제는 서버의 현재 값을 그 자리에서 다시 읽어 복구한다.
+      try {
+        const adopted = await adopt(client, item.taskId, item.href, ics)
+        if (adopted) {
+          record(item.taskId, item.href, adopted.etag, item.event)
+          result.updated++
+          continue
+        }
+        result.failures.push({ taskId: item.taskId, message: FOREIGN_EVENT_MESSAGE })
+      } catch (retryError) {
+        if (isFatal(retryError)) throw retryError
+        result.failures.push({ taskId: item.taskId, message: messageOf(retryError) })
+      }
     }
   }
 
@@ -110,6 +140,44 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
 /** 계속 진행해도 소용없는 오류인가. */
 function isFatal(error: unknown): boolean {
   return error instanceof CalDavError && (error.code === 'unauthorized' || error.code === 'forbidden')
+}
+
+function isConflict(error: unknown): boolean {
+  return error instanceof CalDavError && error.code === 'conflict'
+}
+
+/**
+ * 우리 경로에 남의 일정이 앉아 있을 때의 문구.
+ *
+ * 덮어쓰지 않는다. href는 UID에서 결정적으로 나오므로 이 상황은 사용자가 직접
+ * 만든 일정이 우연히 같은 이름을 가졌거나, 다른 도구가 그 자리를 쓴 것이다.
+ * 어느 쪽이든 조용히 지워 버릴 근거가 없다.
+ */
+const FOREIGN_EVENT_MESSAGE =
+  '이 할일의 자리에 다른 일정이 있어 덮어쓰지 않았습니다. 캘린더에서 확인해 주세요.'
+
+/**
+ * 충돌 난 리소스를 **그 자리에서** 되찾는다. 되찾았으면 새 etag, 남의 것이면 null.
+ *
+ * 세 갈래다:
+ *   - 사라졌다  → 다시 만든다(우리 것이 될 자리다).
+ *   - 우리 UID → 서버의 현재 etag로 한 번 더 갱신한다. 이게 낡은 etag 하나 때문에
+ *                영구 실패로 굳던 경로를 끊는다.
+ *   - 남의 UID → 건드리지 않는다. 호출처가 사용자에게 알린다.
+ */
+async function adopt(
+  client: CalDavClient,
+  taskId: string,
+  href: string,
+  ics: string
+): Promise<{ etag: string | null } | null> {
+  const probe = await client.probeEvent(href)
+  if (probe === null) return { etag: await client.createEvent(href, ics) }
+  // UID를 못 읽는 서버(calendar-data를 안 주는 경우)는 우리 것으로 본다 —
+  // href가 우리 UID에서 나온 경로라 그 근거가 이미 있고, 못 읽었다는 이유로
+  // 사용자를 영구 실패에 두는 것이 더 나쁘다.
+  if (probe.uid !== null && probe.uid !== eventUid(taskId)) return null
+  return { etag: await client.updateEvent(href, ics, probe.etag) }
 }
 
 function messageOf(error: unknown): string {

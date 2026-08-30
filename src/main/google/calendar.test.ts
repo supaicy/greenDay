@@ -18,6 +18,9 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     end: '2026-08-03T07:00:00.000Z',
     allDay: false,
     rrule: null,
+    rdates: [],
+    exdates: [],
+    overrides: [],
     lastModified: null,
     sequence: 0,
     completed: false,
@@ -214,5 +217,135 @@ describe('오류 분류', () => {
       .listCalendars()
       .catch((e) => e)
     expect(String(error.message)).not.toContain('super-secret-token')
+  })
+})
+
+/**
+ * H16b — 구글 쪽 반복. `planSync`를 CalDAV와 공유하므로 같은 모델이 여기까지 온다.
+ */
+describe('H16b — 구글 반복 매핑', () => {
+  it('RRULE·RDATE·EXDATE를 recurrence 배열로 낸다', () => {
+    const body = eventToGoogle(
+      event({
+        rrule: 'FREQ=WEEKLY;BYDAY=MO',
+        rdates: ['2026-08-12T00:00:00.000Z'],
+        exdates: ['2026-08-10T06:00:00.000Z']
+      })
+    )
+    expect(body.recurrence).toEqual([
+      'RRULE:FREQ=WEEKLY;BYDAY=MO',
+      'RDATE:20260812T000000Z',
+      'EXDATE:20260810T060000Z'
+    ])
+  })
+
+  it('종일 일정은 VALUE=DATE 형식을 쓴다 (CalDAV와 같은 헬퍼)', () => {
+    const body = eventToGoogle(
+      event({ allDay: true, start: '2026-08-03', end: '2026-08-04', rrule: 'FREQ=DAILY', exdates: ['2026-08-10'] })
+    )
+    expect(body.recurrence).toEqual(['RRULE:FREQ=DAILY', 'EXDATE;VALUE=DATE:20260810'])
+  })
+
+  it('반복이 없으면 recurrence를 아예 넣지 않는다', () => {
+    expect(eventToGoogle(event()).recurrence).toBeUndefined()
+  })
+
+  it('되읽을 때 접두사를 뗀다 — 내부 표현에는 RRULE:이 없다', () => {
+    const parsed = googleToEvent({
+      id: 'x',
+      start: { dateTime: '2026-08-03T06:00:00.000Z' },
+      end: { dateTime: '2026-08-03T07:00:00.000Z' },
+      recurrence: ['RRULE:FREQ=DAILY', 'EXDATE;VALUE=DATE:20260810', 'RDATE:20260812T000000Z']
+    })
+    expect(parsed?.rrule).toBe('FREQ=DAILY')
+    expect(parsed?.exdates).toEqual(['20260810'])
+    expect(parsed?.rdates).toEqual(['20260812T000000Z'])
+  })
+
+  it('recurrence가 없으면 빈 값으로 읽는다', () => {
+    const parsed = googleToEvent({
+      id: 'x',
+      start: { dateTime: '2026-08-03T06:00:00.000Z' },
+      end: { dateTime: '2026-08-03T07:00:00.000Z' }
+    })
+    expect(parsed?.rrule).toBeNull()
+    expect(parsed?.rdates).toEqual([])
+    expect(parsed?.exdates).toEqual([])
+  })
+})
+
+/**
+ * 구글에는 RECURRENCE-ID가 없다 — 회차 예외는 별도 인스턴스 리소스를 고쳐야 한다.
+ * 부모만 쓰면 옮긴 회차가 반영되지 않는다.
+ */
+describe('H16b — 옮긴 회차를 인스턴스로 반영한다', () => {
+  const MOVED = {
+    recurrenceId: '2026-08-10T06:00:00.000Z',
+    start: '2026-08-10T09:00:00.000Z',
+    end: '2026-08-10T10:30:00.000Z'
+  }
+
+  /** 순서대로 응답을 돌려주는 대역. 인스턴스 조회 → PATCH 왕복이 필요하다. */
+  function scriptedApi(responses: { status?: number; payload?: unknown }[]) {
+    const requests: Recorded[] = []
+    let index = 0
+    const fetchImpl: FetchLike = async (url, init) => {
+      requests.push({
+        url,
+        method: String(init.method),
+        headers: (init.headers ?? {}) as Record<string, string>,
+        body: init.body as string | undefined
+      })
+      const spec = responses[index++] ?? { status: 500 }
+      const status = spec.status ?? 200
+      return new Response(status === 204 ? null : JSON.stringify(spec.payload ?? {}), { status })
+    }
+    return { requests, fetchImpl }
+  }
+
+  it('부모를 쓴 뒤 인스턴스를 찾아 시각을 고친다', async () => {
+    const { requests, fetchImpl } = scriptedApi([
+      { status: 200 }, // 부모 PUT
+      { status: 200, payload: { items: [{ id: 'parentid_20260810T060000Z' }] } }, // instances
+      { status: 200 } // 인스턴스 PATCH
+    ])
+    await new GoogleCalendarClient('token', fetchImpl).upsertEvent(
+      'cal@group.calendar.google.com',
+      event({ rrule: 'FREQ=WEEKLY;BYDAY=MO', overrides: [MOVED] })
+    )
+    expect(requests).toHaveLength(3)
+    expect(requests[1].method).toBe('GET')
+    expect(requests[1].url).toContain('/instances?')
+    expect(requests[1].url).toContain(`originalStart=${encodeURIComponent(MOVED.recurrenceId)}`)
+    expect(requests[2].method).toBe('PATCH')
+    expect(requests[2].url).toContain('parentid_20260810T060000Z')
+    expect(JSON.parse(String(requests[2].body))).toEqual({
+      start: { dateTime: MOVED.start },
+      end: { dateTime: MOVED.end }
+    })
+  })
+
+  it('예외가 없으면 추가 왕복이 없다', async () => {
+    const { requests, fetchImpl } = scriptedApi([{ status: 200 }])
+    await new GoogleCalendarClient('token', fetchImpl).upsertEvent('cal', event({ rrule: 'FREQ=DAILY' }))
+    expect(requests).toHaveLength(1)
+  })
+
+  it('회차를 못 찾으면 조용히 넘어간다 — 나머지 할일까지 막지 않는다', async () => {
+    const { fetchImpl } = scriptedApi([{ status: 200 }, { status: 200, payload: { items: [] } }])
+    await expect(
+      new GoogleCalendarClient('token', fetchImpl).upsertEvent('cal', event({ overrides: [MOVED] }))
+    ).resolves.toBeUndefined()
+  })
+
+  it('부모가 없어 새로 만든 경우에도 예외를 반영한다', async () => {
+    const { requests, fetchImpl } = scriptedApi([
+      { status: 404 }, // PUT — 없다
+      { status: 200 }, // POST — 만든다
+      { status: 200, payload: { items: [{ id: 'inst-1' }] } },
+      { status: 200 }
+    ])
+    await new GoogleCalendarClient('token', fetchImpl).upsertEvent('cal', event({ overrides: [MOVED] }))
+    expect(requests.map((r) => r.method)).toEqual(['PUT', 'POST', 'GET', 'PATCH'])
   })
 })

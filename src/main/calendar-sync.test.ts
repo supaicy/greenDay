@@ -124,22 +124,152 @@ describe('runSync — 갱신', () => {
     expect(requests[0].body).toContain('SEQUENCE:1')
   })
 
-  it('충돌(412)이면 etag를 비워 다음 회차에 덮어쓰게 한다', async () => {
-    const before = task()
-    const { client } = fakeServer(() => 412)
+})
+
+/**
+ * H16a — 412가 영구 실패로 굳던 경로.
+ *
+ * 예전에는 충돌 시 `state[taskId].etag = null`만 남기고 다음 회차로 미뤘다. 그런데
+ * 그 null이 `putEvent`의 **생성** 분기(`If-None-Match: *`)로 번역돼, 이미 있는
+ * 리소스에 대고 같은 412를 영원히 다시 받았다. 이제는 그 자리에서 서버의 현재
+ * 값을 다시 읽어 복구한다.
+ */
+describe('runSync — 충돌 복구', () => {
+  const OUR_UID = 'greenday-t1@supaicy.github.io'
+
+  const probeXml = (uid: string, etag = '"server-v9"'): string => `<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+<response><href>/1/calendars/home/x.ics</href><propstat><prop>
+  <getetag>${etag}</getetag>
+  <C:calendar-data>BEGIN:VCALENDAR&#13;
+BEGIN:VEVENT&#13;
+UID:${uid}&#13;
+DTSTART:20260803T030000Z&#13;
+END:VEVENT&#13;
+END:VCALENDAR</C:calendar-data>
+</prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>`
+
+  /** 정해 둔 응답을 순서대로 돌려주는 서버 대역. 복구는 왕복이 여러 번이라 필요하다. */
+  function scriptedServer(responses: { status?: number; body?: string; etag?: string }[]) {
+    const requests: Recorded[] = []
+    let index = 0
+    const fetchImpl: FetchLike = async (url, init) => {
+      requests.push({
+        method: String(init.method),
+        url,
+        body: init.body as string | undefined,
+        headers: (init.headers ?? {}) as Record<string, string>
+      })
+      const spec = responses[index++] ?? { status: 500 }
+      const status = spec.status ?? 207
+      const hasBody = status !== 204 && status !== 205 && status !== 304
+      return new Response(hasBody ? (spec.body ?? '') : null, {
+        status,
+        headers: spec.etag ? { etag: spec.etag } : {}
+      })
+    }
+    return { requests, client: new CalDavClient(CREDS, fetchImpl) }
+  }
+
+  it('갱신 충돌은 서버의 현재 etag를 다시 읽어 그 자리에서 복구한다', async () => {
+    const changed = task({ due_date: '2026-08-09' })
+    const { requests, client } = scriptedServer([
+      { status: 412 }, // 낡은 If-Match
+      { status: 207, body: probeXml(OUR_UID) }, // 서버의 현재 값
+      { status: 204, etag: '"v10"' } // 새 etag로 다시 갱신
+    ])
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [changed],
+      state: { t1: entryFor(task()) },
+      now: NOW,
+      client
+    })
+    expect(result.updated).toBe(1)
+    expect(result.failures).toEqual([])
+    expect(requests.map((r) => r.method)).toEqual(['PUT', 'PROPFIND', 'PUT'])
+    expect(requests[2].headers['If-Match']).toBe('"server-v9"')
+    // **etag가 null로 남지 않는다** — 그게 다음 회차를 생성 경로로 떨어뜨리던 원인이었다.
+    expect(result.state.t1.etag).toBe('"v10"')
+    // 지문도 새 내용으로 올라가야 다음 회차에 또 올리지 않는다.
+    expect(result.state.t1.fingerprint).toBe(entryFor(changed).fingerprint)
+  })
+
+  it('생성 충돌(재연결 후 같은 캘린더 재선택)도 기존 리소스를 되찾는다', async () => {
+    // syncState는 비었는데 서버에는 지난번 일정이 그대로 있는 상태.
+    const { client } = scriptedServer([
+      { status: 412 }, // If-None-Match: * 가 걸렸다
+      { status: 207, body: probeXml(OUR_UID) },
+      { status: 204, etag: '"v10"' }
+    ])
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [task()],
+      state: {},
+      now: NOW,
+      client
+    })
+    expect(result.created).toBe(1)
+    expect(result.failures).toEqual([])
+    expect(result.state.t1.etag).toBe('"v10"')
+  })
+
+  it('그 사이 서버에서 사라졌으면 다시 만든다', async () => {
+    const { requests, client } = scriptedServer([
+      { status: 412 },
+      { status: 404 }, // probe — 없다
+      { status: 201, etag: '"fresh"' }
+    ])
     const result = await runSync({
       credentials: CREDS,
       calendarUrl: CALENDAR,
       tasks: [task({ due_date: '2026-08-09' })],
-      state: { t1: entryFor(before) },
+      state: { t1: entryFor(task()) },
+      now: NOW,
+      client
+    })
+    expect(result.updated).toBe(1)
+    expect(requests[2].headers['If-None-Match']).toBe('*')
+    expect(result.state.t1.etag).toBe('"fresh"')
+  })
+
+  it('남의 일정이 그 자리에 있으면 덮어쓰지 않고 알린다', async () => {
+    const before = entryFor(task())
+    const { requests, client } = scriptedServer([
+      { status: 412 },
+      { status: 207, body: probeXml('someone-elses-event@example.com') }
+    ])
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [task({ due_date: '2026-08-09' })],
+      state: { t1: before },
       now: NOW,
       client
     })
     expect(result.updated).toBe(0)
     expect(result.failures).toHaveLength(1)
-    expect(result.state.t1.etag).toBeNull()
-    // 지문은 예전 것으로 남아 다음 회차에도 갱신 대상이 된다.
-    expect(result.state.t1.fingerprint).toBe(entryFor(before).fingerprint)
+    expect(result.failures[0].message).toContain('다른 일정')
+    // 두 번째 PUT은 나가지 않았다.
+    expect(requests.filter((r) => r.method === 'PUT')).toHaveLength(1)
+    // 상태는 건드리지 않는다 — 다음 회차에 사용자가 정리한 뒤 다시 시도한다.
+    expect(result.state.t1).toEqual(before)
+  })
+
+  it('복구 시도 중의 인증 실패는 즉시 중단한다', async () => {
+    const { client } = scriptedServer([{ status: 412 }, { status: 401 }])
+    await expect(
+      runSync({
+        credentials: CREDS,
+        calendarUrl: CALENDAR,
+        tasks: [task({ due_date: '2026-08-09' })],
+        state: { t1: entryFor(task()) },
+        now: NOW,
+        client
+      })
+    ).rejects.toMatchObject({ code: 'unauthorized' })
   })
 })
 
@@ -241,5 +371,47 @@ describe('runSync — 입력 상태를 훼손하지 않는다', () => {
       client
     })
     expect(original).toEqual(snapshot)
+  })
+})
+
+/**
+ * C1의 실제 도달 경로 — 설정에 저장된 `calendarUrl`이 다른 출처를 가리키는 경우.
+ *
+ * `calendar:select`가 렌더러 문자열을 그대로 저장하므로, 오염된 값은 `runSync`를
+ * 통해 들어온다. 클라이언트 단위 테스트와 별개로 **여기서도** 확인한다 —
+ * 사용자에게 실제로 일어나는 순서가 이것이다.
+ */
+describe('C1 — 설정의 calendarUrl이 다른 출처를 가리켜도 자격증명이 나가지 않는다', () => {
+  it('요청이 한 번도 나가지 않고 실패로 보고된다', async () => {
+    const { requests, client } = fakeServer(() => 201)
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: 'https://evil.example/998877/calendars/home/',
+      tasks: [task()],
+      state: {},
+      now: NOW,
+      client
+    })
+    expect(requests).toHaveLength(0)
+    expect(result.created).toBe(0)
+    expect(result.failures).toHaveLength(1)
+  })
+
+  it('이미 저장된 syncState의 href가 오염돼 있어도 마찬가지다', async () => {
+    // 침해된 서버가 첫 PROPFIND 응답으로 심어 둔 href가 상태에 남은 경우.
+    const { requests, client } = fakeServer(() => 204)
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [],
+      state: {
+        t1: { href: 'https://evil.example/x.ics', etag: '"v1"', fingerprint: 'fp', sequence: 0 }
+      },
+      now: NOW,
+      client
+    })
+    expect(requests).toHaveLength(0)
+    expect(result.deleted).toBe(0)
+    expect(result.failures).toHaveLength(1)
   })
 })

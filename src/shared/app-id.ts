@@ -3,15 +3,14 @@
  *
  * 이 값은 아래 자리에서 정확히 일치해야 한다:
  *   1. electron-builder.yml 의 `appId` (Info.plist의 CFBundleIdentifier가 된다)
- *   2. electron-builder.yml 의 `mac.protocols[].schemes` (콜백을 받을 URL 스킴)
- *   3. Google OAuth 클라이언트의 iOS 번들 ID
- *   4. (Windows를 내면) electron-builder.yml 의 `win.protocols[].schemes` —
+ *   2. electron-builder.yml 의 `mac.protocols[].schemes` (앱의 URL 스킴)
+ *   3. (Windows를 내면) electron-builder.yml 의 `win.protocols[].schemes` —
  *      NSIS가 설치 시 레지스트리에 등록한다. scripts/mas-preflight.sh 는 아직
- *      1~3만 대조하므로, win: 블록을 만들 때 검사도 같이 넓혀야 한다.
+ *      1~2만 대조하므로, win: 블록을 만들 때 검사도 같이 넓혀야 한다.
  *
- * 어긋나면 조용히 깨진다 — 구글 로그인은 브라우저에서 정상적으로 끝나고,
- * 그 콜백을 받을 앱이 없어 앱은 5분 뒤 타임아웃으로 끝난다. 그래서 코드 쪽은 여기
- * 한 곳에서만 정의하고, scripts/mas-preflight.sh 가 이 값과 electron-builder.yml 을 대조한다.
+ * **구글 OAuth는 더 이상 이 스킴을 쓰지 않는다** — 아래 `loopbackRedirectUri` 참고.
+ * 스킴 정의 자체는 남긴다. 지우면 `index.ts`의 `open-url`·`second-instance` 배선이
+ * 함께 무너지고, 앱을 URL로 여는 다른 용도가 생길 수 있다.
  *
  * 앱 이름은 Greenday지만 번들 ID는 com.supaicy.haru 다. 일부러 그렇게 뒀다 —
  * 번들 ID는 사용자에게 보이지 않는 내부 식별자이고, 이미 등록해 둔 App ID와
@@ -24,10 +23,31 @@
 export const APP_BUNDLE_ID = 'com.supaicy.haru'
 
 /**
- * 구글 OAuth 콜백 주소. 루프백 서버(http://127.0.0.1:포트)가 아니라 커스텀 스킴을
- * 쓰기 때문에 Mac App Store 샌드박스에서 network.server 권한이 필요 없다.
+ * 구글 OAuth 콜백을 받는 **루프백 주소**.
+ *
+ * 예전에는 커스텀 스킴(`com.supaicy.haru:/oauth2redirect`)을 썼다. MAS 샌드박스에서
+ * `network.server` 권한이 필요 없다는 것이 이유였는데, **구글이 그 방식을 받지 않는다.**
+ * 현행 native-app 계약은 설치형 앱에 루프백 IP를 요구하고 custom URI scheme은
+ * 지원 대상이 아니다. 저장소는 이를 "iOS 번들 ID로 등록"해 우회하려 했지만,
+ * Electron macOS 앱을 iOS 클라이언트로 등록하는 것은 지원되는 구성이 아니라
+ * 새로 만든 production 클라이언트에서는 동의 뒤 콜백 전에 막힐 수 있다.
+ *
+ * **포트는 고정하지 않는다.** 고정하면 다른 앱이 먼저 잡고 있을 때 로그인이 통째로
+ * 막히고, 그 포트를 선점한 프로세스가 인가 코드를 받게 된다. OS가 빈 포트를 주고
+ * 그 값으로 redirect_uri를 만든다 — 구글은 루프백에 한해 포트를 대조하지 않는다.
+ *
+ * 호스트는 `localhost`가 아니라 **`127.0.0.1`**이다. `localhost`는 IPv6(::1)로 먼저
+ * 풀릴 수 있고, 그러면 IPv4로 바인드한 서버에 콜백이 닿지 않는다.
+ *
+ * MAS 빌드에는 `com.apple.security.network.server` entitlement가 필요하다
+ * (`resources/entitlements.mac.plist`).
  */
-export const OAUTH_REDIRECT_URI = `${APP_BUNDLE_ID}:/oauth2redirect`
+export const OAUTH_LOOPBACK_HOST = '127.0.0.1'
+export const OAUTH_LOOPBACK_PATH = '/oauth2redirect'
+
+export function loopbackRedirectUri(port: number): string {
+  return `http://${OAUTH_LOOPBACK_HOST}:${port}${OAUTH_LOOPBACK_PATH}`
+}
 
 const SCHEME_PREFIX = `${APP_BUNDLE_ID}:`
 
