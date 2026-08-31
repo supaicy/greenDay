@@ -10,7 +10,8 @@ import {
   Loader2,
   RefreshCw,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Shield
 } from 'lucide-react'
 import { useStore, type Theme } from '../../store/useStore'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -219,6 +220,13 @@ function NotificationSection({ isDark }: { isDark: boolean }) {
   )
 }
 
+/** 개인정보처리방침. 앱스토어에도 이 주소를 **언어별로** 제출한다 —
+    원본이 하나여야 갈라지지 않는다(회사 사이트가 결제 사이트 법적 문서와 같은 곳이다). */
+const PRIVACY_URL: Record<string, string> = {
+  ko: 'https://begreen.dev/ko/privacy',
+  en: 'https://begreen.dev/privacy'
+}
+
 export function Settings() {
   const { t } = useTranslation()
   const theme = useStore((s) => s.theme)
@@ -405,6 +413,22 @@ export function Settings() {
                 <div className={`text-xs ${labelText(isDark)}`}>{t('settings.exportDesc')}</div>
               </div>
             </button>
+
+              {/* 심사 지침 5.1.1 — 개인정보처리방침은 **앱 안에서도** 닿을 수 있어야 한다.
+                  메타데이터의 URL만으로는 부족하다. 언어에 따라 갈라 준다. */}
+              <button
+                type="button"
+                onClick={() => window.api.openExternal(PRIVACY_URL[language] ?? PRIVACY_URL.en)}
+                className={`mt-2 flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors ${focusRing(isDark)} ${
+                  isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'
+                }`}
+              >
+                <Shield size={18} />
+                <div className="text-left">
+                  <div className="text-sm font-medium">{t('settings.privacyTitle')}</div>
+                  <div className={`text-xs ${labelText(isDark)}`}>{t('settings.privacyDesc')}</div>
+                </div>
+              </button>
           </div>
 
           {/* 라이선스. 스토어 빌드에서는 통째로 안 그린다 — 키 입력 칸이 남으면

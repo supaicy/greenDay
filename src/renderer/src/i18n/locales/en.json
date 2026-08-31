@@ -20,10 +20,47 @@
     "monthDay": "MMM d",
     "yearMonth": "MMMM yyyy",
     "yearMonthDay": "MMMM d, yyyy",
-    "weekdaysShort": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-    "weekdaysLong": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-    "weekdaysFromMonday": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    "months": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "weekdaysShort": [
+      "Sun",
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+    ],
+    "weekdaysLong": [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday"
+    ],
+    "weekdaysFromMonday": [
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun"
+    ],
+    "months": [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
+    ],
     "am": "AM",
     "pm": "PM",
     "hour": "{{hour}} {{period}}",
@@ -385,7 +422,9 @@
     "updateDownloadNow": "Download now",
     "updateViewRelease": "View release notes",
     "notifPermProbeSent": "Sent a test notification. If you did not see a banner, allow Greenday in System Settings -> Notifications.",
-    "notifPermUnsupported": "This system cannot display notifications, so reminders will not arrive."
+    "notifPermUnsupported": "This system cannot display notifications, so reminders will not arrive.",
+    "privacyTitle": "Privacy policy",
+    "privacyDesc": "What we collect and what we don't — opens in your browser"
   },
   "shortcuts": {
     "addTask": "Toggle add task",
