@@ -48,7 +48,7 @@
 - [ ] **3rd Party Mac Developer Installer** 인증서 (`.pkg` 서명용) — 없으면 MAS 빌드가 실패합니다.
 
 ### 2-2. App Store Connect
-- [ ] https://appstoreconnect.apple.com 에서 **새 앱 등록**, Bundle ID = `com.supaicy.haru` (Apple Developer → Identifiers에 먼저 등록 필요).
+- [ ] https://appstoreconnect.apple.com 에서 **새 앱 등록**, Bundle ID = `com.begreen.greenday` (2026-09-07 변경 — 옛 com.supaicy.haru 프로파일은 재발급 대상) (Apple Developer → Identifiers에 먼저 등록 필요).
 - [ ] **프로비저닝 프로파일**(Mac App Store 배포용) 생성 후 다운로드.
   - 파일을 `resources/embedded.provisionprofile` 로 두면 electron-builder가 자동 인식(또는 `electron-builder.yml`의 `mas.provisioningProfile`에 경로 지정).
 

@@ -289,7 +289,7 @@ describe('커스텀 스킴은 더 이상 OAuth 경로가 아니다', () => {
     await started()
 
     await expect(
-      handleGoogleCallback(`com.supaicy.haru:/oauth2redirect?code=abc&state=${stateFromLastAuthUrl()}`)
+      handleGoogleCallback(`com.begreen.greenday:/oauth2redirect?code=abc&state=${stateFromLastAuthUrl()}`)
     ).resolves.toBe(false)
 
     // 흐름은 여전히 살아 있다 — 루프백 콜백만이 그것을 끝낼 수 있다.

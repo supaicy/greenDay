@@ -196,7 +196,7 @@ function bootstrap(): void {
         if (wins.length > 0) {
           wins[0].webContents.send('update-available', {
             version: info.version,
-            downloadUrl: `https://github.com/supaicy/haru/releases/tag/v${info.version}`
+            downloadUrl: `https://github.com/supaicy/greenDay/releases/tag/v${info.version}`
           })
         }
       })

@@ -8,6 +8,23 @@ Greenday를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍�
 
 ---
 
+## 재확인 — 2026-09-07 · 번들 ID 변경
+
+**번들 ID를 `com.supaicy.haru` → `com.begreen.greenday` 로 바꿨다**(사용자 결정, 근거는
+`docs/reports/2026-09-07-v1.4.1-shipped-build.md` — 실제로 배포된 v1.4.1 은 `com.haru.app` 이었고
+`com.supaicy.haru` 는 한 번도 나간 적이 없다). 이 문서의 Bundle ID 는 전부 새 값으로 바꿨다.
+이 변경으로 **8-29 재확인 표의 세 항목이 다시 ⬜ 로 돌아간다:**
+
+| 항목 | 상태 | 할 일 |
+|---|---|---|
+| Bundle ID 등록 | ⬜ | Identifiers 에 `com.begreen.greenday` 등록 |
+| 프로비저닝 프로파일 | ⬜ | `haru MAS`(`32R6RHXU36.com.supaicy.haru`)는 **다른 앱 것이 됐다.** 새 ID 로 재발급해 `resources/embedded.provisionprofile` 교체. 그 전까지 `npm run mas:preflight` 2/6 이 실패하는 것이 정상이다 |
+| App Store Connect 앱 레코드 | ⬜ | 새 Bundle ID 로 생성. **레코드를 만든 뒤에는 ID를 못 바꾼다** |
+| 개인정보처리방침 URL | 변경 | 정본이 **`https://begreen.dev/privacy`**(한국어 `/ko/privacy`)로 옮겨졌다. 앱 안의 링크도 그 주소다. GitHub Pages 의 옛 주소는 그리로 리디렉션한다 |
+| Google OAuth | 변경 | 콜백이 커스텀 스킴 → **루프백(127.0.0.1)+PKCE**. 클라이언트는 **데스크톱 앱** 유형(번들 ID 입력 없음). 릴리스 빌드는 `GOOGLE_OAUTH_CLIENT_ID` 가 비면 실패한다 |
+
+---
+
 ## 재확인 — 2026-08-29
 
 한 달 전 상태로 적혀 있던 것을 오늘 전부 다시 쟀다. **네 항목이 바뀌었다.**
@@ -22,8 +39,8 @@ Greenday를 Mac App Store에 올리기 위해 필요한 것 전부. 아래 텍�
 ### 개인정보처리방침 URL이 바뀌었다 — 제출 전 반드시 고칠 것
 
 ```
-옛 주소  https://supaicy.github.io/greenDay/privacy.html      → 404
-새 주소  https://supaicy.github.io/greenDay/privacy.html  → 200
+옛 주소  https://supaicy.github.io/haru/privacy.html      → 404
+새 주소  https://supaicy.github.io/greenDay/privacy.html  → 200 (2026-09-07부터 begreen.dev/privacy 로 리디렉션)
 ```
 
 **대소문자가 맞아야 한다.** `greenday`(소문자 d)는 404다. GitHub Pages 경로는
@@ -67,7 +84,7 @@ npm run mas:preflight
 ## 1. Apple Developer 포털에서
 
 - ⬜ **Bundle ID 등록** — [Identifiers](https://developer.apple.com/account/resources/identifiers/list) → `+` → App IDs → App
-  - Bundle ID: `com.supaicy.haru` (Explicit)
+  - Bundle ID: `com.begreen.greenday` (Explicit)
   - Capabilities: 추가할 것 없음 (Greenday는 iCloud·푸시·인앱결제 미사용)
 
 - ⬜ **인증서 2종 발급** — [Certificates](https://developer.apple.com/account/resources/certificates/list) → `+`
@@ -81,7 +98,7 @@ npm run mas:preflight
   > `Developer ID Application`도 있지만 그건 웹사이트 직접 배포 전용이라 별개다.
 
 - ⬜ **프로비저닝 프로파일** — [Profiles](https://developer.apple.com/account/resources/profiles/list) → `+` → **Mac App Store Connect**
-  - App ID: `com.supaicy.haru`, 인증서: 방금 만든 Apple Distribution
+  - App ID: `com.begreen.greenday`, 인증서: 방금 만든 Apple Distribution
   - 다운로드 후 저장소에 배치:
     ```
     cp ~/Downloads/*.provisionprofile resources/embedded.provisionprofile
@@ -99,7 +116,7 @@ npm run mas:preflight
 | 플랫폼 | macOS |
 | 이름 | `Greenday` |
 | 기본 언어 | 한국어 |
-| Bundle ID | `com.supaicy.haru` |
+| Bundle ID | `com.begreen.greenday` |
 | SKU | `Greenday-macos-001` (내부 식별용, 아무 값이나 가능) |
 | 사용자 액세스 | 전체 액세스 |
 
@@ -189,7 +206,7 @@ Ollama를 설치하면 AI가 내 컴퓨터 안에서 돕니다. 인터넷으로 
 
 **지원 URL**
 ```
-https://github.com/supaicy/haru/issues
+https://github.com/supaicy/greenDay/issues
 ```
 
 **마케팅 URL** (선택)
@@ -199,10 +216,12 @@ https://supaicy.github.io/greenDay/
 
 **개인정보처리방침 URL** (필수)
 ```
-https://supaicy.github.io/greenDay/privacy.html
+https://begreen.dev/privacy        (영어 · 기본)
+https://begreen.dev/ko/privacy     (한국어 — App Store Connect 의 현지화 URL 에)
 ```
-> ✅ 2026-08-29 재확인: 200. 원본은 `docs/privacy.html`. **옛 `/haru/` 주소는 404이니
-> 어딘가에 남아 있으면 같이 고칠 것.**
+> 2026-09-07: 정본이 회사 사이트로 옮겨졌다(앱 설정의 링크와 같은 주소). 옛
+> `https://supaicy.github.io/greenDay/privacy.html` 은 살아 있되 위 주소로 리디렉션한다.
+> **옛 `/haru/` 주소는 404이니 어딘가에 남아 있으면 같이 고칠 것.**
 
 **저작권**
 ```
@@ -332,8 +351,9 @@ in between:
   encrypted via Electron safeStorage (macOS keychain) and never leaves the device.
 - Google: standard OAuth 2.0 with PKCE opened in the user's default browser (not an
   embedded web view). The app is a public client with no client secret. The callback
-  arrives via the custom URL scheme com.supaicy.haru:, so no local HTTP server is opened and
-  the app does not need the network.server entitlement. The only scope requested is
+  arrives on a loopback redirect (http://127.0.0.1:<ephemeral port>/oauth2redirect), which is
+  the flow Google requires for installed apps; the listener is bound to 127.0.0.1 only and is
+  closed as soon as the single callback arrives. The only scope requested is
   https://www.googleapis.com/auth/calendar.app.created, which limits access to events the
   app itself created; Greenday cannot read the user's existing calendar entries.
 
@@ -351,7 +371,7 @@ MAC APP STORE BUILD DIFFERENCES
 The in-app updater and global shortcuts are disabled via a process.mas guard, since the
 App Store handles updates and the sandbox does not permit global shortcuts.
 
-Privacy policy: https://supaicy.github.io/greenDay/privacy.html
+Privacy policy: https://begreen.dev/privacy (Korean: https://begreen.dev/ko/privacy)
 ```
 
 ### ⬜ 캘린더 동기화가 App Privacy 답안을 바꾸는가 — 아니오 (근거)
@@ -387,7 +407,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 | 요청 범위 | `https://www.googleapis.com/auth/calendar.app.created` |
 | 범위 등급 | 콘솔에서 확인 필요 — 앱이 만든 일정만 접근하는 가장 좁은 범위 |
 | 앱 유형 | 데스크톱 앱 (공개 클라이언트, PKCE) |
-| 리디렉션 | `com.supaicy.haru:/oauth2redirect` (커스텀 스킴) |
+| 리디렉션 | `http://127.0.0.1:<임의 포트>/oauth2redirect` (루프백, 데스크톱 앱 유형) |
 
 > `calendar.events`나 `calendar`(전체)를 요청했다면 사용자의 기존 일정까지 읽을 수 있어
 > 훨씬 무거운 심사를 받았을 것입니다. 앱이 만든 일정만 다루면 되므로 그 범위를 요청하지
@@ -502,7 +522,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 | MAS에서 updater/전역단축키 비활성 | ✅ `process.mas` 가드 |
 | 아이콘 | ✅ 원본 1920×1920 (1024 요구 충족) |
 | 카테고리 | ✅ `public.app-category.productivity` |
-| 개인정보처리방침 | ✅ 게시됨 https://supaicy.github.io/greenDay/privacy.html |
+| 개인정보처리방침 | ✅ 게시됨 https://begreen.dev/privacy (GitHub Pages 옛 주소는 리디렉션) |
 | 메타데이터 텍스트 | 🤖 이 문서 3절 |
 | App Privacy 답안 + 심사 노트 | 🤖 이 문서 4절 |
 | 스크린샷 6장 (2880×1800) | ✅ `docs/app-store/screenshots/` |

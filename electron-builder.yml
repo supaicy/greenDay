@@ -1,4 +1,12 @@
-appId: com.supaicy.haru
+# 번들 ID. 2026-09-07에 com.supaicy.haru → com.begreen.greenday 로 바꿨다(사용자 결정).
+# 실제로 배포된 v1.4.1은 com.haru.app 이었고 com.supaicy.haru 는 한 번도 나간 적이 없다
+# (docs/reports/2026-09-07-v1.4.1-shipped-build.md). 그래서 어느 ID로 가든 옛 사용자와의
+# 자동 업데이트 연속성은 끊기며, 이왕이면 제대로 된 이름으로 간다.
+#
+# **package.json 의 name/productName 은 같이 바꾸지 않는다.** Electron 내부 앱 이름
+# (`ticktick`)이 Keychain 항목 `ticktick Safe Storage` 와 userData 경로를 정하므로,
+# 그것까지 바꾸면 기존 암호문을 프롬프트도 없이 조용히 못 읽게 된다.
+appId: com.begreen.greenday
 productName: Greenday
 directories:
   buildResources: resources
@@ -27,6 +35,8 @@ mac:
   # 사이트가 릴리스 목록 페이지로 보낼 수밖에 없고, 사용자가 아홉 개 파일 중에
   # 고르게 된다. 이름을 고정하면 태그를 밀 때마다 같은 주소가 최신을 가리킨다.
   # 자동 업데이트는 latest-mac.yml이 실제 파일명을 들고 있어 영향받지 않는다.
+  # begreen.dev 사이트(site/build.ts 의 greenday.assets)와 Homebrew cask
+  # (.github/workflows/release.yml 의 bump-cask)가 이 이름을 그대로 쓴다.
   artifactName: ${productName}-${arch}.${ext}
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -34,30 +44,49 @@ mac:
   entitlementsInherit: resources/entitlements.mac.plist
   category: public.app-category.productivity
   darkModeSupport: true
-  # 구글 OAuth 콜백을 받는 커스텀 스킴. 루프백 서버를 열지 않아 MAS 샌드박스에서
-  # network.server 권한이 필요 없다.
+  # Electron 40 바이너리 자체의 LSMinimumSystemVersion 이 12.0 이다
+  # (node_modules/electron/dist/Electron.app/Contents/Info.plist). 명시하지 않아도
+  # 같은 값이 들어가지만, README·사이트("macOS 12+")·cask(depends_on)가 한 값을
+  # 보게 여기 적어 둔다. 11(Big Sur)로 낮춰 적어도 Electron 이 안 뜨므로 의미가 없다.
+  minimumSystemVersion: '12.0'
+  extendInfo:
+    # 표준 TLS(HTTPS)와 OS Keychain 만 쓴다 — 자체 암호화 구현이 없어 수출 규제
+    # 면제 대상이다. 이 키가 없으면 App Store Connect 가 빌드마다 수출 규정 설문을
+    # 묻고, 답하기 전까지 TestFlight·심사 제출이 막힌다. 직접 배포 dmg 에는
+    # 무해하다.
+    ITSAppUsesNonExemptEncryption: false
+  # 앱을 URL로 여는 커스텀 스킴(번들 ID와 같다). 구글 OAuth 콜백은 이제 루프백
+  # (src/shared/app-id.ts)이라 이 스킴을 쓰지 않지만, index.ts 의 open-url ·
+  # second-instance 배선이 여기에 기대므로 정의는 남긴다.
   protocols:
     - name: Greenday
       schemes:
-        - com.supaicy.haru
+        - com.begreen.greenday
 mas:
   entitlements: resources/entitlements.mas.plist
   entitlementsInherit: resources/entitlements.mas.inherit.plist
   hardenedRuntime: false
   category: public.app-category.productivity
+  extendInfo:
+    ITSAppUsesNonExemptEncryption: false
   # developer.apple.com에서 'Mac App Store' 유형으로 발급받아 이 경로에 둔다.
-  # App ID가 com.supaicy.haru 가 아니면 빌드는 되고 업로드에서 거절되므로,
-  # scripts/mas-preflight.sh 가 미리 확인한다.
+  # **지금 들어 있는 파일은 옛 App ID(com.supaicy.haru)용이다.** 번들 ID를 바꿨으므로
+  # com.begreen.greenday 로 새로 발급해 교체해야 한다 — 그 전까지
+  # scripts/mas-preflight.sh 의 프로파일 항목이 실패하는 것이 정상이다.
+  # 다른 앱의 프로파일로도 빌드는 되고 업로드에서 거절되므로, preflight 가 미리 막는다.
   provisioningProfile: resources/embedded.provisionprofile
 dmg:
-  # **버전을 이름에 넣지 않는다.** 넣으면 릴리스마다 파일명이 달라져
-  # `/releases/latest/download/<이름>` 형태의 고정 주소를 만들 수 없다 —
-  # 사이트가 릴리스 목록 페이지로 보낼 수밖에 없고, 사용자가 아홉 개 파일 중에
-  # 고르게 된다. 이름을 고정하면 태그를 밀 때마다 같은 주소가 최신을 가리킨다.
-  # 자동 업데이트는 latest-mac.yml이 실제 파일명을 들고 있어 영향받지 않는다.
+  # 위 mac.artifactName 과 같은 이유로 버전을 넣지 않는다.
   artifactName: ${productName}-${arch}.${ext}
 npmRebuild: true
 publish:
   provider: github
   owner: supaicy
-  repo: haru
+  # 저장소는 2026-08에 haru → greenDay 로 개명됐다(gh api repos/supaicy/haru → full_name
+  # supaicy/greenDay). 옛 이름은 GitHub 이 리디렉션해 주지만, 누군가 haru 라는 저장소를
+  # 새로 만들면 그 순간 끊긴다. 정식 이름을 쓴다.
+  repo: greenDay
+  # 옛 앱(com.haru.app · com.supaicy.haru)과 업데이트 캐시를 나눈다. 지정하지 않으면
+  # 둘 다 ~/Library/Caches/ticktick-updater 를 쓰고, 두 앱이 나란히 깔린 전환 기간에
+  # 서로의 내려받은 업데이트를 덮어쓴다.
+  updaterCacheDirName: greenday-updater

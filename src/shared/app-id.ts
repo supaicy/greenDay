@@ -12,20 +12,26 @@
  * 스킴 정의 자체는 남긴다. 지우면 `index.ts`의 `open-url`·`second-instance` 배선이
  * 함께 무너지고, 앱을 URL로 여는 다른 용도가 생길 수 있다.
  *
- * 앱 이름은 Greenday지만 번들 ID는 com.supaicy.haru 다. 일부러 그렇게 뒀다 —
- * 번들 ID는 사용자에게 보이지 않는 내부 식별자이고, 이미 등록해 둔 App ID와
- * 프로비저닝 프로파일을 그대로 쓰기 위해서다. 이름과 다르다고 문제될 것은 없다
- * (Slack의 번들 ID가 com.tinyspeck.slackmacgap 인 것과 같은 이유).
+ * 번들 ID의 역사 (2026-09-07 정리):
+ *   - v1.4.1까지 실제로 배포된 것은 `com.haru.app` 이다(실제 dmg 를 열어 확인 —
+ *     docs/reports/2026-09-07-v1.4.1-shipped-build.md). Apple 전역에서 선점돼 있어
+ *     App ID 로 등록할 수 없었다.
+ *   - `com.supaicy.haru` 는 그 뒤 저장소에만 있었고 한 번도 배포되지 않았다.
+ *   - 그래서 어느 ID 로 가든 옛 사용자와의 자동 업데이트 연속성은 끊기며, 이왕이면
+ *     브랜드에 맞는 `com.begreen.greenday` 로 간다(사용자 결정).
  *
- * 애초에 쓰려던 `com.haru.app` 은 Apple 전역에서 이미 선점돼 있어 쓸 수 없었다 —
- * App ID는 모든 개발자를 통틀어 고유하다.
+ * **번들 ID만 바꾼다.** package.json 의 name/productName(Electron 내부 앱 이름
+ * `ticktick`)은 그대로다 — macOS Keychain 의 `ticktick Safe Storage` 항목과 userData
+ * 경로가 그 이름으로 정해지므로, 같이 바꾸면 기존 암호문을 프롬프트도 없이 조용히
+ * 못 읽게 된다. 번들 ID 변경은 Keychain ACL 에만 영향을 줘서 "깨지는 게 아니라 묻는다".
+ * 앱 이름과 번들 ID가 다른 것은 흔하다(Slack 이 com.tinyspeck.slackmacgap 인 것처럼).
  */
-export const APP_BUNDLE_ID = 'com.supaicy.haru'
+export const APP_BUNDLE_ID = 'com.begreen.greenday'
 
 /**
  * 구글 OAuth 콜백을 받는 **루프백 주소**.
  *
- * 예전에는 커스텀 스킴(`com.supaicy.haru:/oauth2redirect`)을 썼다. MAS 샌드박스에서
+ * 예전에는 커스텀 스킴(`<번들 ID>:/oauth2redirect`)을 썼다. MAS 샌드박스에서
  * `network.server` 권한이 필요 없다는 것이 이유였는데, **구글이 그 방식을 받지 않는다.**
  * 현행 native-app 계약은 설치형 앱에 루프백 IP를 요구하고 custom URI scheme은
  * 지원 대상이 아니다. 저장소는 이를 "iOS 번들 ID로 등록"해 우회하려 했지만,

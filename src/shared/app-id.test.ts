@@ -31,16 +31,19 @@ describe('isAppScheme', () => {
   })
 
   it('rejects a prefix that only looks like ours', () => {
-    // 'com.supaicy.haru2:' 는 우리 스킴이 아니다. ':' 까지 붙여서 봐야 한다.
-    expect(isAppScheme('com.supaicy.haru2:/oauth2redirect')).toBe(false)
-    expect(isAppScheme('com.supaicy.haru')).toBe(false)
+    // 'com.begreen.greenday2:' 는 우리 스킴이 아니다. ':' 까지 붙여서 봐야 한다.
+    expect(isAppScheme(`${APP_BUNDLE_ID}2:/oauth2redirect`)).toBe(false)
+    expect(isAppScheme(APP_BUNDLE_ID)).toBe(false)
+    // 옛 번들 ID 로 온 링크는 우리 것이 아니다.
+    expect(isAppScheme('com.supaicy.haru:/oauth2redirect')).toBe(false)
+    expect(isAppScheme('com.haru.app:/oauth2redirect')).toBe(false)
   })
 
   // Windows 레지스트리는 등록된 스킴을 자기 방식대로 정규화해서 넘긴다.
   // RFC 3986에서 스킴은 대소문자 구분이 없으므로 접두사만 접어서 비교한다.
   it('ignores case in the scheme but not in the rest', () => {
-    expect(isAppScheme(`COM.SUPAICY.HARU:/oauth2redirect?code=AbC`)).toBe(true)
-    expect(isAppScheme(`Com.Supaicy.Haru:/oauth2redirect`)).toBe(true)
+    expect(isAppScheme(`${APP_BUNDLE_ID.toUpperCase()}:/oauth2redirect?code=AbC`)).toBe(true)
+    expect(isAppScheme('Com.Begreen.Greenday:/oauth2redirect')).toBe(true)
   })
 
   it('survives empty and non-string input', () => {

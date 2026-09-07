@@ -155,7 +155,7 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 
 ### [U-1] Google 캘린더 동기화 왕복 — 차단
 - **막힌 이유:** 빌드에 OAuth 클라이언트 ID 없음(`__GOOGLE_CLIENT_ID__` / `GOOGLE_OAUTH_CLIENT_ID` 둘 다 빈 값) → 화면에 "이 빌드에는 Google 연동이 설정되어 있지 않습니다"
-- **준비물:** Google Cloud Console 데스크톱 앱 OAuth 클라이언트 ID. 리디렉션에 **번들 ID `com.supaicy.haru`** 등록(앱 이름 Greenday와 다름 — 실수 지점)
+- **준비물:** Google Cloud Console **데스크톱 앱** 유형 OAuth 클라이언트 ID(콜백은 루프백+PKCE라 번들 ID 입력이 없다). 빌드에 `GOOGLE_OAUTH_CLIENT_ID` 로 주입 — 2026-09-07부터 릴리스 빌드는 이 값이 비면 실패한다(`electron.vite.config.ts`·`mas-preflight.sh`·`release.yml`)
 - **이미 확인됨:** PKCE·토큰 갱신/폐기·캘린더 필터·동기화 계획 로직 유닛테스트 통과
 
 ### [U-2] 커스텀 스킴 딥링크 복귀 — 차단 (U-1 종속)

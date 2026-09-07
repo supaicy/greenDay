@@ -4,7 +4,7 @@
  *
  * ## 왜 루프백인가 (C6)
  *
- * 예전에는 커스텀 스킴(`com.supaicy.haru:/oauth2redirect`)으로 콜백을 받았다. MAS
+ * 예전에는 커스텀 스킴(`<번들 ID>:/oauth2redirect`)으로 콜백을 받았다. MAS
  * 샌드박스에서 `network.server` 권한이 필요 없다는 것이 이유였는데, **구글이 그
  * 방식을 받지 않는다** — 현행 native-app 계약은 설치형 앱에 루프백 IP를 요구하고
  * custom URI scheme은 지원 대상이 아니다. 저장소는 그것을 "iOS 번들 ID로 등록"해
