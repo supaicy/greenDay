@@ -58,16 +58,12 @@
 1. 위의 **Download** 버튼 클릭 (또는 [Releases](https://github.com/supaicy/greenDay/releases) 페이지)
 2. 다운로드된 `.dmg` 파일 열기
 3. `Greenday` 앱을 `Applications` 폴더로 드래그
-4. **첫 실행 전에 터미널에서 아래 명령을 실행하세요:**
+4. 바로 실행하면 됩니다 — 추가 작업이 없습니다.
 
-```bash
-xattr -cr /Applications/Greenday.app
-```
-
-> **왜 필요한가요?**
-> Greenday는 Apple Developer 인증서로 서명되지 않은 오픈소스 앱입니다.
-> macOS가 "손상되었습니다" 경고를 표시할 수 있으며, 위 명령으로 해결됩니다.
-> 이 명령은 최초 설치 시 1회만 실행하면 됩니다.
+> 릴리스는 Developer ID 인증서로 서명되고 Apple 공증을 거칩니다(릴리스 워크플로가 둘 다
+> 검증한 뒤에만 공개합니다). 그래서 Gatekeeper가 "손상되었습니다" 경고 없이 엽니다.
+> 그래도 경고가 뜬다면 내려받은 파일이 손상되거나 바뀐 것이니, 격리 플래그를 지우지 말고
+> 다시 내려받으세요.
 
 ### 업데이트
 
@@ -119,7 +115,7 @@ Greenday의 AI 기능은 로컬 모델이나 클라우드 모델 모두 사용�
 ## 시스템 요구사항
 
 - macOS 12 (Monterey) 이상
-- Apple Silicon 전용 (M1 / M2 / M3 / M4) — *Intel Mac은 지원하지 않습니다*
+- Apple Silicon(`Greenday-arm64.dmg`)과 Intel(`Greenday-x64.dmg`) 둘 다 — 릴리스마다 둘 다 빌드하고 공증합니다
 
 ---
 

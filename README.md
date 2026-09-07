@@ -59,12 +59,6 @@
 brew install --cask supaicy/haru/greenday
 ```
 
-If macOS shows a "damaged" warning on first launch, clear the quarantine flag:
-
-```bash
-xattr -cr /Applications/Greenday.app
-```
-
 To upgrade:
 
 ```bash
@@ -75,13 +69,12 @@ brew upgrade --cask greenday
 
 1. Click the **Download** button above (or visit [Releases](https://github.com/supaicy/greenDay/releases))
 2. Open the downloaded `.dmg` and drag `Greenday` into your `Applications` folder
-3. Before the first launch, run:
+3. Launch it — no extra steps.
 
-```bash
-xattr -cr /Applications/Greenday.app
-```
-
-> Greenday is open-source and isn't signed with an Apple Developer certificate, so macOS may show a *"damaged"* warning. The command above clears the quarantine flag and only needs to run once.
+> Releases are signed with a Developer ID certificate and notarized by Apple (the release
+> workflow verifies both before publishing), so Gatekeeper opens Greenday without a
+> *"damaged"* warning. If you still see one, the download was altered or incomplete —
+> download it again rather than clearing the quarantine flag.
 
 ### Update
 
@@ -133,7 +126,7 @@ Greenday's AI features work with a local or cloud model. Configure under **Setti
 ## System Requirements
 
 - macOS 12 (Monterey) or later
-- Apple Silicon only (M1 / M2 / M3 / M4) — *Intel Macs are not supported*
+- Apple Silicon (`Greenday-arm64.dmg`) and Intel (`Greenday-x64.dmg`) — both are built and notarized for every release
 
 ---
 
