@@ -32,6 +32,15 @@ describe('canSelfUpdate', () => {
   it('is off in dev', () => {
     expect(capabilitiesFor(facts({ isDev: true })).canSelfUpdate).toBe(false)
   })
+
+  // 브리지(옛 번들 ID의 마지막 버전)는 종점이다. 업데이터가 새 앱을 받아 덮어쓰면
+  // 번들 ID가 다른 파일이 옛 자리에 앉는다 — 안내로만 옮긴다.
+  it('is off for the bridge release', () => {
+    const caps = capabilitiesFor(facts({ isBridgeBuild: true }))
+    expect(caps.canSelfUpdate).toBe(false)
+    expect(caps.isBridge).toBe(true)
+    expect(capabilitiesFor(facts()).isBridge).toBe(false)
+  })
 })
 
 describe('hasGlobalShortcuts', () => {

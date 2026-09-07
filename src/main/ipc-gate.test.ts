@@ -54,6 +54,7 @@ vi.mock('./licensing/service', async (importOriginal) => {
 
 const { setupIpcHandlers } = await import('./ipc-handlers')
 const { setupAppIpc } = await import('./app-ipc')
+const { setupMigrationIpc } = await import('./migration/boot')
 const { LICENSE_REQUIRED, UNTRUSTED_SENDER, isTrustedSender, registeredTiers } = await import('./ipc-gate')
 
 /**
@@ -72,6 +73,7 @@ beforeAll(() => {
   // 모듈로 빼냈다.
   setupIpcHandlers()
   setupAppIpc(false)
+  setupMigrationIpc()
 })
 
 afterAll(() => {
@@ -137,7 +139,14 @@ const FREE_CHANNELS = [
   // app-ipc.ts — index.ts에서 옮겨 온 셋.
   'set-language',
   'download-update',
-  'install-update'
+  'install-update',
+  // migration/boot.ts — 번들 ID 마이그레이션. 부류 4(앱 메타)와 2(자기 데이터가 어디로
+  // 가는지 아는 것)다. 옮겨가라는 안내를 유료 뒤에 두는 것은 말이 안 된다.
+  'migration:status',
+  'migration:snooze',
+  'migration:reopen',
+  'migration:dismiss-old-app',
+  'migration:release-lock'
 ]
 
 describe('정책', () => {

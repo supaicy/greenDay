@@ -28,6 +28,11 @@ export interface PlatformFacts {
   isMas: boolean
   /** Microsoft Store(AppX) 빌드인가. Electron의 `process.windowsStore`. */
   isWindowsStore: boolean
+  /**
+   * 옛 번들 ID(com.haru.app)로 나가는 **브리지 릴리스**인가. `BRIDGE_BUILD=1`로
+   * 빌드할 때 주입된다(electron.vite.config.ts). 없으면 false.
+   */
+  isBridgeBuild?: boolean
 }
 
 export interface Capabilities {
@@ -70,16 +75,27 @@ export interface Capabilities {
 
   /** 업데이트 UI 대신 "스토어를 통해 업데이트됩니다" 안내를 보여야 하는가. */
   updatesViaStore: boolean
+
+  /**
+   * 옛 번들 ID로 나가는 마지막 릴리스인가. 이 빌드는 자체 업데이트를 하지 않고
+   * (다음 버전은 다른 앱이다 — 업데이터가 설치해도 번들 ID가 달라 제자리에 앉지 못한다)
+   * 대신 새 앱으로 옮겨가라는 안내를 띄운다.
+   */
+  isBridge: boolean
 }
 
 export function capabilitiesFor(facts: PlatformFacts): Capabilities {
   const isStoreBuild = facts.isMas || facts.isWindowsStore
+  const isBridge = facts.isBridgeBuild === true
 
   return {
-    canSelfUpdate: !facts.isDev && !isStoreBuild,
+    // 브리지는 종점이다. 업데이터가 새 앱(다른 번들 ID)을 받아 덮어쓰면 macOS가 다른
+    // 앱으로 보는 파일이 옛 자리에 앉는다 — 안내 화면으로만 옮긴다.
+    canSelfUpdate: !facts.isDev && !isStoreBuild && !isBridge,
     hasGlobalShortcuts: !facts.isMas,
     needsLicenseKey: !isStoreBuild,
     enforcesLicense: !facts.isDevBuild && !isStoreBuild,
-    updatesViaStore: isStoreBuild
+    updatesViaStore: isStoreBuild,
+    isBridge
   }
 }

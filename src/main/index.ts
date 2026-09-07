@@ -2,17 +2,18 @@ import { app, shell, BrowserWindow, dialog, globalShortcut, Notification } from 
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
-import { initDatabase, closeDatabase, getTasks } from './database'
+import { initDatabase, closeDatabase, getTasks, holdSaves } from './database'
 import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
 import { setupAppIpc } from './app-ipc'
 import { uiStrings } from './ui-language'
-import { currentCapabilities } from './capabilities'
+import { currentBundleId, currentCapabilities } from './capabilities'
+import { runMigrationOnBoot, setupMigrationIpc } from './migration/boot'
 import { applyAppMenu } from './app-menu'
 import { disposeLicensing, initLicensing } from './licensing/service'
 import { handleGoogleCallback } from './google-auth-flow'
 import { appDocumentUrl, isAppDocumentUrl } from './navigation-guard'
-import { APP_BUNDLE_ID, isAppScheme, findAppSchemeArg } from '../shared/app-id'
+import { isAppScheme, findAppSchemeArg } from '../shared/app-id'
 
 // 리마인더 폴러 인터벌 핸들 (모듈 스코프에서 선언해 will-quit 핸들러에서 접근 가능)
 let reminderInterval: ReturnType<typeof setInterval> | null = null
@@ -110,7 +111,8 @@ function createWindow(): void {
 //
 // 락 검사는 반드시 whenReady 앞이다. 뒤에 두면 물러날 인스턴스가 initDatabase()와
 // createWindow()까지 실행해 창이 깜빡인다.
-if (!app.requestSingleInstanceLock()) {
+const singleInstance = app.requestSingleInstanceLock()
+if (!singleInstance) {
   // 우리가 받은 argv는 아래 second-instance로 첫 인스턴스에 전달된다. 조용히 물러난다.
   app.quit()
 } else {
@@ -133,7 +135,9 @@ function bootstrap(): void {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
 
-    electronApp.setAppUserModelId(APP_BUNDLE_ID)
+    // 브리지 빌드는 옛 번들 ID(com.haru.app)로 등록한다 — capabilities.ts 참고.
+    const bundleId = currentBundleId()
+    electronApp.setAppUserModelId(bundleId)
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)
@@ -143,11 +147,15 @@ function bootstrap(): void {
     // network.server 권한이 필요 없다.
     if (is.dev && process.platform === 'darwin') {
       // 개발 중에는 Electron 실행 파일이 아니라 이 프로젝트를 핸들러로 등록해야 한다.
-      app.setAsDefaultProtocolClient(APP_BUNDLE_ID, process.execPath, [join(__dirname, '../..')])
+      app.setAsDefaultProtocolClient(bundleId, process.execPath, [join(__dirname, '../..')])
     } else {
-      app.setAsDefaultProtocolClient(APP_BUNDLE_ID)
+      app.setAsDefaultProtocolClient(bundleId)
     }
 
+    // **번들 ID 마이그레이션 — 디스크 쓰기를 먼저 붙든다.** initDatabase는 읽기만 하고,
+    // 첫 실행 시퀀스(백업·Keychain 검증)가 끝난 뒤에야 `releaseSaves()`로 푼다.
+    // IPC 핸들러가 아직 없으므로 렌더러의 mutation이 그 사이에 끼어들 길도 없다.
+    holdSaves()
     try {
       initDatabase()
     } catch (error) {
@@ -157,11 +165,15 @@ function bootstrap(): void {
       console.error('[bootstrap] 데이터베이스 초기화 실패', error)
       dialog.showErrorBox(uiStrings().dbFailedTitle, uiStrings().dbFailedBody)
     }
+    // 브리지 빌드: 무결성·백업·sentinel·상태 파일. 새 빌드: 백업·표식·Keychain 검증.
+    // 둘 다 끝에서 저장 잠금을 푼다. 창은 그 뒤에 뜬다 — Keychain 안내가 먼저다.
+    runMigrationOnBoot({ singleInstance, bundleId })
     // 출하 빌드에서 개발자 도구 메뉴 항목을 뺀다 (app-menu.ts).
     applyAppMenu(is.dev)
     setupIpcHandlers()
 
     setupAppIpc(is.dev)
+    setupMigrationIpc()
     createWindow()
 
     // **창을 띄운 뒤에** 초기화한다. 토큰이 있는 설치에서는 여기서 기기 id를

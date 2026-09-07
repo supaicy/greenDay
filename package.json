@@ -11,6 +11,7 @@
     "preview": "electron-vite preview",
     "package": "electron-vite build && electron-builder --mac --config",
     "package:mas": "electron-vite build && electron-builder --mac mas --config",
+    "package:bridge": "BRIDGE_BUILD=1 GREENDAY_RELEASE=1 electron-vite build && electron-builder --mac --arm64 --x64 --config electron-builder.bridge.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "biome lint src electron.vite.config.ts",

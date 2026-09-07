@@ -1,3 +1,4 @@
 provider: github
 owner: supaicy
 repo: greenDay
+channel: greenday

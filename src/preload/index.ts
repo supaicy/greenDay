@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { Capabilities } from '../shared/capabilities'
+import type { MigrationStatus } from '../shared/migration'
 import type { ActivateFailure, DeactivateFailure, PublicLicenseState } from '../shared/license'
 
 const api = {
@@ -63,6 +64,15 @@ const api = {
 
   // App meta — 이 빌드가 무엇을 할 수 있는가 (shared/capabilities.ts)
   capabilities: () => ipcRenderer.invoke('app:capabilities') as Promise<Capabilities>,
+
+  // 번들 ID 마이그레이션 (shared/migration.ts · main/migration/). 부팅 때 계산된 결과를 받는다.
+  migrationStatus: () => ipcRenderer.invoke('migration:status') as Promise<MigrationStatus>,
+  // 브리지: "나중에" / 설정에서 다시 열기
+  migrationSnooze: () => ipcRenderer.invoke('migration:snooze') as Promise<MigrationStatus>,
+  migrationReopen: () => ipcRenderer.invoke('migration:reopen') as Promise<MigrationStatus>,
+  // 새 앱: 옛 앱 안내 닫기 / 보호 모드 해제(사용자가 다시 연결한 뒤 명시적으로)
+  migrationDismissOldApp: () => ipcRenderer.invoke('migration:dismiss-old-app') as Promise<MigrationStatus>,
+  migrationReleaseLock: () => ipcRenderer.invoke('migration:release-lock') as Promise<MigrationStatus>,
 
   // 외부 링크 열기
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),

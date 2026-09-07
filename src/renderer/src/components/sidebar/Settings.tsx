@@ -262,6 +262,8 @@ export function Settings() {
   const [caps, setCaps] = useState<Capabilities | null>(null)
   const updatesViaStore = caps?.updatesViaStore ?? false
   const canSelfUpdate = caps?.canSelfUpdate ?? false
+  // 브리지 릴리스(옛 번들 ID의 마지막 버전): 업데이트 대신 "새 앱으로 옮겨가세요".
+  const isBridge = caps?.isBridge ?? false
 
   useEffect(() => {
     window.api.capabilities?.().then(setCaps)
@@ -691,7 +693,18 @@ export function Settings() {
               <div className={`text-sm font-medium mb-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                 Greenday v{__APP_VERSION__}
               </div>
-              {updatesViaStore ? (
+              {isBridge ? (
+                <div className="mt-1 space-y-2">
+                  <span className={`block text-xs ${labelText(isDark)}`}>{t('migration.bridge.settingsRow')}</span>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new Event('greenday:bridge-reopen'))}
+                    className={`text-xs underline ${labelText(isDark)}`}
+                  >
+                    {t('migration.bridge.settingsOpen')}
+                  </button>
+                </div>
+              ) : updatesViaStore ? (
                 // 스토어 빌드: 앱 내 업데이트 확인/다운로드는 비활성(스토어가 담당)
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className={successText(isDark)} />

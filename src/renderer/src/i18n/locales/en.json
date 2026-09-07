@@ -530,5 +530,33 @@
       "saveFailed": "Could not save the license on this device. Check disk space and permissions, then try again."
     },
     "deviceNameNotice": "Activating also sends this device name, shown in your device list"
+  },
+  "migration": {
+    "bridge": {
+      "title": "Greenday is moving to a new app",
+      "lead": "This version (1.5.0) is the last update for the app you're using. From the next version on, Greenday ships as a new app with a new identifier (bundle ID). macOS treats the two as different apps, so it can't arrive as an automatic update — you'll need to download it once.",
+      "keeps": "Installing the new app keeps your tasks, lists, habits, settings and calendar connections. It reads the same data from the same folder.",
+      "backupDone": "Before anything moves, this app has made a copy of your current data (backup-before-greenday-2). Whatever happens, you can go back.",
+      "backupPending": "A data copy could not be made yet. Before downloading, we recommend Settings → Export data once.",
+      "integrityCorrupt": "One of your saved data files is damaged. The new app will try to recover from the backup (.bak), but please save a copy first via Settings → Export data.",
+      "keychain": "The first time you open the new app, macOS will ask once for Keychain access. Choose \"Always Allow\" and your AI key, app password and Google connection carry over.",
+      "download": "Get the new Greenday",
+      "later": "Later",
+      "laterHint": "We'll remind you in a few days. You can reopen this anytime from Settings → Version.",
+      "settingsRow": "This version is the last update — please move to the new app.",
+      "settingsOpen": "Show the notice again"
+    },
+    "arrival": {
+      "lockedTitle": "Stored connection details couldn't be read yet",
+      "lockedBody": "Keychain access wasn't granted, so the AI key, calendar app password and Google connection can't be read. Nothing stored has been deleted — reopen the app and choose \"Always Allow\" and they come back. To use them right now, reconnect in Settings.",
+      "lockedMissing": "The previous app left no verification marker, so we can't tell whether the stored connection details are readable here. They have been left untouched. Reconnect in Settings, or if you've already checked, release the protection below.",
+      "releaseLock": "I've reconnected — release protection",
+      "googleTitle": "Please reconnect Google Calendar",
+      "googleBody": "The new app needs a fresh Google sign-in once. Events already published are unaffected.",
+      "openSettings": "Open Settings",
+      "oldAppTitle": "The old haru app can be removed",
+      "oldAppBody": "The new Greenday read your data successfully. haru.app in your Applications folder is no longer needed.",
+      "dismiss": "Got it"
+    }
   }
 }

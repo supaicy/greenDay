@@ -18,6 +18,8 @@ import { AiChatPanel } from './components/ai/AiChatPanel'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { usePomodoroTicker } from './hooks/usePomodoroTicker'
 import { LicenseGate } from './licensing/LicenseGate'
+import { BridgeNotice } from './components/migration/BridgeNotice'
+import { MigrationBanner } from './components/migration/MigrationBanner'
 
 // CodeMirror 6 라이브프리뷰 에디터(@atomic-editor/editor) 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
 const TaskDetail = lazy(() => import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail })))
@@ -123,6 +125,9 @@ export default function App() {
       <UndoToast />
       {/* 유료 게이트는 앱 전체에서 한 곳이다. enforcement가 꺼져 있으면 아무것도 그리지 않는다. */}
       <LicenseGate />
+      {/* 번들 ID 마이그레이션 — 브리지 빌드의 안내, 새 빌드의 첫 실행 상태. 해당 없으면 null. */}
+      <BridgeNotice />
+      <MigrationBanner />
     </div>
   )
 }

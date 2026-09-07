@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   APP_BUNDLE_ID,
+  LEGACY_BUNDLE_ID,
+  bundleIdFor,
   OAUTH_LOOPBACK_HOST,
   OAUTH_LOOPBACK_PATH,
   loopbackRedirectUri,
@@ -113,5 +115,14 @@ describe('loopbackRedirectUri', () => {
 
   it('더 이상 앱 스킴이 아니다', () => {
     expect(isAppScheme(loopbackRedirectUri(51234))).toBe(false)
+  })
+})
+
+describe('bundleIdFor — 브리지 빌드만 옛 ID', () => {
+  it('브리지는 실제로 배포됐던 com.haru.app, 나머지는 새 ID', () => {
+    expect(LEGACY_BUNDLE_ID).toBe('com.haru.app')
+    expect(bundleIdFor(true)).toBe(LEGACY_BUNDLE_ID)
+    expect(bundleIdFor(false)).toBe(APP_BUNDLE_ID)
+    expect(APP_BUNDLE_ID).not.toBe(LEGACY_BUNDLE_ID)
   })
 })

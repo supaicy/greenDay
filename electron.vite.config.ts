@@ -6,6 +6,15 @@ import pkg from './package.json'
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? ''
 
 /**
+ * 브리지 릴리스(옛 번들 ID com.haru.app, v1.5.0)인가. `npm run package:bridge`가 켠다.
+ * 번들 ID·버전은 electron-builder.bridge.cjs이 정하고, 여기서는 런타임이 같은 사실을
+ * 알도록 리터럴로 박는다 — 실행 방식으로 바뀌지 않는다(__IS_DEV_BUILD__와 같은 이유).
+ */
+const IS_BRIDGE_BUILD = process.env.BRIDGE_BUILD === '1'
+const BRIDGE_VERSION = '1.5.0'
+const APP_VERSION = IS_BRIDGE_BUILD ? BRIDGE_VERSION : pkg.version
+
+/**
  * 릴리스 빌드인가. 릴리스 워크플로(GitHub Actions)와 scripts/release.sh ·
  * scripts/mas-preflight.sh 를 거치는 빌드가 여기 해당한다. 로컬에서 `npm run build`
  * 나 `npm run package` 로 시험 빌드를 만드는 것은 릴리스가 아니므로 막지 않는다 —
@@ -45,7 +54,8 @@ export default defineConfig(({ command }) => {
         // 열면 "개발 중"으로 보인다. 그걸로 enforcement를 끄면 앱의 JS를 고치는
         // 것보다 **싼** 우회가 생긴다 — 이 설계가 넘지 않기로 한 선이다.
         // 여기서 주입한 값은 번들에 리터럴로 박히므로 실행 방식으로 바뀌지 않는다.
-        __IS_DEV_BUILD__: JSON.stringify(process.env.NODE_ENV !== 'production')
+        __IS_DEV_BUILD__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+        __BRIDGE_BUILD__: JSON.stringify(IS_BRIDGE_BUILD)
       },
       plugins: [externalizeDepsPlugin()]
     },
@@ -54,7 +64,8 @@ export default defineConfig(({ command }) => {
     },
     renderer: {
       define: {
-        __APP_VERSION__: JSON.stringify(pkg.version)
+        __APP_VERSION__: JSON.stringify(APP_VERSION),
+        __BRIDGE_BUILD__: JSON.stringify(IS_BRIDGE_BUILD)
       },
       build: {
         // 없으면 렌더러가 미압축으로 나간다(1.47MB → 절반 이하).

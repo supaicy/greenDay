@@ -86,6 +86,12 @@ publish:
   # supaicy/greenDay). 옛 이름은 GitHub 이 리디렉션해 주지만, 누군가 haru 라는 저장소를
   # 새로 만들면 그 순간 끊긴다. 정식 이름을 쓴다.
   repo: greenDay
+  # **업데이트 feed 분리.** electron-updater(GitHub)는 저장소의 "Latest" 릴리스에서
+  # `<channel>-mac.yml`을 읽는다. 옛 앱(v1.4.1·브리지 v1.5.0)은 채널이 없어 `latest-mac.yml`
+  # 을 찾고, 새 앱은 `greenday-mac.yml`을 찾는다. 그래서 새 앱 릴리스가 Latest가 돼도
+  # 옛 앱은 그 파일을 못 찾아 업데이트로 받지 않는다 — 다른 번들 ID의 앱이 옛 자리에
+  # 앉는 일이 없다. 자세한 순서는 docs/2026-09-07-브리지-릴리스.md.
+  channel: greenday
   # 옛 앱(com.haru.app · com.supaicy.haru)과 업데이트 캐시를 나눈다. 지정하지 않으면
   # 둘 다 ~/Library/Caches/ticktick-updater 를 쓰고, 두 앱이 나란히 깔린 전환 기간에
   # 서로의 내려받은 업데이트를 덮어쓴다.

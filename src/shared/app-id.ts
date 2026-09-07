@@ -29,6 +29,21 @@
 export const APP_BUNDLE_ID = 'com.begreen.greenday'
 
 /**
+ * v1.4.1까지 실제로 배포된 번들 ID. **브리지 릴리스(v1.5.0)만** 이 ID로 나간다 —
+ * 옛 사용자에게 새 앱을 안내할 마지막 릴리스다(docs/2026-09-07-브리지-릴리스.md).
+ * `electron-builder.bridge.cjs`의 appId와 정확히 같아야 한다.
+ */
+export const LEGACY_BUNDLE_ID = 'com.haru.app'
+
+/** 브리지 릴리스의 버전. `electron-builder.bridge.cjs`의 extraMetadata.version과 같아야 한다. */
+export const BRIDGE_VERSION = '1.5.0'
+
+/** 이 빌드가 실제로 쓰는 번들 ID — 브리지 빌드면 옛 것, 아니면 새 것. */
+export function bundleIdFor(isBridgeBuild: boolean): string {
+  return isBridgeBuild ? LEGACY_BUNDLE_ID : APP_BUNDLE_ID
+}
+
+/**
  * 구글 OAuth 콜백을 받는 **루프백 주소**.
  *
  * 예전에는 커스텀 스킴(`<번들 ID>:/oauth2redirect`)을 썼다. MAS 샌드박스에서
