@@ -120,12 +120,17 @@ else
     bad "network.client가 없습니다 — 캘린더 동기화가 동작하지 않습니다"
   fi
 
-  # 서버 권한을 요구하면 심사에서 사유를 묻는다. 커스텀 URL 스킴으로 OAuth를 받으므로
-  # 필요 없어야 정상이다. 들어가 있다면 누군가 루프백 방식으로 되돌린 것이다.
+  # 2026-09-07 뒤집음. 구글 OAuth 콜백이 커스텀 스킴 → **루프백(127.0.0.1)** 으로 바뀌었다
+  # (src/shared/app-id.ts — Google 이 설치형 앱에 루프백을 요구한다). 샌드박스에서 리스닝
+  # 소켓을 열려면 network.server 가 **있어야** 한다. 없으면 브라우저에서 로그인은 성공하는데
+  # 앱이 콜백을 영영 못 받는다. 심사에서 사유를 물으면 심사 노트의 설명(127.0.0.1 에만,
+  # 로그인하는 동안만)으로 답한다. 실제로 샌드박스에서 리스너가 열리는지는 MAS 개발 서명
+  # 빌드로 사람이 확인해야 한다(TODOS.md U-5).
   if grep -q "com.apple.security.network.server" "$ENT"; then
-    bad "network.server가 선언돼 있습니다 — OAuth는 커스텀 URL 스킴으로 받으므로 불필요합니다"
+    ok "network.server 선언됨 (루프백 OAuth 콜백 — 샌드박스에서 리스너를 열려면 필요)"
   else
-    ok "network.server 없음 (OAuth 콜백은 커스텀 URL 스킴으로 받음)"
+    bad "network.server가 없습니다 — 루프백 OAuth 콜백을 샌드박스에서 받을 수 없어 Google 로그인이 멈춥니다"
+    note "resources/entitlements.mas.plist 에 com.apple.security.network.server 를 추가하세요"
   fi
 fi
 

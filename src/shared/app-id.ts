@@ -61,7 +61,8 @@ export function bundleIdFor(isBridgeBuild: boolean): string {
  * 풀릴 수 있고, 그러면 IPv4로 바인드한 서버에 콜백이 닿지 않는다.
  *
  * MAS 빌드에는 `com.apple.security.network.server` entitlement가 필요하다
- * (`resources/entitlements.mac.plist`).
+ * (`resources/entitlements.mas.plist` — 2026-09-07 추가. `scripts/mas-preflight.sh` 3/6 이 확인한다).
+ * Hardened Runtime(직접 배포)에는 그런 제약이 없다.
  */
 export const OAUTH_LOOPBACK_HOST = '127.0.0.1'
 export const OAUTH_LOOPBACK_PATH = '/oauth2redirect'

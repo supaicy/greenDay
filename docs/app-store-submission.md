@@ -353,7 +353,8 @@ in between:
   embedded web view). The app is a public client with no client secret. The callback
   arrives on a loopback redirect (http://127.0.0.1:<ephemeral port>/oauth2redirect), which is
   the flow Google requires for installed apps; the listener is bound to 127.0.0.1 only and is
-  closed as soon as the single callback arrives. The only scope requested is
+  closed as soon as the single callback arrives (this is why the sandboxed build declares
+  com.apple.security.network.server). The only scope requested is
   https://www.googleapis.com/auth/calendar.app.created, which limits access to events the
   app itself created; Greenday cannot read the user's existing calendar entries.
 
@@ -370,6 +371,9 @@ test credentials and we will supply them.
 MAC APP STORE BUILD DIFFERENCES
 The in-app updater and global shortcuts are disabled via a process.mas guard, since the
 App Store handles updates and the sandbox does not permit global shortcuts.
+The com.apple.security.network.server entitlement exists only for the Google OAuth loopback
+redirect described above: a listener bound to 127.0.0.1 on an ephemeral port, opened for the
+duration of one sign-in and closed as soon as the single callback arrives. Nothing else listens.
 
 Privacy policy: https://begreen.dev/privacy (Korean: https://begreen.dev/ko/privacy)
 ```

@@ -174,6 +174,11 @@ Biome 도입 후 남은 린트 위반. PR #12, #13으로 biome 설치 + 자동 �
 ### [U-5] MAS(App Store) 빌드 분기 — 보류
 - **막힌 이유:** dev·패키징 모두 `process.mas === false`
 - **확인할 것:** ① 설정에 "App Store를 통해 업데이트" ② 전역 단축키 no-op(앱 외부 Cmd+Shift+A가 **안 먹는 게 정상**) ③ 업데이트 IPC no-op
+- **사람 확인 (2026-09-07):** 샌드박스에서 **루프백 OAuth 리스너가 실제로 열리는가.** `entitlements.mas.plist`에
+  `com.apple.security.network.server`를 넣었지만(루프백 127.0.0.1 콜백 — `app-id.ts`), 정적 검사(`mas:preflight` 3/6)로는
+  권한이 선언됐다는 것만 안다. **MAS 개발 서명 빌드**(`npm run mas:build` → 설치)에서 설정 → Google 연결을 눌러
+  브라우저 동의 뒤 앱이 콜백을 받는지 봐야 한다. 못 받으면 `sandbox-exec` 로그(`log stream --predicate 'sender == "kernel"'`)에
+  `network-outbound`/`network-bind` deny 가 찍힌다.
 
 ### 별건 — 미검증이 아니라 기능 부재
 - ~~**라이선스 검증:** `src/shared/license/`에 서명 검증 코어가 있으나 어디에서도 import되지 않음.~~ → **해소.** 그 오프라인 키 모듈은 서버 계약과 형식이 달라 삭제했고(발급 이력 0), `src/main/licensing/`의 온라인 활성화로 대체됐다. 게이트는 `src/main/ipc-gate.ts`. 다만 **enforcement는 꺼진 채 출하**(`service.ts`의 `IS_ENFORCED`)라 지금도 아무것도 잠기지 않는다 — 켜기 전 검증 대상.
