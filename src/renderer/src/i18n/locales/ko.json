@@ -445,6 +445,7 @@
     "providerCustom": "직접 입력 (CalDAV)",
     "serverUrl": "서버 주소",
     "appleId": "Apple ID",
+    "username": "계정",
     "appPassword": "앱 암호",
     "appPasswordHint": "계정 암호가 아니라 <strong>앱 암호</strong>가 필요합니다. account.apple.com에서 발급하세요.",
     "appPasswordLink": "앱 암호 발급 페이지 열기",

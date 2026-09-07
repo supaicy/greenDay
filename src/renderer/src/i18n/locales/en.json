@@ -445,6 +445,7 @@
     "providerCustom": "Custom (CalDAV)",
     "serverUrl": "Server URL",
     "appleId": "Apple ID",
+    "username": "Account",
     "appPassword": "App-specific password",
     "appPasswordHint": "This needs an <strong>app-specific password</strong>, not your account password. Create one at account.apple.com.",
     "appPasswordLink": "Open the app password page",

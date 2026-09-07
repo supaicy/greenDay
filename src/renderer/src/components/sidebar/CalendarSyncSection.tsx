@@ -219,11 +219,9 @@ export function CalendarSyncSection({
       )}
 
       <div>
-        {/* TODO(i18n, wt-shell 소유): 직접 입력 서버에서는 "Apple ID"가 틀린 이름이다.
-            `calendarSync.username`(계정) 키가 필요하다 — 로케일 파일은 이 워크트리
-            소유가 아니라 여기서 추가하지 않았고, 오케스트레이터에 보고했다. */}
+        {/* 직접 입력(CalDAV) 서버의 계정은 Apple ID가 아니다 — 서비스에 따라 라벨을 가른다. */}
         <label htmlFor="cal-username" className={`text-xs ${labelText}`}>
-          {t('calendarSync.appleId')}
+          {t(isCustom ? 'calendarSync.username' : 'calendarSync.appleId')}
         </label>
         <input
           id="cal-username"
@@ -231,7 +229,7 @@ export function CalendarSyncSection({
           autoComplete="username"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="you@icloud.com"
+          placeholder={isCustom ? 'user@example.com' : 'you@icloud.com'}
           className={`w-full mt-1 px-3 py-2 rounded-lg text-sm ${fieldSurface}`}
         />
       </div>
