@@ -14,17 +14,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/supaicy/haru/releases/latest/download/haru.dmg">
+  <a href="https://github.com/supaicy/greenDay/releases/latest/download/Greenday-arm64.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Apple_Silicon)-blue?style=for-the-badge&logo=apple" alt="Download DMG">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/supaicy/haru/stargazers">
-    <img src="https://img.shields.io/github/stars/supaicy/haru?style=flat-square" alt="Stars">
+  <a href="https://github.com/supaicy/greenDay/stargazers">
+    <img src="https://img.shields.io/github/stars/supaicy/greenDay?style=flat-square" alt="Stars">
   </a>
-  <img src="https://img.shields.io/github/downloads/supaicy/haru/total?style=flat-square" alt="Downloads">
-  <img src="https://img.shields.io/github/v/release/supaicy/haru?style=flat-square" alt="Release">
+  <img src="https://img.shields.io/github/downloads/supaicy/greenDay/total?style=flat-square" alt="Downloads">
+  <img src="https://img.shields.io/github/v/release/supaicy/greenDay?style=flat-square" alt="Release">
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 </p>
@@ -56,7 +56,7 @@
 ### Homebrew (Recommended)
 
 ```bash
-brew install --cask supaicy/haru/Greenday
+brew install --cask supaicy/haru/greenday
 ```
 
 If macOS shows a "damaged" warning on first launch, clear the quarantine flag:
@@ -68,12 +68,12 @@ xattr -cr /Applications/Greenday.app
 To upgrade:
 
 ```bash
-brew upgrade --cask Greenday
+brew upgrade --cask greenday
 ```
 
 ### Download DMG
 
-1. Click the **Download** button above (or visit [Releases](https://github.com/supaicy/haru/releases))
+1. Click the **Download** button above (or visit [Releases](https://github.com/supaicy/greenDay/releases))
 2. Open the downloaded `.dmg` and drag `Greenday` into your `Applications` folder
 3. Before the first launch, run:
 
@@ -85,14 +85,14 @@ xattr -cr /Applications/Greenday.app
 
 ### Update
 
-- **Homebrew:** `brew upgrade --cask Greenday`
-- **DMG:** Open **Settings → Check for Updates** in-app. When a new version is available, download the latest `Greenday.dmg` from Releases and replace the existing app.
+- **Homebrew:** `brew upgrade --cask greenday`
+- **DMG:** Open **Settings → Check for Updates** in-app. When a new version is available, download the latest `Greenday-arm64.dmg` (or `Greenday-x64.dmg` for Intel) from Releases and replace the existing app.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/supaicy/haru.git
-cd Greenday
+git clone https://github.com/supaicy/greenDay.git
+cd greenDay
 npm install
 npm run dev        # Development mode
 npm run package    # Build macOS app

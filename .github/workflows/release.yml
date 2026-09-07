@@ -32,9 +32,11 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # 없이 나가면 Google 캘린더 연동이 죽은 채 빌드는 성공한다(2026-08 감사 U-1).
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
         run: |
           missing=""
-          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_B64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_B64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID GOOGLE_OAUTH_CLIENT_ID; do
             [ -z "${!v}" ] && missing="$missing $v"
           done
           if [ -n "$missing" ]; then
@@ -42,7 +44,7 @@ jobs:
             echo "이대로 진행하면 서명 없는 dmg가 릴리스됩니다. Settings → Secrets에 등록 후 다시 태그하세요."
             exit 1
           fi
-          echo "시크릿 6종 확인 완료"
+          echo "시크릿 7종 확인 완료"
 
       - name: App Store Connect API 키 파일 생성
         env:
@@ -54,7 +56,12 @@ jobs:
           head -1 "$RUNNER_TEMP/private_keys/AuthKey.p8" | grep -q "BEGIN PRIVATE KEY" \
             || { echo "::error::.p8 디코드 실패 — APPLE_API_KEY_B64가 올바른 base64인지 확인하세요"; exit 1; }
 
+      # GOOGLE_OAUTH_CLIENT_ID 는 electron.vite.config.ts 가 __GOOGLE_CLIENT_ID__ 로 박는다.
+      # GITHUB_ACTIONS 환경에서는 그 파일이 값이 비면 빌드를 실패시킨다(위 preflight 와 이중).
       - name: Build app
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GREENDAY_RELEASE: '1'
         run: npx electron-vite build
 
       # 공증은 APPLE_API_KEY / _KEY_ID / _ISSUER 환경변수 존재로 활성화된다
@@ -108,47 +115,82 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # 자산 이름은 electron-builder.yml 의 artifactName(`Greenday-<arch>.dmg`)을 그대로
+      # 따른다 — 버전이 안 들어가는 고정 이름이다. 예전에는 `haru-<버전>-<arch>.dmg` 를
+      # 받아 SHA를 냈는데, 그 이름은 v1.4.1 이후 존재하지 않아 404 본문의 SHA가 cask에
+      # 들어가고 있었다. 이제 받기에 실패하거나 SHA가 비면 여기서 멈춘다.
       - name: Compute SHAs and update tap
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           VERSION="${TAG#v}"
-          ARM_URL="https://github.com/supaicy/haru/releases/download/${TAG}/haru-${VERSION}-arm64.dmg"
-          X64_URL="https://github.com/supaicy/haru/releases/download/${TAG}/haru-${VERSION}-x64.dmg"
-          ARM_SHA=$(curl -sL "$ARM_URL" | shasum -a 256 | cut -d' ' -f1)
-          X64_SHA=$(curl -sL "$X64_URL" | shasum -a 256 | cut -d' ' -f1)
+          BASE="https://github.com/supaicy/greenDay/releases/download/${TAG}"
+
+          sha_of() {
+            # -f: 404 를 본문이 아니라 실패로. 받은 바이트가 0이면 shasum 이 빈 입력의
+            # 해시를 내므로, 파일로 받아 크기까지 본다.
+            local url="$1" tmp
+            tmp="$(mktemp)"
+            curl -fsSL --retry 3 -o "$tmp" "$url" || { echo "::error::내려받기 실패: $url" >&2; exit 1; }
+            [ -s "$tmp" ] || { echo "::error::빈 파일: $url" >&2; exit 1; }
+            shasum -a 256 "$tmp" | cut -d' ' -f1
+            rm -f "$tmp"
+          }
+
+          ARM_SHA="$(sha_of "$BASE/Greenday-arm64.dmg")"
+          X64_SHA="$(sha_of "$BASE/Greenday-x64.dmg")"
+          for pair in "arm64:$ARM_SHA" "x64:$X64_SHA"; do
+            if ! [[ "${pair#*:}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::${pair%%:*} SHA가 비었거나 형식이 틀립니다: '${pair#*:}'"
+              exit 1
+            fi
+          done
+          echo "arm64 $ARM_SHA"
+          echo "x64   $X64_SHA"
 
           git clone "https://x-access-token:${GH_TOKEN}@github.com/supaicy/homebrew-haru.git" tap
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p Casks
 
-          cat > Casks/haru.rb <<EOF
-          cask "haru" do
+          # cask 토큰은 소문자 greenday — `brew install --cask supaicy/haru/greenday`.
+          # 옛 `Casks/haru.rb`(com.haru.app 시절)는 건드리지 않는다. 브리지 릴리스 결정과
+          # 함께 정리한다.
+          cat > Casks/greenday.rb <<EOF
+          cask "greenday" do
             arch arm: "arm64", intel: "x64"
 
             version "${VERSION}"
             sha256 arm:   "${ARM_SHA}",
                    intel: "${X64_SHA}"
 
-            url "https://github.com/supaicy/haru/releases/download/v#{version}/haru-#{version}-#{arch}.dmg"
-            name "haru"
-            desc "TickTick 스타일 일정관리 앱"
-            homepage "https://github.com/supaicy/haru"
+            url "https://github.com/supaicy/greenDay/releases/download/v#{version}/Greenday-#{arch}.dmg"
+            name "Greenday"
+            desc "Tasks, calendar, pomodoro and habits for macOS — data stays on your Mac"
+            homepage "https://begreen.dev/greenday"
 
-            depends_on macos: ">= :big_sur"
+            # Electron 40 의 바닥이자 electron-builder.yml 의 minimumSystemVersion(12.0)
+            depends_on macos: ">= :monterey"
 
-            app "haru.app"
+            app "Greenday.app"
 
+            # userData 와 캐시는 Electron 내부 앱 이름(ticktick)을 따르고, 나머지는 번들 ID.
             zap trash: [
-              "~/Library/Application Support/haru",
-              "~/Library/Preferences/com.supaicy.haru.plist",
-              "~/Library/Saved Application State/com.supaicy.haru.savedState",
+              "~/Library/Application Support/ticktick",
+              "~/Library/Caches/ticktick",
+              "~/Library/Caches/greenday-updater",
+              "~/Library/Caches/com.begreen.greenday",
+              "~/Library/Caches/com.begreen.greenday.ShipIt",
+              "~/Library/Preferences/com.begreen.greenday.plist",
+              "~/Library/Saved Application State/com.begreen.greenday.savedState",
+              "~/Library/Logs/ticktick",
             ]
           end
           EOF
 
-          git add Casks/haru.rb
-          git commit -m "chore: bump haru to ${VERSION}"
+          git add Casks/greenday.rb
+          git commit -m "chore: bump greenday to ${VERSION}"
           git push

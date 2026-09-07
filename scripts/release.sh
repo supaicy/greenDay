@@ -43,10 +43,21 @@ if [ -z "${GH_TOKEN:-}" ]; then
 fi
 echo "  GitHub 토큰 OK"
 
+# Google OAuth 클라이언트 ID. 없이 나가면 Google 캘린더 연동이 통째로 죽는데 빌드는
+# 성공한다(2026-08 감사 U-1). electron.vite.config.ts 도 릴리스 빌드에서 같은 검사를 한다.
+if [ -z "${GOOGLE_OAUTH_CLIENT_ID:-}" ]; then
+  echo "ERROR: GOOGLE_OAUTH_CLIENT_ID 가 비어 있습니다." >&2
+  echo "  GOOGLE_OAUTH_CLIENT_ID=<id> npm run release  로 실행하세요." >&2
+  echo "  (Google Cloud 콘솔 → '데스크톱 앱' 유형 OAuth 클라이언트 ID. 비밀이 아닙니다.)" >&2
+  exit 1
+fi
+echo "  Google OAuth 클라이언트 ID OK"
+
 VERSION="$(node -p "require('./package.json').version")"
 echo "  버전 v$VERSION"
 
 echo "── 2/4  빌드"
+export GREENDAY_RELEASE=1   # electron.vite.config.ts 의 릴리스 전용 검사를 켠다
 npx electron-vite build
 
 echo "── 3/4  패키징 + 서명 + 공증 + 게시(draft)"

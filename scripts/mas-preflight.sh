@@ -23,7 +23,7 @@ ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 bad()  { printf '  \033[31m✗\033[0m %s\n' "$1"; fail=1; }
 note() { printf '    %s\n' "$1"; }
 
-echo "── 1/5  인증서"
+echo "── 1/6  인증서"
 
 # App Store 배포용 인증서는 Developer ID(직접 배포용)와 완전히 다른 종류다.
 if security find-identity -v -p codesigning | grep -qE "3rd Party Mac Developer Application|Apple Distribution"; then
@@ -41,7 +41,7 @@ else
   note "developer.apple.com → Certificates → 'Mac Installer Distribution' 발급 필요"
 fi
 
-echo "── 2/5  프로비저닝 프로파일"
+echo "── 2/6  프로비저닝 프로파일"
 
 if [ ! -f "$PROFILE" ]; then
   bad "프로파일이 없습니다: $PROFILE"
@@ -61,7 +61,7 @@ else
     # plutil 이 아니라 PlistBuddy 를 쓴다: plutil 의 키 경로는 점이 구분자라
     # 'com.apple.application-identifier' 가 com → apple → ... 중첩으로 해석된다.
     # PlistBuddy 는 콜론이 구분자라 점이 든 키를 그대로 읽을 수 있다.
-    tmp_plist="$(mktemp -t haru-profile)"
+    tmp_plist="$(mktemp -t greenday-profile)"
     printf '%s' "$decoded" > "$tmp_plist"
     profile_app_id="$(/usr/libexec/PlistBuddy -c \
       'Print :Entitlements:com.apple.application-identifier' "$tmp_plist" 2>/dev/null)"
@@ -74,13 +74,19 @@ else
       | plutil -extract TeamIdentifier.0 raw -o - - 2>/dev/null)"
     expires="$(printf '%s' "$decoded" | plutil -extract ExpirationDate raw -o - - 2>/dev/null)"
 
-    # application-identifier는 "TEAMID.com.supaicy.haru" 형태다.
+    # application-identifier는 "TEAMID.$BUNDLE_ID" 형태다.
     if [[ "$profile_app_id" == *".$BUNDLE_ID" ]]; then
       ok "프로파일 App ID 일치: $profile_app_id"
     else
       bad "프로파일이 다른 앱의 것입니다: ${profile_app_id:-알 수 없음}"
       note "이 프로파일로 빌드하면 업로드 단계에서 거절됩니다"
       note "$BUNDLE_ID 용 프로파일을 새로 발급하세요"
+      if [[ "$profile_app_id" == *".com.supaicy.haru" ]]; then
+        note "── 예상된 실패입니다. 2026-09-07에 번들 ID를 com.supaicy.haru → $BUNDLE_ID 로 바꿨고,"
+        note "   저장소의 resources/embedded.provisionprofile 은 아직 옛 ID용입니다."
+        note "   사람이 할 일: developer.apple.com → Identifiers 에 $BUNDLE_ID 등록 →"
+        note "   Profiles → 'Mac App Store Connect' 유형으로 새로 발급 → 그 파일로 교체."
+      fi
     fi
 
     profile_platform="$(printf '%s' "$decoded" | plutil -extract Platform.0 raw -o - - 2>/dev/null)"
@@ -96,7 +102,7 @@ else
   fi
 fi
 
-echo "── 3/5  샌드박스 권한"
+echo "── 3/6  샌드박스 권한"
 
 ENT="resources/entitlements.mas.plist"
 if [ ! -f "$ENT" ]; then
@@ -123,7 +129,7 @@ else
   fi
 fi
 
-echo "── 4/5  MAS 빌드에서 꺼져야 하는 기능"
+echo "── 4/6  MAS 빌드에서 꺼져야 하는 기능"
 
 # 샌드박스에서 동작하지 않거나 App Store 정책에 어긋나는 것들은 꺼져 있어야 한다.
 # 판정 규칙은 src/shared/capabilities.ts 한 곳에 있고 단위 테스트로 고정돼 있다.
@@ -164,7 +170,7 @@ else
   bad "전역 단축키에 hasGlobalShortcuts 가드가 없습니다 (샌드박스에서 등록 불가)"
 fi
 
-echo "── 5/5  번들 ID 일관성"
+echo "── 5/6  번들 ID 일관성"
 
 # 세 곳이 어긋나면 조용히 깨진다: 구글 로그인은 브라우저에서 성공하는데 그 콜백을
 # 받을 앱이 없어 앱은 영원히 기다린다. 여기서 대조해 둔다.
@@ -181,10 +187,23 @@ else
   bad "src/shared/app-id.ts 의 APP_BUNDLE_ID가 appId($BUNDLE_ID)와 다릅니다"
 fi
 
-echo "── 참고  Google OAuth 클라이언트"
-note "Google Cloud 콘솔에서 iOS 유형 클라이언트를 만들 때 번들 ID를"
-note "  $BUNDLE_ID"
-note "로 정확히 입력해야 콜백이 돌아옵니다."
+echo "── 6/6  Google OAuth 클라이언트 ID"
+
+# 빌드 시점에 electron.vite.config.ts 가 __GOOGLE_CLIENT_ID__ 로 박아 넣는 값이다. 없이
+# 나가면 Google 캘린더 연동이 "이 빌드에는 설정되어 있지 않습니다"로 통째로 죽는데,
+# 빌드는 멀쩡히 성공해서 사용자가 먼저 발견한다(2026-08 감사 U-1). 여기서 미리 막는다.
+# 콜백은 루프백(127.0.0.1)+PKCE 이므로 Google Cloud 콘솔에서 '데스크톱 앱' 유형으로
+# 만든다 — 번들 ID를 입력하는 iOS 유형이 아니다.
+if [ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]; then
+  ok "GOOGLE_OAUTH_CLIENT_ID 설정됨 (${GOOGLE_OAUTH_CLIENT_ID%%.apps.googleusercontent.com}…)"
+else
+  bad "GOOGLE_OAUTH_CLIENT_ID 가 비어 있습니다 — 이대로 빌드하면 Google 연동이 죽은 채 나갑니다"
+  note "GOOGLE_OAUTH_CLIENT_ID=<id> npm run mas:build  로 실행하세요"
+  note "(Google Cloud 콘솔 → 사용자 인증 정보 → OAuth 클라이언트 ID → '데스크톱 앱'. 비밀 아님)"
+fi
+
+# 위 6/6 을 통과했더라도 electron.vite.config.ts 가 릴리스 빌드(GREENDAY_RELEASE=1,
+# package.json 의 mas:build 가 켠다)에서 다시 확인한다.
 
 echo
 if [ "$fail" = "0" ]; then
