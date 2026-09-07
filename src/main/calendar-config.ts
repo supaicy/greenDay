@@ -10,6 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { KeyCrypto } from './database'
 import type { SyncState } from './caldav/sync'
 import { caldavAccount, openSecret, peekAccount, sealSecret, type SecretPurpose } from './secret-envelope'
+import { preserveCiphertext } from './migration/secrets-gate'
 
 /**
  * 이 파일이 봉인하고 여는 유일한 용도.
@@ -239,9 +240,20 @@ export function readConfigFile(filePath: string, crypto: KeyCrypto): CalendarCon
   }
 }
 
-export function writeConfigFile(filePath: string, config: CalendarConfig, crypto: KeyCrypto): void {
+/**
+ * `clearSecret`은 연결 해제처럼 **사용자가 지우겠다고 한** 저장에만 true다. 보호 모드
+ * (Keychain 거부, migration/secrets-gate.ts)에서 그 밖의 저장은 파일의 기존 암호문을
+ * 되살린다 — 읽지 못한 비밀번호가 저장 한 번에 사라지지 않게.
+ */
+export function writeConfigFile(
+  filePath: string,
+  config: CalendarConfig,
+  crypto: KeyCrypto,
+  options: { clearSecret?: boolean } = {}
+): void {
   if (!filePath) return
-  writeFileSync(filePath, JSON.stringify(encodeConfig(config, crypto), null, 2), 'utf-8')
+  const encoded = preserveCiphertext(encodeConfig(config, crypto), filePath, 'password_enc', options.clearSecret)
+  writeFileSync(filePath, JSON.stringify(encoded, null, 2), 'utf-8')
 }
 
 /**

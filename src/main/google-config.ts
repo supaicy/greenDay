@@ -11,6 +11,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { KeyCrypto } from './database'
+import { preserveCiphertext } from './migration/secrets-gate'
 import type { SyncState } from './caldav/sync'
 import type { TokenSet } from './google/oauth'
 import { openSecret, sealSecret, type SecretPurpose } from './secret-envelope'
@@ -146,9 +147,16 @@ export function readGoogleConfig(filePath: string, crypto: KeyCrypto): GoogleCon
   }
 }
 
-export function writeGoogleConfig(filePath: string, config: GoogleConfig, crypto: KeyCrypto): void {
+/** `clearSecret`은 연결 해제에만 true — `calendar-config.ts`의 writeConfigFile과 같은 규칙. */
+export function writeGoogleConfig(
+  filePath: string,
+  config: GoogleConfig,
+  crypto: KeyCrypto,
+  options: { clearSecret?: boolean } = {}
+): void {
   if (!filePath) return
-  writeFileSync(filePath, JSON.stringify(encodeGoogleConfig(config, crypto), null, 2), 'utf-8')
+  const encoded = preserveCiphertext(encodeGoogleConfig(config, crypto), filePath, 'tokens_enc', options.clearSecret)
+  writeFileSync(filePath, JSON.stringify(encoded, null, 2), 'utf-8')
 }
 
 /** 렌더러로 보낼 형태. 토큰은 존재 여부만 알린다. */

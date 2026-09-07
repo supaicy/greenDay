@@ -1,4 +1,5 @@
 import { app, safeStorage } from 'electron'
+import { preserveCiphertext } from './migration/secrets-gate'
 import {
   closeSync,
   copyFileSync,
@@ -171,11 +172,40 @@ export function saveHealth(): SaveHealth {
   }
 }
 
+/**
+ * 첫 실행 마이그레이션이 끝날 때까지 디스크 쓰기를 붙든다(`migration/arrival.ts`).
+ *
+ * 세대는 계속 오른다 — 붙드는 동안의 변경을 잃지 않는다. 풀리는 순간 밀린 세대가
+ * 한 번에 커밋된다. 종료 플러시(`flushSave`)는 붙들려 있어도 쓴다: 프로세스가
+ * 사라지는 마당에 메모리를 지키는 유일한 길이다.
+ */
+let savesHeld = false
+
+export function holdSaves(): void {
+  savesHeld = true
+}
+
+export function releaseSaves(): void {
+  if (!savesHeld) return
+  savesHeld = false
+  if (revision > committedRevision && !saveTimer && !dbReadFailed) {
+    saveTimer = setTimeout(() => {
+      saveTimer = null
+      void drain()
+    }, SAVE_DEBOUNCE_MS)
+  }
+}
+
+export function savesAreHeld(): boolean {
+  return savesHeld
+}
+
 function save(): void {
   // 호출처가 이미 `assertWritable()`로 걸러 주지만, 여기 한 겹을 더 둔다 —
   // 마이그레이션처럼 mutator를 거치지 않는 경로가 있다.
   if (dbReadFailed) return
   revision += 1
+  if (savesHeld) return
   if (saveTimer) return
   saveTimer = setTimeout(() => {
     saveTimer = null
@@ -193,7 +223,9 @@ async function drain(): Promise<void> {
   if (draining) return
   draining = true
   try {
-    while (revision > committedRevision) {
+    // 붙들려 있으면 쓰지 않는다 — `holdSaves()` 이전에 걸린 타이머가 여기로 들어와도
+    // 마찬가지다. `releaseSaves()`가 다시 예약한다.
+    while (revision > committedRevision && !savesHeld) {
       const target = revision
       const json = JSON.stringify(data)
       try {
@@ -1325,7 +1357,10 @@ export function getAiConfig(): Record<string, unknown> | null {
 export function saveAiConfig(config: Record<string, unknown>): void {
   if (!aiConfigPath) return
   try {
-    writeFileSync(aiConfigPath, JSON.stringify(encodeApiKey(config, realCrypto), null, 2), 'utf-8')
+    // 보호 모드(Keychain 거부)에서는 파일의 기존 암호문을 되살린다 — 새 앱이 키를 못
+    // 읽은 채 저장해도 원본이 사라지지 않는다(migration/secrets-gate.ts).
+    const encoded = preserveCiphertext(encodeApiKey(config, realCrypto), aiConfigPath, 'apiKey_enc')
+    writeFileSync(aiConfigPath, JSON.stringify(encoded, null, 2), 'utf-8')
   } catch (err) {
     console.error('AI config 저장 실패:', err)
   }

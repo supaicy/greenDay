@@ -284,8 +284,8 @@ export function setupIpcHandlers(): void {
   // === 캘린더 연동 (CalDAV) ===
   // 설정은 파일에 두고, 비밀번호만 safeStorage로 암호화한다. 렌더러에는 절대 넘기지 않는다.
   const loadCalendarConfig = (): CalendarConfig => readConfigFile(db.getCalendarConfigPath(), db.realCrypto)
-  const storeCalendarConfig = (config: CalendarConfig): void =>
-    writeConfigFile(db.getCalendarConfigPath(), config, db.realCrypto)
+  const storeCalendarConfig = (config: CalendarConfig, options: { clearSecret?: boolean } = {}): void =>
+    writeConfigFile(db.getCalendarConfigPath(), config, db.realCrypto, options)
 
   // CalDAV 오류는 사용자에게 그대로 보여줄 수 있게 다듬어져 있다. 그 외 예외는
   // 내부 정보가 새지 않도록 일반 문구로 바꾼다.
@@ -424,7 +424,8 @@ export function setupIpcHandlers(): void {
   handle('calendar:disconnect', 'free', () => {
     // 자격증명과 동기화 상태를 모두 버린다. 서버의 일정은 건드리지 않는다 —
     // 연동 해제가 사용자의 캘린더를 비우는 동작이면 되돌릴 방법이 없다.
-    storeCalendarConfig({ ...DEFAULT_CONFIG })
+    // 사용자가 지우겠다고 한 저장이다 — 보호 모드(secrets-gate)도 여기서는 물러난다.
+    storeCalendarConfig({ ...DEFAULT_CONFIG }, { clearSecret: true })
     return toPublicConfig(DEFAULT_CONFIG)
   })
 
@@ -432,7 +433,8 @@ export function setupIpcHandlers(): void {
   const googleConfigPath = (): string =>
     db.getCalendarConfigPath().replace(/calendar-config\.json$/, 'google-config.json')
   const loadGoogle = (): GoogleConfig => readGoogleConfig(googleConfigPath(), db.realCrypto)
-  const storeGoogle = (config: GoogleConfig): void => writeGoogleConfig(googleConfigPath(), config, db.realCrypto)
+  const storeGoogle = (config: GoogleConfig, options: { clearSecret?: boolean } = {}): void =>
+    writeGoogleConfig(googleConfigPath(), config, db.realCrypto, options)
 
   const describeGoogleError = (error: unknown): string =>
     error instanceof GoogleApiError || error instanceof OAuthError ? error.message : '알 수 없는 오류가 발생했습니다.'
@@ -555,7 +557,7 @@ export function setupIpcHandlers(): void {
     if (config.tokens?.refreshToken || config.tokens?.accessToken) {
       await revokeToken(config.tokens.refreshToken ?? config.tokens.accessToken, (u, i) => fetch(u, i))
     }
-    storeGoogle({ ...DEFAULT_GOOGLE_CONFIG })
+    storeGoogle({ ...DEFAULT_GOOGLE_CONFIG }, { clearSecret: true })
     return toPublicGoogleConfig(DEFAULT_GOOGLE_CONFIG)
   })
 
