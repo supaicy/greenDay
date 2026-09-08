@@ -98,7 +98,7 @@ gh release create v1.5.0 -R supaicy/greenDay \
 
 `latest-mac.yml` 이 자산에 있어야 옛 앱이 업데이트를 본다. `--latest` 가 빠지면 GitHub 이 최신 태그를 Latest 로 잡긴 하지만, 명시하는 편이 안전하다.
 
-> **열린 문제 — 태그가 워크플로를 깨운다.** `gh release create v1.5.0` 는 태그 `v1.5.0` 을 만들어 푸시하고, `.github/workflows/release.yml` 은 `v*` 태그에 반응한다. 오늘은 시크릿이 없어 preflight 에서 멈추므로 아무 일도 없다. 그러나 시크릿 7종을 등록한 **뒤에** 브리지를 올리면 워크플로가 **새 앱(2.0.0, `com.begreen.greenday`)을 빌드해 같은 `v1.5.0` 릴리스에 draft 로 올리고 `--latest` 로 공개하려 든다.** 방법은 둘 중 하나다 — 브리지를 시크릿 등록 전에 올리거나, 워크플로에 브리지 태그 예외(예: `v1.5.*` 제외)를 넣는다. 아직 어느 쪽도 하지 않았다.
+> **태그가 워크플로를 깨우지 않는다 (닫힘, 2026-09-09).** `gh release create v1.5.0` 는 태그 `v1.5.0` 을 만들어 푸시한다. `.github/workflows/release.yml` 은 이제 `v[2-9]*` 와 `v[1-9][0-9]*` 태그에만 반응한다 — **v2 이상만**. `v1.5.0` 은 둘째 글자가 `1`, 셋째가 `.` 라 어느 패턴에도 걸리지 않으므로, 시크릿 7종이 등록돼 있어도 워크플로가 새 앱을 빌드해 이 릴리스에 얹는 일은 없다. 브리지를 시크릿 등록 앞뒤 어느 쪽에 올려도 된다.
 
 노트 문구는 `docs/reports/2026-09-07-bridge-copy.md` 와 `CHANGELOG.md` 의 "번들 ID 가 바뀌었습니다" 절에서 가져온다. 새 앱 다운로드 주소는 `https://begreen.dev/greenday` 하나다(`GREENDAY_DOWNLOAD_URL`, `src/shared/migration.ts`).
 

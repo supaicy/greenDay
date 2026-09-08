@@ -108,7 +108,7 @@
 
 **2026-09-08 `gh secret list -R supaicy/greenDay`: `HOMEBREW_TAP_TOKEN` 만 등록돼 있다.** 나머지 7종은 없다.
 
-트리거: `push.tags: ['v*']`. 러너 `macos-latest`, Node 20. 단계 순서와 각 단계의 실패 조건은 [howto-태그-릴리스.md](howto-태그-릴리스.md) 5절.
+트리거: `push.tags: ['v[2-9]*', 'v[1-9][0-9]*']` — v2 이상만. `v1.*`(브리지 v1.5.0)는 무시된다. 러너 `macos-latest`, Node 20. 단계 순서와 각 단계의 실패 조건은 [howto-태그-릴리스.md](howto-태그-릴리스.md) 5절.
 
 ## 스크립트가 읽는 파일
 
