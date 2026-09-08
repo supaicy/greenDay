@@ -18,36 +18,23 @@ export const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 export const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 
 /**
- * 요청하는 권한.
+ * 요청하는 권한 — `calendar.app.created` 하나.
  *
- * 예전에는 `calendar.app.created` 하나였고, **그것으로는 이 앱이 하는 일을 할 수 없었다.**
- * 그 범위는 "앱이 만든 캘린더"에만 닿는데, 앱은 캘린더를 만들지 않고 사용자의 기존
- * 캘린더를 고르게 한다. 그래서 `GET /users/me/calendarList`가 403으로 떨어졌다 —
- * 클라이언트 ID를 넣어도 캘린더 목록에서 더 갈 수 없었다.
+ * 이 범위는 "앱이 만든 보조 캘린더"에만 닿는다: 그 캘린더를 만들고(`calendars.insert`),
+ * 확인하고(`calendars.get`), 그 안의 일정을 읽고 쓴다. 사용자의 **기존** 캘린더에는
+ * 목록조차 닿지 않는다 — `calendarList.list`는 이 범위를 받지 않아 403이다.
  *
- * 그래서 둘을 받는다. **둘 다 필요하고, 각자 최소다:**
+ * 그래서 앱은 캘린더를 고르게 하지 않는다. 연결하면 계정 안에 `Greenday` 캘린더를
+ * 만들어(이미 있으면 그것을 다시 써서) 거기에만 쓴다(`google/app-calendar.ts`).
  *
- *   - `calendar.calendarlist.readonly` — 캘린더 **목록**만 읽는다. 일정 내용에는
- *     닿지 않는다. 사용자가 어디로 내보낼지 고르려면 이 목록이 있어야 한다.
- *     (`calendar.readonly`는 모든 일정 내용까지 읽어서 여기엔 과하다.)
- *   - `calendar.events` — 고른 캘린더에 일정을 쓴다. 구글에는 "이 캘린더 하나에만
- *     쓴다"는 범위가 없으므로, 사용자가 기존 캘린더를 고르는 이상 이것이 최소다.
- *
- * **대안을 고르지 않은 이유.** `calendar.app.created`를 유지하려면 앱 전용 보조
- * 캘린더를 만들어 거기에만 써야 하는데, 그러면 캘린더 선택 UI가 사라지고 "내가 쓰던
- * 캘린더에 올라온다"는 지금의 약속이 깨진다. 제품 결정이라 코드로 몰래 바꾸지 않았다.
- *
- * **`calendar.events`는 구글의 민감 범위다.** production 클라이언트에는 심사가
- * 필요하고, 심사 전에는 등록된 테스트 사용자만 로그인할 수 있다.
- *
- * **문구를 함께 고쳐야 한다.** `googleSync.scopeNote`가 "Greenday가 만든 일정만
- * 접근합니다. 기존 캘린더 일정은 읽지 않습니다"라고 말하는데 이 조합에서는 참이
- * 아니다. 로케일 파일은 이 워크트리 소유가 아니라 여기서 고치지 않았고, 보고했다.
+ * **왜 이쪽인가.** 한때 `calendarlist.readonly` + `calendar.events`를 받아 사용자의
+ * 기존 캘린더를 고르게 했다. 그러면 "내가 쓰던 캘린더에 올라온다"는 되지만,
+ * `calendar.events`는 구글의 **민감 범위**라 production 클라이언트에 심사가 필요하고
+ * 심사 전에는 등록된 테스트 사용자만 로그인할 수 있다. 제품 결정(2026-09-09)은
+ * "앱이 만든 캘린더만 쓴다" — 개인정보 문서·심사 노트·`googleSync.scopeNote`가
+ * 이미 그렇게 말하고 있었고, 이제 코드도 같은 말을 한다.
  */
-export const SCOPES = [
-  'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-  'https://www.googleapis.com/auth/calendar.events'
-]
+export const SCOPES = ['https://www.googleapis.com/auth/calendar.app.created']
 
 export interface PkcePair {
   verifier: string

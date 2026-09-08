@@ -122,37 +122,65 @@ describe('googleToEvent', () => {
   })
 })
 
-describe('listCalendars', () => {
-  it('쓰기 가능한 캘린더를 구분한다', async () => {
-    const { fetchImpl } = fakeApi(() => 200, {
-      items: [
-        { id: 'primary@gmail.com', summary: '내 캘린더', primary: true, accessRole: 'owner', backgroundColor: '#039be5' },
-        { id: 'team@group', summary: '팀', accessRole: 'writer' },
-        { id: 'holidays', summary: '공휴일', accessRole: 'reader' },
-        { id: 'busy', summary: '바쁨', accessRole: 'freeBusyReader' }
-      ]
-    })
-    const calendars = await new GoogleCalendarClient('token', fetchImpl).listCalendars()
-    expect(calendars.filter((c) => c.writable).map((c) => c.id)).toEqual(['primary@gmail.com', 'team@group'])
-    expect(calendars[0].primary).toBe(true)
-    expect(calendars[0].color).toBe('#039be5')
+/**
+ * `calendar.app.created` 범위에서 캘린더는 "앱이 만든 것" 하나뿐이다. 목록 API는
+ * 이 범위를 받지 않으므로(403) 클라이언트에 `listCalendars`가 없다 — id로 되묻고, 없으면 만든다.
+ */
+describe('getCalendar', () => {
+  it('저장된 id로 calendars.get을 부른다 (calendarList.list는 이 범위에서 403이다)', async () => {
+    const { requests, fetchImpl } = fakeApi(() => 200, { id: 'abc@group.calendar.google.com', summary: 'Greenday' })
+    const calendar = await new GoogleCalendarClient('token', fetchImpl).getCalendar('abc@group.calendar.google.com')
+    expect(requests[0].method).toBe('GET')
+    expect(requests[0].url).toBe(
+      'https://www.googleapis.com/calendar/v3/calendars/abc%40group.calendar.google.com'
+    )
+    expect(requests.some((r) => r.url.includes('calendarList'))).toBe(false)
+    expect(calendar).toEqual({ id: 'abc@group.calendar.google.com', summary: 'Greenday' })
+  })
+
+  it('404면 null — 지웠거나 다른 계정의 캘린더다', async () => {
+    const { fetchImpl } = fakeApi(() => 404)
+    expect(await new GoogleCalendarClient('token', fetchImpl).getCalendar('gone')).toBeNull()
+  })
+
+  it('403도 null — 이 앱이 만든 캘린더가 아니면 범위가 닿지 않는다', async () => {
+    const { fetchImpl } = fakeApi(() => 403)
+    expect(await new GoogleCalendarClient('token', fetchImpl).getCalendar('theirs')).toBeNull()
   })
 
   it('Bearer 토큰을 붙인다', async () => {
-    const { requests, fetchImpl } = fakeApi(() => 200, { items: [] })
-    await new GoogleCalendarClient('tok-123', fetchImpl).listCalendars()
+    const { requests, fetchImpl } = fakeApi(() => 200, { id: 'c', summary: 'Greenday' })
+    await new GoogleCalendarClient('tok-123', fetchImpl).getCalendar('c')
     expect(requests[0].headers.Authorization).toBe('Bearer tok-123')
   })
 
   it('401은 재연결을 안내한다', async () => {
     const { fetchImpl } = fakeApi(() => 401)
     try {
-      await new GoogleCalendarClient('bad', fetchImpl).listCalendars()
+      await new GoogleCalendarClient('bad', fetchImpl).getCalendar('c')
       expect.unreachable()
     } catch (error) {
       expect((error as GoogleApiError).code).toBe('unauthorized')
       expect((error as GoogleApiError).message).toContain('다시 연결')
     }
+  })
+})
+
+describe('createCalendar', () => {
+  it('calendars.insert에 이름만 보낸다', async () => {
+    const { requests, fetchImpl } = fakeApi(() => 200, { id: 'new@group.calendar.google.com', summary: 'Greenday' })
+    const calendar = await new GoogleCalendarClient('token', fetchImpl).createCalendar('Greenday')
+    expect(requests[0].method).toBe('POST')
+    expect(requests[0].url).toBe('https://www.googleapis.com/calendar/v3/calendars')
+    expect(JSON.parse(requests[0].body ?? '{}')).toEqual({ summary: 'Greenday' })
+    expect(calendar).toEqual({ id: 'new@group.calendar.google.com', summary: 'Greenday' })
+  })
+
+  it('응답에 id가 없으면 실패로 본다 — id 없는 캘린더에는 쓸 수 없다', async () => {
+    const { fetchImpl } = fakeApi(() => 200, { summary: 'Greenday' })
+    await expect(new GoogleCalendarClient('token', fetchImpl).createCalendar('Greenday')).rejects.toMatchObject({
+      code: 'server'
+    })
   })
 })
 
@@ -200,21 +228,21 @@ describe('오류 분류', () => {
   it('429는 재시도 안내로 구분한다', async () => {
     const { fetchImpl } = fakeApi(() => 429)
     await expect(
-      new GoogleCalendarClient('t', fetchImpl).listCalendars()
+      new GoogleCalendarClient('t', fetchImpl).getCalendar('c')
     ).rejects.toMatchObject({ code: 'rate_limit' })
   })
 
   it('네트워크 실패를 구분한다', async () => {
     const fetchImpl: FetchLike = () => Promise.reject(new Error('offline'))
     await expect(
-      new GoogleCalendarClient('t', fetchImpl).listCalendars()
+      new GoogleCalendarClient('t', fetchImpl).getCalendar('c')
     ).rejects.toMatchObject({ code: 'network' })
   })
 
   it('오류 메시지에 액세스 토큰을 담지 않는다', async () => {
     const { fetchImpl } = fakeApi(() => 500)
     const error = await new GoogleCalendarClient('super-secret-token', fetchImpl)
-      .listCalendars()
+      .getCalendar('c')
       .catch((e) => e)
     expect(String(error.message)).not.toContain('super-secret-token')
   })

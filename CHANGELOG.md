@@ -33,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - **Mac App Store 패키징 지원** (앱 샌드박스 + MAS 빌드) 및 직접 배포용 Hardened Runtime + 공증 설정. 릴리스 워크플로가 서명·공증을 검증한 뒤에만 공개한다.
 
 ### Changed
+- **Google 캘린더는 앱이 만든 `Greenday` 캘린더에만 씁니다.** 요청 범위를 `calendar.app.created` 하나로 되돌렸다(민감 범위 `calendar.events` 와 목록 범위를 더는 요청하지 않는다 — Google 심사 없이 배포할 수 있다). 연결하면 계정 안에 `Greenday` 보조 캘린더를 찾거나 만들어 거기에만 올리고, 기존 캘린더는 목록조차 읽지 않는다. 설정의 캘린더 선택 UI 는 사라졌다. 연결 해제는 토큰만 지우고 캘린더 id 는 남겨 재연결 때 같은 캘린더를 이어 쓴다.
 - **번들 ID `com.begreen.greenday`** (위 안내). URL 스킴도 같이 바뀌었다. 업데이트 캐시 디렉터리를 옛 앱과 분리(`greenday-updater`).
 - **보안 하드닝**: AI API 키·캘린더 앱 암호를 macOS Keychain(`safeStorage`)으로 암호화 저장하고 암호문에 용도·주인(서버·계정)을 봉인, IPC 경계 입력 검증 + 발신자를 앱 문서에 결속, AI 키를 오리진에 결속하고 SSRF 검사를 요청 시점으로, 창을 앱 문서에 묶어 넘어간 페이지가 `window.api` 를 물려받지 못하게. AI가 한국어 질문에 한국어로만 답하도록 강제.
 - **Google OAuth 를 커스텀 스킴에서 루프백(127.0.0.1)+PKCE 로** — Google 의 현행 설치형 앱 계약. 클라이언트 ID 없이 나가는 릴리스 빌드는 이제 실패한다.

@@ -154,7 +154,7 @@ describe('콜백 처리', () => {
       vi
         .fn()
         .mockResolvedValue(
-          okTokenResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600, scope: 'calendar.events' })
+          okTokenResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600, scope: 'calendar.app.created' })
         )
     )
     const pending = startGoogleAuth(CLIENT_ID)
@@ -235,15 +235,14 @@ describe('startGoogleAuth', () => {
     expect(url.searchParams.get('code_challenge')).toBeTruthy()
   })
 
-  it('캘린더 목록과 일정 범위를 함께 요청한다', async () => {
-    // 목록 범위가 빠지면 calendarList.list가 403이고, 그 상태에서는 클라이언트 ID를
-    // 넣어도 캘린더 선택 화면에서 더 갈 수 없다 — C6의 절반이 그것이었다.
+  it('앱이 만든 캘린더 범위(app.created) 하나만 요청한다', async () => {
+    // 앱은 사용자의 캘린더를 고르게 하지 않고 `Greenday` 캘린더를 만들어 쓴다.
+    // 그래서 목록 범위도, 민감 범위인 `calendar.events`도 필요 없다.
     const pending = startGoogleAuth(CLIENT_ID)
     pending.catch(() => {})
     await started()
     const scope = lastAuthUrl().searchParams.get('scope') ?? ''
-    expect(scope).toContain('calendar.calendarlist.readonly')
-    expect(scope).toContain('calendar.events')
+    expect(scope).toBe('https://www.googleapis.com/auth/calendar.app.created')
   })
 
   // 버튼을 두 번 누르면 콜백이 어느 쪽 것인지 알 수 없다. 이전 흐름은 취소된다.

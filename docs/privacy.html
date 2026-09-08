@@ -175,8 +175,9 @@
 <p>
   <strong>Google.</strong> 브라우저를 통한 표준 OAuth 2.0(PKCE)으로 연결합니다. Greenday는 사용자의
   Google 비밀번호를 보지 않습니다. 요청하는 권한은
-  <code>calendar.app.created</code> 하나이며, 이는 <strong>Greenday가 만든 일정만</strong> 다룰 수 있는
-  범위입니다. 사용자의 기존 캘린더 일정을 읽을 권한은 요청하지도, 가지고 있지도 않습니다.
+  <code>calendar.app.created</code> 하나이며, 이는 <strong>Greenday가 만든 캘린더만</strong> 다룰 수 있는
+  범위입니다. 연결하면 계정 안에 "Greenday" 캘린더를 하나 만들어 거기에만 씁니다. 사용자의 기존 캘린더를
+  읽거나 고칠 권한은 요청하지도, 가지고 있지도 않습니다.
   발급받은 인증 토큰도 키체인으로 암호화해 이 맥에만 저장합니다.
 </p>
 
@@ -314,8 +315,9 @@
 <p>
   <strong>Google.</strong> Greenday uses standard OAuth 2.0 with PKCE through your browser and never sees
   your Google password. It requests a single scope, <code>calendar.app.created</code>, which grants
-  access <strong>only to events Greenday itself created</strong>. Greenday neither requests nor holds permission
-  to read your existing calendar entries. Tokens are encrypted with the keychain and stored only on
+  access <strong>only to calendars Greenday itself created</strong>: on connect it creates a "Greenday" calendar
+  in your account and writes only there. Greenday neither requests nor holds permission to read or
+  modify your existing calendars. Tokens are encrypted with the keychain and stored only on
   this Mac.
 </p>
 <p>

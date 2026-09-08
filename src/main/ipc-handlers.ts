@@ -20,6 +20,7 @@ import { GoogleCalendarClient, GoogleApiError } from './google/calendar'
 import { needsRefresh, refreshTokens, revokeToken, OAuthError } from './google/oauth'
 import { startGoogleAuth } from './google-auth-flow'
 import { runGoogleSync } from './google-sync'
+import { ensureAppCalendar } from './google/app-calendar'
 import { uiStrings } from './ui-language'
 import { currentCapabilities } from './capabilities'
 import { licensing, publicLicenseState } from './licensing/service'
@@ -470,6 +471,20 @@ export function setupIpcHandlers(): void {
     }
   }
 
+  const googleClient = (config: GoogleConfig): GoogleCalendarClient =>
+    new GoogleCalendarClient(config.tokens?.accessToken ?? '', (u, i) => fetch(u, i))
+
+  /**
+   * 쓸 캘린더를 확보한다 — 앱이 만든 `Greenday` 캘린더. `calendar.app.created` 범위는
+   * 그 하나에만 닿으므로 사용자가 고를 것이 없다. 저장된 id가 죽었으면(지웠거나 다른
+   * 계정) 새로 만들고 동기화 상태를 비운다. 연결 직후와 매 동기화 앞에서 부른다.
+   */
+  const ensureGoogleCalendar = async (config: GoogleConfig): Promise<GoogleConfig> => {
+    const { config: next } = await ensureAppCalendar(googleClient(config), config)
+    storeGoogle(next)
+    return next
+  }
+
   handle('google:get-config', 'free', () => ({
     ...toPublicGoogleConfig(loadGoogle()),
     clientIdConfigured: Boolean(resolveClientId())
@@ -484,53 +499,37 @@ export function setupIpcHandlers(): void {
       }
     }
     const config = loadGoogle()
+    let connected: GoogleConfig
     try {
       const tokens = await startGoogleAuth(clientId)
-      storeGoogle({ ...config, tokens, lastError: null })
-      return { ok: true, message: null }
+      connected = { ...config, tokens, lastError: null }
+      storeGoogle(connected)
     } catch (error) {
       const message = describeGoogleError(error)
       storeGoogle({ ...config, lastError: message })
       return { ok: false, message }
     }
-  })
-
-  handle('google:list-calendars', 'paid', async () => {
+    // 로그인 직후 캘린더까지 확보한다 — 사용자가 고를 단계가 없으므로 여기서 끝나야
+    // "연결됨"이다. 실패해도 토큰은 남긴다: 다음 동기화가 같은 확보를 다시 시도한다.
     try {
-      const config = await ensureGoogleToken(loadGoogle())
-      const client = new GoogleCalendarClient(config.tokens?.accessToken ?? '', (u, i) => fetch(u, i))
-      const calendars = await client.listCalendars()
-      // 읽기 전용 캘린더(공휴일 등)에는 일정을 만들 수 없다. 미리 걸러 낸다.
-      return { ok: true, message: null, calendars: calendars.filter((c) => c.writable) }
+      await ensureGoogleCalendar(connected)
+      return { ok: true, message: null }
     } catch (error) {
-      return { ok: false, message: describeGoogleError(error), calendars: [] }
+      const message = describeGoogleError(error)
+      storeGoogle({ ...loadGoogle(), lastError: message })
+      return { ok: false, message }
     }
-  })
-
-  handle('google:select', 'paid', (_, id: string, name: string) => {
-    const config = loadGoogle()
-    // 캘린더를 바꾸면 이전 동기화 상태는 다른 캘린더의 것이라 쓸 수 없다.
-    const changed = config.calendarId !== id
-    const next: GoogleConfig = {
-      ...config,
-      calendarId: String(id),
-      calendarName: String(name),
-      enabled: true,
-      syncState: changed ? {} : config.syncState
-    }
-    storeGoogle(next)
-    return toPublicGoogleConfig(next)
   })
 
   handle('google:sync-now', 'paid', async () => {
     const loaded = loadGoogle()
-    if (!loaded.tokens || !loaded.calendarId) {
-      return { ok: false, message: '구글 계정과 캘린더를 먼저 선택하세요.', result: null }
+    if (!loaded.tokens) {
+      return { ok: false, message: '구글 계정을 먼저 연결하세요.', result: null }
     }
     try {
-      const config = await ensureGoogleToken(loaded)
+      const config = await ensureGoogleCalendar(await ensureGoogleToken(loaded))
       const result = await runGoogleSync({
-        client: new GoogleCalendarClient(config.tokens?.accessToken ?? '', (u, i) => fetch(u, i)),
+        client: googleClient(config),
         calendarId: config.calendarId ?? '',
         tasks: db.getTasks() as unknown as TaskRow[],
         state: config.syncState
@@ -557,8 +556,18 @@ export function setupIpcHandlers(): void {
     if (config.tokens?.refreshToken || config.tokens?.accessToken) {
       await revokeToken(config.tokens.refreshToken ?? config.tokens.accessToken, (u, i) => fetch(u, i))
     }
-    storeGoogle({ ...DEFAULT_GOOGLE_CONFIG }, { clearSecret: true })
-    return toPublicGoogleConfig(DEFAULT_GOOGLE_CONFIG)
+    // 토큰만 버린다. 캘린더 id·이름·동기화 상태는 남긴다 — 비밀이 아니고, 같은 계정으로
+    // 다시 연결하면 같은 `Greenday` 캘린더를 이어 쓰기 위해서다. 목록 API가 이 범위에
+    // 없어 id를 잃으면 같은 이름의 캘린더가 하나 더 생긴다. 다른 계정이면
+    // `calendars.get`이 실패해 새로 만들고 상태도 그때 비운다(google/app-calendar.ts).
+    const kept: GoogleConfig = {
+      ...DEFAULT_GOOGLE_CONFIG,
+      calendarId: config.calendarId,
+      calendarName: config.calendarName,
+      syncState: config.syncState
+    }
+    storeGoogle(kept, { clearSecret: true })
+    return toPublicGoogleConfig(kept)
   })
 
   // Quick add (global shortcut)

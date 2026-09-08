@@ -14,13 +14,6 @@ interface GooglePublicConfig {
   clientIdConfigured: boolean
 }
 
-interface GoogleCalendarItem {
-  id: string
-  summary: string
-  primary: boolean
-  color: string | null
-}
-
 interface SyncSummary {
   created: number
   updated: number
@@ -38,18 +31,20 @@ interface Props {
   errorText: string
 }
 
+/**
+ * 캘린더를 고르는 단계가 없다. `calendar.app.created` 범위는 앱이 만든 캘린더에만
+ * 닿으므로, 연결하면 메인이 `Greenday` 캘린더를 찾거나 만들어 거기에만 쓴다.
+ */
 export function GoogleSyncSection({
   isDark,
   focusRing,
-  labelText,
   hintText,
   successText,
   errorText
 }: Props) {
   const { t, i18n } = useTranslation()
   const [config, setConfig] = useState<GooglePublicConfig | null>(null)
-  const [calendars, setCalendars] = useState<GoogleCalendarItem[]>([])
-  const [busy, setBusy] = useState<'connect' | 'list' | 'sync' | null>(null)
+  const [busy, setBusy] = useState<'connect' | 'sync' | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [summary, setSummary] = useState<SyncSummary | null>(null)
 
@@ -64,24 +59,6 @@ export function GoogleSyncSection({
 
   if (!config) return null
 
-  const loadCalendars = async (): Promise<void> => {
-    setBusy('list')
-    setMessage(null)
-    try {
-      const response = (await window.api.googleListCalendars?.()) as
-        | { ok: boolean; message: string | null; calendars: GoogleCalendarItem[] }
-        | undefined
-      if (!response) return
-      setCalendars(response.calendars ?? [])
-      if (!response.ok) setMessage(response.message)
-      else if ((response.calendars ?? []).length === 0)
-        setMessage(t('googleSync.noWritableCalendar'))
-      await load()
-    } finally {
-      setBusy(null)
-    }
-  }
-
   const handleConnect = async (): Promise<void> => {
     setBusy('connect')
     setMessage(null)
@@ -89,21 +66,11 @@ export function GoogleSyncSection({
       const response = (await window.api.googleConnect?.()) as
         | { ok: boolean; message: string | null }
         | undefined
-      if (response && !response.ok) {
-        setMessage(response.message)
-        return
-      }
+      if (response && !response.ok) setMessage(response.message)
       await load()
-      await loadCalendars()
     } finally {
       setBusy(null)
     }
-  }
-
-  const handleSelect = async (calendar: GoogleCalendarItem): Promise<void> => {
-    await window.api.googleSelect?.(calendar.id, calendar.summary)
-    setSummary(null)
-    await load()
   }
 
   const handleSync = async (): Promise<void> => {
@@ -124,7 +91,6 @@ export function GoogleSyncSection({
 
   const handleDisconnect = async (): Promise<void> => {
     await window.api.googleDisconnect?.()
-    setCalendars([])
     setSummary(null)
     setMessage(null)
     await load()
@@ -164,7 +130,7 @@ export function GoogleSyncSection({
           <CheckCircle2 size={13} />
           {config.account
             ? t('googleSync.connectedAccount', { account: config.account })
-            : t('googleSync.connected', { name: config.calendarName ?? 'Google' })}
+            : t('googleSync.connected', { name: config.calendarName ?? 'Greenday' })}
         </div>
       )}
 
@@ -176,58 +142,6 @@ export function GoogleSyncSection({
       )}
 
       {config.connected && (
-        <button
-          type="button"
-          onClick={loadCalendars}
-          disabled={busy !== null}
-          className={`text-xs rounded transition-colors disabled:opacity-40 ${focusRing} ${
-            isDark ? 'text-primary-300 hover:text-primary-200' : 'text-primary-700 hover:text-primary-800'
-          }`}
-        >
-          {t('googleSync.loadCalendars')}
-        </button>
-      )}
-
-      {calendars.length > 0 && (
-        <div>
-          <span className={`text-xs ${labelText}`}>{t('googleSync.pickCalendar')}</span>
-          <div className="mt-1 space-y-1">
-            {calendars.map((calendar) => {
-              const selected = config.calendarId === calendar.id
-              return (
-                <button
-                  type="button"
-                  key={calendar.id}
-                  onClick={() => handleSelect(calendar)}
-                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-left transition-colors ${focusRing} ${
-                    selected
-                      ? isDark
-                        ? 'bg-primary-500/20 text-primary-200'
-                        : 'bg-primary-50 text-primary-800'
-                      : isDark
-                        ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: calendar.color ?? '#8E8E93' }}
-                  />
-                  <span className="flex-1 truncate">{calendar.summary}</span>
-                  {calendar.primary && (
-                    <span className={`text-[10px] shrink-0 ${hintText}`}>
-                      {t('googleSync.primaryBadge')}
-                    </span>
-                  )}
-                  {selected && <CheckCircle2 size={14} className="shrink-0" />}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {config.calendarId && (
         <div className={`rounded-lg px-3 py-2.5 space-y-2 ${isDark ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
           <p className={`text-xs ${hintText}`}>
             {config.lastSyncAt

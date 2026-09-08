@@ -11,18 +11,21 @@ Google 캘린더 연동에는 Google Cloud 의 OAuth 클라이언트 ID 가 필�
 | 클라이언트 종류 | **공개 클라이언트, PKCE(S256)**. 클라이언트 시크릿 없음 | `createPkcePair`, `buildAuthUrl` |
 | 리디렉션 URI | `http://127.0.0.1:<임시 포트>/oauth2redirect` — 포트는 OS 가 고른다(`listen(0)`) | `src/shared/app-id.ts` `loopbackRedirectUri` |
 | 브라우저 | 시스템 기본 브라우저(`shell.openExternal`). 임베디드 웹뷰 아님 | `startGoogleAuth` |
-| 요청 범위 | `https://www.googleapis.com/auth/calendar.calendarlist.readonly` + `https://www.googleapis.com/auth/calendar.events` | `SCOPES` |
+| 요청 범위 | `https://www.googleapis.com/auth/calendar.app.created` 하나 | `SCOPES` |
+| 쓰는 캘린더 | 연결 직후 계정 안에 **`Greenday` 보조 캘린더를 만들고** 거기에만 쓴다. 사용자가 고르는 단계가 없다 | `src/main/google/app-calendar.ts` `ensureAppCalendar` |
 | `access_type=offline`, `prompt=consent` | 리프레시 토큰을 매번 받는다 | `buildAuthUrl` |
 | 리스너 | `127.0.0.1` 에만 바인드, 콜백 하나 받고 닫는다, 5분 타임아웃 | `listenOnLoopback`, `FLOW_TIMEOUT_MS` |
 | 토큰 저장 | `google-config.json` 의 `tokens_enc` — safeStorage 로 봉인(`purpose: google.tokens`) | `src/main/google-config.ts` |
 
-**범위에 대해 알아 둘 것.** 저장소의 다른 문서들(`CHANGELOG.md`, `app-store-submission.md` 4-B, 로케일 `googleSync.scopeNote`)은 `calendar.app.created` 하나라고 적고 있지만, **코드는 위 둘을 요청한다.** `oauth.ts` 의 `SCOPES` 주석이 그 이유를 적어 뒀다 — `app.created` 로는 사용자의 기존 캘린더 목록을 읽을 수 없어 `calendarList` 가 403 이었다. `calendar.events` 는 Google 이 **민감(sensitive) 범위**로 분류하므로 production 클라이언트는 심사가 필요하고, 심사 전에는 등록된 테스트 사용자만 로그인할 수 있다. 문서·문구를 코드에 맞추는 일은 아직 남아 있다.
+**범위에 대해 알아 둘 것.** `calendar.app.created` 는 "앱이 만든 보조 캘린더" 에만 닿는다 — 만들기(`calendars.insert`)·확인(`calendars.get`)·그 안의 일정 읽기/쓰기. 사용자의 기존 캘린더에는 **목록조차** 닿지 않는다(`calendarList.list` 는 이 범위를 받지 않아 403). 그래서 앱은 캘린더를 고르게 하지 않고, 만든 캘린더의 **id 를 `google-config.json` 에 저장**해 두고 `calendars.get` 으로 되묻는다. id 가 죽었으면(사용자가 지웠거나 다른 계정) 새로 만들고 동기화 상태를 비운다. 연결 해제도 토큰만 지우고 id 는 남긴다 — 목록으로 되찾을 수 없어, 지우면 재연결 때 같은 이름의 캘린더가 하나 더 생기기 때문이다.
+
+한때(2026-08~09) `calendarlist.readonly` + `calendar.events` 를 받아 기존 캘린더를 고르게 했다. `calendar.events` 는 Google 이 **민감(sensitive) 범위**로 분류해 production 클라이언트에 심사가 필요하고 심사 전에는 테스트 사용자만 로그인됐다. 2026-09-09 제품 결정으로 `app.created` 하나로 돌아왔고, 이제 `CHANGELOG.md`·`app-store-submission.md` 4-B·`privacy.html`·로케일 `googleSync.scopeNote` 가 말하는 것과 코드가 같다.
 
 ## 2. Google Cloud 콘솔에서
 
 1. 프로젝트를 하나 만들거나 고른다.
 2. **API 및 서비스 → 라이브러리 → Google Calendar API → 사용 설정.**
-3. **OAuth 동의 화면** — 외부(External) 사용자 유형. 앱 이름 `Greenday`, 지원 이메일, 개인정보처리방침 `https://begreen.dev/privacy`. **범위 추가**에서 위 두 범위를 넣는다. 게시 상태가 "테스트" 인 동안은 테스트 사용자 목록에 있는 계정만 로그인된다 — 본인 계정을 넣는다.
+3. **OAuth 동의 화면** — 외부(External) 사용자 유형. 앱 이름 `Greenday`, 지원 이메일, 개인정보처리방침 `https://begreen.dev/privacy`. **범위 추가**에서 `.../auth/calendar.app.created` 하나를 넣는다. 게시 상태가 "테스트" 인 동안은 테스트 사용자 목록에 있는 계정만 로그인된다 — 본인 계정을 넣는다.
 4. **사용자 인증 정보 → 사용자 인증 정보 만들기 → OAuth 클라이언트 ID → 애플리케이션 유형: 데스크톱 앱.** 이름은 자유. **번들 ID 를 묻는 iOS 유형이 아니다** — 옛 문서가 iOS 유형으로 등록하는 우회를 적어 둔 적이 있는데, Electron macOS 앱을 iOS 클라이언트로 등록하는 것은 지원되는 구성이 아니다(`app-id.ts` 주석).
 5. 만들어진 **클라이언트 ID**(`…​.apps.googleusercontent.com`)를 복사한다. 클라이언트 보안 비밀은 데스크톱 앱에도 표시되지만 **쓰지 않는다** — 코드가 보내지 않는다.
 
@@ -52,7 +55,7 @@ export GOOGLE_OAUTH_CLIENT_ID=<id>
 npm run dev -- --user-data-dir=/tmp/greenday-oauth
 ```
 
-설정 → 캘린더 연동 → Google → 연결. 브라우저가 열리고 로그인 뒤 "연결됐습니다 — Greenday 로 돌아가세요" 페이지가 뜨면 콜백이 도착한 것이다. 캘린더 목록이 뜨면 `calendarlist.readonly` 범위가 통과한 것이다.
+설정 → 캘린더 연동 → Google → 연결. 브라우저가 열리고 로그인 뒤 "연결됐습니다 — Greenday 로 돌아가세요" 페이지가 뜨면 콜백이 도착한 것이다. "'Greenday' 캘린더에 연결됨" 이 뜨면 `calendars.insert`(또는 저장된 id 의 `calendars.get`)까지 통과한 것이다 — Google 캘린더 웹에서 **내 캘린더** 아래 `Greenday` 가 생겼는지 본다.
 
 `google:get-config` IPC 가 돌려주는 `clientIdConfigured` 가 `false` 면 값이 어디에도 없는 것이다.
 

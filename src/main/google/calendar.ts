@@ -22,13 +22,10 @@ export class GoogleApiError extends Error {
   }
 }
 
-export interface GoogleCalendarSummary {
+/** 앱이 만든 보조 캘린더 — `calendar.app.created` 범위가 닿는 유일한 종류의 캘린더다. */
+export interface GoogleCalendar {
   id: string
   summary: string
-  primary: boolean
-  /** 쓰기 가능한가. reader/freeBusyReader 캘린더에는 일정을 만들 수 없다. */
-  writable: boolean
-  color: string | null
 }
 
 function classify(status: number): GoogleApiError['code'] {
@@ -204,17 +201,38 @@ export class GoogleCalendarClient {
     return response
   }
 
-  async listCalendars(): Promise<GoogleCalendarSummary[]> {
-    const response = await this.request('/users/me/calendarList', { method: 'GET' })
-    const payload = (await response.json()) as { items?: Record<string, unknown>[] }
-    return (payload.items ?? []).map((item) => ({
-      id: String(item.id ?? ''),
-      summary: String(item.summary ?? ''),
-      primary: item.primary === true,
-      // owner/writer만 일정을 만들 수 있다.
-      writable: item.accessRole === 'owner' || item.accessRole === 'writer',
-      color: typeof item.backgroundColor === 'string' ? item.backgroundColor : null
-    }))
+  /**
+   * 캘린더 하나를 확인한다. 없으면 null — 사용자가 지웠거나, 다른 계정의 것이거나,
+   * 이 앱이 만든 것이 아니다(그 셋을 구글은 404 또는 403으로 알린다).
+   *
+   * `calendarList.list`는 `calendar.app.created` 범위를 **받지 않는다**(403). 그래서
+   * 이름으로 찾을 수 없고, 우리가 만든 캘린더의 id를 저장해 두고 이것으로 되묻는다.
+   */
+  async getCalendar(calendarId: string): Promise<GoogleCalendar | null> {
+    let response: Response
+    try {
+      response = await this.request(`/calendars/${encodeURIComponent(calendarId)}`, { method: 'GET' })
+    } catch (error) {
+      if (error instanceof GoogleApiError && (error.code === 'not_found' || error.code === 'forbidden')) {
+        return null
+      }
+      throw error
+    }
+    const payload = (await response.json()) as { id?: unknown; summary?: unknown }
+    return {
+      id: typeof payload.id === 'string' && payload.id ? payload.id : calendarId,
+      summary: typeof payload.summary === 'string' ? payload.summary : ''
+    }
+  }
+
+  /** 앱 소유 보조 캘린더를 만든다. 이 범위로 일정을 쓸 수 있는 곳은 이렇게 만든 캘린더뿐이다. */
+  async createCalendar(summary: string): Promise<GoogleCalendar> {
+    const response = await this.request('/calendars', { method: 'POST', body: JSON.stringify({ summary }) })
+    const payload = (await response.json()) as { id?: unknown; summary?: unknown }
+    if (typeof payload.id !== 'string' || !payload.id) {
+      throw new GoogleApiError(response.status, '캘린더를 만들었지만 id를 받지 못했습니다.', 'server')
+    }
+    return { id: payload.id, summary: typeof payload.summary === 'string' ? payload.summary : summary }
   }
 
   /**

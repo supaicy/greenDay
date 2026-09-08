@@ -66,24 +66,22 @@ describe('buildAuthUrl', () => {
   })
 
   /**
-   * C6 — 예전에는 `calendar.app.created` 하나만 요청했고, **그것으로는 이 앱이 하는
-   * 일을 할 수 없었다.** 그 범위는 앱이 만든 캘린더에만 닿는데 앱은 캘린더를 만들지
-   * 않고 사용자의 기존 캘린더를 고르게 한다 — `calendarList.list`가 403이었다.
+   * 2026-09-09 제품 결정 — 앱이 만든 캘린더만 쓴다. `calendar.app.created` 하나면
+   * 사용자의 기존 캘린더에는 목록조차 닿지 않고, 구글의 민감 범위 심사도 없다.
+   * (한때 `calendarlist.readonly` + `calendar.events`를 받아 기존 캘린더를 고르게 했다 —
+   * 그 조합은 `calendar.events`가 민감 범위라 심사 전에는 테스트 사용자만 로그인됐다.)
    */
-  it('목록 범위와 일정 범위를 함께 요청한다', () => {
+  it('앱이 만든 캘린더 범위 하나만 요청한다', () => {
     const scope = url.searchParams.get('scope') ?? ''
     expect(scope).toBe(SCOPES.join(' '))
-    // 캘린더를 고르려면 목록을 읽어야 한다.
-    expect(scope).toContain('auth/calendar.calendarlist.readonly')
-    // 고른 캘린더에 쓰려면 필요하다. 구글에는 "이 캘린더 하나만" 범위가 없다.
-    expect(scope).toContain('auth/calendar.events')
+    expect(scope.split(' ')).toEqual(['https://www.googleapis.com/auth/calendar.app.created'])
   })
 
-  it('필요 이상으로 넓은 범위는 요청하지 않는다', () => {
+  it('사용자의 기존 캘린더에 닿는 범위는 요청하지 않는다', () => {
     const scopes = (url.searchParams.get('scope') ?? '').split(' ')
-    // 목록을 얻는 데 모든 일정 내용을 읽을 필요도, 캘린더 전체 관리 권한도 없다.
-    expect(scopes).not.toContain('https://www.googleapis.com/auth/calendar.readonly')
-    expect(scopes).not.toContain('https://www.googleapis.com/auth/calendar')
+    for (const wide of ['calendar', 'calendar.readonly', 'calendar.events', 'calendar.calendarlist.readonly']) {
+      expect(scopes).not.toContain(`https://www.googleapis.com/auth/${wide}`)
+    }
   })
 
   it('리프레시 토큰을 받도록 offline + consent를 요청한다', () => {

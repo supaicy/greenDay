@@ -355,8 +355,10 @@ in between:
   the flow Google requires for installed apps; the listener is bound to 127.0.0.1 only and is
   closed as soon as the single callback arrives (this is why the sandboxed build declares
   com.apple.security.network.server). The only scope requested is
-  https://www.googleapis.com/auth/calendar.app.created, which limits access to events the
-  app itself created; Greenday cannot read the user's existing calendar entries.
+  https://www.googleapis.com/auth/calendar.app.created, which limits access to calendars the
+  app itself created: on connect Greenday creates a secondary calendar named "Greenday" in the
+  user's account and writes only there. Greenday cannot list, read or modify the user's
+  existing calendars.
 
 Only tasks that have a date are published, carrying title, date/time, note body, and
 completion state. Disconnecting deletes stored credentials (and revokes the Google grant)
@@ -409,7 +411,7 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
 | 항목 | 값 |
 |---|---|
 | 요청 범위 | `https://www.googleapis.com/auth/calendar.app.created` |
-| 범위 등급 | 콘솔에서 확인 필요 — 앱이 만든 일정만 접근하는 가장 좁은 범위 |
+| 범위 등급 | 콘솔에서 확인 필요 — 앱이 만든 보조 캘린더(`Greenday`)에만 닿는 가장 좁은 범위. 사용자의 기존 캘린더는 목록조차 읽지 못한다 |
 | 앱 유형 | 데스크톱 앱 (공개 클라이언트, PKCE) |
 | 리디렉션 | `http://127.0.0.1:<임의 포트>/oauth2redirect` (루프백, 데스크톱 앱 유형) |
 

@@ -473,17 +473,13 @@
     "connecting": "브라우저에서 로그인 중…",
     "connectHint": "브라우저가 열립니다. 로그인 후 이 앱으로 돌아옵니다.",
     "notConfigured": "이 빌드에는 Google 연동이 설정되어 있지 않습니다.",
-    "connected": "{{name}}에 연결됨",
+    "connected": "'{{name}}' 캘린더에 연결됨",
     "connectedAccount": "계정: {{account}}",
-    "pickCalendar": "동기화할 캘린더",
-    "loadCalendars": "캘린더 목록 불러오기",
-    "noWritableCalendar": "일정을 만들 수 있는 캘린더가 없습니다.",
-    "primaryBadge": "기본",
     "syncNow": "지금 동기화",
     "syncing": "동기화 중…",
     "disconnect": "연결 해제",
     "disconnectHint": "저장된 인증을 지우고 Google 쪽 권한도 회수합니다. 이미 올라간 일정은 지우지 않습니다.",
-    "scopeNote": "Greenday가 만든 일정만 접근합니다. 기존 캘린더 일정은 읽지 않습니다."
+    "scopeNote": "Google 계정 안에 'Greenday' 캘린더를 만들어 거기에만 씁니다. 기존 캘린더는 읽지도 쓰지도 않습니다."
   },
   "license": {
     "title": "라이선스",

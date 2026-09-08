@@ -111,11 +111,9 @@
 | 채널 | 등급 | 인자 | 반환 | preload |
 |---|---|---|---|---|
 | `google:get-config` | free | — | 공개 설정 + `clientIdConfigured: boolean` | `googleGetConfig()` |
-| `google:connect` | paid | — (브라우저 로그인, 루프백 콜백) | `{ ok, message }` | `googleConnect()` |
-| `google:list-calendars` | paid | — | `{ ok, message, calendars }` (쓸 수 있는 것만) | `googleListCalendars()` |
-| `google:select` | paid | `id, name` | 공개 설정 | `googleSelect(id, name)` |
-| `google:sync-now` | paid | — | `{ ok, message, result }` | `googleSyncNow()` |
-| `google:disconnect` | free | — (서버 revoke 시도 후 로컬 토큰 삭제, `clearSecret: true`) | 기본 설정 | `googleDisconnect()` |
+| `google:connect` | paid | — (브라우저 로그인, 루프백 콜백). 로그인 뒤 **`Greenday` 캘린더를 찾거나 만든다**(`google/app-calendar.ts`) — 캘린더를 고르는 채널은 없다 | `{ ok, message }` | `googleConnect()` |
+| `google:sync-now` | paid | — . 매번 캘린더를 다시 확보한다(저장된 id 가 죽었으면 새로 만들고 상태를 비운다) | `{ ok, message, result }` | `googleSyncNow()` |
+| `google:disconnect` | free | — (서버 revoke 시도 후 로컬 토큰 삭제, `clearSecret: true`). `calendarId`·`calendarName`·`syncState` 는 **남긴다** — 목록 API 가 없어 지우면 재연결 때 캘린더가 하나 더 생긴다 | 토큰 없는 설정 | `googleDisconnect()` |
 
 ### 언어·업데이트 — `app-ipc.ts`
 

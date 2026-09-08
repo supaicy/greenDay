@@ -473,17 +473,13 @@
     "connecting": "Signing in via your browser…",
     "connectHint": "Your browser will open. Come back here after signing in.",
     "notConfigured": "This build has no Google integration configured.",
-    "connected": "Connected to {{name}}",
+    "connected": "Connected to the \"{{name}}\" calendar",
     "connectedAccount": "Account: {{account}}",
-    "pickCalendar": "Calendar to sync to",
-    "loadCalendars": "Load calendars",
-    "noWritableCalendar": "No calendar here can accept new events.",
-    "primaryBadge": "Primary",
     "syncNow": "Sync now",
     "syncing": "Syncing…",
     "disconnect": "Disconnect",
     "disconnectHint": "Clears the saved sign-in and revokes access on Google's side. Events already published are left alone.",
-    "scopeNote": "Greenday only touches events it created. It never reads your existing calendar entries."
+    "scopeNote": "Greenday creates its own \"Greenday\" calendar in your Google account and writes only there. It never reads or touches your existing calendars."
   },
   "license": {
     "title": "License",
