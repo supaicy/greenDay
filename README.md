@@ -115,6 +115,10 @@ Greenday's AI features work with a local or cloud model. Configure under **Setti
 | `Delete` | Delete selected task |
 | `Esc` | Deselect / Close |
 
+## Documentation
+
+Developer docs (Korean) live under [`docs/`](docs/README.md) — tutorials, how-tos (release, Mac App Store, bridge build, Google OAuth, screenshots, i18n), references (scripts and flags, IPC channels, licensing, migration files) and explanations (bundle-ID migration, license gate and MAS, local data and safeStorage). Start at [docs/README.md](docs/README.md).
+
 ## Tech Stack
 
 - **Electron 40** — Native macOS app
