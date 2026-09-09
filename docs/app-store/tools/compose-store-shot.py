@@ -1,4 +1,4 @@
-import sys,base64,subprocess,pathlib,json
+import sys,base64,subprocess,pathlib,json,hashlib
 S=pathlib.Path(sys.argv[1]); scene=sys.argv[2]; headline=sys.argv[3]; out=sys.argv[4]
 src=pathlib.Path('/Users/supermicrosoft/orca/workspaces/ticktick/coordinate/docs/app-store')
 def b64(p): return 'data:image/png;base64,'+base64.b64encode(open(p,'rb').read()).decode()
@@ -33,6 +33,9 @@ html,body{{margin:0;width:2880px;height:1800px;overflow:hidden;background:#04060
 <div class="win {front_cls}"><img src="{front_img}"></div>
 <div class="brand">{mark}<span>Greenday · begreen.dev</span></div>
 '''
-p=S/'store'/f'{scene}.html'; p.write_text(html,encoding='utf-8')
+# 중간 HTML 이름에 출력 파일 경로를 섞는다. 장면 이름만 쓰면 ko/en 을 동시에 돌릴 때
+# 서로 덮어쓰고 두 로케일이 같은 그림으로 나온다 (2026-09-09 en-06 사고).
+tag=hashlib.md5(str(pathlib.Path(out).resolve()).encode()).hexdigest()[:8]
+p=S/'store'/f'{scene}-{tag}.html'; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(html,encoding='utf-8')
 subprocess.run(['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','--headless=new','--disable-gpu','--hide-scrollbars','--force-device-scale-factor=1','--window-size=2880,1800',f'--screenshot={out}',f'file://{p}'],check=True,capture_output=True)
 print(out)
