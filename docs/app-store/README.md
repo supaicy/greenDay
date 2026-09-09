@@ -4,31 +4,65 @@
 
 | 파일 | 화면 | 보여주는 것 |
 |---|---|---|
-| `01-오늘.png` | 오늘 | 마감·우선순위·태그가 붙은 할 일 목록 |
+| `01-오늘.png` | 오늘 | 마감·우선순위·태그가 붙은 오늘 할 일 여덟 줄 |
 | `02-캘린더-주.png` | 캘린더(주) | 시간 블록 배치 |
 | `03-칸반보드.png` | 칸반 보드 | 할 일 / 진행 중 / 완료 |
 | `04-아이젠하워.png` | 아이젠하워 | 중요도·긴급도 4분면 자동 분류 |
 | `05-습관.png` | 습관 트래커 | 주간 체크와 연속 기록 |
-| `06-설정-프라이버시.png` | 설정 | 로컬 전용 잠금 · 로컬 AI (차별점) |
+| `06-설정-프라이버시.png` | 설정 | 데이터 내보내기와 개인정보처리방침 (차별점) |
 
-## 재현 방법
+## 폴더
 
-스크린샷에 **실제 개인 할 일이 들어가면 안 되므로** 데모 데이터로 찍는다.
+로케일과 테마마다 한 벌씩이다. 합성기가 로케일에 맞는 폴더를 읽고,
+없으면 조용히 ko 로 넘어가지 않고 즉시 멈춘다.
 
-```bash
-DEMO=/tmp/haru-demo && mkdir -p "$DEMO"
-cp docs/app-store/demo-data.json "$DEMO/ticktick-data.json"
-npx electron-vite dev -- --user-data-dir="$DEMO"
+| 폴더 | 내용 |
+|---|---|
+| `screenshots/` | 한국어 · 다크 |
+| `screenshots-light/` | 한국어 · 라이트 |
+| `screenshots-en/` | 영어 · 다크 |
+| `screenshots-en-light/` | 영어 · 라이트 |
+| `store-composites/{ko,en}/` | 업로드용 합성본 |
 
-# 창을 1440×900 으로 (Retina 캡처 시 2880×1800)
-osascript -e 'tell application "System Events" to tell process "Electron" \
-  to set size of window 1 to {1440, 900}'
+## 촬영 — 사람 화면을 뺏지 않는다
+
+Electron 창을 띄우지 않고 렌더러만 헤드리스로 찍는다. 자세한 건
+`tools/README.md`. 요약하면 `npm run build` 뒤 `out/renderer` 사본에
+`tools/headless-stub.js` 를 끼우고 로컬 서버에 올린 다음, Chrome 을
+`--headless=new --window-size=1440,900 --force-device-scale-factor=2` 로 부른다.
+
+데모 데이터는 스텁 안에 있고 로케일을 따라간다(`?lang=ko|en`). 실제 개인 할 일이
+섞일 일이 없다. 스텁을 고치면 네 폴더를 **전부** 다시 찍어야 한다 — 한 폴더만
+갈면 라이트와 다크의 내용이 어긋나고, 그게 예전에 라이트 습관 화면이 '0일 연속'
+빈 격자로 나가 헤드라인을 반박한 원인이었다.
+
+## 합성
+
+```sh
+python3 docs/app-store/tools/compose-store-shot.py <작업폴더> <장면> <로케일> <출력.png>
 ```
 
-`demo-data.json`의 날짜는 **고정값**이라 오늘과 어긋나면 "오늘" 뷰가 빈다.
-날짜를 다시 맞추려면 `due_date`/`scheduled_*`를 촬영일 기준으로 바꾼다.
+헤드라인은 스크립트 안 `HEADLINES` 표에서만 온다. 예전에는 호출부가 자유
+문자열로 넘겨서, ko/en 을 병렬로 돌렸을 때 중간 파일이 서로 덮이며 영문 세트에
+한국어가 박힌 채 나갔다. 표에 없는 조합은 즉시 실패한다.
+
+배치 뒤에는 반드시 이걸 돌린다. 비어야 정상이다.
+
+```sh
+for s in 01-오늘 02-캘린더-주 03-칸반보드 04-아이젠하워 05-습관 06-설정-프라이버시; do
+  [ "$(md5 -q docs/app-store/store-composites/ko/$s.png)" = \
+    "$(md5 -q docs/app-store/store-composites/en/$s.png)" ] && echo "ko/en 동일: $s"
+done
+```
+
+배경 수치도 검사 대상이다. 창을 뺀 배경에서 **어두움(v<0.15) 45~55%**,
+**밝음(v>0.30) 25% 안팎**, **시안(hue>178) 5% 미만**. 더 어둡게 밀면 320px
+썸네일이 검은 사각형이 되고, 밝게 풀면 near-black 위 오로라가 아니라 초록 벽지가 된다.
 
 ## 주의
 
 - 규격이 어긋나면 App Store Connect가 업로드를 거부한다. 허용: 2880×1800 / 2560×1600 / 1440×900 / 1280×800
-- 촬영 전 실제 데이터 폴더(`~/Library/Application Support/ticktick`)를 쓰지 않는지 확인할 것
+- 신호등 세 개는 macOS 가 그리는 것이라 헤드리스 캡처에는 없다. 합성기가 그려 넣는다
+  (지름·간격·색은 실제 Electron 캡처에서 잰 값). 잘라내지 말 것 — 맥 네이티브 앱이라는
+  신호를 0.3초에 주는 유일한 기호다.
+- 한 벌에 열 장까지. 지금은 여섯 장이다.
