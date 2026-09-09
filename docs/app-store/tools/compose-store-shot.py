@@ -3,6 +3,9 @@ S=pathlib.Path(sys.argv[1]); scene=sys.argv[2]; headline=sys.argv[3]; out=sys.ar
 src=pathlib.Path('/Users/supermicrosoft/orca/workspaces/ticktick/coordinate/docs/app-store')
 def b64(p): return 'data:image/png;base64,'+base64.b64encode(open(p,'rb').read()).decode()
 light=b64(src/'screenshots-light'/f'{scene}.png'); dark=b64(src/'screenshots'/f'{scene}.png')
+import os
+front=os.environ.get('FRONT','dark')
+back_img,front_img,back_cls,front_cls=(light,dark,'lightback','darkfront') if front=='dark' else (dark,light,'dark','light')
 mark=open('/Users/supermicrosoft/orca/workspaces/begreen/needlefish/site/assets/favicon.svg',encoding='utf-8').read()
 html=f'''<!doctype html><meta charset="utf-8"><style>
 html,body{{margin:0;width:2880px;height:1800px;overflow:hidden;background:#04060A;font-family:-apple-system,"SF Pro Display","Pretendard","Apple SD Gothic Neo",sans-serif}}
@@ -21,11 +24,13 @@ html,body{{margin:0;width:2880px;height:1800px;overflow:hidden;background:#04060
 .win img{{display:block;width:100%;height:auto}}
 .dark{{width:1560px;right:300px;top:290px}}
 .light{{width:1560px;left:480px;top:640px;box-shadow:0 70px 160px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.08)}}
+.lightback{{width:1560px;right:430px;top:250px;box-shadow:0 50px 120px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.08)}}
+.darkfront{{width:1560px;left:640px;top:600px;box-shadow:0 70px 160px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.12)}}
 </style>
 <div class="bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div><div class="grain"></div><div class="vign"></div></div>
 <div class="hl">{headline}</div>
-<div class="win dark"><img src="{dark}"></div>
-<div class="win light"><img src="{light}"></div>
+<div class="win {back_cls}"><img src="{back_img}"></div>
+<div class="win {front_cls}"><img src="{front_img}"></div>
 <div class="brand">{mark}<span>Greenday · begreen.dev</span></div>
 '''
 p=S/'store'/f'{scene}.html'; p.write_text(html,encoding='utf-8')
