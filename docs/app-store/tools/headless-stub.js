@@ -6,6 +6,7 @@
   const today = new Date();
   const day = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return iso(d); };
   // 테마는 localStorage 에서 온다. ?theme=light 로 갈아끼운다.
+  const AI_LOCAL = new URLSearchParams(location.search).get('ai') === 'local';
   const wanted = new URLSearchParams(location.search).get('theme');
   if (wanted) localStorage.setItem('ticktick-theme', wanted);
 
@@ -66,8 +67,11 @@
         case 'getScore':       return () => ok({ level: 4, points: 428, streak: 12 });
         case 'getPomodoroSessions': return () => ok([]);
         case 'aiGetHistory':   return () => ok([]);
-        case 'aiGetConfig':    return () => ok({ enabled: false, model: '', baseUrl: '' });
-        case 'aiCheckConnection': return () => ok({ ok: false });
+        // ?ai=local 이면 로컬 Ollama에 연결되고 '로컬 전용' 잠금이 켜진 상태로 보인다(설정 장면용).
+        case 'aiGetConfig':    return () => ok(AI_LOCAL
+          ? { provider: 'ollama', baseUrl: 'http://localhost:11434', model: 'exaone3.5:7.8b', apiKey: null, maxHistoryMessages: 200, localOnly: true }
+          : { provider: 'ollama', baseUrl: 'http://localhost:11434', model: '', apiKey: null, maxHistoryMessages: 200, localOnly: false });
+        case 'aiCheckConnection': return () => ok(AI_LOCAL ? { connected: true, models: ['exaone3.5:7.8b', 'llama3.2:latest'] } : { connected: false, models: [] });
         case 'calendarGetConfig': return () => ok({ connected: false });
         case 'googleGetConfig':   return () => ok({ connected: false });
         case 'notificationPermission': return () => ok('granted');
@@ -81,15 +85,37 @@
   window.electron = { ipcRenderer: { on: () => {}, send: () => {}, invoke: () => ok(undefined) } };
 })();
 
-/* 캡처용 화면 전환. 헤드리스는 클릭을 못 하므로 스크립트가 대신 누른다. */
+/* 캡처용 화면 전환. 헤드리스는 클릭을 못 하므로 스크립트가 대신 누른다.
+   ?view=오늘,설정 처럼 쉼표로 이으면 차례로 누른다(바탕 화면을 고른 뒤 설정을 여는 식).
+   ?scrollto=AI%20어시스턴트 이면 그 글자로 시작하는 요소를 스크롤 영역 맨 위로 가져온다. */
 (function () {
-  const want = new URLSearchParams(location.search).get('view');
-  if (!want) return;
+  const q = new URLSearchParams(location.search);
+  const steps = (q.get('view') || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const scrollTo = q.get('scrollto');
+  if (!steps.length && !scrollTo) return;
+  const find = (want) => [...document.querySelectorAll('button,a,div[role="button"],li')]
+    .find((e) => e.textContent.trim() === want || e.textContent.trim().startsWith(want));
   let tries = 0;
   const t = setInterval(() => {
-    if (++tries > 60) return clearInterval(t);
-    const el = [...document.querySelectorAll('button,a,div[role="button"],li')]
-      .find((e) => e.textContent.trim() === want || e.textContent.trim().startsWith(want));
-    if (el) { el.click(); clearInterval(t); }
-  }, 100);
+    if (++tries > 80) return clearInterval(t);
+    if (steps.length) {
+      const el = find(steps[0]);
+      if (el) { el.click(); steps.shift(); }
+      return;
+    }
+    if (scrollTo) {
+      // 열린 다이얼로그가 있으면 그 안에서만 찾는다 — 사이드바에 같은 글자가 있을 수 있다.
+      const root = document.querySelector('[role="dialog"]') || document;
+      const el = [...root.querySelectorAll('span,label,div,h3')]
+        .find((e) => e.children.length <= 2 && e.textContent.trim().startsWith(scrollTo));
+      if (!el) return;
+      el.scrollIntoView({ block: 'start' });
+    }
+    clearInterval(t);
+  }, 120);
+  // 다이얼로그가 첫 버튼에 포커스를 주면 포커스 링이 찍힌다. 계속 포커스를 뺀다.
+  setInterval(() => {
+    const a = document.activeElement;
+    if (a && a !== document.body) a.blur();
+  }, 150);
 })();
