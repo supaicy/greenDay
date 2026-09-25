@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { installDragGuard } from './utils/dragGuard'
 import './i18n'
 import './index.css'
@@ -11,4 +12,10 @@ installDragGuard(window)
 
 const rootEl = document.getElementById('root')
 if (!rootEl) throw new Error('Root element #root not found in index.html')
-ReactDOM.createRoot(rootEl).render(<App />)
+// 렌더 예외가 앱을 통째로 언마운트하지 않게 한다. 없을 때는 화면이 완전히 비었고,
+// 원인이 디스크의 데이터면 재시작해도 같은 자리에서 다시 죽어 복구가 불가능했다.
+ReactDOM.createRoot(rootEl).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+)

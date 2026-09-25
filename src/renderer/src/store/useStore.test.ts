@@ -1029,3 +1029,75 @@ describe('읽기 전용 세션의 유령 편집', () => {
     expect(mainState.getTasks).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Regression: 진단 2.3 — 모양이 어긋난 행 하나가 앱 전체를 백지로 만들었다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * `mapTask`가 `JSON.parse` 결과를 `as string[]`로 캐스팅만 했다. 파싱 결과가
+ * 배열이 아니면 그대로 `Task.tags`에 앉고, 화면이 `tags.map(...)`에서 던졌다.
+ * 값이 디스크에 있으므로 재시작해도 같은 자리에서 다시 죽었다.
+ *
+ * 마이그레이션으로 넘어온 옛 스키마, 손으로 고친 JSON, 다른 버전이 쓴 파일 —
+ * 어느 쪽이든 이 경계에서 "태그 없음"으로 내려앉아야 한다.
+ */
+describe('loadData — 어긋난 행이 화면을 무너뜨리지 않는다', () => {
+  const row = (over: Record<string, unknown>): Record<string, unknown> => ({
+    id: 'r1',
+    title: '행',
+    tags: '[]',
+    attachments: '[]',
+    created_at: '2026-09-25T00:00:00.000Z',
+    ...over
+  })
+
+  const loadWith = async (rows: Record<string, unknown>[]): Promise<void> => {
+    vi.stubGlobal('window', {
+      api: {
+        getLists: async () => [],
+        getTasks: async () => rows,
+        getTrashTasks: async () => [],
+        getHabits: async () => [],
+        getHabitLogs: async () => [],
+        getFolders: async () => [],
+        getPomodoroSessions: async () => [],
+        getScore: async () => ({ total: 0, events: [], taskNet: {} })
+      }
+    })
+    await useStore.getState().loadData()
+  }
+
+  it('이중 인코딩된 tags가 배열로 내려앉는다', async () => {
+    // 실측된 그 값: JSON.parse('"[]"') === '[]' (문자열) → .map이 없다.
+    await loadWith([row({ tags: '"[]"' })])
+    const [task] = useStore.getState().tasks
+    expect(Array.isArray(task.tags)).toBe(true)
+    expect(task.tags).toEqual([])
+    expect(() => task.tags.map((x) => x)).not.toThrow()
+  })
+
+  it('객체·숫자·문자열 어떤 것이 와도 배열이다', async () => {
+    for (const bad of ['{"a":1}', '42', '"업무"', 'true', 'null', '깨진 JSON']) {
+      await loadWith([row({ tags: bad, attachments: bad })])
+      const [task] = useStore.getState().tasks
+      expect(Array.isArray(task.tags), `tags for ${bad}`).toBe(true)
+      expect(Array.isArray(task.attachments), `attachments for ${bad}`).toBe(true)
+    }
+  })
+
+  it('배열 안의 비문자열 원소는 걸러낸다', async () => {
+    await loadWith([row({ tags: '["업무", 7, null, "긴급"]' })])
+    expect(useStore.getState().tasks[0].tags).toEqual(['업무', '긴급'])
+  })
+
+  it('정상 tags는 그대로 통과한다', async () => {
+    await loadWith([row({ tags: '["업무","긴급"]' })])
+    expect(useStore.getState().tasks[0].tags).toEqual(['업무', '긴급'])
+  })
+
+  it('scheduledOverrides가 배열이면 없는 것으로 친다', async () => {
+    await loadWith([row({ scheduled_overrides: '["나쁜 값"]' })])
+    expect(useStore.getState().tasks[0].scheduledOverrides).toBeNull()
+  })
+})

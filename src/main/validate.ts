@@ -71,6 +71,30 @@ function validateRangeAndPin(obj: Record<string, unknown>): void {
   if ('sortOrder' in obj && !Number.isFinite(obj.sortOrder)) {
     throw new Error('Invalid task payload')
   }
+  validateStringArrays(obj)
+}
+
+/**
+ * `tags`·`attachments`는 **문자열 배열이어야 한다.**
+ *
+ * 이 둘만 검사에서 빠져 있었다. `database.ts`의 `updateTask`는 받은 값을 그대로
+ * `JSON.stringify` 하므로, 문자열을 넣으면 `"\"[]\""` 같은 이중 인코딩이 디스크에
+ * 남는다. 그러면 렌더러가 그것을 배열로 되읽지 못하고 `task.tags.map(...)`에서
+ * 던져 **화면이 통째로 비었다** — 데이터가 디스크에 있으니 재시작해도 마찬가지였다.
+ * (2026-09-25 진단에서 실측했다.)
+ *
+ * 렌더러가 늘 배열을 보낸다는 것은 방어가 아니라 우연이다. 이 파일이 존재하는
+ * 이유가 바로 "렌더러가 준 값을 믿지 않는다"이고, 같은 함수가 `pinned`와 날짜는
+ * 이미 그렇게 보고 있었다. 빠진 둘을 같은 자리에 맞춘다.
+ */
+function validateStringArrays(obj: Record<string, unknown>): void {
+  for (const key of ['tags', 'attachments'] as const) {
+    if (!(key in obj)) continue
+    const value = obj[key]
+    if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+      throw new Error('Invalid task payload')
+    }
+  }
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/

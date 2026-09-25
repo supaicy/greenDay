@@ -229,8 +229,8 @@ function mapTask(row: Record<string, unknown>): Task {
     pinned: Boolean(row.pinned),
     listId: (row.list_id as string) || 'inbox',
     parentId: (row.parent_id as string) || null,
-    tags: safeParseJson<string[]>(row.tags as string, []),
-    attachments: safeParseJson<string[]>(row.attachments as string, []),
+    tags: parseStringArray(row.tags as string),
+    attachments: parseStringArray(row.attachments as string),
     createdAt: row.created_at as string,
     completedAt: (row.completed_at as string) || null,
     deletedAt: (row.deleted_at as string) || null,
@@ -239,7 +239,7 @@ function mapTask(row: Record<string, unknown>): Task {
     recurringPattern: (row.recurring_pattern as string) || null,
     scheduledStart: (row.scheduled_start as string) || null,
     scheduledEnd: (row.scheduled_end as string) || null,
-    scheduledOverrides: safeParseJson<Task['scheduledOverrides']>(row.scheduled_overrides as string, null)
+    scheduledOverrides: parsePlainObject<NonNullable<Task['scheduledOverrides']>>(row.scheduled_overrides as string)
   }
 }
 
@@ -269,7 +269,7 @@ function mapHabit(row: Record<string, unknown>): Habit {
     name: row.name as string,
     color: row.color as string,
     frequency: row.frequency as 'daily' | 'weekly',
-    targetDays: safeParseJson<number[]>(row.target_days as string, []),
+    targetDays: parseNumberArray(row.target_days as string),
     createdAt: row.created_at as string
   }
 }
@@ -455,13 +455,47 @@ function normalizeScoreSlice(raw: unknown): ScoreSlice {
   }
 }
 
-/** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
-function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
-  if (!s) return fallback
+/**
+ * JSON 문자열 → 배열. **모양까지 확인한다.** DB 행 디코딩 경로의 유일한 가드다.
+ *
+ * 전에 있던 `safeParseJson`은 파싱만 하고 `as T`로 캐스팅할 뿐이라, 파싱 결과가 배열이
+ * 아니어도 그대로 `Task.tags`에 앉았다. 그러면 화면이 `task.tags.map(...)`에서
+ * 던지고, ErrorBoundary가 없던 동안에는 앱 전체가 백지가 됐다 — 게다가 그 값은
+ * 디스크에 있으므로 **재시작해도 같은 자리에서 다시 죽었다.**
+ *
+ * 2026-09-25 진단 실측: `tags`가 `"\"[]\""`(이중 인코딩)인 행 하나로
+ * `a.tags.map is not a function`이 나면서 창이 완전히 비었다.
+ *
+ * 파싱은 실패할 수 있는 입력이다 — 마이그레이션으로 넘어온 옛 스키마, 손으로
+ * 고친 JSON, 형태가 다른 미래 버전의 파일. 여기서 한 번 거르면 그 전부가
+ * "태그 없음"으로 안전하게 내려앉는다.
+ */
+function parseArrayOf<T>(s: string | undefined | null, isItem: (v: unknown) => v is T): T[] {
+  if (!s) return []
   try {
-    return (JSON.parse(s) as T) ?? fallback
+    const parsed: unknown = JSON.parse(s)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isItem)
   } catch {
-    return fallback
+    return []
+  }
+}
+
+const parseStringArray = (s: string | undefined | null): string[] =>
+  parseArrayOf(s, (v): v is string => typeof v === 'string')
+
+const parseNumberArray = (s: string | undefined | null): number[] =>
+  parseArrayOf(s, (v): v is number => typeof v === 'number' && Number.isFinite(v))
+
+/** JSON 문자열 → 평범한 객체. 배열·문자열·숫자가 오면 없는 것으로 친다. */
+function parsePlainObject<T>(s: string | undefined | null): T | null {
+  if (!s) return null
+  try {
+    const parsed: unknown = JSON.parse(s)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return parsed as T
+  } catch {
+    return null
   }
 }
 
