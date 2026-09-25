@@ -74,6 +74,23 @@ export function useKeyboardShortcuts() {
           return
         }
         if (selectedTaskId) {
+          // **글자를 치는 중이면 선택을 건드리지 않는다.** 아래 Cmd+Z가 입력칸에
+          // 양보하는 것과 같은 이유인데, 여기서는 잃는 것이 더 크다.
+          //
+          // 손으로 쓴 onKeyDown(할일 추가칸 AddTask, 하위작업 입력칸 SubtaskList,
+          // 새 폴더·새 리스트 이름 Sidebar, 습관 추가 HabitTracker)은 Escape를 자기
+          // 몫으로 처리하면서 `preventDefault()`를 걸지 않는다. 그래서 위의
+          // `defaultPrevented` 가드가 걸리지 않고, 그 핸들러가 이미 `showAddTask`를
+          // 내려놓은 뒤라 체인이 한 칸 더 내려와 여기까지 온다 — 추가칸을 닫으려고
+          // 누른 Escape 한 번이 오른쪽 상세 패널(App.tsx: `selectedTaskId`가 null이면
+          // TaskDetail 언마운트)까지 같이 닫았다. 하위작업 입력칸에서는 글자만
+          // 지우려던 사용자가 작업하던 패널을 통째로 잃었다.
+          //
+          // 호출처마다 preventDefault를 붙이는 대신 여기 한 곳에서 막는다. 새로
+          // 만드는 입력칸이 또 잊어도 같은 버그가 돌아오지 않는다. 오버레이를 닫는
+          // 위 두 단계는 그대로 두므로(Radix의 `defaultPrevented` 계약도 그대로),
+          // 입력칸 밖에서 누른 Escape는 예전과 똑같이 선택을 해제한다.
+          if (isTextEntry(e.target)) return
           selectTask(null)
           return
         }

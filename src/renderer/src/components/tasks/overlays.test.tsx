@@ -25,16 +25,20 @@ import i18n from '../../i18n'
 import { toLocalDateString } from '../../../../shared/date'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useStore } from '../../store/useStore'
+import { AddTask } from './AddTask'
 import { DueDatePicker } from './DueDatePicker'
 import { PriorityMenu } from './PriorityMenu'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
+import { SubtaskList } from './SubtaskList'
 import { TagPicker } from './TagPicker'
 import { TaskContextMenu } from './TaskContextMenu'
 import { TaskItem } from './TaskItem'
 import { TaskMoreMenu } from './TaskMoreMenu'
 import { QuickAdd } from '../common/QuickAdd'
+import { UndoToast } from '../common/UndoToast'
+import { BatchBar } from './BatchBar'
 
 beforeAll(async () => {
   // jsdom의 navigator.language는 en-US라 초기 언어가 흔들린다 — 한국어로 고정.
@@ -67,7 +71,12 @@ const STORE_KEYS = [
   'removeTask',
   'toggleTask',
   'popUndo',
-  'setShowAddTask'
+  'setShowAddTask',
+  // 아래 셋은 배치 바 / 되돌리기 토스트 차선 테스트가 쓴다 — 되돌리지 않으면
+  // 뒤 테스트가 batchMode:true를 물려받아 TaskItem이 다른 분기를 그린다.
+  'batchMode',
+  'batchSelectedIds',
+  'undoStack'
 ] as const
 let storeSnapshot: Record<string, unknown>
 
@@ -313,6 +322,50 @@ describe('ui 프리미티브 — 프로젝트 규칙', () => {
 
     expect(contentClick).toHaveBeenCalled()
     expect(rowClick).not.toHaveBeenCalled()
+  })
+
+  // Tailwind 스페이싱 한 칸 = 4px. jsdom은 Tailwind를 물리지 않아 실제 좌표가
+  // 전부 0이므로, 앵커는 클래스에서 읽어 px로 환산한다.
+  const bottomPx = (el: HTMLElement): number => {
+    const m = el.className.match(/(?:^|\s)bottom-(\d+)(?:\s|$)/)
+    if (!m) throw new Error(`bottom-* 앵커가 없다: ${el.className}`)
+    return Number(m[1]) * 4
+  }
+
+  it('일괄 바가 되돌리기 토스트의 하단 차선을 비켜 앉는다', () => {
+    // Regression: 배치 모드에서 단건 삭제(행 우클릭 삭제 / 선택된 행에서
+    // Backspace)를 하면 UndoToast가 5초간 뜬다 — batchComplete·batchDelete·
+    // batchMove만 스스로 batchMode를 끄므로 단건 경로에서는 둘이 동시에 산다.
+    // 둘 다 `fixed bottom-* left-1/2 -translate-x-1/2`로 같은 자리를 다퉜고,
+    // 사이에 stacking context가 없어 z-90인 토스트가 바(z-50) 위로 올라가
+    // '이동'·'우선순위'를 덮고 클릭까지 가로챘다. z를 올려 바를 위로 세우는
+    // 건 답이 아니다 — 바가 훨씬 넓어 토스트가 통째로 숨고 방금 지운 할일의
+    // 되돌리기가 사라진다. 그래서 자리를 비킨다.
+    useStore.setState({
+      batchMode: true,
+      batchSelectedIds: ['task-1'],
+      undoStack: [
+        { type: 'deleteTask', data: {}, description: '"장보기" 삭제됨', timestamp: 1 }
+      ] as never
+    })
+    const bar = render(<BatchBar />).container.firstElementChild as HTMLElement
+    const toast = render(<UndoToast />).container.firstElementChild as HTMLElement
+    expect(bar).toBeTruthy()
+    expect(toast).toBeTruthy()
+
+    // 전제 — 가로 중앙 고정이라 둘의 x 범위는 반드시 겹친다. 세로로 갈라놓는
+    // 것 말고는 겹침을 피할 방법이 없다.
+    for (const el of [bar, toast]) {
+      expect(el.className).toContain('fixed')
+      expect(el.className).toContain('left-1/2')
+      expect(el.className).toContain('-translate-x-1/2')
+    }
+
+    // 토스트 카드 높이는 py-3(12+12) + 한 줄 20px = 44px, 제목이 길어 두 줄로
+    // 접히면 ~64px. 바는 그 띠를 넘어선 자리에 앉아야 한다. 어느 쪽 앵커가
+    // 나중에 움직여도(토스트를 올리는 것도 포함) 여기서 잡힌다.
+    const TOAST_BAND = 64
+    expect(bottomPx(bar)).toBeGreaterThanOrEqual(bottomPx(toast) + TOAST_BAND)
   })
 
   it('다이얼로그의 모서리 지정을 호출처가 이길 수 있다', async () => {
@@ -1186,5 +1239,71 @@ describe('할일 드래그 — 드래그와 드롭의 effect가 맞는가', () =
     fireEvent.dragOver(row, { dataTransfer: dt })
     // 'copy' vs 'move'로 갈리면 브라우저가 드롭을 거부한다.
     expect(dt.effectAllowed).toBe(dt.dropEffect)
+  })
+})
+
+/**
+ * Regression: 진단 #39 — 입력칸에서 누른 Escape가 상세 패널까지 닫았다.
+ * Found by /qa on 2026-09-25
+ *
+ * 손으로 쓴 onKeyDown(AddTask·SubtaskList·Sidebar·HabitTracker)은 Escape를 자기
+ * 몫으로 처리하면서 preventDefault를 걸지 않는다. 그래서 window 핸들러의
+ * defaultPrevented 가드가 안 걸리고, 그때 그 핸들러가 이미 showAddTask를
+ * 내려놓은 뒤라 Escape 체인이 한 칸 더 내려가 selectTask(null)까지 갔다 —
+ * App.tsx가 `selectedTaskId`를 보고 TaskDetail을 언마운트한다.
+ *
+ * userEvent가 아니라 fireEvent로 보낸다: 실제 상황과 같게 **입력칸에서** 올라온
+ * Escape여야 한다(포커스가 아니라 이벤트 target이 판정 기준이다).
+ */
+describe('입력칸에서 누른 Escape', () => {
+  it('할일 추가칸을 닫을 뿐, 열려 있던 상세 패널을 함께 닫지 않는다', () => {
+    useStore.setState({ selectedTaskId: 'task-1', showAddTask: true, showQuickAdd: false })
+    function Harness(): React.JSX.Element | null {
+      useKeyboardShortcuts()
+      const showAddTask = useStore((s) => s.showAddTask)
+      const setShowAddTask = useStore((s) => s.setShowAddTask)
+      // TaskList가 AddTask를 다는 방식 그대로 — onClose가 스토어 플래그를 내린다.
+      return showAddTask ? <AddTask onClose={() => setShowAddTask(false)} /> : null
+    }
+    const { container } = render(<Harness />)
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(useStore.getState().showAddTask).toBe(false)
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+
+  it('하위작업 입력칸에서는 글자만 지우고 상세 패널을 살려 둔다', () => {
+    useStore.setState({
+      selectedTaskId: 'task-1',
+      showAddTask: false,
+      showQuickAdd: false,
+      tasks: [] as never
+    })
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <SubtaskList taskId="task-1" />
+      </>
+    )
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '초안 쓰기' } })
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    // 글자만 지우려던 사용자가 작업하던 패널을 통째로 잃었다.
+    expect(input.value).toBe('')
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+
+  it('입력칸 밖에서 누르면 예전처럼 선택을 해제한다', () => {
+    // 반대쪽 못. 가드를 넓게 잡아 Escape가 아무것도 안 하게 되면 이게 깨진다.
+    useStore.setState({ selectedTaskId: 'task-1', showAddTask: false, showQuickAdd: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    expect(useStore.getState().selectedTaskId).toBe(null)
   })
 })
