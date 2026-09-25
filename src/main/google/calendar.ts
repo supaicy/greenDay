@@ -28,13 +28,53 @@ export interface GoogleCalendar {
   summary: string
 }
 
-function classify(status: number): GoogleApiError['code'] {
+/**
+ * 구글은 **할당량 초과도 403으로 알린다** — `usageLimits` 도메인의
+ * rateLimitExceeded·userRateLimitExceeded·dailyLimitExceeded·quotaExceeded.
+ *
+ * 상태 코드만 보면 "이 캘린더는 우리 범위 밖이다"(거부)와 "잠깐 너무 자주 불렀다"
+ * (불통)가 같은 값이 된다. 그러면 `getCalendar`가 둘 다 null로 접고,
+ * `ensureAppCalendar`가 그것을 "캘린더가 사라졌다"로 읽어 **`Greenday` 캘린더를
+ * 하나 더 만들고 syncState를 비운다.** 목록 API는 `calendar.app.created` 범위에
+ * 없으므로 버려진 캘린더는 앱이 다시 찾지도 못한다.
+ *
+ * OAuth 클라이언트가 빌드에 박혀 있어 할당량은 모든 사용자가 한 프로젝트에서
+ * 나눠 쓴다 — 한도에 한 번 걸리면 그 순간 동기화하던 사람 전부가 같은 일을 당한다.
+ *
+ * 그래서 403은 **본문의 reason으로 갈라야** 한다. CLAUDE.md가 라이선스에 대해
+ * 이미 적어 둔 규칙과 같다: "거부와 불통을 뭉치지 말 것 — 상태 코드만으로는
+ * 절대 닫지 않는다."
+ */
+const RATE_LIMIT_REASONS = new Set([
+  'rateLimitExceeded',
+  'userRateLimitExceeded',
+  'dailyLimitExceeded',
+  'quotaExceeded'
+])
+
+function classify(status: number, reasons: string[] = []): GoogleApiError['code'] {
   if (status === 401) return 'unauthorized'
-  if (status === 403) return 'forbidden'
+  if (status === 403) return reasons.some((r) => RATE_LIMIT_REASONS.has(r)) ? 'rate_limit' : 'forbidden'
   if (status === 404) return 'not_found'
   if (status === 409 || status === 412) return 'conflict'
   if (status === 429) return 'rate_limit'
   return 'server'
+}
+
+/**
+ * 오류 본문의 `error.errors[].reason`만 꺼낸다. 본문이 JSON이 아니거나(프록시·CDN이
+ * 가로챈 응답) 형태가 다르면 빈 배열 — 그때는 지금까지처럼 상태 코드로만 판단한다.
+ * 본문 자체는 절대 메시지에 싣지 않는다(토큰이 섞여 나갈 수 있다).
+ */
+async function reasonsOf(response: Response): Promise<string[]> {
+  try {
+    const payload = (await response.json()) as { error?: { errors?: { reason?: unknown }[] } }
+    const errors = payload?.error?.errors
+    if (!Array.isArray(errors)) return []
+    return errors.map((entry) => (typeof entry?.reason === 'string' ? entry.reason : '')).filter(Boolean)
+  } catch {
+    return []
+  }
 }
 
 function messageFor(code: GoogleApiError['code'], status: number): string {
@@ -169,6 +209,9 @@ export function googleToEvent(raw: Record<string, unknown>): CalendarEvent | nul
   }
 }
 
+/** 요청 하나의 상한. 이유는 `caldav/client.ts`의 같은 상수에 적어 두었다. */
+const REQUEST_TIMEOUT_MS = 30_000
+
 export class GoogleCalendarClient {
   private readonly accessToken: string
   private readonly fetchImpl: FetchLike
@@ -187,7 +230,11 @@ export class GoogleCalendarClient {
           Authorization: `Bearer ${this.accessToken}`,
           'Content-Type': 'application/json',
           ...(init.headers as Record<string, string> | undefined)
-        }
+        },
+        // 상한 없이는 응답하지 않는 네트워크에서 `google:sync-now`가 undici 기본값
+        // (5분)까지 매달리고, 설정 패널의 버튼이 그동안 busy로 잠긴 채 남는다.
+        // 동기화는 일정 하나마다 한 번씩 부르므로 그 곱만큼 늘어난다.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       })
     } catch (cause) {
       const error = new GoogleApiError(0, '구글 서버에 연결하지 못했습니다.', 'network')
@@ -195,7 +242,7 @@ export class GoogleCalendarClient {
       throw error
     }
     if (!response.ok) {
-      const code = classify(response.status)
+      const code = classify(response.status, await reasonsOf(response))
       throw new GoogleApiError(response.status, messageFor(code, response.status), code)
     }
     return response
