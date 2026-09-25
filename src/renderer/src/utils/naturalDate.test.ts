@@ -135,4 +135,54 @@ describe('parseNaturalDateTime', () => {
       expect(parseNaturalDateTime('tomorrow at 5pm call')?.consumed).toBe(3)
     })
   })
+
+  // Regression: 진단 2.1 — 프로토타입 키가 요일 표 조회를 통과해 앱을 언마운트시켰다
+  // Found by /qa on 2026-09-25
+  // Report: docs/reports/2026-09-25-전체-진단.html
+  describe('프로토타입 체인 키 (앱 전체 크래시 회귀)', () => {
+    // 객체 리터럴은 Object.prototype을 상속하므로 MAP['constructor']가 함수를 돌려준다.
+    // 그 값이 NEXT_DAY_FN의 인덱스로 들어가 undefined(today) → TypeError가 됐고,
+    // 파싱이 useEffect에서 매 타이핑마다 돌기 때문에 글자를 치는 도중 창이 비었다.
+    const PROTO_KEYS = [
+      'constructor',
+      'toString',
+      'valueOf',
+      'hasOwnProperty',
+      'isPrototypeOf',
+      'propertyIsEnumerable',
+      'toLocaleString',
+      '__proto__',
+      '__defineGetter__',
+      '__defineSetter__',
+      '__lookupGetter__',
+      '__lookupSetter__'
+    ]
+
+    it.each(PROTO_KEYS)('"%s" 단독 입력이 던지지 않는다', (key) => {
+      expect(() => parseNaturalDateTime(key)).not.toThrow()
+      expect(parseNaturalDateTime(key)).toBeNull()
+    })
+
+    it.each(PROTO_KEYS)('"%s"로 시작하는 할일 제목이 던지지 않는다', (key) => {
+      expect(() => parseNaturalDateTime(`${key} 장보기`)).not.toThrow()
+    })
+
+    it.each(PROTO_KEYS)('한글 주간 접두사 + "%s"가 던지지 않는다', (key) => {
+      for (const prefix of ['다음주 ', '이번 ', '이번주 ']) {
+        expect(() => parseNaturalDateTime(prefix + key)).not.toThrow()
+      }
+    })
+
+    it.each(PROTO_KEYS)('영어 주간 접두사 + "%s"가 던지지 않는다', (key) => {
+      for (const prefix of ['next ', 'this ']) {
+        expect(() => parseNaturalDateTime(prefix + key)).not.toThrow()
+      }
+    })
+
+    it('정상 요일 파싱은 그대로 동작한다', () => {
+      // 2026-03-25는 수요일. 표를 프로토타입 없는 객체로 바꿔도 조회는 같아야 한다.
+      expect(parseNaturalDateTime('금요일 회의')?.date).toBe('2026-03-27')
+      expect(parseNaturalDateTime('friday meeting')?.date).toBe('2026-03-27')
+    })
+  })
 })

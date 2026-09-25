@@ -14,7 +14,27 @@ import {
 } from 'date-fns'
 import i18n from '../i18n'
 
-const DAY_MAP: Record<string, number> = {
+/**
+ * **사용자 입력으로 조회하는 표는 프로토타입이 없어야 한다.**
+ *
+ * 객체 리터럴은 `Object.prototype`을 상속하므로 `MAP['constructor']`가
+ * `undefined`가 아니라 **함수**를 돌려준다. 아래 조회들은 전부
+ * `!== undefined`로 가드한 뒤 그 값을 `NEXT_DAY_FN`의 인덱스로 쓰는데,
+ * 함수를 인덱스로 넣으면 `undefined(today)`가 되어 TypeError가 난다.
+ *
+ * 그 예외는 AddTask·QuickAdd의 `useEffect` 안에서 **글자를 칠 때마다** 터지고,
+ * 렌더러에 ErrorBoundary가 생기기 전까지는 앱 전체를 언마운트시켰다.
+ * 즉 "constructor"로 시작하는 할일을 적으려던 사용자는 빈 창을 보게 됐다.
+ * (`toString`·`valueOf`·`__proto__` 등 12개 키가 모두 같았다.)
+ *
+ * 호출처마다 `Object.hasOwn`을 붙이는 대신 표를 한 번 막는다 — 나중에 조회를
+ * 한 줄 더 추가하는 사람이 가드를 잊어도 안전하다.
+ */
+function lookupTable(entries: Record<string, number>): Record<string, number> {
+  return Object.assign(Object.create(null) as Record<string, number>, entries)
+}
+
+const DAY_MAP = lookupTable({
   일요일: 0,
   일: 0,
   월요일: 1,
@@ -29,11 +49,11 @@ const DAY_MAP: Record<string, number> = {
   금: 5,
   토요일: 6,
   토: 6
-}
+})
 
 // 영어 요일. 한국어 표와 나란히 두고 두 언어를 항상 같이 인식한다 — UI 언어를
 // 영어로 두고도 "내일"이라 적는 사용자가 있고, 그 반대도 있다.
-const EN_DAY_MAP: Record<string, number> = {
+const EN_DAY_MAP = lookupTable({
   sunday: 0,
   sun: 0,
   monday: 1,
@@ -51,7 +71,7 @@ const EN_DAY_MAP: Record<string, number> = {
   fri: 5,
   saturday: 6,
   sat: 6
-}
+})
 
 const EN_MONTHS = [
   'jan',
