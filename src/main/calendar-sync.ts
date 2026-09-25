@@ -130,7 +130,44 @@ export async function runSync(options: SyncOptions): Promise<SyncResult> {
         result.deleted++
         continue
       }
-      result.failures.push({ taskId: item.taskId, message: messageOf(error) })
+      if (!isConflict(error)) {
+        result.failures.push({ taskId: item.taskId, message: messageOf(error) })
+        continue
+      }
+      // **삭제도 낡은 etag 하나로 영구 실패가 된다.**
+      //
+      // 사용자가 Calendar.app에서 그 일정을 한 번 건드리면 서버 etag가 바뀌는데
+      // 우리 상태에는 옛 값이 남는다. 그 뒤 할일을 지우면 DELETE의 `If-Match`가
+      // 412를 받고, 예전에는 여기서 실패로만 세고 `state[taskId]`를 **그대로
+      // 남겼다** — 다음 회차가 같은 낡은 etag로 같은 412를 받는다. 일정은
+      // 캘린더에 영영 남고, 화면은 "다음 동기화에서 다시 시도합니다"라는 못 지킬
+      // 약속만 반복했다.
+      //
+      // 위의 생성·갱신은 이미 `adopt()`로 서버의 현재 값을 다시 읽어 복구한다.
+      // 세 루프 중 이 하나만 그 수정에서 빠져 있었다.
+      try {
+        const probe = await client.probeEvent(item.href)
+        if (probe === null) {
+          // 그 사이 사라졌다 — 우리가 원하던 결과다.
+          delete state[item.taskId]
+          result.deleted++
+          continue
+        }
+        if (probe.uid !== null && probe.uid !== eventUid(item.taskId)) {
+          // 남의 일정은 지우지 않는다. 다만 상태에서는 뺀다 — 할일은 이미 없어서
+          // 다시 시도해 봐야 같은 실패뿐이고, 남겨 두는 것이 곧 영구 재시도다.
+          // (갱신 쪽은 할일이 살아 있으므로 상태를 남기는 것이 맞다.)
+          delete state[item.taskId]
+          result.failures.push({ taskId: item.taskId, message: FOREIGN_EVENT_MESSAGE })
+          continue
+        }
+        await client.deleteEvent(item.href, probe.etag)
+        delete state[item.taskId]
+        result.deleted++
+      } catch (retryError) {
+        if (isFatal(retryError)) throw retryError
+        result.failures.push({ taskId: item.taskId, message: messageOf(retryError) })
+      }
     }
   }
 

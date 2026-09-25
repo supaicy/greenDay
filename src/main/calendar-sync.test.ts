@@ -134,14 +134,15 @@ describe('runSync — 갱신', () => {
  * 리소스에 대고 같은 412를 영원히 다시 받았다. 이제는 그 자리에서 서버의 현재
  * 값을 다시 읽어 복구한다.
  */
-describe('runSync — 충돌 복구', () => {
-  const OUR_UID = 'greenday-t1@supaicy.github.io'
+/* 충돌 복구와 삭제가 함께 쓰는 서버 대역. 삭제 루프도 같은 왕복(412 → PROPFIND
+ * → 재시도)을 하게 되면서 두 describe가 공유한다. */
+const OUR_UID = 'greenday-t1@supaicy.github.io'
 
-  const probeXml = (uid: string, etag = '"server-v9"'): string => `<?xml version="1.0" encoding="UTF-8"?>
+const probeXml = (uid: string, etag = '"server-v9"'): string => `<?xml version="1.0" encoding="UTF-8"?>
 <multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
 <response><href>/1/calendars/home/x.ics</href><propstat><prop>
-  <getetag>${etag}</getetag>
-  <C:calendar-data>BEGIN:VCALENDAR&#13;
+<getetag>${etag}</getetag>
+<C:calendar-data>BEGIN:VCALENDAR&#13;
 BEGIN:VEVENT&#13;
 UID:${uid}&#13;
 DTSTART:20260803T030000Z&#13;
@@ -149,28 +150,30 @@ END:VEVENT&#13;
 END:VCALENDAR</C:calendar-data>
 </prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>`
 
-  /** 정해 둔 응답을 순서대로 돌려주는 서버 대역. 복구는 왕복이 여러 번이라 필요하다. */
-  function scriptedServer(responses: { status?: number; body?: string; etag?: string }[]) {
-    const requests: Recorded[] = []
-    let index = 0
-    const fetchImpl: FetchLike = async (url, init) => {
-      requests.push({
-        method: String(init.method),
-        url,
-        body: init.body as string | undefined,
-        headers: (init.headers ?? {}) as Record<string, string>
-      })
-      const spec = responses[index++] ?? { status: 500 }
-      const status = spec.status ?? 207
-      const hasBody = status !== 204 && status !== 205 && status !== 304
-      return new Response(hasBody ? (spec.body ?? '') : null, {
-        status,
-        headers: spec.etag ? { etag: spec.etag } : {}
-      })
-    }
-    return { requests, client: new CalDavClient(CREDS, fetchImpl) }
+/** 정해 둔 응답을 순서대로 돌려주는 서버 대역. 복구는 왕복이 여러 번이라 필요하다. */
+function scriptedServer(responses: { status?: number; body?: string; etag?: string }[]) {
+  const requests: Recorded[] = []
+  let index = 0
+  const fetchImpl: FetchLike = async (url, init) => {
+    requests.push({
+      method: String(init.method),
+      url,
+      body: init.body as string | undefined,
+      headers: (init.headers ?? {}) as Record<string, string>
+    })
+    const spec = responses[index++] ?? { status: 500 }
+    const status = spec.status ?? 207
+    const hasBody = status !== 204 && status !== 205 && status !== 304
+    return new Response(hasBody ? (spec.body ?? '') : null, {
+      status,
+      headers: spec.etag ? { etag: spec.etag } : {}
+    })
   }
+  return { requests, client: new CalDavClient(CREDS, fetchImpl) }
+}
 
+
+describe('runSync — 충돌 복구', () => {
   it('갱신 충돌은 서버의 현재 etag를 다시 읽어 그 자리에서 복구한다', async () => {
     const changed = task({ due_date: '2026-08-09' })
     const { requests, client } = scriptedServer([
@@ -286,6 +289,80 @@ describe('runSync — 삭제', () => {
     })
     expect(requests[0].method).toBe('DELETE')
     expect(result.deleted).toBe(1)
+    expect(result.state.t1).toBeUndefined()
+  })
+
+  /**
+   * Regression: 진단 3장 #13 — 삭제만 충돌 복구 분기가 없어 영구 실패로 굳었다.
+   * Found by /qa on 2026-09-25
+   * Report: docs/reports/2026-09-25-전체-진단.html
+   *
+   * 사용자가 Calendar.app에서 그 일정을 한 번 건드리면 서버 etag가 바뀌는데 우리
+   * 상태에는 옛 값이 남는다. 그 뒤 할일을 지우면 DELETE의 If-Match가 412를 받고,
+   * 예전에는 실패로만 세고 상태를 남겨 다음 회차가 같은 412를 반복했다.
+   * 생성·갱신은 이미 adopt()로 복구하고 있었다 — 세 루프 중 이 하나만 빠져 있었다.
+   */
+  it('낡은 etag로 412를 받으면 서버의 현재 etag로 다시 지운다', async () => {
+    const { requests, client } = scriptedServer([
+      { status: 412 }, // 낡은 If-Match
+      { status: 207, body: probeXml(OUR_UID) }, // 서버의 현재 값
+      { status: 204 } // 새 etag로 다시 삭제
+    ])
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [],
+      state: { t1: entryFor(task()) },
+      now: NOW,
+      client
+    })
+
+    expect(requests.map((r) => r.method)).toEqual(['DELETE', 'PROPFIND', 'DELETE'])
+    expect(requests[2].headers['If-Match']).toBe('"server-v9"')
+    expect(result.deleted).toBe(1)
+    expect(result.failures).toHaveLength(0)
+    // 상태에서 빠져야 다음 회차가 같은 412를 다시 만들지 않는다.
+    expect(result.state.t1).toBeUndefined()
+  })
+
+  it('412 뒤 다시 보니 이미 사라졌으면 성공으로 친다', async () => {
+    const { client } = scriptedServer([
+      { status: 412 },
+      { status: 404 } // probeEvent가 없다고 답한다
+    ])
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [],
+      state: { t1: entryFor(task()) },
+      now: NOW,
+      client
+    })
+
+    expect(result.deleted).toBe(1)
+    expect(result.failures).toHaveLength(0)
+    expect(result.state.t1).toBeUndefined()
+  })
+
+  it('우리 경로에 남의 일정이 앉아 있으면 지우지 않되, 영구 재시도로 남기지도 않는다', async () => {
+    const { requests, client } = scriptedServer([
+      { status: 412 },
+      { status: 207, body: probeXml('someone-else@example.com') }
+    ])
+    const result = await runSync({
+      credentials: CREDS,
+      calendarUrl: CALENDAR,
+      tasks: [],
+      state: { t1: entryFor(task()) },
+      now: NOW,
+      client
+    })
+
+    // 두 번째 DELETE는 나가지 않는다 — 남의 일정이다.
+    expect(requests.map((r) => r.method)).toEqual(['DELETE', 'PROPFIND'])
+    expect(result.deleted).toBe(0)
+    expect(result.failures).toHaveLength(1)
+    // 할일은 이미 없으므로 상태에 남겨 두면 매 회차 같은 실패를 반복할 뿐이다.
     expect(result.state.t1).toBeUndefined()
   })
 
