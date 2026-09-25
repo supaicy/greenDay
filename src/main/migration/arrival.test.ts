@@ -147,9 +147,35 @@ describe('Keychain 거부·잠김·항목 없음 — 보호 모드', () => {
 
   it('sentinel 이 다른 값으로 풀리면(mismatch) 잠근다', () => {
     seedFromBridge()
+    // 지킬 암호문이 있어야 잠금이 의미를 갖는다 — 없으면 `applyGate`가 (옳게) 열어 둔다.
+    seedGoogleTokens()
     writeFileSync(join(tmp, SENTINEL_FILE), fakeCrypto('old').encrypt('tampered'), 'utf-8')
     const r = runArrival(deps())
     expect(r.status).toMatchObject({ sentinel: 'mismatch', secretsLocked: true })
+  })
+
+  it('지킬 암호문이 하나도 없으면 denied 여도 잠그지 않는다 — 옛 앱 안내가 막히던 버그', () => {
+    // 연동(AI·CalDAV·Google)을 하나도 안 쓴 v1.4.1 사용자: `*_enc` 가 어디에도 없고
+    // 브리지가 sentinel 만 심어 뒀다. 여기서 Keychain 을 거부하면 전에는 영구히 잠겼는데,
+    // `preserveCiphertext` 가 되살릴 암호문이 없으니 그 잠금은 아무것도 지키지 못한 채
+    // 닫는 버튼 없는 보호 모드 배너만 매 실행 띄우고 `oldAppRemovable` 을 영원히 false 로
+    // 만들었다 — 옛 haru 앱을 지워도 된다는 안내가 영영 안 뜬다.
+    seedFromBridge()
+    const r = runArrival(deps({ crypto: fakeCrypto('new-random-key') }))
+    expect(r.status).toMatchObject({ sentinel: 'denied', secretsLocked: false, lockReason: null, oldAppRemovable: true })
+    expect(secretsGate().locked).toBe(false)
+  })
+
+  it('암호문이 없으면 unavailable·mismatch 도 마찬가지로 열어 둔다', () => {
+    seedFromBridge()
+    expect(runArrival(deps({ crypto: fakeCrypto('old', false) })).status).toMatchObject({
+      sentinel: 'unavailable',
+      secretsLocked: false,
+      oldAppRemovable: true
+    })
+    _resetSecretsGateForTests()
+    writeFileSync(join(tmp, SENTINEL_FILE), fakeCrypto('old').encrypt('tampered'), 'utf-8')
+    expect(runArrival(deps()).status).toMatchObject({ sentinel: 'mismatch', secretsLocked: false, oldAppRemovable: true })
   })
 
   it('사용자가 명시적으로 풀면(재연결 뒤) 새 sentinel 을 심고 연다', () => {
@@ -199,8 +225,44 @@ describe('Google 재연결 판정', () => {
     expect(r.status.googleReconnect).toBe(true)
   })
 
+  // 첫 실행만 고치면 고친 것이 아니다 — completedBefore 분기가 다음 실행부터 답을 뒤집는다.
+  it('두 번째 실행에서도 안내가 남는다 — 잠기지 않았다고 판정을 건너뛰지 않는다', () => {
+    seedFromBridge()
+    seedGoogleTokens()
+    const unreadable = { googleTokensReadable: () => false }
+    expect(runArrival(deps(unreadable)).status.googleReconnect).toBe(true)
+    // 완료된 설치 분기(performed:false)도 첫 실행과 같은 식을 써야 한다. 한때
+    // `locked ? … : false` 라, 잠기지 않은 채 봉투만 거절된 사용자는 안내를 딱 한 번
+    // 보고(배너 dismiss 는 실행마다 초기화되는 useState 다) 그 뒤로 Google 동기화가
+    // 조용히 죽어 있었다.
+    const second = runArrival(deps(unreadable))
+    expect(second.status.performed).toBe(false)
+    expect(second.status.secretsLocked).toBe(false)
+    expect(second.status.googleReconnect).toBe(true)
+  })
+
+  // 반대쪽도 못박는다: 매 실행 조르기만 하면 정상 사용자가 닫을 수 없는 배너를 안고 산다.
+  it('토큰이 정상이면 두 번째 실행은 조용하다 — 과잉 안내 회귀 방지', () => {
+    seedFromBridge()
+    seedGoogleTokens()
+    runArrival(deps())
+    expect(runArrival(deps()).status.googleReconnect).toBe(false)
+  })
+
+  it('잠긴 두 번째 실행은 그대로 재연결 안내 — 기존 동작 유지', () => {
+    seedFromBridge()
+    seedGoogleTokens()
+    runArrival(deps({ crypto: fakeCrypto('new') }))
+    const second = runArrival(deps({ crypto: fakeCrypto('new') }))
+    expect(second.status.performed).toBe(false)
+    expect(second.status.secretsLocked).toBe(true)
+    expect(second.status.googleReconnect).toBe(true)
+  })
+
   it('토큰이 없으면 재연결을 말하지 않는다', () => {
     seedFromBridge()
+    // Google 토큰은 없지만 AI 키가 있다 — 잠글 이유(지킬 암호문)는 있는 상태다.
+    writeFileSync(join(tmp, 'ai-config.json'), JSON.stringify({ apiKey_enc: 'QUFB' }), 'utf-8')
     const r = runArrival(deps({ crypto: fakeCrypto('other') }))
     expect(r.status.secretsLocked).toBe(true)
     expect(r.status.googleReconnect).toBe(false)
@@ -246,5 +308,43 @@ describe('가장자리', () => {
     writeFileSync(join(tmp, 'ticktick-data.json'), raw, 'utf-8')
     runArrival(deps())
     expect(readFileSync(join(tmp, 'ticktick-data.json'), 'utf-8')).toBe(raw)
+  })
+})
+
+/**
+ * 배너 문구(`migration.arrival.oldAppBody`)는 "새 Greenday가 데이터를 정상적으로
+ * 읽었습니다"라고 **단언**한다. 판정이 `!locked && oldAppPresent()` 뿐이던 동안에는
+ * 한 건도 이어받지 못한 설치에서도 같은 말을 했고, 그 말을 믿은 사용자가 옛 데이터를
+ * 열 수 있던 유일한 앱을 지웠다.
+ */
+describe('옛 앱 제거 안내는 데이터를 실제로 이어받았을 때만', () => {
+  it('이어받은 데이터가 하나도 없으면(빈 userData·MAS 컨테이너) 안내하지 않는다', () => {
+    expect(runArrival(deps()).status.oldAppRemovable).toBe(false)
+  })
+
+  // initDatabase() 가 던져 `dbFailedTitle` 대화상자가 뜬 바로 그 상태다.
+  it('데이터 파일이 깨졌으면 안내하지 않는다', () => {
+    writeFileSync(join(tmp, 'ticktick-data.json'), '{ this is not json', 'utf-8')
+    expect(runArrival(deps()).status.oldAppRemovable).toBe(false)
+  })
+
+  // 첫 실행만 고치면 고친 것이 아니다 — completedBefore 분기가 다음 실행에서 다시 연다.
+  it('두 번째 실행(completedBefore)도 같은 판정을 쓴다', () => {
+    runArrival(deps())
+    const r = runArrival(deps())
+    expect(r.status.performed).toBe(false)
+    expect(r.status.oldAppRemovable).toBe(false)
+  })
+
+  // 반대쪽도 못박는다: 지나치게 닫으면 정상 이전 사용자가 옛 앱을 영영 안고 산다.
+  it('primary 가 없어도 .bak 이 읽히면 안내한다 — database.ts 가 실제로 그쪽에서 복구한다', () => {
+    writeFileSync(join(tmp, 'ticktick-data.json.bak'), JSON.stringify({ tasks: [{ id: 1 }] }), 'utf-8')
+    expect(runArrival(deps()).status.oldAppRemovable).toBe(true)
+  })
+
+  it('브리지를 거쳐 실제 데이터가 읽히면 두 실행 모두 안내한다', () => {
+    seedFromBridge()
+    expect(runArrival(deps()).status.oldAppRemovable).toBe(true)
+    expect(runArrival(deps()).status.oldAppRemovable).toBe(true)
   })
 })
