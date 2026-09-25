@@ -249,8 +249,35 @@ function bootstrap(): void {
     receiveOAuthCallback(url)
   })
 
+  /**
+   * 종료 전 마지막 플러시. **`before-quit`에도 걸어야 한다.**
+   *
+   * 예전에는 `window-all-closed`에만 걸려 있었는데, Electron은 **종료 중에는 그
+   * 이벤트를 내지 않는다**(Cmd+Q / `app.quit()` → `before-quit` → 창 닫기 →
+   * `will-quit`). 그래서 macOS의 정상 종료 경로에서 플러시가 통째로 건너뛰어졌다.
+   *
+   * 저장은 300ms 디바운스이고 쓰기가 실패하면 최대 30초까지 재시도 대기열에
+   * 머무는데, 그동안 IPC는 렌더러에 이미 "성공"이라고 답한 상태다. 즉 방금 적은
+   * 제목·노트·마감일이 경고 한 줄 없이 사라질 수 있었다. 업데이터의
+   * `autoInstallOnAppQuit` 재시작도 같은 경로를 탄다.
+   *
+   * `flushSave()`는 멱등이라(이미 확정됐으면 바로 true) 두 경로에 다 걸어도 된다 —
+   * Windows·Linux의 창 닫기 경로는 `window-all-closed`가 계속 맡는다.
+   *
+   * 판정을 버리지 않는다. `closeDatabase()`가 boolean을 돌려주는 이유가 바로
+   * "마지막 편집을 잃은 종료와 정상 종료를 구별하라"는 것이었는데(database.ts),
+   * 아무도 그 값을 읽지 않고 있었다. 종료를 막지는 않는다 — 못 나가게 가두는
+   * 편이 더 나쁘다 — 대신 조용히 잃지는 않게 알린다.
+   */
+  const flushBeforeExit = (): void => {
+    if (closeDatabase()) return
+    dialog.showErrorBox(uiStrings().quitFlushFailedTitle, uiStrings().quitFlushFailedBody)
+  }
+
+  app.on('before-quit', flushBeforeExit)
+
   app.on('window-all-closed', () => {
-    closeDatabase()
+    flushBeforeExit()
     if (process.platform !== 'darwin') {
       app.quit()
     }

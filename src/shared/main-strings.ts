@@ -18,6 +18,9 @@ interface MainStrings {
   /** 데이터 파일을 못 읽었을 때. 렌더러가 아직 없으므로 메인이 직접 띄운다. */
   dbFailedTitle: string
   dbFailedBody: string
+  /** 종료 직전 마지막 플러시가 실패했을 때. 조용히 잃는 것보다 알리는 편이 낫다. */
+  quitFlushFailedTitle: string
+  quitFlushFailedBody: string
   /** 새 번들 ID 첫 실행 — sentinel을 열기 전에 띄우는 Keychain 안내 (migration/arrival.ts). */
   keychainNoticeTitle: string
   keychainNoticeBody: string
@@ -33,6 +36,9 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
     dbFailedTitle: '데이터를 읽지 못했습니다',
     dbFailedBody:
       '저장된 할일 파일을 열 수 없어 빈 상태로 시작합니다. 원본은 같은 폴더에 .corrupt- 사본으로 남겨 뒀고, 이번 실행에서는 아무것도 저장하지 않습니다 — 앱을 닫아도 원본은 그대로입니다.',
+    quitFlushFailedTitle: '마지막 변경을 저장하지 못했습니다',
+    quitFlushFailedBody:
+      '앱을 닫기 전에 저장을 시도했지만 디스크에 쓰지 못했습니다. 방금 하신 변경 일부가 다음 실행에서 보이지 않을 수 있습니다.\n\n디스크 여유 공간과 폴더 권한을 확인해 주세요.',
     keychainNoticeTitle: '잠시 후 macOS가 키체인 접근을 물어봅니다',
     keychainNoticeBody:
       'Greenday가 새 앱으로 바뀌어 처음 실행됐습니다. 예전 앱이 키체인에 보관해 둔 AI 키·캘린더 앱 암호·Google 연결을 그대로 이어받으려면 "항상 허용"을 눌러 주세요.\n\n거부해도 할 일과 설정은 그대로입니다 — 그 경우 연동만 다시 연결하면 되고, 저장돼 있던 값은 지우지 않고 남겨 둡니다.',
@@ -46,6 +52,9 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
     dbFailedTitle: 'Could not read your data',
     dbFailedBody:
       'The saved task file could not be opened, so the app is starting empty. A .corrupt- copy of the original was saved next to it, and nothing will be written this session — closing the app leaves your original untouched.',
+    quitFlushFailedTitle: 'Could not save your last changes',
+    quitFlushFailedBody:
+      'The app tried to save before closing but could not write to disk. Some of what you just changed may be missing next time you open it.\n\nCheck your free disk space and the folder permissions.',
     keychainNoticeTitle: 'macOS is about to ask for Keychain access',
     keychainNoticeBody:
       'This is the first launch of the new Greenday app. To carry over the AI key, calendar app password and Google connection the previous app kept in your Keychain, choose "Always Allow".\n\nIf you deny, your tasks and settings are unaffected — you would only need to reconnect those integrations, and the stored values are kept, not deleted.',
