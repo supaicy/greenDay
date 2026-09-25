@@ -402,6 +402,7 @@
     "shortcuts": "Keyboard shortcuts",
     "version": "Version",
     "checkingUpdate": "Checking for updates…",
+    "updateCheckFailed": "Update check failed — check your network connection",
     "upToDate": "You're up to date",
     "updateViaAppStore": "Updates are handled by the Mac App Store",
     "updateAvailable": "Update available",

@@ -203,8 +203,43 @@ function bootstrap(): void {
         }
       })
 
-      autoUpdater.checkForUpdates()
-      const updateInterval = setInterval(() => autoUpdater.checkForUpdates(), 60 * 60 * 1000)
+      /**
+       * **'error' 리스너는 선택이 아니다** — 없으면 오프라인 실행이 네이티브
+       * 크래시 창을 띄운다.
+       *
+       * `autoUpdater`는 EventEmitter다. electron-updater는 확인 실패를
+       * `emit('error', …)`로 알리는데(`out/AppUpdater.js`의 `checkForUpdates()`
+       * catch 절), EventEmitter 규약상 'error'는 **리스너가 하나도 없으면 emit
+       * 자체가 던진다**. 그 예외가 catch 절 밖으로 나가 `checkForUpdates()`가
+       * 돌려준 프라미스를 거절시키고, 그 프라미스를 버리면 처리되지 않은
+       * rejection이 된다. Electron 기본 핸들러는 그걸 "A JavaScript error
+       * occurred in the main process" 모달로 띄운다 — 오프라인·프록시·릴리스 피드
+       * 4xx면 실행할 때 한 번, 그 뒤 한 시간마다 한 번씩.
+       *
+       * 다운로드 쪽은 라이브러리가 `dispatchError`를 try/catch로 감싸 둬 안 터지고
+       * (같은 파일의 `downloadUpdate`), **확인 쪽만 맨몸이다** — 그런데 우리가
+       * 사용자 모르게 자동으로 부르는 것이 바로 그 확인이다.
+       *
+       * 화면도 같이 고친다. `updateChecked`는 available/not-available 두 IPC로만
+       * 참이 되므로(App.tsx), 실패를 안 알리면 설정의 '버전 정보'가 "업데이트 확인
+       * 중…"에서 영원히 멈춘다. 라이브러리 오류 문구는 렌더러로 넘기지 않는다 —
+       * 사용자 문구는 i18n에 있고, 원문은 여기 로그에 남는 편이 쓸모 있다.
+       */
+      autoUpdater.on('error', (err) => {
+        console.error('[updater] 업데이트 확인 실패', err)
+        const wins = BrowserWindow.getAllWindows()
+        if (wins.length > 0) {
+          wins[0].webContents.send('update-error')
+        }
+      })
+
+      // 프라미스를 끊어 준다. 위 리스너가 이미 사용자에게 알렸으므로 여기서 더 할
+      // 일은 없지만, 그냥 버리면 그 자체가 처리되지 않은 rejection이 된다.
+      const checkForUpdates = (): void => {
+        void autoUpdater.checkForUpdates().catch(() => {})
+      }
+      checkForUpdates()
+      const updateInterval = setInterval(checkForUpdates, 60 * 60 * 1000)
       app.on('will-quit', () => clearInterval(updateInterval))
     }
   })

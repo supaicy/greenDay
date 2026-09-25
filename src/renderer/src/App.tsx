@@ -67,10 +67,16 @@ export default function App() {
     void useStore.getState().aiCheckConnection()
     // 자동 업데이트 이벤트 수신 (electron-updater에서 push)
     const cleanupUpdate = window.api.onUpdateAvailable?.((info) => {
-      useStore.setState({ updateAvailable: info, updateChecked: true })
+      useStore.setState({ updateAvailable: info, updateChecked: true, updateFailed: false })
     })
     const cleanupNotAvailable = window.api.onUpdateNotAvailable?.(() => {
-      useStore.setState({ updateChecked: true })
+      useStore.setState({ updateChecked: true, updateFailed: false })
+    })
+    // 실패도 "확인이 끝났다"이다 — `updateChecked`를 안 올리면 설정이 "업데이트
+    // 확인 중…"에 영영 갇힌다. 그렇다고 '최신 버전'은 아니라서 깃발을 갈라 둔다.
+    // 한 시간 뒤 재시도가 성공하면 위 두 핸들러가 이 깃발을 도로 내린다.
+    const cleanupUpdateError = window.api.onUpdateError?.(() => {
+      useStore.setState({ updateChecked: true, updateFailed: true })
     })
     const cleanupProgress = window.api.onUpdateProgress?.((percent) => {
       useStore.setState({ updateDownloadProgress: percent })
@@ -88,6 +94,7 @@ export default function App() {
       cleanup?.()
       cleanupUpdate?.()
       cleanupNotAvailable?.()
+      cleanupUpdateError?.()
       cleanupProgress?.()
       cleanupDownloaded?.()
     }

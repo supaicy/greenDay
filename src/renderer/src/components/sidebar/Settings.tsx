@@ -238,6 +238,7 @@ export function Settings() {
   const exportData = useStore((s) => s.exportData)
   const updateAvailable = useStore((s) => s.updateAvailable)
   const updateChecked = useStore((s) => s.updateChecked)
+  const updateFailed = useStore((s) => s.updateFailed)
   const updateDownloadProgress = useStore((s) => s.updateDownloadProgress)
   const updateReady = useStore((s) => s.updateReady)
   const aiConfig = useStore((s) => s.aiConfig)
@@ -709,6 +710,14 @@ export function Settings() {
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className={successText(isDark)} />
                   <span className={`text-xs ${labelText(isDark)}`}>{t('settings.updateViaAppStore')}</span>
+                </div>
+              ) : updateFailed ? (
+                // **실패 가지가 '최신' 가지보다 먼저다.** 뒤에 두면 확인이 실패한
+                // 상태가 `updateChecked && !updateAvailable`에 먼저 걸려 "최신
+                // 버전입니다"라고 거짓말한다 — 버전을 한 번도 못 물어본 채로.
+                <div className="flex items-center gap-1.5 mt-1">
+                  <AlertTriangle size={13} className={errorText(isDark)} />
+                  <span className={`text-xs ${errorText(isDark)}`}>{t('settings.updateCheckFailed')}</span>
                 </div>
               ) : updateChecked && !updateAvailable ? (
                 <div className="flex items-center gap-1.5 mt-1">

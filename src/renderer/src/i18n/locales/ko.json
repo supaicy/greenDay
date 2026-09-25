@@ -402,6 +402,7 @@
     "shortcuts": "키보드 단축키",
     "version": "버전 정보",
     "checkingUpdate": "업데이트 확인 중…",
+    "updateCheckFailed": "업데이트 확인 실패 — 네트워크 연결을 확인하세요",
     "upToDate": "최신 버전입니다",
     "updateViaAppStore": "Mac App Store를 통해 자동으로 업데이트됩니다",
     "updateAvailable": "새 버전 사용 가능",
