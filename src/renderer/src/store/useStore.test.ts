@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useStore } from './useStore'
-import type { Task } from '../types'
+import type { Task, AiMessage } from '../types'
+import { getScheduledForOccurrence } from '../utils/scheduledTime'
 
 /**
  * 2026-08-05 검증에서 고친 스토어 동작을 고정한다.
@@ -47,7 +48,10 @@ beforeEach(() => {
       reorderTasks: vi.fn(),
       toggleHabitLog: vi.fn(),
       deleteTask: vi.fn(),
-      restoreTask: vi.fn()
+      restoreTask: vi.fn(),
+      // AI 액션 경로가 대화를 디스크에 적는지 보는 테스트가 쓴다.
+      aiSaveHistory: vi.fn(),
+      aiInterpretAction: vi.fn()
     }
   })
   useStore.setState({ tasks: [], score: { total: 10, events: [], taskNet: {} }, batchSelectedIds: [], batchMode: false })
@@ -263,6 +267,23 @@ describe('reorderTasks', () => {
     useStore.setState({ tasks: [task({ id: 'a', sortOrder: 5 }), task({ id: 'x', sortOrder: 5 })] })
     await useStore.getState().reorderTasks(['a'])
     expect(useStore.getState().tasks.map((t) => t.id)).toEqual(['a', 'x'])
+  })
+
+  // sortOrder는 **리스트별** 카운터라 리스트마다 1부터 센다. '전체'·'오늘'·'다음 7일'·
+  // 태그처럼 리스트를 가로지르는 뷰에는 같은 값을 쥔 행이 여럿 보이는데, 동점 슬롯을
+  // 그대로 되돌려 주면 마지막 안정 정렬이 이전 배열 순서를 지켜 드롭이 통째로 버려졌다 —
+  // 끌어다 놓은 항목이 제자리로 튕기고, 다시 끌어도 결과가 한 글자도 안 바뀌었다.
+  it('honours the drop across lists whose per-list counters tie', async () => {
+    useStore.setState({
+      tasks: [
+        task({ id: 'a1', listId: 'A', sortOrder: 1 }),
+        task({ id: 'a2', listId: 'A', sortOrder: 2 }),
+        task({ id: 'b1', listId: 'B', sortOrder: 1 }),
+        task({ id: 'b2', listId: 'B', sortOrder: 2 })
+      ]
+    })
+    await useStore.getState().reorderTasks(['b1', 'a1', 'a2', 'b2'])
+    expect(useStore.getState().tasks.map((t) => t.id)).toEqual(['b1', 'a1', 'a2', 'b2'])
   })
 })
 
@@ -516,6 +537,91 @@ describe('완료 시 미래 회차 오버라이드 인계', () => {
     await useStore.getState().toggleTask('r2')
     const spawned = useStore.getState().tasks.find((t) => !t.completed)
     expect(spawned?.scheduledOverrides ?? null).toBeNull()
+  })
+})
+
+// 캘린더에서 2026-09-27 회차만 14시로 끌어다 놓고 일괄 완료하면, 넘긴 키가
+// 완료본에도 남아 그날 같은 블록이 둘 겹쳤다(완료본 + 새 인스턴스). 캘린더는
+// deletedAt만 거르고 completed는 거르지 않으므로 둘 다 그려진다. 하나씩 완료하는
+// 경로는 원래 이 정리를 하고 있었다 — 두 경로가 같은 결과를 내는지를 못 박는다.
+describe('일괄 완료 — 넘긴 미래 회차는 완료본에서 빠진다', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 8, 25, 12, 0, 0))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const moved = (): Task =>
+    task({
+      id: 'r',
+      title: '운동',
+      isRecurring: true,
+      recurringPattern: 'daily',
+      dueDate: '2026-09-25',
+      scheduledStart: '2026-09-25T09:00:00',
+      scheduledEnd: '2026-09-25T10:00:00',
+      // 2026-09-27 회차만 14시로 옮겨둔 상태
+      scheduledOverrides: { '2026-09-27': { start: '2026-09-27T14:00:00', end: '2026-09-27T15:00:00' } }
+    })
+
+  /** 그날 그 제목으로 캘린더에 그려질 블록 수 — WeeklyCalendar와 같은 규칙(deletedAt만 거른다). */
+  const blocksOn = (title: string, date: string): number =>
+    useStore.getState().tasks.filter((t) => !t.deletedAt && t.title === title && getScheduledForOccurrence(t, date))
+      .length
+
+  it('하나씩 완료한 것과 일괄 완료가 같은 수의 블록을 남긴다', async () => {
+    useStore.setState({ tasks: [moved()] })
+    await useStore.getState().toggleTask('r')
+    const one = blocksOn('운동', '2026-09-27')
+
+    useStore.setState({ tasks: [moved()], batchSelectedIds: ['r'], batchMode: true })
+    await useStore.getState().batchComplete()
+    expect(blocksOn('운동', '2026-09-27')).toBe(one)
+    expect(blocksOn('운동', '2026-09-27')).toBe(1)
+  })
+
+  it('완료본에는 넘긴 키가 남지 않는다', async () => {
+    useStore.setState({ tasks: [moved()], batchSelectedIds: ['r'], batchMode: true })
+    await useStore.getState().batchComplete()
+    const done = useStore.getState().tasks.find((t) => t.completed)
+    expect(done?.scheduledOverrides ?? null).toBeNull()
+  })
+
+  // 짝짓기가 어긋나면 A의 오버라이드를 B에서 빼게 된다. 스폰이 안 생기는 항목이
+  // 섞여 있어도 인덱스가 밀리지 않는지 함께 본다.
+  it('비반복이 섞인 일괄 완료에서도 시리즈마다 자기 것만 빠진다', async () => {
+    useStore.setState({
+      tasks: [
+        task({
+          id: 'plain',
+          title: '장보기',
+          scheduledStart: '2026-09-27T11:00:00',
+          scheduledEnd: '2026-09-27T11:30:00'
+        }),
+        moved(),
+        task({
+          id: 'b',
+          title: '독서',
+          isRecurring: true,
+          recurringPattern: 'daily',
+          dueDate: '2026-09-25',
+          scheduledStart: '2026-09-25T20:00:00',
+          scheduledEnd: '2026-09-25T21:00:00',
+          scheduledOverrides: { '2026-09-28': { start: '2026-09-28T07:00:00', end: '2026-09-28T08:00:00' } }
+        })
+      ],
+      batchSelectedIds: ['plain', 'r', 'b'],
+      batchMode: true
+    })
+    await useStore.getState().batchComplete()
+
+    expect(blocksOn('운동', '2026-09-27')).toBe(1)
+    expect(blocksOn('독서', '2026-09-28')).toBe(1)
+    expect(blocksOn('장보기', '2026-09-27')).toBe(1)
+    expect(useStore.getState().tasks.find((t) => t.id === 'r')?.scheduledOverrides ?? null).toBeNull()
+    expect(useStore.getState().tasks.find((t) => t.id === 'b')?.scheduledOverrides ?? null).toBeNull()
   })
 })
 
@@ -1290,5 +1396,161 @@ describe('반복 스폰 — 내용이 다음 회차로 넘어간다', () => {
     await useStore.getState().toggleTask('shop')
     expect(spawned()?.dueDate).toBe('2026-08-16')
     expect(kids().map((k) => k.dueDate)).toEqual([null])
+  })
+})
+
+/**
+ * 버려진 AI 스트림이 다음 답변을 오염시키고 끊었다 (2026-09-25 진단 #18).
+ *
+ * `ai:stream-*`는 창에 채널이 하나뿐인 브로드캐스트고, 렌더러가 리스너를 떼도
+ * main의 `streamChat`은 끝까지 돈다(취소 경로가 없다). 두 스트림이 겹치는 문은
+ * 정확히 하나다 — `setShowAiChat(false)`가 답변 도중 리스너를 걷으면서
+ * `aiLoading:false`로 되돌려, AiChatPanel이 막고 있던 전송을 다시 열어 준다.
+ * 이벤트에 요청 id가 없던 시절 그 결과는 둘이었다: 버려진 스트림의 잔여 토큰이
+ * 새 답변 말머리에 붙었고, 그 done이 새 스트림의 리스너를 통째로 걷어 가
+ * 진짜 답변이 문장 중간에서 끊긴 채 히스토리에 저장됐다.
+ */
+describe('AI 스트림 요청 격리', () => {
+  type TokenCb = (token: string, requestId: string) => void
+  type DoneCb = (requestId: string) => void
+
+  // main을 흉내 내는 단일 브로드캐스트 버스. 실제 배관과 같은 모양이다 —
+  // 채널은 창당 하나고, 스트림이 몇 개 살아 있든 같은 채널로 쏟아진다.
+  function makeBus() {
+    const tokenCbs: TokenCb[] = []
+    const doneCbs: DoneCb[] = []
+    const requestIds: string[] = []
+    const api = {
+      // 실제 핸들러도 streamChat을 await 하지 않고 즉시 반환한다.
+      aiStreamChat: vi.fn(async (_m: string, _t: unknown, _h: unknown, requestId: string) => {
+        requestIds.push(requestId)
+      }),
+      aiSaveHistory: vi.fn(),
+      onAiStreamToken: (cb: TokenCb) => {
+        tokenCbs.push(cb)
+        return () => {
+          const i = tokenCbs.indexOf(cb)
+          if (i >= 0) tokenCbs.splice(i, 1)
+        }
+      },
+      onAiStreamDone: (cb: DoneCb) => {
+        doneCbs.push(cb)
+        return () => {
+          const i = doneCbs.indexOf(cb)
+          if (i >= 0) doneCbs.splice(i, 1)
+        }
+      },
+      onAiStreamError: () => () => {}
+    }
+    return {
+      api,
+      // stream 0 = 첫 질문의 스트림(A), 1 = 둘째 질문의 스트림(B)
+      emitToken: (stream: number, token: string) => {
+        for (const cb of [...tokenCbs]) cb(token, requestIds[stream])
+      },
+      emitDone: (stream: number) => {
+        for (const cb of [...doneCbs]) cb(requestIds[stream])
+      }
+    }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('패널을 닫아 버려진 스트림은 다음 답변에 끼어들지 못한다', async () => {
+    const bus = makeBus()
+    vi.stubGlobal('window', { api: bus.api })
+    useStore.setState({
+      aiMessages: [],
+      aiLoading: false,
+      aiConfig: null,
+      showAiChat: true,
+      _aiStreamCleanup: null
+    })
+
+    // 1) 첫 질문 — 스트림 A 시작
+    await useStore.getState().aiSendMessage('첫 질문')
+    bus.emitToken(0, '첫답변')
+
+    // 2) 답변 도중 패널을 닫았다 연다. 렌더러 리스너만 떨어지고 main의 A는 계속 돈다.
+    useStore.getState().setShowAiChat(false)
+    useStore.getState().setShowAiChat(true)
+
+    // 3) 둘째 질문 — 스트림 B 시작. 이제 A와 B가 같은 채널을 공유한다.
+    await useStore.getState().aiSendMessage('둘째 질문')
+
+    // 4) 버려진 A가 남은 토큰을 뱉는다  5) B의 진짜 첫 토큰
+    bus.emitToken(0, '[A의 잔여 토큰]')
+    bus.emitToken(1, '둘째답변')
+    // 6) A가 끝난다 — 예전에는 여기서 B의 리스너가 통째로 걷혔다
+    bus.emitDone(0)
+    // 7) B는 아직 답하는 중
+    bus.emitToken(1, ' 이어짐')
+
+    const second = useStore.getState().aiMessages[3]?.content
+    expect(second, 'A의 잔여 토큰이 B의 답변에 섞이면 안 된다').toBe('둘째답변 이어짐')
+    expect(useStore.getState().aiLoading, 'A의 done이 B의 스피너를 꺼서는 안 된다').toBe(true)
+
+    // B가 제대로 끝나면 그때 스피너가 꺼지고 히스토리가 저장된다.
+    bus.emitDone(1)
+    expect(useStore.getState().aiLoading).toBe(false)
+    expect(bus.api.aiSaveHistory).toHaveBeenCalled()
+  })
+})
+
+/**
+ * 액션 카드로만 오간 대화가 디스크에 남는가.
+ *
+ * 2026-09-25 검증에서 실측: `aiRequestTaskAction`/`aiConfirmAction`/`aiCancelAction`은
+ * 대화에 메시지를 밀어 넣고도 `aiSaveHistory`를 한 번도 부르지 않았다. 저장은
+ * `aiSendMessage`의 done/error 핸들러 안에만 있었다. 그래서 액션만 쓰고 앱을 끄면
+ * `aiLoadHistory()`가 마지막으로 저장된 = 이전 대화를 되살린다: 할일은 완료·삭제됐는데
+ * 시켰다는 기록은 사라지고, 화면은 옛 대화로 되돌아간다.
+ */
+describe('AI 액션 경로의 대화 저장', () => {
+  const interpret = (): ReturnType<typeof vi.fn> => window.api.aiInterpretAction as ReturnType<typeof vi.fn>
+  const saved = (): AiMessage[] =>
+    ((window.api.aiSaveHistory as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] ?? []) as AiMessage[]
+
+  beforeEach(() => {
+    useStore.setState({ aiMessages: [], aiPendingAction: null, aiConfig: null, aiLoading: false })
+  })
+
+  it('확인한 액션의 요청과 결과를 남긴다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', title: '장보기' })] })
+    interpret().mockResolvedValue({ op: 'complete', taskTitle: '장보기', dueDate: null })
+
+    await useStore.getState().aiRequestTaskAction('장보기 완료해줘')
+    await useStore.getState().aiConfirmAction()
+
+    expect(window.api.aiSaveHistory).toHaveBeenCalled()
+    expect(saved().map((m) => m.role)).toEqual(['user', 'assistant'])
+    // 저장본과 화면이 같아야 한다 — 다르면 재시작할 때 대화가 소리 없이 달라진다.
+    expect(saved()).toEqual(useStore.getState().aiMessages)
+  })
+
+  // 취소도 기록이다. 무엇을 안 하기로 했는지가 남아야 다음에 또 시킬지 판단할 수 있다.
+  it('취소한 액션도 남긴다', async () => {
+    useStore.setState({ tasks: [task({ id: 'a', title: '장보기' })] })
+    interpret().mockResolvedValue({ op: 'delete', taskTitle: '장보기', dueDate: null })
+
+    await useStore.getState().aiRequestTaskAction('장보기 삭제해줘')
+    useStore.getState().aiCancelAction()
+
+    expect(saved()).toEqual(useStore.getState().aiMessages)
+    expect(saved()).toHaveLength(2)
+  })
+
+  // 실패 응답("그런 할일 못 찾았다")도 대화다. 이것만 사라지면 사용자는 자기가
+  // 물어본 적 없다고 기억하게 된다.
+  it('할일을 못 찾았다는 답도 남긴다', async () => {
+    useStore.setState({ tasks: [] })
+    interpret().mockResolvedValue({ op: 'complete', taskTitle: '없는할일', dueDate: null })
+
+    await useStore.getState().aiRequestTaskAction('없는할일 완료해줘')
+
+    expect(saved()).toEqual(useStore.getState().aiMessages)
+    expect(saved()).toHaveLength(2)
   })
 })

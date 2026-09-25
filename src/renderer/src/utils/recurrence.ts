@@ -324,6 +324,28 @@ export function nextRecurrenceSpawn(
   }
 }
 
+/**
+ * 스폰에 회차를 넘긴 뒤 **완료본에 남길** 오버라이드. 넘긴 키는 뺀다.
+ *
+ * 양쪽에 같은 키가 남으면 그 날짜를 두 인스턴스가 함께 주장한다 —
+ * getScheduledForOccurrence는 오버라이드에 그 날짜가 있는 완료본도 '자기 회차'로
+ * 인정하므로(movedHere), 캘린더에 같은 블록이 둘 겹치고 그 시리즈를 완료할 때마다
+ * 하나씩 는다. 단건 완료(toggleTask)는 이 정리를 하고 있었는데 일괄 완료가 빠져
+ * 있었다 — 두 경로가 다시 갈라지지 않게 규칙을 여기 한 곳에 둔다.
+ *
+ * 뺄 것이 아예 없으면 undefined를 준다: 쓰기 자체를 건너뛰라는 뜻이다(넘긴 키가
+ * 없는데도 updateTask를 부르면 일괄 완료가 선택 수만큼 스토어 쓰기와 IPC를 만든다).
+ */
+export function overridesAfterHandover(
+  task: Pick<Task, 'scheduledOverrides'>,
+  spawn: RecurrenceSpawn
+): Record<string, { start: string; end: string } | null> | null | undefined {
+  if (!spawn.scheduledOverrides) return undefined
+  const handed = new Set(Object.keys(spawn.scheduledOverrides))
+  const left = Object.entries(task.scheduledOverrides ?? {}).filter(([date]) => !handed.has(date))
+  return left.length > 0 ? Object.fromEntries(left) : null
+}
+
 /** date 이상인 오버라이드만 남긴다. 없으면 null(필드 자체를 만들지 않는다). */
 export function pickOverridesFrom(
   overrides: Task['scheduledOverrides'],
@@ -339,7 +361,13 @@ export function pickOverridesFrom(
  * 보장해야 한다 — 같은 시리즈의 8/15·8/16 회차를 함께 완료할 때 8/16이 아직 미완료인
  * 시점 기준으로 중복 판정하지 않으면 8/16 인스턴스가 한 번 더 생긴다.
  */
-export function collectRecurrenceSpawns(completing: Task[], existing: Task[], today: string): RecurrenceSpawn[] {
+export interface RecurrenceSpawnPlan {
+  /** 완료되는 인스턴스. 넘긴 회차를 여기서 빼야 그 날짜의 블록이 둘로 늘지 않는다. */
+  source: Task
+  spawn: RecurrenceSpawn
+}
+
+export function collectRecurrenceSpawns(completing: Task[], existing: Task[], today: string): RecurrenceSpawnPlan[] {
   // 반복이 하나도 없으면(흔한 경우) 정렬도 색인도 만들지 않는다.
   if (!completing.some((t) => t.isRecurring && t.recurringPattern)) return []
 
@@ -356,11 +384,13 @@ export function collectRecurrenceSpawns(completing: Task[], existing: Task[], to
     if (kids) kids.push(t)
     else childrenOf.set(t.parentId, [t])
   }
-  const spawns: RecurrenceSpawn[] = []
+  const spawns: RecurrenceSpawnPlan[] = []
   for (const task of ordered) {
     const spawn = nextRecurrenceSpawn(task, index, today, childrenOf.get(task.id) ?? [])
     if (spawn) {
-      spawns.push(spawn)
+      // 어느 완료본이 이 회차를 넘겼는지 짝을 지어 돌려준다 — 짝을 버리면 호출처가
+      // 다시 계산해야 하고, 그 순간 단건 완료 경로와 규칙이 갈라진다.
+      spawns.push({ source: task, spawn })
       // 스폰한 회차를 색인에 올려, 같은 기한의 중복 인스턴스가 또 스폰하지 않게 한다.
       const key = seriesKey(spawn.recurringPattern, spawn.title, spawn.dueDate)
       index.set(key, (index.get(key) ?? 0) + 1)

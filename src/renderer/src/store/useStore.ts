@@ -31,7 +31,13 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
-import { nextRecurrenceSpawn, collectRecurrenceSpawns, shiftIsoByDays, daysBetween } from '../utils/recurrence'
+import {
+  nextRecurrenceSpawn,
+  collectRecurrenceSpawns,
+  overridesAfterHandover,
+  shiftIsoByDays,
+  daysBetween
+} from '../utils/recurrence'
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
@@ -96,6 +102,11 @@ interface Store {
   dragTaskId: string | null
   updateAvailable: { version: string; downloadUrl: string } | null
   updateChecked: boolean
+  /**
+   * 확인을 **못 했다**. `updateChecked`만으로는 이 상태를 표현할 수 없다 —
+   * `updateChecked && !updateAvailable`은 "최신 버전입니다"로 읽히기 때문이다.
+   */
+  updateFailed: boolean
   updateDownloadProgress: number | null
   updateReady: boolean
 
@@ -192,6 +203,8 @@ interface Store {
   // 실행 대기 중인 '기존 할일' 액션. 사용자가 확인 카드에서 승인해야 실행된다.
   aiPendingAction: { op: ActionOp; taskId: string; taskTitle: string; dueDate: string | null } | null
   _aiStreamCleanup: (() => void) | null
+  /** 지금 화면의 대화를 잘라서 디스크에 적는다. 대화를 늘린 쪽이 누구든 이걸 부른다. */
+  _aiPersistHistory: () => void
   setShowAiChat: (show: boolean) => void
   aiCheckConnection: () => Promise<void>
   aiPullModel: (model: string) => void
@@ -307,6 +320,16 @@ export function applyReorder(tasks: Task[], ids: string[]): Task[] {
   const moving = ids.map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t))
   if (moving.length === 0) return tasks
   const slots = moving.map((t) => t.sortOrder).sort((a, b) => a - b)
+  // 슬롯은 **엄격히 증가**해야 한다. sortOrder는 위 주석대로 리스트별 카운터라
+  // 리스트마다 1부터 세고, '전체'·'오늘'·'다음 7일'·태그처럼 리스트를 가로지르는
+  // 뷰는 같은 값을 쥔 행을 한 묶음으로 넘긴다. 동점을 그대로 나눠 주면 아래
+  // 안정 정렬이 동점끼리는 이전 배열 순서를 지켜 드롭이 통째로 버려진다 —
+  // 항목이 제자리로 튕겨 나오고, 몇 번을 다시 끌어도 결과가 한 글자도 안 바뀌던
+  // 그 버그다. 올려 주는 것은 이미 동점이거나 뒤집힌 값뿐이고, 한 번 끌고 나면
+  // 그 묶음은 엄격히 증가하므로 다음 드래그는 아무것도 밀지 않는다.
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i] <= slots[i - 1]) slots[i] = slots[i - 1] + 1
+  }
   const nextOrder = new Map(moving.map((t, i) => [t.id, slots[i]]))
   return tasks
     .map((t) => (nextOrder.has(t.id) ? { ...t, sortOrder: nextOrder.get(t.id) as number } : t))
@@ -562,6 +585,7 @@ export const useStore = create<Store>((set, get) => ({
   dragTaskId: null,
   updateAvailable: null as { version: string; downloadUrl: string } | null,
   updateChecked: false,
+  updateFailed: false,
   updateDownloadProgress: null as number | null,
   updateReady: false,
 
@@ -860,11 +884,11 @@ export const useStore = create<Store>((set, get) => ({
       if (spawn) {
         // 넘긴 미래 회차는 완료본에서 뺀다 — 양쪽에 남으면 같은 날짜를 두 인스턴스가
         // 주장한다(완료본은 오버라이드가 있는 날을 자기 회차로 인정하므로 실제로 겹친다).
-        if (spawn.scheduledOverrides) {
-          const handed = new Set(Object.keys(spawn.scheduledOverrides))
-          const left = Object.entries(task.scheduledOverrides ?? {}).filter(([d]) => !handed.has(d))
-          get().updateTask({ id, scheduledOverrides: left.length > 0 ? Object.fromEntries(left) : null })
-        }
+        // 규칙은 recurrence.ts의 overridesAfterHandover 한 곳에 있다 — 일괄 완료도
+        // 같은 것을 부른다. 예전에는 이 세 줄이 여기에만 있어서 일괄 완료가 같은
+        // 날짜의 블록을 하나씩 복제했다.
+        const left = overridesAfterHandover(task, spawn)
+        if (left !== undefined) get().updateTask({ id, scheduledOverrides: left })
         get().addTask(spawn.title, spawn)
       }
     }
@@ -1034,7 +1058,7 @@ export const useStore = create<Store>((set, get) => ({
     const newlyCompletedIds = newlyCompleted.map((t) => t.id)
     // 반복 task의 다음 인스턴스 — 완료 반영 전 스냅샷으로 계산해야 하나씩 완료한
     // 것과 같은 결과가 된다(안 그러면 일괄 완료가 반복 시리즈를 조용히 끝냈다).
-    const spawns = collectRecurrenceSpawns(newlyCompleted, get().tasks, todayString())
+    const plans = collectRecurrenceSpawns(newlyCompleted, get().tasks, todayString())
     set((s) => ({
       // 이미 완료였던 항목의 completedAt은 건드리지 않는다 — 덮어쓰면 완료 이력이
       // 오늘로 밀려 통계의 '오늘 완료'와 14일 추이가 조용히 바뀐다.
@@ -1043,7 +1067,16 @@ export const useStore = create<Store>((set, get) => ({
       batchMode: false
     }))
     persist('batchUpdateTasks', () => window.api.batchUpdateTasks(newlyCompletedIds, { completed: true }))
-    await get().addTasks(spawns.map((spawn) => ({ title: spawn.title, opts: spawn })))
+    // 스폰에 넘긴 미래 회차를 완료본에서 뺀다. 단건 완료가 하던 정리인데 여기만
+    // 빠져 있어서, 옮겨둔 회차가 있는 시리즈를 일괄 완료하면 그 날짜에 같은 블록이
+    // 둘 겹쳤다(완료본 하나 + 새 인스턴스 하나). 일괄 완료를 되풀이할수록 늘어났다.
+    // 넘긴 키가 없으면 overridesAfterHandover가 undefined를 주고 쓰기도 건너뛴다 —
+    // 평범한 일괄 완료의 스토어 쓰기 횟수는 그대로다.
+    for (const { source, spawn } of plans) {
+      const left = overridesAfterHandover(source, spawn)
+      if (left !== undefined) get().updateTask({ id: source.id, scheduledOverrides: left })
+    }
+    await get().addTasks(plans.map(({ spawn }) => ({ title: spawn.title, opts: spawn })))
     await get().addScores(
       newlyCompleted.map((t) => ({ type: 'taskComplete', points: pointsForTask(t.priority), taskId: t.id }))
     )
@@ -1363,6 +1396,23 @@ export const useStore = create<Store>((set, get) => ({
     const messages = (await window.api.aiGetHistory()) as AiMessage[]
     set({ aiMessages: messages })
   },
+
+  // **대화가 디스크로 가는 단 하나의 경로.** 예전에는 이 잘라-저장하기가
+  // `aiSendMessage`의 done/error 핸들러 안에만 복사돼 있어서, 액션 카드로만 오간
+  // 대화(요청·확인·취소·"못 찾았다")는 통째로 저장되지 않았다. 앱을 끄면
+  // `aiLoadHistory()`가 그 이전 대화를 되살려, 사용자에게는 완료·삭제된 할일만
+  // 남고 시켰다는 기록은 사라진 화면이 남는다 — 할일 변경은 `toggleTask`/`removeTask`가
+  // 따로 저장하므로, 왜 그렇게 됐는지 되짚을 근거만 없어진다.
+  //
+  // 자르기(cap)도 여기 한 곳에만 둔다. 저장본과 화면의 길이가 갈리면 재시작할 때
+  // 화면이 소리 없이 짧아진다. `trimHistory`는 cap 이하면 같은 배열을 돌려주므로,
+  // 참조가 그대로면 set을 건너뛴다(구독자 헛재렌더 방지).
+  _aiPersistHistory: () => {
+    const { aiMessages, aiConfig } = get()
+    const trimmed = trimHistory(aiMessages, aiConfig?.maxHistoryMessages ?? 200)
+    if (trimmed !== aiMessages) set({ aiMessages: trimmed })
+    persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
+  },
   aiSaveConfig: async (updates) => {
     try {
       await window.api.aiSetConfig(updates)
@@ -1376,6 +1426,19 @@ export const useStore = create<Store>((set, get) => ({
     // 이전 스트리밍 리스너 정리 (리스너 누적 방지)
     const prevCleanup = get()._aiStreamCleanup
     if (prevCleanup) prevCleanup()
+
+    // **이 요청의 id — '버려진 스트림 섞임'을 막는 가드다.**
+    // 리스너를 떼는 것만으로는 스트림이 멈추지 않는다. main의 `streamChat`은 끝까지
+    // 돌고, `ai:stream-*`는 창에 채널이 하나뿐인 브로드캐스트다. 그리고 그 겹침을
+    // 여는 문은 정확히 하나다 — `setShowAiChat(false)`가 답변 도중 리스너를 걷으면서
+    // `aiLoading:false`로 되돌려 입력칸을 다시 열어 준다(패널이 열려 있는 동안에는
+    // AiChatPanel이 `aiLoading`으로 전송을 막는다). 그래서 답변 중에 패널을 닫았다
+    // 열고 다시 물으면, 버려진 스트림 A와 새 스트림 B가 같은 채널에 함께 쏟아졌다:
+    // A의 잔여 토큰이 B의 답변 말머리에 붙고, A의 done이 B의 리스너를 통째로 걷어
+    // 가 B의 진짜 답변이 문장 중간에서 끊긴 채 히스토리에 저장됐다.
+    // id가 다르면 남의 스트림이니 무시한다. 모르는 id도 '내 것이 아님'이 맞는
+    // 판정이다 — main·preload는 같은 빌드로 나가므로 id 없는 이벤트는 없다.
+    const requestId = uuid()
 
     // 현재 메시지 추가 전의 대화를 컨텍스트로 캡처 (멀티턴). 최근 N개만.
     const history = normalizeChatHistory(get().aiMessages)
@@ -1407,34 +1470,32 @@ export const useStore = create<Store>((set, get) => ({
       set({ _aiStreamCleanup: null })
     }
 
-    const cleanupToken = window.api.onAiStreamToken?.((token: string) => {
+    const cleanupToken = window.api.onAiStreamToken?.((token: string, id: string) => {
+      if (id !== requestId) return
       set((s) => ({
         aiMessages: s.aiMessages.map((m) => (m.id === assistantMsg.id ? { ...m, content: m.content + token } : m))
       }))
     })
-    const cleanupDone = window.api.onAiStreamDone?.(() => {
-      const { aiMessages, aiConfig } = get()
-      const cap = aiConfig?.maxHistoryMessages ?? 200
-      const trimmed = trimHistory(aiMessages, cap)
-      set({ aiLoading: false, aiMessages: trimmed })
-      persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
+    const cleanupDone = window.api.onAiStreamDone?.((id: string) => {
+      if (id !== requestId) return
+      set({ aiLoading: false })
+      get()._aiPersistHistory()
       cleanup()
     })
-    const cleanupError = window.api.onAiStreamError?.((error: string) => {
+    const cleanupError = window.api.onAiStreamError?.((error: string, id: string) => {
+      if (id !== requestId) return
       const withError = get().aiMessages.map((m) =>
         m.id === assistantMsg.id ? { ...m, content: i18n.t('ai.error', { message: error }) } : m
       )
-      const cap = get().aiConfig?.maxHistoryMessages ?? 200
-      const trimmed = trimHistory(withError, cap)
-      set({ aiLoading: false, aiMessages: trimmed })
-      persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
+      set({ aiLoading: false, aiMessages: withError })
+      get()._aiPersistHistory()
       cleanup()
     })
 
     set({ _aiStreamCleanup: cleanup })
 
     try {
-      await window.api.aiStreamChat(message, tasks, history)
+      await window.api.aiStreamChat(message, tasks, history, requestId)
     } catch {
       set((s) => ({
         aiLoading: false,
@@ -1463,12 +1524,17 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   aiRequestTaskAction: async (message) => {
-    const pushAssistant = (content: string): void =>
+    const pushAssistant = (content: string): void => {
       set((s) => ({
         aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content, timestamp: new Date().toISOString() }]
       }))
+      get()._aiPersistHistory()
+    }
     const userMsg: AiMessage = { id: uuid(), role: 'user', content: message, timestamp: new Date().toISOString() }
     set((s) => ({ aiMessages: [...s.aiMessages, userMsg], aiLoading: true, aiPendingAction: null }))
+    // 해석이 성공하면 답이 아니라 확인 카드가 뜬다 — assistant 메시지가 없으므로
+    // 카드를 띄운 채 앱을 끄면 이 발화만 사라진다. 여기서 한 번 적어 둔다.
+    get()._aiPersistHistory()
     try {
       const tasks = buildAiTaskContext(get().tasks)
       const res = (await window.api.aiInterpretAction(message, tasks)) as TaskActionInterpretation
@@ -1503,10 +1569,12 @@ export const useStore = create<Store>((set, get) => ({
     const pending = get().aiPendingAction
     if (!pending) return
     set({ aiPendingAction: null })
-    const pushAssistant = (content: string): void =>
+    const pushAssistant = (content: string): void => {
       set((s) => ({
         aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content, timestamp: new Date().toISOString() }]
       }))
+      get()._aiPersistHistory()
+    }
     // TOCTOU 방지: 확인 카드가 떠 있는 동안 사용자가 손으로 그 태스크를 완료/삭제/변경했을
     // 수 있다. 실행 직전 현재 상태를 다시 확인해, 없거나 이미 처리된 경우 blind 실행 대신
     // 정직하게 알린다(예전 코드는 toggleTask가 이미 완료된 태스크를 도로 미완료로 되돌렸음).
@@ -1541,6 +1609,7 @@ export const useStore = create<Store>((set, get) => ({
         { id: uuid(), role: 'assistant', content: i18n.t('ai.actionCancelled'), timestamp: new Date().toISOString() }
       ]
     }))
+    get()._aiPersistHistory()
   },
   aiCreateTaskFromNL: async (input) => {
     const tasks = buildAiTaskContext(get().tasks)
