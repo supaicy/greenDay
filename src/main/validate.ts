@@ -138,3 +138,32 @@ export function validateTaskUpdate(input: unknown): Record<string, unknown> {
   validateRangeAndPin(obj)
   return obj
 }
+
+/**
+ * 일괄 수정 페이로드. **id는 없고 바꿀 필드만 온다** — `validateTaskUpdate`가 id를
+ * 필수로 보므로 그대로 쓸 수 없었고, 그 한 가지 이유로 `batch-update-tasks`만
+ * 검증을 통째로 건너뛰고 있었다. 할일 쓰기 채널 셋 중 둘에만 문이 있었다.
+ *
+ * `database.ts`의 `batchUpdateTasks`는 받은 `dueDate`를 `task.due_date`에 그대로
+ * 넣는다 — 형제 채널이 'Invalid task payload'로 거절하는 바로 그 값이 같은 열,
+ * 같은 파일, 같은 CalDAV 출구로 들어간다. 개행이 섞인 날짜 하나면 사용자의 캘린더에
+ * 임의 iCalendar 속성이 끼고(위 `validateRangeAndPin` 주석이 말하는 그 위협 그대로 —
+ * 실측하면 DTSTART 다음 줄에 ATTENDEE가 그대로 선다), 문자열이 아니면
+ * `caldav/sync.ts`의 `addDays`가 던지는데 그 호출(`planSync`)은 `calendar-sync.ts`의
+ * try 바깥이라 **행 하나가 동기화 전체를 세운다.**
+ *
+ * 렌더러가 지금 completed·deleted·listId·priority 넷만 보낸다는 것은 방어가 아니라
+ * 우연이다 — `validateStringArrays`의 tags/attachments와 같은 이야기다.
+ *
+ * `ids`는 여기서 보지 않는다. `batchUpdateTasks`는 그 값을 찾기(`find`)에만 쓰고
+ * 어떤 행에도 적지 않으므로 디스크로도 .ics로도 새지 않는다 — 같은 모양을 받는
+ * `reorder-tasks`와 함께 한 가드로 묶는 편이 맞고, 이 채널에만 덧붙일 일이 아니다.
+ */
+export function validateBatchUpdate(updates: unknown): Record<string, unknown> {
+  if (typeof updates !== 'object' || updates === null || Array.isArray(updates)) {
+    throw new Error('Invalid task payload')
+  }
+  const obj = updates as Record<string, unknown>
+  validateRangeAndPin(obj)
+  return obj
+}

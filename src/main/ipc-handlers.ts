@@ -1,10 +1,10 @@
-import { dialog, Notification, globalShortcut, BrowserWindow, shell } from 'electron'
+import { dialog, Notification, globalShortcut, shell } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { v4 as uuid } from 'uuid'
 import * as db from './database'
 import * as ai from './ai-service'
-import { validateTaskInput, validateTaskUpdate } from './validate'
+import { validateTaskInput, validateTaskUpdate, validateBatchUpdate } from './validate'
 import { readConfigFile, writeConfigFile, toPublicConfig, DEFAULT_CONFIG, type CalendarConfig } from './calendar-config'
 import { CalDavClient, CalDavError } from './caldav/client'
 import { runSync } from './calendar-sync'
@@ -27,6 +27,7 @@ import { licensing, publicLicenseState } from './licensing/service'
 import { handle, LICENSE_REQUIRED } from './ipc-gate'
 import { asPurchaseSource, purchaseUrl, recoverUrl } from './licensing/endpoints'
 import { toLocalDateString } from '../shared/date'
+import { flushPendingQuickAdd, requestQuickAdd } from './main-window'
 
 // 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로
 // 이 값은 비밀이 아니다 — 인가 코드 가로채기는 PKCE가 막는다.
@@ -114,7 +115,7 @@ export function setupIpcHandlers(): void {
   handle('permanent-delete-task', 'paid', (_, id) => db.permanentDeleteTask(id))
   handle('empty-trash', 'paid', () => db.emptyTrash())
   handle('reorder-tasks', 'paid', (_, ids) => db.reorderTasks(ids))
-  handle('batch-update-tasks', 'paid', (_, ids, updates) => db.batchUpdateTasks(ids, updates))
+  handle('batch-update-tasks', 'paid', (_, ids, updates) => db.batchUpdateTasks(ids, validateBatchUpdate(updates)))
 
   // Habits
   handle('get-habits', 'free', () => db.getHabits())
@@ -138,10 +139,11 @@ export function setupIpcHandlers(): void {
   handle('pick-attachment', 'paid', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
+      // 형식 이름은 macOS가 그대로 띄운다 — 영어 UI에 한국어가 섞이지 않게 표를 거친다.
       filters: [
-        { name: '모든 파일', extensions: ['*'] },
-        { name: '이미지', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
-        { name: '문서', extensions: ['pdf', 'doc', 'docx', 'txt', 'md'] }
+        { name: uiStrings().filterAllFiles, extensions: ['*'] },
+        { name: uiStrings().filterImages, extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+        { name: uiStrings().filterDocuments, extensions: ['pdf', 'doc', 'docx', 'txt', 'md'] }
       ]
     })
     if (result.canceled) return []
@@ -288,10 +290,24 @@ export function setupIpcHandlers(): void {
   const storeCalendarConfig = (config: CalendarConfig, options: { clearSecret?: boolean } = {}): void =>
     writeConfigFile(db.getCalendarConfigPath(), config, db.realCrypto, options)
 
-  // CalDAV 오류는 사용자에게 그대로 보여줄 수 있게 다듬어져 있다. 그 외 예외는
-  // 내부 정보가 새지 않도록 일반 문구로 바꾼다.
-  const describeError = (error: unknown): string =>
-    error instanceof CalDavError ? error.message : '알 수 없는 오류가 발생했습니다.'
+  /**
+   * CalDAV 오류를 렌더러가 띄울 문장으로 바꾼다. **`code`만 본다.**
+   *
+   * `error.message`를 그대로 내보내던 자리다. 그 문자열은 개발자용이라 한국어로
+   * 박혀 있고 `일정 조회:` 같은 컨텍스트까지 붙는데, `CalendarSyncSection`이
+   * `response.message`를 그대로 출력하므로 **영어 UI에 한국어가 그대로 떴다.**
+   * 밖으로 나가는 문장은 `uiStrings()`에서만 나온다.
+   *
+   * 원문에서 남기는 것은 상태 코드 하나다 — 언어가 없고, 문의가 들어왔을 때
+   * 유일하게 쓸모 있는 값이다. 우리 오류 타입이 아닌 예외는 내부 정보가 새지
+   * 않도록 일반 문구로 접는다.
+   */
+  const describeError = (error: unknown): string => {
+    const strings = uiStrings()
+    if (!(error instanceof CalDavError)) return strings.syncErrorUnknown
+    const text = strings.caldavErrors[error.code]
+    return error.status === null ? text : `${text} (${error.status})`
+  }
 
   handle('calendar:get-config', 'free', () => toPublicConfig(loadCalendarConfig()))
 
@@ -339,7 +355,7 @@ export function setupIpcHandlers(): void {
   handle('calendar:test-connection', 'paid', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password) {
-      return { ok: false, message: '계정과 앱 암호를 먼저 입력하세요.', calendars: [] }
+      return { ok: false, message: uiStrings().calendarCredentialsMissing, calendars: [] }
     }
     try {
       const client = new CalDavClient({
@@ -459,17 +475,43 @@ export function setupIpcHandlers(): void {
   const storeGoogle = (config: GoogleConfig, options: { clearSecret?: boolean } = {}): void =>
     writeGoogleConfig(googleConfigPath(), config, db.realCrypto, options)
 
-  const describeGoogleError = (error: unknown): string =>
-    error instanceof GoogleApiError || error instanceof OAuthError ? error.message : '알 수 없는 오류가 발생했습니다.'
+  /**
+   * 구글 쪽도 같다 — 문장은 `code`로만 고른다(위 `describeError` 참고).
+   *
+   * 다만 인덱싱이 느슨하다: `GoogleApiError['code']`는 닫힌 유니온이지만
+   * `OAuthError.code`는 그냥 `string`이라(google/oauth.ts) 타입이 전부를 못 잡는다.
+   * 그래서 **모르는 code는 반드시 접는다** — 접지 않으면 `undefined`가 그대로
+   * 렌더러로 가서 오류 칸이 빈 줄로 뜬다.
+   */
+  const describeGoogleError = (error: unknown): string => {
+    const strings = uiStrings()
+    if (!(error instanceof GoogleApiError) && !(error instanceof OAuthError)) return strings.syncErrorUnknown
+    const text = (strings.googleErrors as Record<string, string | undefined>)[error.code] ?? strings.syncErrorUnknown
+    // network 오류의 status는 0이다 — 붙여 봐야 아무 뜻이 없다.
+    return error instanceof GoogleApiError && error.status > 0 ? `${text} (${error.status})` : text
+  }
 
   const resolveClientId = (): string => BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
 
   /**
+   * 구글이 그랜트를 **거절했다고 단정할 수 있는** code. 저장된 토큰을 버리는 것은
+   * 이때뿐이다. 나머지는 전부 "닿지 못했다"이거나 "모르겠다"다 — `network`(fetch가
+   * 던짐: 오프라인·DNS·TLS·30초 상한), `bad_response`(JSON이 아님: 캡티브 포털의
+   * HTML), `token_failed`(`invalid_grant`가 아닌 모든 비정상 응답 — 구글의 5xx도
+   * 여기로 온다), `no_token`. 이것들로 자격증명을 지우면 다음 시도에 멀쩡히 될
+   * 연결을 우리 손으로 끊는다. 라이선스 클라이언트의 `KNOWN_REFUSALS`와 같은 규칙이다.
+   */
+  const GOOGLE_REFUSAL_CODES = new Set(['invalid_grant'])
+
+  /**
    * 유효한 액세스 토큰을 확보한다. 만료가 가까우면 미리 갱신하고 갱신 결과를 저장한다.
-   * 갱신에 실패하면 토큰을 버린다 — 죽은 토큰을 들고 계속 시도해 봐야 소용없고,
-   * 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
+   * 구글이 그랜트를 거절하면(`invalid_grant`) 토큰을 버린다 — 죽은 토큰을 들고 계속
+   * 시도해 봐야 소용없고, 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
+   * 서버에 **닿지 못한** 실패는 거절이 아니므로 토큰을 남긴다.
    */
   const ensureGoogleToken = async (config: GoogleConfig): Promise<GoogleConfig> => {
+    // 아래 두 message는 **로그·cause 추적용이다.** 화면에 나가는 문장은
+    // `describeGoogleError`가 code(`not_connected`·`no_refresh_token`)로 고른다.
     if (!config.tokens) throw new OAuthError('not_connected', '구글 계정이 연결되어 있지 않습니다.')
     if (!needsRefresh(config.tokens, new Date().toISOString())) return config
     if (!config.tokens.refreshToken) {
@@ -488,7 +530,15 @@ export function setupIpcHandlers(): void {
       storeGoogle(next)
       return next
     } catch (error) {
-      storeGoogle({ ...config, tokens: null, lastError: describeGoogleError(error) })
+      // **거부와 불통을 뭉치지 않는다.** 구글이 실제로 그랜트를 거절했을 때만 토큰을
+      // 버린다. 오프라인·DNS·TLS 순간 실패는 `OAuthError('network')`로 오는데, 갱신
+      // 실패를 전부 "그랜트가 죽었다"로 읽으면 비행기에서 "지금 동기화" 한 번이
+      // 리프레시 토큰을 디스크에서 지운다(`tokens: null` → `tokens_enc: null`,
+      // 보호 모드가 아니면 `preserveCiphertext`가 되살릴 것도 없다). 그러면 브라우저
+      // OAuth 동의를 처음부터 다시 받아야 하고, 이 경로는 `revokeToken`도 안 부르니
+      // 구글 계정에는 죽은 승인이 남는다.
+      const refused = error instanceof OAuthError && GOOGLE_REFUSAL_CODES.has(error.code)
+      storeGoogle({ ...config, tokens: refused ? null : config.tokens, lastError: describeGoogleError(error) })
       throw error
     }
   }
@@ -515,10 +565,7 @@ export function setupIpcHandlers(): void {
   handle('google:connect', 'paid', async () => {
     const clientId = resolveClientId()
     if (!clientId) {
-      return {
-        ok: false,
-        message: '구글 OAuth 클라이언트 ID가 설정되지 않았습니다. 빌드 설정을 확인하세요.'
-      }
+      return { ok: false, message: uiStrings().googleClientIdMissing }
     }
     const config = loadGoogle()
     let connected: GoogleConfig
@@ -615,19 +662,21 @@ export function setupIpcHandlers(): void {
   })
 
   // Quick add (global shortcut)
-  handle('register-global-shortcut', 'free', () => {
+  handle('register-global-shortcut', 'free', (event) => {
     // MAS 샌드박스에서는 시스템 전역 단축키를 등록할 수 없어 조용히 실패 → no-op
     if (!currentCapabilities().hasGlobalShortcuts) return false
+    // **이 호출은 "렌더러가 이제 받을 수 있다"는 신호이기도 하다.** App.tsx가 이
+    // invoke 바로 다음 줄에서 `onGlobalQuickAdd` 리스너를 걸고, invoke는 비동기라
+    // 이 핸들러는 그 줄보다 뒤에 돈다. 창이 없던 동안 눌린 핫키를 여기서 흘려보낸다 —
+    // 창 생성 이벤트(`did-finish-load`)에 걸면 리스너보다 먼저 도착해 그대로
+    // 사라진다(main-window.ts의 `quickAddPending` 주석 참고).
+    flushPendingQuickAdd(event.sender)
+    // 창이 하나도 없을 때 무엇을 하는지는 `requestQuickAdd`가 안다. 여기서
+    // `getAllWindows()`를 직접 보던 동안, macOS에서 창을 닫으면(= 전역 단축키가
+    // 존재하는 이유인 바로 그 상태) 핫키가 무반응이면서 다른 앱의 Cmd+Shift+A는
+    // 계속 가로챘다 — 없는 것보다 나쁜 상태였다.
     try {
-      globalShortcut.register('CommandOrControl+Shift+A', () => {
-        const wins = BrowserWindow.getAllWindows()
-        if (wins.length > 0) {
-          const win = wins[0]
-          if (win.isMinimized()) win.restore()
-          win.focus()
-          win.webContents.send('global-quick-add')
-        }
-      })
+      globalShortcut.register('CommandOrControl+Shift+A', requestQuickAdd)
       return true
     } catch {
       return false
