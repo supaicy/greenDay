@@ -10,6 +10,7 @@ import {
   nextSaturday,
   nextSunday,
   startOfDay,
+  startOfWeek,
   format
 } from 'date-fns'
 import i18n from '../i18n'
@@ -89,6 +90,26 @@ const EN_MONTHS = [
 ]
 
 const NEXT_DAY_FN = [nextSunday, nextMonday, nextTuesday, nextWednesday, nextThursday, nextFriday, nextSaturday]
+
+/**
+ * **"다음주 <요일>"의 기준점은 이번 주 일요일이지 `today + 6`이 아니다.**
+ *
+ * `nextX()`는 주어진 날짜보다 **엄격히 뒤**의 첫 요일을 돌려준다. 기준을
+ * `today + 6`으로 잡으면 그 지점이 이미 다음 주 한가운데라, 목표 요일이
+ * 기준보다 앞이면 그 주를 통째로 건너뛰고 한 주 더 간다. 49개 (오늘, 목표)
+ * 조합 중 21개가 이렇게 틀렸다 — 금요일에 "다음주 화요일"이 9/29가 아니라
+ * 10/6이 됐고, QuickAdd가 그 날짜를 그대로 마감일에 넣어 사용자는 마감이
+ * 일주일 밀린 줄도 모르고 놓쳤다.
+ *
+ * 이번 주 일요일(월요일 시작 주의 마지막 날)에 앉히면 7개 요일이 전부 한
+ * 규칙으로 다음 주 안에 떨어진다. 주 시작이 월요일인 건 이 파서가 이미
+ * "다음주"/"next week"를 `nextMonday(today)`로 정의했기 때문이다 — 같은
+ * 입력에서 "다음주"와 "다음주 월요일"이 다른 날을 가리키면 안 된다.
+ * (한국어·영어 두 갈래가 같은 실수를 복사해 놨었다. 기준은 여기 한 군데다.)
+ */
+function nextWeekAnchor(today: Date): Date {
+  return addDays(startOfWeek(today, { weekStartsOn: 1 }), 6)
+}
 
 export interface ParsedDateTime {
   date: string // "YYYY-MM-DD"
@@ -301,7 +322,7 @@ function parseDateExpression(text: string, today: Date): string | null {
   const nextWeekDay = text.match(/^다음\s*주\s*(.+)$/)
   if (nextWeekDay) {
     const dayNum = DAY_MAP[nextWeekDay[1]]
-    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](addDays(today, 6)))
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](nextWeekAnchor(today)))
   }
 
   // "이번 금요일", "이번주 월요일"
@@ -361,7 +382,7 @@ function parseEnglishDateExpression(text: string, today: Date): string | null {
   const nextWeekDay = text.match(/^next\s+(.+)$/)
   if (nextWeekDay) {
     const dayNum = EN_DAY_MAP[nextWeekDay[1].trim()]
-    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](addDays(today, 6)))
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](nextWeekAnchor(today)))
   }
 
   // "this friday" — 이번 주 안에 남아 있을 때만.
