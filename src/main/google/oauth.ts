@@ -143,6 +143,22 @@ interface TokenResponse {
   error_description?: string
 }
 
+/**
+ * 토큰 요청 하나의 상한.
+ *
+ * 상한이 없으면 응답하지 않는 서버에서 이 await가 끝나지 않는다 — `google:connect`와
+ * `google:disconnect`는 사용자가 버튼을 누르고 기다리는 자리라, 끝나지 않는 요청은
+ * 스피너도 오류도 취소도 없이 설정 패널을 잠가 둔다.
+ *
+ * 값은 본문 동기화(`google/calendar.ts`)·CalDAV(`caldav/client.ts`)와 **같은 30초**다.
+ * 사람이 앞에서 기다리니 더 짧게 잡고 싶지만, 여기서 시간이 초과되면
+ * `ensureGoogleToken`의 catch가 그것을 다른 실패와 똑같이 취급해 저장된 토큰을
+ * 통째로 지운다(`ipc-handlers.ts`). 상한을 조이는 만큼 **느린 회선이 재연결로
+ * 내몰린다** — 응답이 늦은 것은 불통이지 구글의 거부가 아닌데 결과만 거부와 같아진다.
+ * 한 제품에 상한이 셋이면 드리프트만 생기므로 하나로 맞춘다.
+ */
+const TOKEN_TIMEOUT_MS = 30_000
+
 async function postToken(
   fetchImpl: FetchLike,
   body: URLSearchParams,
@@ -153,7 +169,9 @@ async function postToken(
     response = await fetchImpl(TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
+      body: body.toString(),
+      // 상한이 없으면 응답하지 않는 서버에서 `google:connect`가 끝나지 않는다 — 위 상수 참고.
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS)
     })
   } catch (cause) {
     const error = new OAuthError('network', '구글 서버에 연결하지 못했습니다.')
@@ -245,7 +263,10 @@ export async function revokeToken(token: string, fetchImpl: FetchLike): Promise<
     const response = await fetchImpl(REVOKE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ token }).toString()
+      body: new URLSearchParams({ token }).toString(),
+      // 상한이 없으면 회수가 끝나지 않고, `google:disconnect`가 이 await 뒤에서
+      // 로컬 토큰을 지우므로 리프레시 토큰이 그동안 디스크에 그대로 남는다.
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS)
     })
     return response.ok
   } catch {

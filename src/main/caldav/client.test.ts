@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { CalDavClient, CalDavError, type FetchLike } from './client'
 
 const CREDS = {
@@ -502,5 +502,54 @@ describe('자격증명 취급', () => {
     const error = await new CalDavClient(CREDS, fetchImpl).discoverCalendars().catch((e) => e)
     expect(String(error.message)).not.toContain(CREDS.password)
     expect(String(error.stack)).not.toContain(CREDS.password)
+  })
+})
+
+describe('요청 상한', () => {
+  /**
+   * 연결은 받아 주고 **응답은 하지 않는** 서버(캡티브 포털, 패킷을 삼키는 방화벽,
+   * 과부하된 자체 호스팅). init.signal이 없으면 이 promise는 영영 끝나지 않는다 —
+   * 상한이 빠졌을 때 실제 코드가 하던 그대로다.
+   */
+  const stallingFetch =
+    (seen: (AbortSignal | null | undefined)[]): FetchLike =>
+    (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        seen.push(init.signal)
+        const signal = init.signal
+        if (!signal) return
+        if (signal.aborted) return reject(signal.reason)
+        signal.addEventListener('abort', () => reject(signal.reason))
+      })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('응답하지 않는 서버에 매달리지 않는다 — 상한 뒤 network로 접는다', async () => {
+    // 30초를 실제로 기다릴 수는 없다. 요청한 값만 확인하고 타이머는 20ms로 줄인다.
+    const real = AbortSignal.timeout.bind(AbortSignal)
+    const asked: number[] = []
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      asked.push(ms)
+      return real(20)
+    })
+    const seen: (AbortSignal | null | undefined)[] = []
+    const client = new CalDavClient(CREDS, stallingFetch(seen))
+
+    const settled = await Promise.race([
+      client.discoverCalendars().then(
+        () => 'resolved',
+        (error: unknown) => error
+      ),
+      new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+    ])
+
+    // 'hung'이면 설정 패널의 "연결"·"지금 동기화"가 그 시간만큼 잠긴 채 남는다.
+    // busy 해제가 await 뒤 finally에 있어서, 끝나지 않는 요청은 끝나지 않는 버튼이다.
+    expect(settled, '상한이 없어 요청이 끝나지 않았다').not.toBe('hung')
+    expect(settled).toBeInstanceOf(CalDavError)
+    // 응답하지 않는 것은 **불통**이지 서버의 거부가 아니다.
+    expect((settled as CalDavError).code).toBe('network')
+    expect(seen[0], '요청에 AbortSignal이 실리지 않았다').toBeInstanceOf(AbortSignal)
+    expect(asked).toEqual([30_000])
   })
 })
