@@ -5,6 +5,7 @@ import { useStore } from '../../store/useStore'
 import { tList } from '../../i18n'
 import { getCalendarDays, formatDate, toDateString } from '../../utils/date'
 import { DND_MIME } from '../../utils/dnd'
+import { isTopLevel } from '../../utils/smartLists'
 import { isToday, isSameMonth } from 'date-fns'
 
 // 월간 캘린더의 날짜 간 이동은 DND_MIME.CAL_DATE 사용 — 주/일 뷰의 시간블록
@@ -27,7 +28,11 @@ export function CalendarView() {
   const tasksByDate = useMemo(() => {
     const map: Record<string, typeof tasks> = {}
     tasks
-      .filter((t) => t.dueDate && !t.completed && !t.deletedAt)
+      // 하위작업 제외 — 월간 셀은 앞의 3개만 그리고 나머지를 '+n개'로 접으므로,
+      // 새어 나온 하위작업이 진짜 최상위 할일을 밀어내 그날 할 일이 아예 안 보인다.
+      // 게다가 이 카드는 draggable이라, 드롭하면 목록에 없는 하위작업의 마감일이
+      // 바뀐다(updateTask({ id, dueDate })).
+      .filter((t) => t.dueDate && !t.completed && !t.deletedAt && isTopLevel(t))
       .forEach((t) => {
         const key = t.dueDate
         if (!key) return
