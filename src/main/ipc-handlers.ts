@@ -34,6 +34,12 @@ import { flushPendingQuickAdd, requestQuickAdd } from './main-window'
 declare const __GOOGLE_CLIENT_ID__: string
 const BUILTIN_GOOGLE_CLIENT_ID = typeof __GOOGLE_CLIENT_ID__ === 'string' ? __GOOGLE_CLIENT_ID__ : ''
 
+/**
+ * UTF-8 BOM. **CSV에만** 붙인다 — 왜 붙이고 왜 JSON에는 안 붙이는지는 쓰는 자리의 주석에.
+ * 리터럴 문자로 적지 않는다: 눈에 보이지 않아서 편집·붙여넣기·포매터에 조용히 사라진다.
+ */
+const UTF8_BOM = '\uFEFF'
+
 function csvCell(value: unknown): string {
   const s = String(value ?? '')
   const escaped = s.replace(/"/g, '""')
@@ -212,7 +218,17 @@ export function setupIpcHandlers(): void {
             .join(',')
         )
         .join('\n')
-      writeFileSync(result.filePath, header + rows, 'utf-8')
+      // **BOM을 앞에 붙인다.** `.csv`에는 인코딩을 선언할 자리가 없어서 스프레드시트는
+      // 앞 바이트만 보고 짐작한다 — BOM이 없으면 엑셀은 시스템 코드페이지(한국어
+      // 윈도우는 CP949)로 읽고 한글 제목·설명·목록 이름이 통째로 깨져 나온다.
+      // 헤더가 전부 ASCII라 앞부분만 보고 판단하는 쪽에는 단서조차 없다 — 첫
+      // 비ASCII 바이트는 첫 데이터 행 한참 안쪽이다.
+      // 내보내기는 잠긴 화면에서도 열어 두는 유일한 길인데(데이터를 인질로 잡지
+      // 않는다), 돌려준 파일을 사용자가 못 읽으면 그 약속이 말뿐이 된다.
+      // **JSON 쪽에는 붙이지 말 것** — `JSON.parse`는 앞선 U+FEFF에서 그대로 터지고
+      // 복원 경로(`database.ts`의 load/restore)가 바로 그 파서다. 두 방향을
+      // `exportEncoding.test.ts`가 각각 못 박는다.
+      writeFileSync(result.filePath, `${UTF8_BOM}${header}${rows}`, 'utf-8')
     } else {
       writeFileSync(result.filePath, exportedData, 'utf-8')
     }
@@ -249,20 +265,27 @@ export function setupIpcHandlers(): void {
   handle('ai:set-config', 'paid', (_, updates) => ai.setAiConfig(updates))
   handle('ai:create-task', 'paid', (_, input, tasks) => ai.createTaskFromNL(input, tasks))
   handle('ai:interpret-action', 'paid', (_, message, tasks) => ai.interpretTaskAction(message, tasks))
-  handle('ai:stream-chat', 'paid', (event, message, tasks, history) => {
+  // **스트림 이벤트에 요청 id를 달아 보낸다.** 창에 채널은 하나뿐인데 스트림은 여럿
+  // 살아 있을 수 있다 — 렌더러가 리스너를 떼도 여기 `streamChat`은 끝까지 돈다(취소
+  // 경로가 없다). id가 없으면 렌더러는 어느 스트림의 토큰인지 구분할 방법이 없어,
+  // 버려진 답변이 다음 답변 말머리에 붙고 그 done이 새 스트림을 끊어 버렸다.
+  handle('ai:stream-chat', 'paid', (event, message, tasks, history, requestId) => {
     const sender = event.sender
+    // `pullModel`과 같은 방식으로 한 번 정규화한다. 보낸 sender에게만 되돌아가므로 값
+    // 자체가 위험하진 않지만, 타입이 흔들리면 렌더러의 일치 검사가 조용히 어긋난다.
+    const id = String(requestId ?? '')
     ai.streamChat(
       message,
       tasks,
       history ?? [],
       (token) => {
-        if (!sender.isDestroyed()) sender.send('ai:stream-token', token)
+        if (!sender.isDestroyed()) sender.send('ai:stream-token', token, id)
       },
       () => {
-        if (!sender.isDestroyed()) sender.send('ai:stream-done')
+        if (!sender.isDestroyed()) sender.send('ai:stream-done', id)
       },
       (error) => {
-        if (!sender.isDestroyed()) sender.send('ai:stream-error', error)
+        if (!sender.isDestroyed()) sender.send('ai:stream-error', error, id)
       }
     )
   })
