@@ -1035,6 +1035,14 @@ export function reorderTasks(orderedIds: string[]): void {
   // 리스트별 카운터라서 전역 재번호는 다른 리스트의 순서를 덮어쓴다.
   const moving = orderedIds.map((id) => data.tasks.find((t) => t.id === id)).filter((t) => t !== undefined)
   const slots = moving.map((t) => (t.sort_order as number) || 0).sort((a, b) => a - b)
+  // 슬롯은 엄격히 증가해야 한다. 리스트별 카운터라 리스트마다 1부터 세고,
+  // '전체'·'오늘'·태그처럼 리스트를 가로지르는 뷰는 같은 값을 쥔 행을 함께 넘긴다.
+  // 동점을 그대로 되돌려 주면 getTasks의 정렬이 안정 정렬이라 파일에 적힌 순서가
+  // 그대로 살아나, 재시작하면 드롭이 없던 일이 된다. (렌더러 applyReorder와 같은 규칙 —
+  // 한쪽만 고치면 화면과 디스크가 재시작 때 갈린다.)
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i] <= slots[i - 1]) slots[i] = slots[i - 1] + 1
+  }
   moving.forEach((t, i) => {
     t.sort_order = slots[i]
   })
