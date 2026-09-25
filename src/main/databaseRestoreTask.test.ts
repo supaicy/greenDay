@@ -178,3 +178,59 @@ describe('일괄 삭제와 복원', () => {
     expect(trashIds()).toEqual(['c'])
   })
 })
+
+/**
+ * 휴지통에서 **하위작업만** 복원했을 때.
+ *
+ * 휴지통은 행을 계층 없이 평평하게 그려서(TrashView) 하위작업 행에도 복원 버튼이
+ * 있다. 그런데 목록 뷰는 전부 `isTopLevel`로 거르고 하위작업은 살아 있는 부모의
+ * 상세 안에서만 그려진다 — 부모를 휴지통에 둔 채 자식만 올리면 그 행은 DB에는
+ * 있는데 어느 화면에도 없고, 나중에 부모를 '영구 삭제'하면 부모 제목만 적힌
+ * 확인창 아래에서 같이 지워진다. 휴지통을 비우면 반대로 영원히 남는다.
+ */
+describe('휴지통에서 하위작업만 복원', () => {
+  type Row = { id: string; parent_id: string | null; deleted_at: string | null }
+
+  /** 어느 화면에도 그려질 수 없는 행: 살아 있는데 부모가 휴지통에 있거나 아예 없다. */
+  const invisibleIds = (): string[] => {
+    const live = db.getTasks() as Row[]
+    const rows = [...live, ...(db.getTrashTasks() as Row[])]
+    return live
+      .filter((t) => t.parent_id && !rows.some((p) => p.id === t.parent_id && !p.deleted_at))
+      .map((t) => t.id)
+      .sort()
+  }
+
+  it('되살아난 하위작업은 어느 화면에도 없는 행이 되면 안 된다', () => {
+    parentWithChildren()
+    db.deleteTask('p') // p, c1, c2가 함께 휴지통으로
+    expect(trashIds().sort()).toEqual(['c1', 'c2', 'p'])
+
+    db.restoreTask('c1') // 휴지통에서 하위작업 행의 '복원'을 누른다
+
+    expect(invisibleIds(), '살아났는데 부모가 휴지통이라 어느 화면에도 없다').toEqual([])
+    expect(activeIds()).toContain('c1')
+  })
+
+  it("부모 행을 '영구 삭제'해도 살아 있는 하위작업이 함께 지워지지 않는다", () => {
+    parentWithChildren()
+    db.deleteTask('p')
+    db.restoreTask('c1')
+
+    // 휴지통에 남은 행을 하나씩 '영구 삭제'한다 — 확인창에는 그 행의 제목만 나온다.
+    for (const id of trashIds()) db.permanentDeleteTask(id)
+
+    expect(activeIds(), '복원했던 하위작업이 부모의 확인창 아래에서 같이 지워졌다').toContain('c1')
+  })
+
+  it('휴지통을 비워도 살아 있는 하위작업이 유령으로 남지 않는다', () => {
+    parentWithChildren()
+    db.deleteTask('p')
+    db.restoreTask('c1')
+
+    db.emptyTrash()
+
+    expect(invisibleIds(), '부모 행이 사라져 보이지도 지워지지도 않는 행이 남았다').toEqual([])
+    expect(activeIds()).toContain('c1')
+  })
+})

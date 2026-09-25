@@ -3,6 +3,9 @@ import { v4 as uuid } from 'uuid'
 import { clampDetailWidth } from './detailWidth'
 import { isVirtualSmartList, tagFromListId } from '../utils/smartLists'
 import { getFilteredTaskIds } from '../utils/filteredTaskIds'
+// 뷰(TaskList)·'전체 선택'과 같은 검색 판별식. setSearchQuery가 일괄 선택을 줄일 때도
+// 같은 식을 써야 BatchBar의 개수와 화면에 보이는 줄 수가 어긋나지 않는다.
+import { matchesSearch } from '../utils/search'
 import { todayString, tomorrowString } from '../utils/date'
 import { pointsForTask, POINTS_PER_HABIT, POINTS_PER_POMODORO } from '../utils/score'
 import { refreshLicense } from '../licensing/useLicense'
@@ -666,13 +669,19 @@ export const useStore = create<Store>((set, get) => ({
       maxOrderByList.set(t.listId, Math.max(maxOrderByList.get(t.listId) ?? 0, t.sortOrder || 0))
     }
 
-    const newTasks: Task[] = drafts.map(({ title, opts = {} }) => {
+    // 한 건을 Task로 굽는다. 하위작업도 같은 절차를 거쳐야 해서 밖으로 뺐다 —
+    // 두 벌로 적어 두면 Task에 필드가 늘 때 한쪽만 늘고, 그 필드는 하위작업에서만
+    // 조용히 빈다(바로 이 함수의 `description: ''`이 그렇게 굳은 자리다).
+    const build = (title: string, opts: AddTaskOptions): Task => {
       const targetList =
         opts.listId || (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
       // 오늘/내일 뷰에서 날짜 없이 추가하면, 방금 추가한 그 리스트에 보이도록 마감일을 채운다.
+      // 하위작업(parentId)은 제외한다 — 목록에 홀로 서지 않으니(smartLists.isTopLevel)
+      // 뷰의 날짜를 물려받을 이유가 없고, 반복 스폰이 만든 다음 주 체크리스트에
+      // '오늘'이 찍히면 부모와 날짜가 어긋난다. 아래 태그 규칙과 같은 기준이다.
       let finalDueDate = opts.dueDate || null
-      if (!finalDueDate && currentList === 'today') finalDueDate = todayString()
-      else if (!finalDueDate && currentList === 'tomorrow') finalDueDate = tomorrowString()
+      if (!finalDueDate && !opts.parentId && currentList === 'today') finalDueDate = todayString()
+      else if (!finalDueDate && !opts.parentId && currentList === 'tomorrow') finalDueDate = tomorrowString()
 
       // 태그 뷰에서 (최상위 태스크를) 추가하면 그 태그가 자동으로 붙어 방금 추가한 뷰에 보인다.
       // 하위작업(parentId)은 뷰의 태그를 상속하지 않는다.
@@ -687,7 +696,7 @@ export const useStore = create<Store>((set, get) => ({
       return {
         id: uuid(),
         title,
-        description: '',
+        description: opts.description ?? '',
         completed: false,
         priority: opts.priority || 'none',
         dueDate: finalDueDate,
@@ -698,7 +707,7 @@ export const useStore = create<Store>((set, get) => ({
         listId: targetList,
         parentId: opts.parentId || null,
         tags: finalTags,
-        attachments: [],
+        attachments: opts.attachments ?? [],
         createdAt: now,
         completedAt: null,
         deletedAt: null,
@@ -709,7 +718,25 @@ export const useStore = create<Store>((set, get) => ({
         scheduledEnd: opts.scheduledEnd || null,
         scheduledOverrides: opts.scheduledOverrides || null
       }
-    })
+    }
+
+    const newTasks: Task[] = []
+    for (const { title, opts = {} } of drafts) {
+      const parent = build(title, opts)
+      newTasks.push(parent)
+      // 하위작업은 부모 id가 나온 뒤에야 만들 수 있다. 같은 set/persist 묶음에
+      // 태워 보내면 부모만 저장되고 체크리스트가 없는 중간 상태가 생기지 않는다.
+      for (const sub of opts.subtasks ?? []) {
+        newTasks.push(
+          build(sub.title, {
+            parentId: parent.id,
+            listId: parent.listId,
+            description: sub.description,
+            priority: sub.priority
+          })
+        )
+      }
+    }
 
     // 스토어 쓰기는 한 번. 건당 set()은 선택 수만큼 전체 재렌더를 만든다.
     set((s) => ({ tasks: [...s.tasks, ...newTasks] }))
@@ -824,7 +851,12 @@ export const useStore = create<Store>((set, get) => ({
 
     if (newCompleted) {
       // 반복 task: 완료 시 다음 인스턴스 생성 (중복 방지·알림 오프셋은 헬퍼가 처리)
-      const spawn = nextRecurrenceSpawn(task, get().tasks, todayString())
+      const spawn = nextRecurrenceSpawn(
+        task,
+        get().tasks,
+        todayString(),
+        get().tasks.filter((t) => t.parentId === id)
+      )
       if (spawn) {
         // 넘긴 미래 회차는 완료본에서 뺀다 — 양쪽에 남으면 같은 날짜를 두 인스턴스가
         // 주장한다(완료본은 오버라이드가 있는 날을 자기 회차로 인정하므로 실제로 겹친다).
@@ -932,6 +964,21 @@ export const useStore = create<Store>((set, get) => ({
           (t) => t.id === id || (t.parentId === id && t.deletedAt === task.deletedAt)
         )
         const backIds = new Set(back.map((t) => t.id))
+        // **휴지통에 남은 부모에 매달린 채로 올리지 않는다.** 목록 뷰는 전부
+        // isTopLevel로 거르고 하위작업은 살아 있는 부모의 상세 안에서만 그려지므로,
+        // 부모를 휴지통에 둔 채 자식만 올리면 그 할일은 어느 화면에도 없다 —
+        // 사용자에게는 "복원했더니 사라졌다"다. main의 `restoreTask`가 같은 규칙으로
+        // 조상을 함께 올린다(databaseRestoreTask.test.ts). 조상만 올린다 —
+        // 그 조상의 다른 하위작업까지 끌어올리면 부모를 복원한 것과 같아진다.
+        const trashed = new Map(s.trashTasks.map((t) => [t.id, t]))
+        let child: Task | undefined = task
+        while (child?.parentId && !backIds.has(child.parentId)) {
+          const ancestor = trashed.get(child.parentId)
+          if (!ancestor) break // 부모가 살아 있으면 더 올릴 것이 없다
+          back.push(ancestor)
+          backIds.add(ancestor.id)
+          child = ancestor
+        }
         return {
           trashTasks: s.trashTasks.filter((t) => !backIds.has(t.id)),
           tasks: [...s.tasks, ...back.map((t) => ({ ...t, deletedAt: null }))]
@@ -1047,7 +1094,25 @@ export const useStore = create<Store>((set, get) => ({
 
   // === 뷰 ===
   setViewType: (type) => set({ viewType: type, selectedTaskId: null }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  // 검색은 화면을 좁히는데 일괄 선택은 그대로 남아 있었다. '전체 선택' 뒤에 검색어를
+  // 치면 BatchBar는 가려진 것까지 그대로 들고 있어서, 그 상태의 일괄 삭제/완료/이동이
+  // 화면에 없는 할일을 통째로 처리했다(보이는 건 한 줄인데 스물한 개가 휴지통으로 갔다).
+  // 좁힐 때마다 선택도 같이 줄여, BatchBar의 개수가 언제나 화면에 보이는 것과 같게 만든다.
+  // 리스트를 바꿀 때 setSelectedList가 일괄 상태를 통째로 비우는 것과 같은 이유다.
+  // getFilteredTaskIds의 검색 필터는 '검색 → 전체 선택' 한쪽 순서만 막는다 — 반대 순서는
+  // 여기서만 막을 수 있다.
+  // 거르는 잣대는 getFilteredTaskIds가 아니라 matchesSearch다. 전자는 '전체 선택' 대상
+  // (= 미완료)만 돌려주는데 뷰는 완료한 것도 '완료 N' 묶음으로 계속 그리고 거기서도
+  // 체크가 된다 — 그걸로 거르면 검색어와 무관하게, 화면에 멀쩡히 보이는 완료 항목의
+  // 체크가 타이핑 한 번에 조용히 풀린다. 여기서 바뀌는 건 검색어뿐이니 검색어로만 판단한다.
+  // 일괄 모드가 아닐 때는 걸러내지 않는다 — 선택이 비어 있는 게 불변식이고, 타이핑마다
+  // 전체 태스크를 훑을 이유도 없다.
+  setSearchQuery: (query) =>
+    set((s) => {
+      if (!s.batchMode || s.batchSelectedIds.length === 0) return { searchQuery: query }
+      const visible = new Set(s.tasks.filter((t) => matchesSearch(t, query)).map((t) => t.id))
+      return { searchQuery: query, batchSelectedIds: s.batchSelectedIds.filter((id) => visible.has(id)) }
+    }),
   setTheme: (theme) => {
     writeLocal('ticktick-theme', theme)
     set({ theme })

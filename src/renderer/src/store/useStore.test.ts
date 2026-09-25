@@ -870,6 +870,25 @@ describe('삭제 되돌리기와 하위작업', () => {
     await useStore.getState().popUndo()
     expect(ids(useStore.getState().tasks)).toEqual(['p'])
   })
+
+  // 화면도 main과 같은 규칙을 써야 한다 — 부모를 휴지통에 둔 채 자식만 올리면
+  // 뷰는 isTopLevel로 거르고 하위작업은 살아 있는 부모의 상세 안에서만 그려져서,
+  // 되살린 할일이 어느 화면에도 나타나지 않는다.
+  it('하위작업만 복원하면 부모도 함께 올라온다', async () => {
+    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('p')
+    expect(ids(useStore.getState().trashTasks)).toEqual(['c1', 'c2', 'p'])
+
+    await useStore.getState().restoreTask('c1')
+
+    const live = useStore.getState().tasks
+    const trashed = new Set(useStore.getState().trashTasks.map((t) => t.id))
+    const invisible = live.filter(
+      (t) => t.parentId !== null && (trashed.has(t.parentId) || !live.some((p) => p.id === t.parentId))
+    )
+    expect(ids(invisible), '살아났는데 부모가 휴지통이라 어느 화면에도 없다').toEqual([])
+    expect(ids(live)).toContain('c1')
+  })
 })
 
 /**
@@ -1099,5 +1118,177 @@ describe('loadData — 어긋난 행이 화면을 무너뜨리지 않는다', ()
   it('scheduledOverrides가 배열이면 없는 것으로 친다', async () => {
     await loadWith([row({ scheduled_overrides: '["나쁜 값"]' })])
     expect(useStore.getState().tasks[0].scheduledOverrides).toBeNull()
+  })
+})
+
+/**
+ * **검색이 화면을 좁혀도 일괄 선택은 그대로 남아 있었다.**
+ *
+ * 검색창은 일괄 모드에서도 계속 떠 있고(BatchBar는 따로 뜨는 바다), `setSearchQuery`는
+ * `batchSelectedIds`를 건드리지 않았다. 그래서 '전체 선택' 뒤에 검색어를 치면 화면에는
+ * 두어 줄만 남는데 BatchBar는 여전히 스물몇 개를 들고 있었고, 그 상태의 삭제가 화면에
+ * 없는 할일까지 통째로 휴지통에 넣었다 — 무엇이 사라졌는지 화면에 아무 단서도 없이.
+ * 완료는 가려진 것의 점수까지 지급했고, 이동은 가려진 것을 다른 리스트로 옮겼다.
+ *
+ * getFilteredTaskIds에 검색 필터를 넣은 건 '검색 → 전체 선택' 순서만 고쳤다.
+ * 반대 순서('전체 선택 → 검색')는 여기서 막는다.
+ */
+describe('일괄 선택과 검색 좁히기', () => {
+  const rows = () => [
+    task({ id: 'a', title: '빨래' }),
+    task({ id: 'b', title: '설거지' }),
+    task({ id: 'c', title: '보고서' })
+  ]
+
+  it('검색으로 가려진 할일은 선택에서 빠진다 — 일괄 삭제가 화면 밖의 것을 버리지 않는다', async () => {
+    useStore.setState({ tasks: rows(), trashTasks: [], selectedListId: 'inbox', searchQuery: '', batchMode: true })
+    useStore.getState().selectAllBatch()
+    useStore.getState().setSearchQuery('보고서')
+    expect(useStore.getState().batchSelectedIds, 'BatchBar의 개수는 화면에 보이는 수와 같아야 한다').toEqual(['c'])
+
+    await useStore.getState().batchDelete()
+    expect(useStore.getState().trashTasks.map((t) => t.id)).toEqual(['c'])
+    expect(useStore.getState().tasks.map((t) => t.id), '가려진 빨래·설거지가 함께 버려졌다').toEqual(['a', 'b'])
+  })
+
+  it('일괄 완료도 가려진 할일의 점수를 지급하지 않는다', async () => {
+    useStore.setState({
+      tasks: rows().map((t) => ({ ...t, priority: 'high' as const })),
+      score: { total: 0, events: [], taskNet: {} },
+      selectedListId: 'inbox',
+      searchQuery: '',
+      batchMode: true
+    })
+    useStore.getState().selectAllBatch()
+    useStore.getState().setSearchQuery('보고서')
+    await useStore.getState().batchComplete()
+    expect(
+      useStore
+        .getState()
+        .tasks.filter((t) => t.completed)
+        .map((t) => t.id)
+    ).toEqual(['c'])
+    expect(useStore.getState().score.taskNet).toEqual({ c: 3 })
+  })
+
+  // 검색을 지운다고 선택이 되살아나면 안 된다 — 사라진 선택은 화면에서도 사라져 있었다.
+  it('검색어를 지워도 걸러진 선택은 돌아오지 않는다', () => {
+    useStore.setState({ tasks: rows(), selectedListId: 'inbox', searchQuery: '', batchMode: true })
+    useStore.getState().selectAllBatch()
+    useStore.getState().setSearchQuery('보고서')
+    useStore.getState().setSearchQuery('')
+    expect(useStore.getState().batchSelectedIds).toEqual(['c'])
+  })
+
+  // 일괄 모드가 아닐 때는 아무것도 걸러내지 않는다(불변식: 선택이 비어 있다).
+  it('일반 모드의 검색은 선택을 건드리지 않는다', () => {
+    useStore.setState({ tasks: rows(), selectedListId: 'inbox', searchQuery: '', batchMode: false })
+    useStore.getState().setSearchQuery('보고서')
+    expect(useStore.getState().batchSelectedIds).toEqual([])
+    expect(useStore.getState().searchQuery).toBe('보고서')
+  })
+
+  // 거르는 잣대가 '전체 선택' 대상(getFilteredTaskIds)이면 안 되는 이유.
+  // 뷰는 완료한 할일도 '완료 N' 묶음으로 계속 그리고 거기서도 체크가 되는데,
+  // getFilteredTaskIds는 미완료만 돌려준다. 그걸로 거르면 검색어에 멀쩡히 걸려
+  // 화면에 그대로 보이는 완료 항목의 체크가 타이핑 한 번에 조용히 풀렸다.
+  it('검색어에 걸리면 완료된 할일의 선택도 유지된다 — 아직 화면에 보인다', () => {
+    useStore.setState({
+      tasks: [...rows(), task({ id: 'd', title: '보고서 초안', completed: true })],
+      selectedListId: 'inbox',
+      searchQuery: '',
+      batchMode: true
+    })
+    useStore.getState().toggleBatchSelect('c')
+    useStore.getState().toggleBatchSelect('d')
+    useStore.getState().setSearchQuery('보고서')
+    expect(useStore.getState().batchSelectedIds).toEqual(['c', 'd'])
+  })
+})
+
+/**
+ * 반복 할일은 완료할 때마다 다음 회차를 새로 만든다. 그 스폰이 제목·마감일만
+ * 들고 가던 시절, 메모·첨부·체크리스트는 완료본에만 남았다 — 완료본은 '완료'
+ * 스마트 리스트 말고는 어느 화면에도 안 보이므로, 사용자 쪽에서는 주간 장보기에
+ * 적어 둔 품목 목록이 체크 한 번에 사라진 것과 구별되지 않았다.
+ */
+describe('반복 스폰 — 내용이 다음 회차로 넘어간다', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(2026, 7, 15, 12, 0, 0))
+    // 스토어 기본값이 'today'라 앞 테스트가 무엇을 남겼든 여기서 못 박는다 —
+    // 뷰가 '오늘'이면 날짜 자동 채움이 끼어들어 마지막 케이스와 구분이 흐려진다.
+    useStore.setState({ selectedListId: 'inbox' })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const weekly = (): Task =>
+    task({
+      id: 'shop',
+      title: '장보기',
+      description: '우유, 계란, 빵',
+      attachments: ['목록.png|/data/attachments/uuid-목록.png'],
+      isRecurring: true,
+      recurringPattern: 'daily',
+      dueDate: '2026-08-15'
+    })
+
+  /** 스폰된 다음 회차(= 미완료 최상위 하나). */
+  const spawned = (): Task | undefined => useStore.getState().tasks.find((t) => !t.completed && !t.parentId)
+  /** 그 회차에 달린 체크리스트. */
+  const kids = (): Task[] => useStore.getState().tasks.filter((t) => t.parentId === spawned()?.id)
+
+  it('toggleTask 스폰이 메모와 첨부를 들고 간다', async () => {
+    useStore.setState({ tasks: [weekly()] })
+    await useStore.getState().toggleTask('shop')
+    expect(spawned()?.dueDate).toBe('2026-08-16')
+    expect(spawned()?.description).toBe('우유, 계란, 빵')
+    expect(spawned()?.attachments).toEqual(['목록.png|/data/attachments/uuid-목록.png'])
+  })
+
+  // 체크리스트는 시리즈의 것이다. 지난 회차에서 체크한 표시는 따라오지 않는다.
+  it('toggleTask 스폰이 하위작업을 전부 미완료로 다시 세운다', async () => {
+    useStore.setState({
+      tasks: [
+        weekly(),
+        task({ id: 's1', title: '우유', parentId: 'shop', description: '저지방' }),
+        task({ id: 's2', title: '계란', parentId: 'shop', completed: true, priority: 'high' })
+      ]
+    })
+    await useStore.getState().toggleTask('shop')
+    expect(kids().map((k) => k.title)).toEqual(['우유', '계란'])
+    expect(kids().map((k) => k.completed)).toEqual([false, false])
+    expect(kids().map((k) => k.description)).toEqual(['저지방', ''])
+    expect(kids().map((k) => k.priority)).toEqual(['none', 'high'])
+    // 원본의 하위작업은 그대로 원본에 남는다 — 옮기는 것이 아니라 복제다.
+    expect(useStore.getState().tasks.filter((t) => t.parentId === 'shop')).toHaveLength(2)
+  })
+
+  // 일괄 완료는 스폰을 collectRecurrenceSpawns로 따로 계산한다 — 한 건씩 완료한
+  // 것과 결과가 같아야 한다. 여기서 갈리면 같은 할일이 어떻게 완료했느냐에 따라
+  // 다음 주에 내용이 있기도 없기도 한다.
+  it('batchComplete 스폰도 같은 것을 들고 간다', async () => {
+    useStore.setState({
+      tasks: [weekly(), task({ id: 's1', title: '우유', parentId: 'shop' })],
+      batchSelectedIds: ['shop']
+    })
+    await useStore.getState().batchComplete()
+    expect(spawned()?.description).toBe('우유, 계란, 빵')
+    expect(spawned()?.attachments).toEqual(['목록.png|/data/attachments/uuid-목록.png'])
+    expect(kids().map((k) => k.title)).toEqual(['우유'])
+  })
+
+  // '오늘' 뷰의 날짜 자동 채움은 최상위 할일만의 규칙이다(태그 상속과 같은 기준).
+  // 하위작업까지 채우면 다음 주 체크리스트에 오늘 날짜가 찍혀 부모와 어긋난다.
+  it('스폰된 하위작업은 오늘 뷰의 마감일을 물려받지 않는다', async () => {
+    useStore.setState({
+      tasks: [weekly(), task({ id: 's1', title: '우유', parentId: 'shop' })],
+      selectedListId: 'today'
+    })
+    await useStore.getState().toggleTask('shop')
+    expect(spawned()?.dueDate).toBe('2026-08-16')
+    expect(kids().map((k) => k.dueDate)).toEqual([null])
   })
 })

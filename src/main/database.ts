@@ -147,6 +147,51 @@ let primaryTrusted = true
 /** 이 세대가 커밋되면 첨부를 걷는다. 0이면 예약 없음. */
 let gcAfterRevision = 0
 
+/**
+ * **예약된 스윕이 볼 수 있는 이름들 — 예약 시점에 첨부 폴더에 있던 것만이다.**
+ * null이면 제한 없음(부팅 스윕이 그렇다).
+ *
+ * 없으면: 예약과 커밋 사이에 `copyAttachment`가 넣은 파일이 고아로 보인다.
+ * `pick-attachment`는 파일을 **먼저** 복사하고, 그 참조를 적는 `update-task`는
+ * 렌더러를 한 바퀴 돌아 나중에 온다. 그 왕복 안에 커밋이 착륙하면 방금 고른
+ * 첨부가 아무도 참조하지 않는 것으로 보여 쓸려 나간다 — 목록에는 남았는데 파일은
+ * 없어서 눌러도 아무 일도 일어나지 않는 첨부가 된다(`open-attachment`는
+ * `isInsideAttachments`가 없는 경로에서 false로 떨어져 조용히 거절한다).
+ * 창은 디바운스 300ms이고, 쓰기가 실패 중이면 재시도 백오프 전체(최대 30초)로
+ * 벌어진다 — 한 번의 영구 삭제가 그동안 고른 첨부를 전부 먹는다.
+ *
+ * 미루는 것이지 새는 것이 아니다: 참조가 끝내 오지 않으면 다음 부팅의 무제한
+ * 스윕이 걷는다. 참조만 떼는 경로가 이미 그 자리에서 정산된다.
+ */
+let gcArmedNames: readonly string[] | null = null
+
+/**
+ * **붙들려 있는 동안 미뤄 둔 파괴적 파일 조작.**
+ *
+ * `holdSaves()`는 "디스크 쓰기를 붙든다"는 약속인데, 격리(rename)와 첨부 GC(unlink)는
+ * `save()`를 지나지 않는 직접 조작이라 그 가드를 통째로 비껴갔다. 부팅 순서가
+ * `holdSaves() → initDatabase() → runMigrationOnBoot()`(index.ts)이므로, 첫 실행에서
+ * 그 둘이 **전환 전 백업(`backup-before-greenday-2/`)보다 먼저** 돌았다:
+ * 손상된 primary에만 참조가 남아 있던 첨부는 백업이 시작되기 전에 이미 unlink됐고,
+ * 손상본은 `.corrupt-*`라는 이름으로 옮겨져 `DATA_FILES`(migration/handoff.ts)에
+ * 걸리지 않아 백업에서도 빠졌다 — 되돌릴 사본이 어디에도 없는 영구 삭제였다.
+ * 붙들려 있는 동안에는 적어 두기만 하고 `releaseSaves()`(=백업이 끝난 뒤)에 실제로 한다.
+ */
+let quarantineWhenReleased: string | null = null
+let gcAttachmentsWhenReleased = false
+
+/**
+ * 미뤄 둔 격리를 지금 한다. **primary를 덮어쓰기 직전에도 반드시 불러야 한다** —
+ * 그러지 않으면 종료 플러시가 손상본 자리에 새 데이터를 써서 사용자가 잃은 원본이
+ * 통째로 사라진다.
+ */
+function quarantineDeferred(): void {
+  if (quarantineWhenReleased === null) return
+  const file = quarantineWhenReleased
+  quarantineWhenReleased = null
+  quarantine(file)
+}
+
 export interface SaveHealth {
   /** 디스크가 메모리를 따라잡았는가. */
   settled: boolean
@@ -188,6 +233,14 @@ export function holdSaves(): void {
 export function releaseSaves(): void {
   if (!savesHeld) return
   savesHeld = false
+  // **미뤄 둔 파괴적 조작은 여기서 한다.** 붙드는 구간의 끝은 곧 "전환 전 백업이
+  // 끝났다"는 뜻이다(migration/arrival.ts 3단계 → 10단계). 그 뒤에야 지워도
+  // 되돌릴 사본이 있다.
+  quarantineDeferred()
+  if (gcAttachmentsWhenReleased) {
+    gcAttachmentsWhenReleased = false
+    gcAttachments()
+  }
   if (revision > committedRevision && !saveTimer && !dbReadFailed) {
     saveTimer = setTimeout(() => {
       saveTimer = null
@@ -405,6 +458,11 @@ function flushSave(): boolean {
   }
   if (dbReadFailed) return true
   if (revision <= committedRevision) return lastSaveError === null
+  // **종료 플러시는 붙들려 있어도 쓴다.** 그러니 미뤄 둔 격리가 남아 있으면 여기서
+  // 반드시 먼저 치운다 — 안 그러면 우리 데이터가 손상본 자리로 rename돼 사용자가
+  // 잃은 원본이 통째로 사라진다. 첨부 GC는 미룬 채로 둔다: 종료 직전에 파일을
+  // 지워서 얻을 것이 없고, 다음 부팅이 어차피 다시 판정한다.
+  quarantineDeferred()
   try {
     commitSync(revision)
   } catch (error) {
@@ -426,13 +484,20 @@ function flushSave(): boolean {
  * 된다(검증이 실측). 삭제의 내구성이 확보된 뒤에야 그 참조가 진짜로 없는 것이다.
  */
 function scheduleAttachmentGc(): void {
+  // **예약 시점의 폴더를 찍어 둔다.** 이 뒤에 들어온 파일은 방금 지운 행이
+  // 참조했을 리가 없다 — 아직 참조가 안 적혔을 뿐이다(`gcArmedNames` 주석).
+  // 이미 예약돼 있으면 **먼저 찍은 것을 유지한다**: 다시 찍으면 1차 예약 뒤에
+  // `copyAttachment`가 넣은 파일이 후보로 들어와 같은 창이 그대로 다시 열린다.
+  if (gcAfterRevision === 0) gcArmedNames = listAttachmentNames()
   gcAfterRevision = revision
 }
 
 function runPendingAttachmentGc(): void {
   if (gcAfterRevision === 0 || committedRevision < gcAfterRevision) return
   gcAfterRevision = 0
-  gcAttachments()
+  const armed = gcArmedNames
+  gcArmedNames = null
+  gcAttachments(armed)
 }
 
 /** 죽은 프로세스가 남긴 임시 파일. 다음 부팅에서 걷어낸다. */
@@ -601,7 +666,12 @@ export function initDatabase(): void {
   lastSaveError = null
   retryStreak = 0
   gcAfterRevision = 0
+  gcArmedNames = null
   primaryTrusted = true
+  // 한 프로세스에서 initDatabase()를 두 번 부르는 경로(테스트)가 앞선 실행의
+  // 미뤄 둔 격리를 물려받으면 엉뚱한 경로를 치운다.
+  quarantineWhenReleased = null
+  gcAttachmentsWhenReleased = false
   sweepTempFiles()
   try {
     const loaded = load()
@@ -612,7 +682,17 @@ export function initDatabase(): void {
       // `rotateBackup`으로 그것을 `.bak` 위에 밀어, 방금 우리를 구해 준 정상본이
       // 손상본으로 덮인다(검증이 실측). 치우면 `rotateBackup`이 밀 것을 찾지
       // 못해 `.bak`이 그대로 살아남고, 새 primary가 커밋된 뒤부터 정상 회전이다.
-      if (loaded.primaryCorrupt) quarantine(dbPath)
+      //
+      // 다만 **붙들려 있으면 미룬다**(`quarantineWhenReleased` 주석). 첫 실행에서
+      // 여기서 바로 치우면 전환 전 백업이 `DATA_FILES`의 `ticktick-data.json`을
+      // 찾지 못해 사용자가 잃은 원본이 백업에서 빠진다. 미뤄도 안전한 이유는
+      // 바로 아래 `primaryTrusted = false`가 회전을 막고, 붙들린 동안은 저장 자체가
+      // 없으며, 유일하게 쓰는 종료 플러시가 쓰기 직전에 `quarantineDeferred()`를
+      // 부르기 때문이다.
+      if (loaded.primaryCorrupt) {
+        if (savesHeld) quarantineWhenReleased = dbPath
+        else quarantine(dbPath)
+      }
       // 격리가 실패했을 때를 위한 두 번째 겹. 우리 손으로 쓴 primary가
       // 자리에 앉을 때까지 회전을 막는다.
       primaryTrusted = false
@@ -904,6 +984,30 @@ export function restoreTask(id: string): void {
       t.deleted_at = null
       t.deleted_with = null
     }
+  }
+  // **되살아난 행을 휴지통에 남은 부모에 매달아 두지 않는다.**
+  // 휴지통은 계층 없이 평평하게 그려서 하위작업 행에도 복원 버튼이 있다(TrashView).
+  // 그런데 목록 뷰는 전부 `isTopLevel`로 거르고 하위작업은 **살아 있는** 부모의 상세
+  // 안에서만 그려진다 — 부모를 휴지통에 둔 채 자식만 올리면 그 할일은 DB에는 있는데
+  // 어느 화면에도 없다. 사용자에게는 "복원했더니 그냥 사라졌다"이고, 그 뒤 부모 행을
+  // '영구 삭제'하면 부모 제목만 적힌 확인창 아래에서 같이 지워진다
+  // (`permanentDeleteTask`가 `parent_id === id`를 함께 걷는다). 휴지통을 비우면
+  // 이번엔 부모 행만 사라져, 보이지도 고치지도 지우지도 못하는 행이 영원히 남는다.
+  // 조상**만** 올린다 — 그 조상의 다른 하위작업까지 끌어올리면 restoreTask(부모)와
+  // 같아져, 사용자가 고른 한 줄이 가족 전체를 되살린다.
+  let child = parent
+  const walked = new Set<string>([id])
+  while (typeof child.parent_id === 'string') {
+    const parentId = child.parent_id
+    const ancestor = data.tasks.find((t) => t.id === parentId)
+    // 손상된 파일의 자기참조·순환 parent_id에 여기서 멈추지 않으면 앱이 통째로 선다.
+    if (!ancestor || walked.has(ancestor.id as string)) break
+    walked.add(ancestor.id as string)
+    if (ancestor.deleted_at) {
+      ancestor.deleted_at = null
+      ancestor.deleted_with = null
+    }
+    child = ancestor
   }
   save()
 }
@@ -1256,6 +1360,16 @@ function attachmentNameCandidates(entry: string): string[] {
   return [...pieces].map((piece) => piece.split(/[\\/]/).pop() || piece)
 }
 
+/** 첨부 폴더의 이름들. 못 읽으면 빈 목록 — 아무것도 지우지 않는 쪽으로 떨어진다. */
+function listAttachmentNames(): string[] {
+  if (!attachmentsDir) return []
+  try {
+    return readdirSync(attachmentsDir)
+  } catch {
+    return []
+  }
+}
+
 /**
  * 참조가 사라진 첨부 사본을 지운다. 지운 개수를 돌려준다.
  *
@@ -1264,13 +1378,22 @@ function attachmentNameCandidates(entry: string): string[] {
  * 행을 지우지 않으므로 그때는 아직 "휴지통에서 되돌릴 수 있는" 상태이고,
  * 다음 부팅이 그 판정이 확정되는 첫 지점이다.
  */
-export function gcAttachments(): number {
+export function gcAttachments(onlyNames?: readonly string[] | null): number {
   if (dbReadFailed || !attachmentsDir) return 0
-  let names: string[]
-  try {
-    names = readdirSync(attachmentsDir)
-  } catch {
+  // **붙들려 있으면 한 개도 지우지 않는다.** unlink는 `save()`를 지나지 않으므로
+  // `holdSaves()`가 막지 못했고, 첫 실행에서는 그 때문에 전환 전 백업이 만들어지기
+  // 전에 첨부가 사라졌다 — `.bak`이 낡아 그 할일을 모르면 아직 살아 있는 사진·PDF가
+  // "참조 없음"으로 보인다. 미루면 백업이 원본 폴더를 통째로 담은 뒤에 걷는다.
+  if (savesHeld) {
+    gcAttachmentsWhenReleased = true
     return 0
+  }
+  let names = listAttachmentNames()
+  // **예약된 스윕은 예약 시점의 스냅샷 안에서만 지운다** — `gcArmedNames` 주석 참고.
+  // 부팅 스윕은 아무것도 넘기지 않아 예전 그대로 전부 본다.
+  if (onlyNames) {
+    const armed = new Set(onlyNames)
+    names = names.filter((name) => armed.has(name))
   }
   let removed = 0
   for (const name of unreferencedAttachments(names, data.tasks)) {
