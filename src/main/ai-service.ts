@@ -42,6 +42,24 @@ let config: AiConfig = { ...DEFAULT_CONFIG }
  * 중 하나이고, 관문을 통과한 주소 대신 검사받지 않은 주소로 나가는 것도 그렇다.
  */
 function snapshot(): AiConfig {
+  // **읽기 전에 디스크를 올린다.** 전역 `config`는 모듈이 올라오는 순간 `DEFAULT_CONFIG`
+  // (= ollama / `http://localhost:11434`)이고, 하이드레이션은 `getAiConfig()`와
+  // `getAiConfigInternal()` **안에서만** 일어난다. 그런데 앱이 부팅하고 처음 보내는 AI IPC는
+  // `ai:check-connection`이지 `ai:get-config`가 아니다(App.tsx의 시작 effect —
+  // `ai:get-config`는 설정 화면이나 AI 패널을 **열어야** 나간다). 그래서 첫 연결 확인이,
+  // 그리고 그 둘을 열기 전에 누른 할일 폼의 AI 버튼(`ai:create-task` → `callLlm`)이,
+  // **저장된 설정 대신 기본 localhost**로 나갔다. 로컬 Ollama가 없으면 `aiConnected=false`가
+  // 한 세션 내내 붙어(패널의 재검사는 `null`일 때만 돈다) AI가 통째로 죽고, 떠 있으면 반대로
+  // **남의 제공자 모델 목록**이 설정 드롭다운에 실린 채 프롬프트가 localhost로 나간다.
+  //
+  // 하이드레이션을 여기 두는 이유: 요청을 보내는 다섯 자리가 전부 `snapshot()` 아니면
+  // `getAiConfigInternal()`을 지나므로, 이 한 줄이 나머지를 한꺼번에 덮는다.
+  // `checkConnection`만 고치면 부팅 검사는 초록이 되는데 그 초록이 띄운 AI 버튼은 여전히
+  // localhost로 가서, 오히려 증상이 더 헷갈려진다.
+  //
+  // 위 주석의 보장은 깨지지 않는다 — `hydrateFromDisk`는 `config`에 **새 객체를 대입**하고
+  // 우리는 그 직후 참조를 한 번만 잡는다. 요청 하나가 한 시점의 설정만 쓴다는 성질은 그대로다.
+  hydrateFromDisk()
   return config
 }
 
@@ -338,6 +356,10 @@ function bareHost(hostname: string): string {
  * 자물쇠가 "외부 제공자를 차단해 데이터가 기기를 벗어나지 않습니다"라고 말하는 동안
  * **연결 확인 버튼이 그 약속을 깨고** 있었다. 약속과 강제를 한 자리에 둔다.
  *
+ * 그 자물쇠는 **지금 나가는 `url`**로 판정한다. 저장된 `cfg.baseUrl`로 판정하면
+ * 리다이렉트 홉이 통째로 빠져나간다 — `guardedFetch`가 홉마다 여기를 다시 부르는데
+ * 대상만 외부로 바뀌고 설정은 그대로라 판정이 계속 "이건 로컬이다"였다.
+ *
  * 판정은 호스트 문자열이 아니라 **해석된 주소**로 한다. 이름이 루프백/사설로 풀리는
  * 경우(DNS 리바인딩, `metadata.google.internal`)가 문자열 검사로는 안 보인다.
  *
@@ -349,9 +371,6 @@ function bareHost(hostname: string): string {
  * 중에 도착한 `ai:set-config`가 판정 대상을 바꿔 놓는다.
  */
 export async function assertEgressAllowed(url: string, cfg: AiConfig): Promise<string> {
-  if (cfg.localOnly && !isLocalAiConfig(cfg)) {
-    throw new Error('로컬 전용 모드: 외부 제공자 호출이 차단되었습니다')
-  }
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -360,6 +379,14 @@ export async function assertEgressAllowed(url: string, cfg: AiConfig): Promise<s
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('허용되지 않은 서버 주소입니다')
+  }
+  // 자물쇠는 **지금 나가는 주소**로 판정한다. 저장된 `cfg.baseUrl`로 판정하면
+  // `localhost:11434`가 `302 Location: http://외부/` 하나만 줘도 다음 홉의 판정이
+  // 여전히 "설정은 로컬이다"라고 답해서, 잠금이 켜진 채 외부 호스트로 요청이 나갔다
+  // (실측: 두 번째 요청이 나갔고 그 호스트가 준 모델 목록이 드롭다운에 들어왔다).
+  // provider는 설정의 것을 그대로 쓴다 — 주소가 로컬이어도 ollama가 아니면 온디바이스가 아니다.
+  if (cfg.localOnly && !isLocalAiConfig({ provider: cfg.provider, baseUrl: parsed.origin })) {
+    throw new Error('로컬 전용 모드: 외부 제공자 호출이 차단되었습니다')
   }
 
   const host = bareHost(parsed.hostname)
@@ -763,17 +790,21 @@ async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: b
   let lastError: Error | null = null
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    // **본문을 다 읽을 때까지 타이머를 살려 둔다.** 전에는 헤더가 도착하자마자
+    // `clearTimeout`을 해서 30초가 '연결·헤더까지'만 덮었다. 200만 뱉고 본문을 멈춘
+    // 상대(생성 도중 멎은 Ollama, 끊긴 Wi-Fi/프록시, 캡티브 포털) 앞에서는 아래
+    // `res.json()`이 영영 안 깨어나고 끊어 줄 신호도 없었다 — AI 패널이 `aiLoading`인
+    // 채로 얼어붙어 전송 버튼까지 죽었다(스피너만 돌고 취소도 안 된다).
+    // 정리는 streamChat·pullModel과 같은 모양으로 아래 finally 한 곳에서만 한다.
+    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT)
-
       const res = await guardedFetch(chatUrl, cfg, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
         signal: controller.signal
       })
-      clearTimeout(timeout)
 
       if (!res.ok) {
         throw new Error(`API error: ${res.status} ${res.statusText}`)
@@ -797,6 +828,10 @@ async function callLlm(systemPrompt: string, userMessage: string, useJsonMode: b
     } catch (err) {
       lastError = err as Error
       if (attempt < MAX_RETRIES) continue
+    } finally {
+      // continue/return/throw 어느 경로든 이번 시도의 타이머를 정리한다.
+      // 성공 경로의 `return parsed`도 여기를 지나므로 타이머는 정확히 한 번 꺼진다.
+      clearTimeout(timeout)
     }
   }
 
