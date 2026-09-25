@@ -31,6 +31,7 @@ import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
 import { TagPicker } from './TagPicker'
 import { TaskContextMenu } from './TaskContextMenu'
+import { TaskItem } from './TaskItem'
 import { TaskMoreMenu } from './TaskMoreMenu'
 import { QuickAdd } from '../common/QuickAdd'
 
@@ -1102,5 +1103,54 @@ describe('Cmd+Z는 글자를 치는 중이면 양보한다', () => {
     fireEvent.keyDown(document.body, { key: 'z', metaKey: true })
 
     expect(popUndo).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Regression: 진단 2.7 / 3장 #24 — 드래그가 'copy'를 광고해 드롭이 거부됐다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * HTML5 DnD는 `effectAllowed`와 `dropEffect`가 맞아야 드롭을 허용한다.
+ * 어긋나면 `onDrop`이 아예 발화하지 않아 재정렬이 조용히 죽는다 — 행이
+ * 흐려지며 드래그는 시작되므로 "기능이 없다"가 아니라 "앱이 놓쳤다"로 보인다.
+ */
+describe('할일 드래그 — 드래그와 드롭의 effect가 맞는가', () => {
+  const dragTask = {
+    id: 'drag-1',
+    title: '끌어보기',
+    completed: false,
+    priority: 'none',
+    dueDate: null,
+    listId: 'inbox',
+    parentId: null,
+    tags: [],
+    attachments: [],
+    pinned: false
+  } as never
+
+  function fakeTransfer(): { setData: ReturnType<typeof vi.fn>; effectAllowed: string; dropEffect: string } {
+    return { setData: vi.fn(), effectAllowed: 'uninitialized', dropEffect: 'none' }
+  }
+
+  function renderRow(): HTMLElement {
+    useStore.setState({ tasks: [dragTask] as never })
+    render(<TaskItem task={dragTask} />)
+    return screen.getByText('끌어보기').closest('[draggable="true"]') as HTMLElement
+  }
+
+  it('드래그 시작이 move를 허용한다', () => {
+    const dt = fakeTransfer()
+    fireEvent.dragStart(renderRow(), { dataTransfer: dt })
+    expect(dt.effectAllowed).toBe('move')
+  })
+
+  it('드래그와 드롭이 같은 effect를 말한다 (드롭이 허용되는 조건)', () => {
+    const row = renderRow()
+    const dt = fakeTransfer()
+    fireEvent.dragStart(row, { dataTransfer: dt })
+    fireEvent.dragOver(row, { dataTransfer: dt })
+    // 'copy' vs 'move'로 갈리면 브라우저가 드롭을 거부한다.
+    expect(dt.effectAllowed).toBe(dt.dropEffect)
   })
 })

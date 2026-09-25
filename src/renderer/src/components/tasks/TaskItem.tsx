@@ -76,7 +76,14 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
         onDragStart={(e) => {
           setDragTaskId(task.id)
           e.dataTransfer.setData(DND_MIME.TASK_ID, task.id)
-          e.dataTransfer.effectAllowed = 'copy'
+          // **'move'여야 한다.** 받는 쪽은 전부 `dropEffect = 'move'`를 설정하는데,
+          // 여기서 'copy'만 허용하면 HTML5 DnD 규격상 조합이 맞지 않아 드롭 자체가
+          // 허용되지 않는다 — `onDrop`이 발화하지 않아 목록 재정렬도, 캘린더로 끌어
+          // 시간 배정하기도 아무 일이 일어나지 않았다. 행이 흐려지며 드래그는
+          // 시작되므로 사용자에게는 "앱이 드롭을 놓쳤다"로 보인다.
+          // (`utils/dnd.ts`의 주석이 이 드래그를 'effectAllowed: move'로 적고 있다 —
+          //  저장소에서 'copy'를 쓰던 곳은 여기 하나뿐이었다.)
+          e.dataTransfer.effectAllowed = 'move'
         }}
         onDragOver={(e) => {
           e.preventDefault()
