@@ -390,7 +390,29 @@ export function setupIpcHandlers(): void {
   handle('calendar:sync-now', 'paid', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password || !config.calendarUrl) {
-      return { ok: false, message: '연동 설정을 먼저 마치세요.', result: null }
+      return { ok: false, message: uiStrings().syncNotConfigured, result: null }
+    }
+    /**
+     * **읽기 전용 세션에서는 원격을 건드리지 않는다.**
+     *
+     * 데이터 파일을 못 읽으면 세션이 읽기 전용으로 내려가고 `data`는 빈 기본값이
+     * 된다. 그런데 `getTasks()`에는 `assertWritable()`이 없어서(읽기는 무료 채널이라
+     * 의도된 것) 조용히 `[]`를 돌려준다. 캘린더 설정은 **별도 파일**이라 멀쩡히
+     * 로드되므로 `syncState`에는 이전에 올린 항목이 전부 남아 있고,
+     * `planSync`의 마지막 루프가 "목록에 없는 것 = 지워진 것"으로 보아
+     * **사용자의 캘린더에서 Greenday 일정을 전부 삭제**한다.
+     *
+     * 로컬이 이미 안 읽히는 그 순간에 마지막 남은 사본이 날아간다. 서버 삭제는
+     * 앱에서 되돌릴 수 없고, 비워진 state가 저장되면서 무엇을 지웠는지 기록도
+     * 사라진다.
+     *
+     * 이 저장소는 같은 위험을 이미 알고 있었다 — `databaseReadOnly.test.ts`가
+     * "빈 백업으로 진짜 백업을 덮지 않는다"며 `exportData()`가 읽기 전용에서
+     * 던지도록 못박아 두었다. 동기화 채널 둘만 같은 가드를 못 받았고,
+     * `isDatabaseReadOnly()`는 export돼 있으면서 자기 테스트 말고는 호출처가 없었다.
+     */
+    if (db.isDatabaseReadOnly()) {
+      return { ok: false, message: uiStrings().syncBlockedReadOnly, result: null }
     }
     try {
       const result = await runSync({
@@ -524,7 +546,29 @@ export function setupIpcHandlers(): void {
   handle('google:sync-now', 'paid', async () => {
     const loaded = loadGoogle()
     if (!loaded.tokens) {
-      return { ok: false, message: '구글 계정을 먼저 연결하세요.', result: null }
+      return { ok: false, message: uiStrings().syncGoogleNotConnected, result: null }
+    }
+    /**
+     * **읽기 전용 세션에서는 원격을 건드리지 않는다.**
+     *
+     * 데이터 파일을 못 읽으면 세션이 읽기 전용으로 내려가고 `data`는 빈 기본값이
+     * 된다. 그런데 `getTasks()`에는 `assertWritable()`이 없어서(읽기는 무료 채널이라
+     * 의도된 것) 조용히 `[]`를 돌려준다. 캘린더 설정은 **별도 파일**이라 멀쩡히
+     * 로드되므로 `syncState`에는 이전에 올린 항목이 전부 남아 있고,
+     * `planSync`의 마지막 루프가 "목록에 없는 것 = 지워진 것"으로 보아
+     * **사용자의 캘린더에서 Greenday 일정을 전부 삭제**한다.
+     *
+     * 로컬이 이미 안 읽히는 그 순간에 마지막 남은 사본이 날아간다. 서버 삭제는
+     * 앱에서 되돌릴 수 없고, 비워진 state가 저장되면서 무엇을 지웠는지 기록도
+     * 사라진다.
+     *
+     * 이 저장소는 같은 위험을 이미 알고 있었다 — `databaseReadOnly.test.ts`가
+     * "빈 백업으로 진짜 백업을 덮지 않는다"며 `exportData()`가 읽기 전용에서
+     * 던지도록 못박아 두었다. 동기화 채널 둘만 같은 가드를 못 받았고,
+     * `isDatabaseReadOnly()`는 export돼 있으면서 자기 테스트 말고는 호출처가 없었다.
+     */
+    if (db.isDatabaseReadOnly()) {
+      return { ok: false, message: uiStrings().syncBlockedReadOnly, result: null }
     }
     try {
       const config = await ensureGoogleCalendar(await ensureGoogleToken(loaded))
