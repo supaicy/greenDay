@@ -75,6 +75,19 @@ mas:
   # scripts/mas-preflight.sh 의 프로파일 항목이 실패하는 것이 정상이다.
   # 다른 앱의 프로파일로도 빌드는 되고 업로드에서 거절되므로, preflight 가 미리 막는다.
   provisioningProfile: resources/embedded.provisionprofile
+  # **MAS pkg 이름에만 버전을 넣는다.** 위 `mac.artifactName` 은 고정 다운로드 주소
+  # 때문에 일부러 버전을 뺐는데, `mas:` 가 `artifactName` 을 적지 않으면 그 이름을
+  # 그대로 물려받는다 — app-builder-lib 의 macPackager 가 MAS 옵션을
+  # `deepAssign({}, mac, mas)` 로 만들기 때문이다. 그러면 산출물이
+  # `dist/mas-universal/Greenday-universal.pkg` 가 되는데 `scripts/mas-upload.sh` 는
+  # `<productName>-<version>*.pkg` 를 찾으므로, 빌드가 성공한 직후에도
+  # "올릴 pkg가 없습니다. 먼저 빌드하세요: npm run mas:build" 로 끝났다 —
+  # 빌드와 업로드가 서로를 가리켜 App Store 출시 경로가 통째로 막혔다.
+  # App Store pkg 는 고정 주소로 내려받지 않으니 버전을 넣어도 잃을 것이 없고,
+  # `mas:build` 가 dist/ 를 비우지 않으므로 **지난 릴리스 pkg 를 새 빌드로 착각해
+  # 올리는 사고**까지 이름만으로 막힌다.
+  # 이름을 만드는 쪽과 찾는 쪽이 어긋나는지는 src/shared/masArtifactName.test.ts 가 본다.
+  artifactName: ${productName}-${version}-${arch}.${ext}
 dmg:
   # 위 mac.artifactName 과 같은 이유로 버전을 넣지 않는다.
   artifactName: ${productName}-${arch}.${ext}
@@ -92,7 +105,23 @@ publish:
   # 옛 앱은 그 파일을 못 찾아 업데이트로 받지 않는다 — 다른 번들 ID의 앱이 옛 자리에
   # 앉는 일이 없다. 자세한 순서는 docs/2026-09-07-브리지-릴리스.md.
   channel: greenday
-  # 옛 앱(com.haru.app · com.supaicy.haru)과 업데이트 캐시를 나눈다. 지정하지 않으면
-  # 둘 다 ~/Library/Caches/ticktick-updater 를 쓰고, 두 앱이 나란히 깔린 전환 기간에
-  # 서로의 내려받은 업데이트를 덮어쓴다.
-  updaterCacheDirName: greenday-updater
+  # **updaterCacheDirName 을 여기 적지 말 것 — electron-builder 가 통째로 버린다.**
+  # app-update.yml 을 쓰는 자리(app-builder-lib/out/publish/PublishManager.js 의
+  # getAppUpdatePublishConfiguration)가 `{...publishConfigs[0], updaterCacheDirName:
+  # appInfo.updaterCacheDirName}` 으로 **우리 값 뒤에** 자기 값을 덮어쓴다. 그 값은
+  # package.json 의 `name` 에서 하드 유도된다(appInfo.js: `sanitizedName.toLowerCase()
+  # + "-updater"`) — 즉 `ticktick` → `ticktick-updater`. 실측: 지난 빌드 산출물
+  # dist/mac-arm64/haru.app/Contents/Resources/app-update.yml 이 이미
+  # `updaterCacheDirName: ticktick-updater` 다.
+  # 최상위 키로 빼는 것도 답이 아니다 — scheme.json 은 이 키를 publish 프로바이더
+  # 옵션에만 두고 루트는 additionalProperties:false 라, 밖에 적으면 설정 검증에서
+  # 빌드가 멈춘다. 값을 진짜로 바꾸는 유일한 레버는 package.json 의 `name` 인데,
+  # 그건 위 6-8번 줄이 금지한다(Keychain `ticktick Safe Storage` 와 userData 경로가
+  # 조용히 따라 옮겨간다).
+  # 그래서 업데이터 캐시는 옛 앱과 나눌 수 없고 ~/Library/Caches/ticktick-updater
+  # 하나다. 전환 기간의 충돌은 받아들인다(DownloadedUpdateHelper 가 파일 이름 +
+  # sha512 로 판정하므로 최악이 재다운로드 한 번이다). **대신 Homebrew cask 의 zap
+  # 목록이 그 진짜 경로를 지우게 한다**(.github/workflows/release.yml). 여기 죽은 키를
+  # 적어 두면 읽는 사람이 믿고 cask 가 그 거짓말을 따라가 — 실제로 따라갔다:
+  # 만들어진 적 없는 ~/Library/Caches/greenday-updater 를 지우고 내려받은 .zip
+  # 수백 MB 를 남겼다. 두 자리가 어긋나면 src/shared/updaterCacheDir.test.ts 가 잡는다.

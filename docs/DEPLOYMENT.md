@@ -55,7 +55,10 @@
 ### 2-3. 빌드 & 제출
 - [ ] MAS 빌드: `NODE_OPTIONS="..." npm run package:mas`
   - `mac.target`은 dmg/zip이라 일반 `package`는 MAS를 만들지 않습니다. **반드시 `package:mas`** 사용(내부적으로 `electron-builder --mac mas`).
-  - 결과: `dist/mas/Greenday-2.0.0.pkg` (Apple Distribution + Installer 인증서로 서명됨).
+  - 지금 쓰는 경로는 `npm run mas:build`(preflight + `--universal`)이고, 결과는
+    `dist/mas-universal/Greenday-2.0.0-universal.pkg` 입니다 (Apple Distribution + Installer
+    인증서로 서명됨). `package:mas` 처럼 `--universal` 없이 돌리면 `dist/mas-<arch>/` 로 나오고,
+    App Store Connect는 버전당 빌드 하나만 받으므로 `mas:upload` 가 거절합니다.
 - [ ] **Transporter**(Mac App Store 앱) 또는 `xcrun altool`/`notarytool`로 `.pkg`를 App Store Connect에 업로드 → 심사 제출.
 
 ### 2-4. MAS 참고
