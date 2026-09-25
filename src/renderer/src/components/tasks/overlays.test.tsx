@@ -63,7 +63,9 @@ const STORE_KEYS = [
   'updateTask',
   'duplicateTask',
   'removeTask',
-  'toggleTask'
+  'toggleTask',
+  'popUndo',
+  'setShowAddTask'
 ] as const
 let storeSnapshot: Record<string, unknown>
 
@@ -1006,5 +1008,99 @@ describe('공유 할일 동작', () => {
     await user.keyboard('{ArrowDown}{Enter}')
 
     expect(updateTask).toHaveBeenCalledWith({ id: 'task-1', listId: 'work' })
+  })
+})
+
+/**
+ * Regression: 진단 2.4 / 3장 #20 — 문자 단축키가 소문자만 비교했다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * Caps Lock은 shiftKey를 세우지 않고 `e.key`만 대문자로 만든다. 그래서
+ * userEvent의 '{Shift>}z'가 아니라 fireEvent로 key만 대문자로 보내야
+ * 실제 상황과 같아진다.
+ */
+describe('Caps Lock — 문자 단축키', () => {
+  it('대문자 key로 와도 Cmd+Z가 되돌린다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(window, { key: 'Z', metaKey: true })
+
+    // 예전에는 `key === 'z'`만 봐서, Caps Lock 하나로 방금 지운 할일을
+    // 키보드로 되돌릴 방법이 사라졌다.
+    expect(popUndo).toHaveBeenCalledTimes(1)
+  })
+
+  it('대문자 key로 와도 Cmd+N이 할일 추가를 연다', () => {
+    const setShowAddTask = vi.fn()
+    useStore.setState({ setShowAddTask, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(window, { key: 'N', metaKey: true })
+
+    expect(setShowAddTask).toHaveBeenCalledWith(true)
+  })
+
+  it('소문자도 그대로 동작한다 (회귀 방지의 반대쪽)', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+
+    expect(popUndo).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Regression: 진단 3장 #20 — 입력칸의 Cmd+Z를 전역 되돌리기가 가로챘다.
+ * Found by /qa on 2026-09-25
+ */
+describe('Cmd+Z는 글자를 치는 중이면 양보한다', () => {
+  it('입력칸에서 누른 Cmd+Z가 지운 할일을 되살리지 않는다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(
+      <>
+        <ShortcutHarness />
+        <input aria-label="제목" defaultValue="타이핑 중" />
+      </>
+    )
+
+    fireEvent.keyDown(screen.getByLabelText('제목'), { key: 'z', metaKey: true })
+
+    // 예전에는 preventDefault()가 그 칸의 네이티브 글자 되돌리기를 죽이고,
+    // 대신 몇 분 전에 지운 할일이 목록에 조용히 되살아났다.
+    expect(popUndo).not.toHaveBeenCalled()
+  })
+
+  it('contentEditable(노트 에디터)에서도 양보한다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <div contentEditable data-testid="note" suppressContentEditableWarning />
+      </>
+    )
+    const note = container.querySelector('[data-testid="note"]') as HTMLElement
+    // jsdom은 contentEditable 속성만으로 isContentEditable을 세우지 않는다.
+    Object.defineProperty(note, 'isContentEditable', { value: true })
+
+    fireEvent.keyDown(note, { key: 'z', metaKey: true })
+
+    expect(popUndo).not.toHaveBeenCalled()
+  })
+
+  it('입력칸 밖에서는 그대로 되돌린다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(document.body, { key: 'z', metaKey: true })
+
+    expect(popUndo).toHaveBeenCalledTimes(1)
   })
 })
