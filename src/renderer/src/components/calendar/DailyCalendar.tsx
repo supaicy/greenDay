@@ -1,5 +1,5 @@
 import type React from 'react'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useStore } from '../../store/useStore'
 import { useToday } from '../../hooks/useToday'
 import { toDateString } from '../../utils/date'
@@ -12,9 +12,10 @@ import { getScheduledForOccurrence, resolveTimeBlockDrop } from '../../utils/sch
 import { useTranslation } from 'react-i18next'
 import { DND_MIME } from '../../utils/dnd'
 import { PRIORITY_COLOR } from '../../utils/priority'
+import { isTopLevel } from '../../utils/smartLists'
 import i18n, { tList } from '../../i18n'
 
-// 시간 슬롯 (6:00 ~ 23:00, 30분 단위)
+// 시간 슬롯 (0:00 ~ 23:30, 30분 단위)
 interface TimeSlot {
   hour: number
   minute: number
@@ -25,7 +26,11 @@ interface TimeSlot {
 // language를 인자로 받아 useMemo 의존성이 실제 값과 일치하게 한다.
 function buildTimeSlots(language: string): TimeSlot[] {
   const slots: TimeSlot[] = []
-  for (let h = 6; h <= 23; h++) {
+  // 6시부터 그리던 시절, dueTime이 있는 할일은 무조건 timed 버킷으로 가서 종일 영역에서
+  // 빠지는데 정작 그 시각의 슬롯이 없어 03:00·00:30 할일이 하루 어디에도 안 떴다.
+  // 시간블록도 같은 구멍이었다 — 레이어가 -DAY_START_HOUR만큼 올라가 있어 그 블록의
+  // top이 음수(-240px)가 됐다. 밴드를 24시간으로 열어 버킷 판정과 렌더 판정을 맞춘다.
+  for (let h = 0; h <= 23; h++) {
     slots.push({ hour: h, minute: 0, label: formatTime(h, 0, language) })
     slots.push({ hour: h, minute: 30, label: '' })
   }
@@ -37,9 +42,14 @@ function buildTimeSlots(language: string): TimeSlot[] {
 // Update if the slot row height changes.
 const PX_PER_MIN = 40 / 30
 
-// Time-slot column visible range: 6:00 (inclusive) to 24:00 (exclusive).
-const DAY_START_HOUR = 6
+// Time-slot column range: 0:00 (inclusive) to 24:00 (exclusive).
+// buildTimeSlots의 첫 시각과 반드시 같아야 한다 — 블록 레이어 오프셋과 드롭 좌표
+// 변환이 둘 다 이 값을 쓴다.
+const DAY_START_HOUR = 0
 const DAY_END_HOUR_EXCLUSIVE = 24
+
+// 처음 열었을 때 눈이 닿는 시각. 밴드는 24시간이지만 시선은 업무시간에서 시작한다.
+const DAY_FOCUS_HOUR = 6
 
 function formatTime(h: number, m: number, language: string): string {
   const t = i18n.getFixedT(language)
@@ -81,6 +91,14 @@ export function DailyCalendar(): React.ReactElement {
 
   const [currentDate, setCurrentDate] = useState(() => new Date())
 
+  // 마운트 때 한 번만 업무시간으로 스크롤한다. 날짜를 넘길 때마다 되감으면
+  // 새벽 일정을 보던 사용자를 06:00으로 끌어다 놓는다 — 그래서 의존성은 빈 배열이다.
+  const gridRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = gridRef.current
+    if (el) el.scrollTop = DAY_FOCUS_HOUR * 60 * PX_PER_MIN
+  }, [])
+
   const dateStr = useMemo(() => dateToStr(currentDate), [currentDate])
   const todayStr = useToday()
   const isToday = dateStr === todayStr
@@ -106,7 +124,14 @@ export function DailyCalendar(): React.ReactElement {
 
   // 해당 날짜의 태스크
   const { allDayTasks, timedTasks } = useMemo(() => {
-    const dayTasks = tasks.filter((t) => !t.deletedAt && t.dueDate === dateStr)
+    // 하위작업은 부모 안에서만 산다(smartLists.isTopLevel). 마감일이 붙었다고 종일/시간
+    // 칸에 독립 카드로 서면 같은 일이 부모와 하위로 두 번 세어지고, 그 카드를 눌러 연
+    // 할일은 목록 뷰 어디에도 없다 — TaskList는 언제나 최상위만 그린다.
+    // AI 자연어 생성이 하위작업에 dueDate를 직접 붙이므로(ai-service.ts 스키마의
+    // subtasks[].dueDate) 이건 예외가 아니라 기본 경로다. 바로 옆 UnscheduledRail은
+    // 이미 이 규칙을 지키고 있어서, 가드가 없으면 한 화면 안에서 레일과 격자가
+    // 서로 다른 말을 한다.
+    const dayTasks = tasks.filter((t) => !t.deletedAt && isTopLevel(t) && t.dueDate === dateStr)
 
     const allDay: Task[] = []
     const timed: Task[] = []
@@ -218,7 +243,7 @@ export function DailyCalendar(): React.ReactElement {
       {/* 캘린더 본문 — 왼쪽 레일이 시간블록을 만드는 드래그 소스다 */}
       <div className="flex-1 flex min-h-0">
         <UnscheduledRail isDark={isDark} />
-        <div className="flex-1 overflow-y-auto">
+        <div ref={gridRef} className="flex-1 overflow-y-auto">
           {/* 종일 태스크 */}
           {allDayTasks.length > 0 && (
             <div className={`px-6 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -399,7 +424,7 @@ export function DailyCalendar(): React.ReactElement {
             {/* Render scheduled time blocks absolutely on top of slot rows.
               TimeBlock computes top from start.getHours() * 60 * pxPerMin (i.e. from 0:00),
               so this layer is offset by -DAY_START_HOUR hours to align with the
-              6:00-based time-slot column. Left offset matches the w-20 label column. */}
+              0:00-based time-slot column. Left offset matches the w-20 label column. */}
             <div
               className="absolute pointer-events-none"
               style={{
