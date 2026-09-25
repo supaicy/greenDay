@@ -15,7 +15,7 @@ import {
   endOfWeek
 } from 'date-fns'
 import { ko, enUS } from 'date-fns/locale'
-import { toLocalDateString } from '../../../shared/date'
+import { fromLocalDateString, toLocalDateString } from '../../../shared/date'
 import i18n from '../i18n'
 
 // date-fns 로케일은 요일·월 이름을 담당하고, 포맷 문자열('M월 d일' vs 'MMM d')은
@@ -26,7 +26,7 @@ function dfLocale(): typeof ko {
 
 export function formatDueDate(dateStr: string | null): string {
   if (!dateStr) return ''
-  const date = new Date(dateStr)
+  const date = fromLocalDateString(dateStr)
   if (isToday(date)) return i18n.t('date.today')
   if (isTomorrow(date)) return i18n.t('date.tomorrow')
   if (isYesterday(date)) return i18n.t('date.yesterday')
@@ -45,23 +45,24 @@ export function formatDateRange(startDate: string | null, dueDate: string | null
   if (!dueDate) return ''
   const time = dueTime ? ` ${dueTime}` : ''
   if (!startDate) return `${formatDueDate(dueDate)}${time}`
-  const abs = (d: string): string => format(new Date(d), i18n.t('date.monthDay'), { locale: dfLocale() })
+  const abs = (d: string): string =>
+    format(fromLocalDateString(d), i18n.t('date.monthDay'), { locale: dfLocale() })
   return `${abs(startDate)} ~ ${abs(dueDate)}${time}`
 }
 
 export function isOverdue(dateStr: string | null): boolean {
   if (!dateStr) return false
-  return isBefore(new Date(dateStr), startOfDay(new Date()))
+  return isBefore(fromLocalDateString(dateStr), startOfDay(new Date()))
 }
 
 export function isDueToday(dateStr: string | null): boolean {
   if (!dateStr) return false
-  return isToday(new Date(dateStr))
+  return isToday(fromLocalDateString(dateStr))
 }
 
 export function isDueTomorrow(dateStr: string | null): boolean {
   if (!dateStr) return false
-  return isTomorrow(new Date(dateStr))
+  return isTomorrow(fromLocalDateString(dateStr))
 }
 
 // 로컬 시간 기준 오늘/내일 날짜 문자열(yyyy-MM-dd). UTC 기반 toISOString 과 달리
@@ -76,7 +77,7 @@ export function tomorrowString(): string {
 
 export function isDueInNext7Days(dateStr: string | null): boolean {
   if (!dateStr) return false
-  const date = new Date(dateStr)
+  const date = fromLocalDateString(dateStr)
   const today = startOfDay(new Date())
   const nextWeek = addDays(today, 7)
   return date >= today && date <= nextWeek

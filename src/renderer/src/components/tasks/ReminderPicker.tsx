@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { fromLocalDateString } from '../../../../shared/date'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface QuickOption {
@@ -73,8 +74,15 @@ export function ReminderPicker({
       today.setHours(9, 0, 0, 0)
       onChange(option.getDate(today.toISOString()))
     } else {
-      // 마감일 + 시간이 있으면 그것을 기준으로
-      const dueDateObj = new Date(dueDate)
+      // 마감일을 **로컬 자정**으로 읽는다. `new Date('YYYY-MM-DD')`는 UTC 자정이라
+      // 시간대마다 다른 시각이 나왔고, 그래서 아래 "0시면 9시로" 분기가 지역에 따라
+      // 발화하기도 안 하기도 했다:
+      //   Asia/Seoul(+9)  → 09:00으로 읽혀 분기가 안 돌지만 우연히 9시라 맞았다
+      //   UTC             → 00:00이라 분기가 돌아 9시, 맞다
+      //   America/NY(-4)  → **전날 20:00**으로 읽혀 분기가 안 돌고, 알림이 하루 전
+      //                     저녁 8시에 울렸다("1일 전"은 이틀 전이 된다)
+      // 로컬로 읽으면 어디서든 0시라 분기가 돌고, 의도대로 마감일 당일 오전 9시가 된다.
+      const dueDateObj = fromLocalDateString(dueDate)
       if (dueDateObj.getHours() === 0 && dueDateObj.getMinutes() === 0) {
         dueDateObj.setHours(9, 0, 0, 0)
       }

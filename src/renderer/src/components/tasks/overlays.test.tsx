@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import i18n from '../../i18n'
+import { toLocalDateString } from '../../../../shared/date'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useStore } from '../../store/useStore'
 import { DueDatePicker } from './DueDatePicker'
@@ -105,6 +106,39 @@ describe('SortMenu', () => {
 })
 
 describe('ReminderPicker', () => {
+  /**
+   * Regression: 진단 3장 #18·#44 — 빠른 알림이 마감일을 UTC로 읽었다.
+   * Found by /qa on 2026-09-25
+   *
+   * 이 검사는 seoul·west 두 시간대에서 모두 돈다(vitest.config.ts). Asia/Seoul
+   * 에서는 UTC 자정이 로컬 09:00이라 **우연히** 맞아떨어져서, 한쪽만 돌리면
+   * 아무것도 못 잡는다. America/New_York에서는 전날 20:00이 됐다.
+   */
+  it.each([
+    ['reminder.atDue', '마감 시'],
+    ['reminder.day1', '1일 전']
+  ])('빠른 옵션 "%s"이 마감일을 로컬 기준으로 읽는다', async (_key, label) => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <ReminderPicker
+        dueDate="2026-09-25"
+        value={null}
+        onChange={onChange}
+        trigger={<button type="button">알림 설정</button>}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: '알림 설정' }))
+    await user.click(await screen.findByRole('button', { name: label }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const fired = new Date(onChange.mock.calls[0][0] as string)
+    // 마감일 당일(또는 하루 전) 오전 9시여야 한다 — 날짜가 밀리면 안 된다.
+    const expectedDay = label === '마감 시' ? '2026-09-25' : '2026-09-24'
+    expect(toLocalDateString(fired)).toBe(expectedDay)
+    expect(fired.getHours()).toBe(9)
+  })
+
   it('트리거를 한 번 누르면 열린다', async () => {
     const user = userEvent.setup()
     render(
