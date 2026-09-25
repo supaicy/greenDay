@@ -6,6 +6,7 @@ import { useToday } from '../../hooks/useToday'
 import { tList } from '../../i18n'
 import { toDateString } from '../../utils/date'
 import { levelFromScore, levelProgress, pointsToNextLevel, POINTS_PER_LEVEL } from '../../utils/score'
+import { habitCompletionRate } from '../../utils/habitStats'
 import { Trophy, CheckCircle2, Flame, Timer, Target, TrendingUp, Star, Calendar } from 'lucide-react'
 
 export function StatsView(): React.ReactElement {
@@ -72,13 +73,10 @@ export function StatsView(): React.ReactElement {
     const totalFocusHours = Math.floor(totalFocusMinutes / 60)
     const remainingMinutes = totalFocusMinutes % 60
 
-    // 습관 완료율
-    let habitCompletionRate = 0
-    if (habits.length > 0 && habitLogs.length > 0) {
-      const completedLogs = habitLogs.filter((l) => l.completed).length
-      // 간단한 비율: 완료된 로그 / 전체 로그
-      habitCompletionRate = habitLogs.length > 0 ? Math.round((completedLogs / habitLogs.length) * 100) : 0
-    }
+    // 습관 완료율 — 분모는 '기대한 날'이지 '남아 있는 로그'가 아니다.
+    // 체크를 풀면 로그의 completed가 false가 되는 게 아니라 행이 지워지므로,
+    // 로그끼리 나누면 언제나 100%였다(utils/habitStats.ts에 이유를 적어 뒀다).
+    const habitRate = habitCompletionRate(habits, habitLogs, todayStr)
 
     // 가장 생산적인 요일
     const dayCount = [0, 0, 0, 0, 0, 0, 0] // 일~토
@@ -89,7 +87,10 @@ export function StatsView(): React.ReactElement {
       }
     }
     const maxDayCount = Math.max(...dayCount)
-    const mostProductiveDay = maxDayCount > 0 ? dayNames[dayCount.indexOf(maxDayCount)] : '-'
+    // 완료한 할일이 하나도 없으면 최고 요일이라는 것도 없다. '-'를 흘려보내면
+    // date.dayLabel('{{day}}요일')이 '-요일'이라는 없는 요일을 그린다 —
+    // 값이 없다는 것은 렌더가 말하게 한다.
+    const mostProductiveDay = maxDayCount > 0 ? dayNames[dayCount.indexOf(maxDayCount)] : null
 
     return {
       totalCompleted,
@@ -104,7 +105,7 @@ export function StatsView(): React.ReactElement {
       pomodoroCount,
       totalFocusHours,
       remainingMinutes,
-      habitCompletionRate,
+      habitCompletionRate: habitRate,
       mostProductiveDay,
       dayCount,
       maxDayCount
@@ -262,7 +263,7 @@ export function StatsView(): React.ReactElement {
               <div className="flex justify-between">
                 <span className={labelClass}>{t('stats.mostProductiveDay')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {t('date.dayLabel', { day: stats.mostProductiveDay })}
+                  {stats.mostProductiveDay ? t('date.dayLabel', { day: stats.mostProductiveDay }) : t('common.none')}
                 </span>
               </div>
             </div>

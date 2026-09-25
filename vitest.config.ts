@@ -18,8 +18,13 @@ const TZ_SENSITIVE = [
   'src/renderer/src/utils/recurrence.test.ts',
   'src/renderer/src/utils/scheduledTime.test.ts',
   'src/renderer/src/utils/smartLists.test.ts',
+  // 반복 시리즈의 DTSTART·EXDATE·RECURRENCE-ID가 한 프레임인지 — DST가 없는
+  // Asia/Seoul에서는 앵커와 예외의 오프셋이 같아 어긋남이 통째로 가려진다.
+  'src/main/caldav/sync.test.ts',
   // 빠른 알림이 마감일을 어떻게 읽는지 — Seoul에서는 우연히 맞아떨어진다.
-  'src/renderer/src/components/tasks/overlays.test.tsx'
+  'src/renderer/src/components/tasks/overlays.test.tsx',
+  // 습관 완료율은 창의 경계와 습관 생성일(UTC ISO)을 로컬 날짜로 센다.
+  'src/renderer/src/components/stats/StatsView.test.tsx'
 ]
 
 export default defineConfig({
