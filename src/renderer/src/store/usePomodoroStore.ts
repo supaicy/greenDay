@@ -17,6 +17,9 @@ export const POMODORO_LONG_BREAK_EVERY = 4
  * 이 시간(초)보다 짧은 세션은 기록하지 않는다.
  * 재생 직후 건너뛰기를 반복하면 정격 25분 세션과 점수가 무한히 쌓였다 —
  * duration을 정격값으로 적고 있어서 통계의 '총 집중 시간'도 같이 부풀었다.
+ *
+ * 이 하한이 실제로 물려면 재는 값이 '돌린 시간'이어야 한다. 벽시계로 재던 동안은
+ * 일시정지 1분이 그냥 넘겨 줘서 아무것도 막지 못했다(skip 참고).
  */
 export const POMODORO_MIN_RECORDED_SECONDS = 60
 
@@ -83,13 +86,23 @@ export const usePomodoroStore = create<PomodoroState>((set, get) => ({
   tick: () => set((s) => (s.deadline ? { timeLeft: remainingSeconds(s.deadline) } : {})),
 
   skip: async () => {
-    const { mode, startedAt, sessions } = get()
+    const { mode, startedAt, sessions, timeLeft, running, deadline } = get()
     // 실제로 흐른 시간만 기록한다. 정격 길이를 적으면 건너뛰기만으로 통계와 점수가 부푼다.
-    const elapsed = startedAt ? Math.round((Date.now() - new Date(startedAt).getTime()) / 1000) : 0
-    if (startedAt && elapsed >= POMODORO_MIN_RECORDED_SECONDS) {
+    //
+    // 벽시계(`Date.now() - startedAt`)로 재면 안 된다 — startedAt은 첫 재생에만 찍고
+    // 일시정지에도 그대로 두므로(위 toggleRun), 멈춰 있던 시간이 통째로 섞인다.
+    // 2분 집중 → 일시정지 → 25분 자리 비움 → 건너뛰기면 정격 25분 세션이 기록되고
+    // POINTS_PER_POMODORO까지 나갔다. 정확히 그 부풀림을 막으려던 아래 60초 하한도
+    // 멈춰 있던 시간이 대신 넘겨 줘서 무력했다(10초 집중 + 5분 정지 = 310초 세션).
+    // timeLeft는 진행 중에만 줄어드니 '정격 - 남은 시간'이 곧 실제로 돌린 시간이고,
+    // 멈춘 시간은 거기에 절대 섞이지 않는다. 진행 중이면 직전 틱 값 대신 deadline으로
+    // 다시 잰다 — 창이 가려지면 틱이 분 단위로 스로틀돼 timeLeft가 최대 1분 낡아 있다.
+    const left = running && deadline ? remainingSeconds(deadline) : timeLeft
+    const focused = Math.max(0, POMODORO_DURATIONS[mode] - left)
+    if (startedAt && focused >= POMODORO_MIN_RECORDED_SECONDS) {
       await useStore.getState().savePomodoroSession({
         taskId: null,
-        duration: Math.min(POMODORO_DURATIONS[mode], elapsed),
+        duration: focused,
         type: mode === 'work' ? 'work' : 'break',
         startedAt,
         completedAt: new Date().toISOString()
