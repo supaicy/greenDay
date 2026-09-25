@@ -115,6 +115,41 @@ export function toUtcStamp(iso: string): string {
   )
 }
 
+/**
+ * 로컬 벽시계 타임스탬프 20260310T090000 — Z도 TZID도 없는 'floating' 형식
+ * (RFC 5545 §3.3.5 form 1). 읽는 쪽 `parseStamp`가 이미 이 형식을 로컬로 읽는다.
+ */
+export function toLocalStamp(iso: string): string {
+  const d = new Date(iso)
+  return (
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+    `T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  )
+}
+
+/**
+ * 이 일정을 **벽시계 프레임**으로 쓸 것인가 — 시각이 있는 반복 시리즈면 그렇다.
+ *
+ * 반복을 UTC(`...Z`)로 적으면 RRULE은 "같은 UTC 순간"의 반복이 된다. 서머타임이
+ * 바뀌는 순간 09:00 스탠드업이 그 뒤로 전부 10:00에 뜬다. 게다가 EXDATE/RDATE/
+ * RECURRENCE-ID는 `sync.ts`가 **날짜마다 로컬 시각으로** 계산하므로, 전환 뒤 두
+ * 값이 한 시간 어긋나 규칙이 만드는 회차를 하나도 지목하지 못한다 — 지운 회차는
+ * 캘린더에 그대로 남고, 옮긴 회차는 원본과 예외가 함께 보여 두 번 뜬다.
+ * 같은 순간을 벽시계로 적으면 프레임이 하나가 되어 둘 다 사라진다.
+ *
+ * 종일과 한 번짜리는 건드리지 않는다 — 전자는 이미 날짜고, 후자는 반복이 없으니
+ * 절대 시각(UTC)이 오히려 정확하다.
+ */
+export function usesWallClock(event: CalendarEvent): boolean {
+  if (event.allDay) return false
+  return (
+    event.rrule !== null ||
+    event.rdates.length > 0 ||
+    event.exdates.length > 0 ||
+    event.overrides.length > 0
+  )
+}
+
 /** 종일 날짜 형식 20260803 */
 export function toDateStamp(yyyyMmDd: string): string {
   return yyyyMmDd.replace(/-/g, '')
@@ -169,20 +204,25 @@ export function serializeEvent(event: CalendarEvent, now: string): string {
     `SUMMARY:${escapeText(event.summary)}`
   ]
 
+  // 프레임을 **한 번만** 고른다. DTSTART와 RDATE/EXDATE/RECURRENCE-ID가 서로 다른
+  // 프레임이면 서머타임 전환 뒤 예외가 회차를 못 짚는다(`usesWallClock` 주석 참고).
+  const wallClock = usesWallClock(event)
+  const stamp = wallClock ? toLocalStamp : toUtcStamp
+
   if (event.allDay) {
     lines.push(`DTSTART;VALUE=DATE:${toDateStamp(event.start)}`)
     lines.push(`DTEND;VALUE=DATE:${toDateStamp(event.end)}`)
   } else {
-    lines.push(`DTSTART:${toUtcStamp(event.start)}`)
-    lines.push(`DTEND:${toUtcStamp(event.end)}`)
+    lines.push(`DTSTART:${stamp(event.start)}`)
+    lines.push(`DTEND:${stamp(event.end)}`)
   }
 
   if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`)
   if (event.rrule) lines.push(`RRULE:${event.rrule}`)
   // RDATE/EXDATE의 값 형식은 **DTSTART와 같아야 한다**(RFC 5545 §3.8.5.2/§3.8.5.1).
   // 종일 일정에 UTC 스탬프를 섞으면 서버가 통째로 거부하거나 회차를 엉뚱한 날에 놓는다.
-  if (event.rdates.length > 0) lines.push(stampList('RDATE', event.rdates, event.allDay))
-  if (event.exdates.length > 0) lines.push(stampList('EXDATE', event.exdates, event.allDay))
+  if (event.rdates.length > 0) lines.push(stampList('RDATE', event.rdates, event.allDay, wallClock))
+  if (event.exdates.length > 0) lines.push(stampList('EXDATE', event.exdates, event.allDay, wallClock))
   // 완료 여부는 VEVENT에 표준 필드가 없다. Calendar.app이 무시하되 우리는 되읽을 수
   // 있도록 X- 속성으로 싣는다.
   lines.push(`X-HARU-COMPLETED:${event.completed ? 'TRUE' : 'FALSE'}`)
@@ -200,10 +240,13 @@ export function serializeEvent(event: CalendarEvent, now: string): string {
       `SUMMARY:${escapeText(event.summary)}`,
       event.allDay
         ? `RECURRENCE-ID;VALUE=DATE:${toDateStamp(override.recurrenceId)}`
-        : `RECURRENCE-ID:${toUtcStamp(override.recurrenceId)}`,
+        : `RECURRENCE-ID:${stamp(override.recurrenceId)}`,
       // 옮긴 회차는 언제나 시각이 있다 — 시간 블록을 끌어 놓아야 생기는 값이다.
-      `DTSTART:${toUtcStamp(override.start)}`,
-      `DTEND:${toUtcStamp(override.end)}`
+      // 시리즈와 **같은 프레임**으로 적는다. 예외 컴포넌트만 UTC로 남기면
+      // RECURRENCE-ID는 회차를 짚는데 그 DTSTART는 다른 프레임이라, 옮긴 회차가
+      // 서머타임 전환 뒤 한 시간 어긋난 자리에 뜬다.
+      `DTSTART:${stamp(override.start)}`,
+      `DTEND:${stamp(override.end)}`
     )
     if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`)
     lines.push(`X-HARU-COMPLETED:${event.completed ? 'TRUE' : 'FALSE'}`)
@@ -221,10 +264,17 @@ export function serializeEvent(event: CalendarEvent, now: string): string {
  * 구글 쪽 `recurrence[]`도 같은 문자열을 쓰므로 export한다 — 두 곳에서 따로 만들면
  * 한쪽만 종일 형식을 틀리는 종류의 어긋남이 생긴다.
  */
-export function stampList(name: 'RDATE' | 'EXDATE', values: string[], allDay: boolean): string {
-  return allDay
-    ? `${name};VALUE=DATE:${values.map(toDateStamp).join(',')}`
-    : `${name}:${values.map(toUtcStamp).join(',')}`
+export function stampList(
+  name: 'RDATE' | 'EXDATE',
+  values: string[],
+  allDay: boolean,
+  wallClock = false
+): string {
+  if (allDay) return `${name};VALUE=DATE:${values.map(toDateStamp).join(',')}`
+  // 기본은 UTC다 — 구글 쪽은 `start.dateTime`을 캘린더 타임존으로 환산해 **벽시계로**
+  // 전개하므로 UTC 스탬프로도 프레임이 하나다. CalDAV 서버는 DTSTART를 적힌 그대로
+  // 전개하기 때문에 거기서만 벽시계로 넘겨받는다.
+  return `${name}:${values.map(wallClock ? toLocalStamp : toUtcStamp).join(',')}`
 }
 
 interface RawLine {
