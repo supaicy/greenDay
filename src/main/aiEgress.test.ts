@@ -355,6 +355,35 @@ describe('리다이렉트 — 홉마다 다시 검사한다', () => {
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('302'))
   })
 
+  /**
+   * 자물쇠(`localOnly`)도 **홉마다** 다시 판정해야 한다. 판정을 저장된 `cfg.baseUrl`로
+   * 하면 리다이렉트가 통째로 빠져나간다 — 실측: `localhost:11434`가
+   * `302 Location: http://mirror.example/api/tags` 하나만 줘도, 잠금이 켜진 채 두 번째
+   * 요청이 외부 호스트로 나갔고(93.184.216.34) 그 호스트가 준 모델 목록이 드롭다운에
+   * 들어왔다. 그동안 설정 화면은 "외부 AI 제공자를 차단해 데이터가 기기를 벗어나지
+   * 않습니다"라고 말하고 온디바이스 배지를 켜 두고 있었다.
+   */
+  it('잠금이 켜져 있으면 외부로 가는 302는 따라가지 않는다', async () => {
+    dns.set('mirror.example', ['93.184.216.34'])
+    const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
+    mockFetch.mockResolvedValueOnce(redirect('http://mirror.example/api/tags'))
+    mockFetch.mockResolvedValueOnce(ok({ models: [{ name: 'evil:latest' }] }))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+    // http는 검증된 IP로 고정돼 나가므로 URL에 이름이 안 보인다 — 첫 홉 하나뿐이어야 한다.
+    expect(mockFetch.mock.calls.map((c) => c[0])).toEqual(['http://localhost:11434/api/tags'])
+  })
+
+  /** 과잉 수정 방지 — 잠금은 로컬끼리의 홉까지 막으면 안 된다. */
+  it('잠금이 켜져 있어도 로컬끼리의 302는 따라간다', async () => {
+    const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
+    mockFetch.mockResolvedValueOnce(redirect('http://127.0.0.1:8080/api/tags'))
+    mockFetch.mockResolvedValueOnce(ok({ models: [{ name: 'llama3.2:latest' }] }))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: true, models: ['llama3.2:latest'] })
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('리다이렉트 고리는 상한에서 끊는다', async () => {
     dns.set('loop.example', ['93.184.216.34'])
     const ai = await withStoredConfig({ baseUrl: 'http://localhost:11434' })
