@@ -371,16 +371,56 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     const result = verifyCurrent()
     if (result?.ok) {
       const token = { payload: result.payload, expiresAtMs: result.expiresAtMs }
+      claimTrialWindow()
       apply({ status: 'licensed', untilMs: token.expiresAtMs })
       return token
     }
     const deadline = graceDeadlineOf(result)
     if (deadline !== null && clockSafeNow() < deadline) {
+      claimTrialWindow()
       apply({ status: 'grace', untilMs: deadline })
       return null
     }
     apply(evaluateTrial())
     return null
+  }
+
+  /**
+   * **토큰이 서 있는 실행에서도 트라이얼 시작일을 배정해 둔다.**
+   *
+   * 없으면 취소·해제가 서명 없는 30일을 발행한다. `clearLocalLicense`는 "기록된
+   * 시작일이 판정하므로 이걸로 새 창을 만들 수는 없다"고 적어 뒀지만, 기록이
+   * **없는** 설치에서 그 문장은 거짓이다 — `resolveTrialStart`가 null을 보면
+   * "지금"을 새 시작으로 도출한다. 그리고 기록이 없는 설치가 지금의 구매자
+   * 전원이다: `IS_ENFORCED = false`로 출하하는 동안 `evaluateTrial`이 아무것도
+   * 쓰지 않고, 켠 뒤에도 라이선스가 선 실행은 `settle`의 위 두 가지에서 돌아서서
+   * `evaluateTrial`에 아예 닿지 않는다. 그래서 환불(revoked)이 잠그는 대신 30일을
+   * 더 주고, 활성화 → "이 기기 해제" 한 번이 기기마다 창을 하나씩 찍어낸다.
+   *
+   * 적는 값은 **트라이얼 설치가 이 실행에서 적었을 바로 그 값**이다
+   * (`resolveTrialStart`의 `recorded === null` 가지와 같은 `clockSafeNow()`).
+   * 그래서 enforcement를 켜는 날 구매자도 똑같이 온전한 30일을 하나 배정받고,
+   * 그 창은 라이선스를 잃었을 때만 눈에 보인다 — CLAUDE.md의 "켜는 날 모두가
+   * 온전한 30일"이 여기서 실제로 지켜진다. 토큰의 `iat`로 적지 않는 이유가
+   * 이것이다: `iat`는 마지막 갱신 시각(반감기마다 새로 발급된다)이라 구매일도
+   * 아니고, 그걸로 적으면 환불된 사람에게 15~30일이 그대로 남는다.
+   *
+   * enforcement가 꺼져 있으면 아무것도 쓰지 않는다 — `evaluateTrial`과 같은
+   * 이유다. 살 것도 없는 동안 창이 타들어가면 안 된다.
+   *
+   * 유예(grace)에서도 부른다. 같은 구멍이 거기에도 있다: 첫 enforced 실행이
+   * 이미 유예 중이면 `evaluateTrial`에 닿지 않은 채 유예가 끝나고, 그 순간
+   * 30일이 새로 열려 유예 30일 + 트라이얼 30일이 된다.
+   *
+   * 한 번만 찍는다. 두 번째 실행부터는 디스크를 만지지 않는다.
+   */
+  function claimTrialWindow(): void {
+    if (!deps.enforced || record.trialStartMs !== null) return
+    record.trialStartMs = clockSafeNow()
+    // 못 적었으면 다음 실행이 다시 시도한다. 이 값은 창을 **제한**할 뿐 열어
+    // 주지 않으므로, 쓰기 실패가 권한을 바꾸지 않는다 — `evaluateTrial`의
+    // 되돌리기(창을 여는 쓰기)와 방향이 반대라 그게 여기엔 필요 없다.
+    persist()
   }
 
   /**
@@ -433,7 +473,9 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
    *
    * **한 가지 예외: 시계 자체가 뒤로 갔을 때.** 메인보드 배터리가 죽어 2001년으로
    * 올라온 기기에서는 정상적인 시작일이 "한참 미래"로 보인다. 거기서 되쓰면
-   * 진짜 시작일이 2001년으로 박제되고 앱 안에 되돌릴 방법이 없다. 두 상황은
+   * 진짜 시작일이 2001년으로 박제되고 앱 안에 되돌릴 방법이 없다. **디스크만
+   * 지키는 것으로는 부족하다** — 그 갈래에서 도출값까지 고장 난 시계로 박으면
+   * 파일은 살아도 그 세션의 트라이얼이 죽는다(아래 갈래의 주석). 두 상황은
    * 겉모습이 같지만 래칫이 가른다: `resolveTrialStart`는 `touchClock()` 바로
    * 뒤에서만 불리므로, 시계가 정상이면 `lastSeen === systemNow`이고 시계가
    * 뒤로 갔을 때만 `lastSeen > systemNow`다.
@@ -470,6 +512,33 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 시계가 뒤로 가지 않았다면 되쓴다. 위 문단 참고.
     if (systemNow >= record.lastSeenMs) {
       record.trialStartMs = systemNow
+      trialStartedAt = systemNow
+      return trialStartedAt
+    }
+    // **시계가 뒤로 간 갈래에서는 도출값도 기록된 시작일로 한다.**
+    //
+    // 여기서 `systemNow`를 쓰면 디스크만 지키고 **그 세션은 죽는다**: 창이
+    // `[2001년, 2001년+30일]`로 평가되는데 비교 대상은 `clockSafeNow()`, 즉
+    // 래칫이 든 진짜 시각이라 20일 남은 트라이얼이 그 자리에서 "체험 기간이
+    // 끝났습니다"가 됐다. 배터리가 죽어 2001년으로 올라온 기기를 벽돌로 만들지
+    // 않겠다는 것이 이 갈래의 존재 이유인데, 파일만 살리고 사람을 잠갔던 것이다.
+    // 도출은 프로세스당 한 번이라 NTP가 30초 뒤에 시계를 고쳐도 재시작 전에는
+    // 안 풀렸다(clockAttacks/licenseManager 두 시험이 상태까지 못 박는다).
+    //
+    // **믿는 것은 래칫 안쪽일 때뿐이다.** 정직한 기기는 시작일이 과거고 래칫이
+    // 진짜 지금이므로 언제나 `trialStart <= lastSeen`이다. 반대로 `lastSeen`만
+    // 살짝 앞세워 이 갈래로 들어온 뒤 시작일을 100년 뒤로 써넣는 위조는 그
+    // 바깥이라, 조건 없이 믿으면 창이 100년이 된다 — 그건 `systemNow`로 떨어뜨려
+    // 예전 그대로 둔다.
+    //
+    // 안쪽에 남는 위조(`trialStart`와 `lastSeen`을 **같은** 미래로 써넣는 편집)가
+    // 새로 얻는 것은 **창 하나**다. `clockSafeNow()`가 그 값에서 시작해 단조
+    // 증거(uptime)로만 오르므로 30일이면 닫히고, 다시 편집하지 않는 한 끝이다 —
+    // 위 문단이 이미 받아들인 "한 번의 편집 = 최대 한 창, 설정 폴더 삭제와 같다"의
+    // 그 한 창이다. 상한은 clockAttacks.test.ts가 못 박는다.
+    if (recorded <= record.lastSeenMs) {
+      trialStartedAt = recorded
+      return trialStartedAt
     }
     trialStartedAt = systemNow
     return trialStartedAt
@@ -818,12 +887,31 @@ export function createLicenseManager(deps: ManagerDeps): LicenseManager {
     // 게다가 다음 폴의 `persist()`가 그 빈 레코드를 디스크에 그대로 적어, 실패라고
     // 답한 일이 조용히 성공해 버린다. 같은 커밋에서 `activate`만 고치고 여기를
     // 빠뜨렸었다.
-    const before = { key: record.key, token: record.token }
+    //
+    // 사유도 같이 챙긴다 — 아래에서 지우므로, 커밋이 실패해 되돌릴 때 사유까지
+    // 원래대로 서야 한다. 놓아주지 못한 해제가 경고만 지워 놓고 끝나면 안 된다.
+    const before = { key: record.key, token: record.token, blockedReason: record.blockedReason }
 
     // 토큰을 버리면 유예도 같이 사라진다 — 마감이 토큰에서 계산되므로 잊어야 할
     // 두 번째 자격증명이 없다.
     record.token = null
-    if (!keepKey) record.key = null
+    if (!keepKey) {
+      record.key = null
+      // **사용자가 방금 해결한 것을 계속 탓하지 않는다.** `deviceLimit` 경고를
+      // 보고 "이 기기 해제"를 누른 사람에게 사유를 남겨 두면, 슬롯을 돌려준 바로
+      // 그 화면이 "기기가 다 찼으니 쓰지 않는 기기에서 먼저 해제하라"고 말한다 —
+      // 방금 한 일을 다시 하라는 지시다. 게다가 이 값은 커밋되므로 재시작해도
+      // 살아남고, 키가 사라진 뒤로는 재검증이 서버를 아예 안 부르니
+      // (`runRevalidation`이 그 앞에서 돌아선다) 스스로 지워질 기회조차 없다 —
+      // 이 기기에 키를 다시 넣기 전에는 영영 안 지워진다. 지울 수 있는 자리는
+      // 여기뿐이다.
+      //
+      // `keepKey` 쪽은 건드리지 않는다. 그 길은 `refresh()`가 방금 세운
+      // `revoked`/`deviceNotActive`를 같은 쓰기에 실어 보내려고 일부러 만든
+      // 것이라, 거기서 지우면 취소된 사용자에게 "체험 기간이 끝났습니다"가
+      // 돌아온다(H9).
+      record.blockedReason = null
+    }
     if (!commit()) {
       Object.assign(record, before)
       return false
