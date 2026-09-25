@@ -668,4 +668,73 @@ describe('ai-service', () => {
       expect(systemMsg.content).toContain('#프로젝트')
     })
   })
+
+  /**
+   * **헤더는 왔는데 본문이 안 오는 상대.** 생성 도중 멎은 Ollama, 끊긴 Wi-Fi/프록시,
+   * 캡티브 포털이 이 모양이다 — 200과 헤더까지는 멀쩡히 오고 본문에서 소켓이 멈춘다.
+   *
+   * 전에는 헤더가 도착하자마자 `clearTimeout`을 해서 30초가 '연결·헤더까지'만 덮었다.
+   * 그래서 `res.json()`이 영영 안 깨어나도 끊어 줄 신호가 없었고, AI 패널은 `aiLoading`이
+   * 내려가지 않아 스피너째 얼어붙었다(전송 버튼까지 죽는다). 타이머가 **본문을 다 읽을
+   * 때까지** 살아 있는지 본다.
+   */
+  describe('본문이 멈춘 응답 — callLlm 타임아웃 범위', () => {
+    it('헤더만 오고 본문이 멈추면 30초 타임아웃이 시도마다 끊는다', async () => {
+      const ai = await loadAiService()
+      vi.useFakeTimers()
+      try {
+        let bodyReads = 0
+        let bodyStarted!: () => void
+        const bodyEntered = new Promise<void>((resolve) => {
+          bodyStarted = resolve
+        })
+
+        mockFetch.mockImplementation((_url: string, init: RequestInit) => {
+          const signal = init.signal as AbortSignal
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            // 본문은 abort 신호로만 깨어난다 — 끊긴 본문에서 undici가 하는 그대로.
+            json: () => {
+              bodyReads++
+              bodyStarted()
+              return new Promise((_resolve, reject) => {
+                const fail = (): void => {
+                  const e = new Error('This operation was aborted')
+                  e.name = 'AbortError'
+                  reject(e)
+                }
+                if (signal.aborted) fail()
+                else signal.addEventListener('abort', fail)
+              })
+            }
+          })
+        })
+
+        let outcome = 'pending'
+        void ai.createTaskFromNL('내일 장보기', []).then(
+          () => {
+            outcome = 'resolved'
+          },
+          (e: Error) => {
+            outcome = e.name
+          }
+        )
+
+        // 헤더를 받고 본문 읽기에 들어간 시점까지는 타이머 없이 마이크로태스크로 간다.
+        // 이 대기가 핵심이다 — 안 기다리면 가짜 시계가 헤더보다 먼저 30초를 지나
+        // 버그가 있는 코드도 우연히 통과한다.
+        await bodyEntered
+        // 30초 × (첫 시도 + MAX_RETRIES 2) 보다 넉넉히
+        await vi.advanceTimersByTimeAsync(95_000)
+
+        expect(outcome).toBe('AbortError')
+        // 시도마다 자기 본문을 덮는 타이머를 다시 건다 — 첫 판만 고친 게 아니다.
+        expect(bodyReads).toBe(3)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
 })
