@@ -131,6 +131,84 @@ describe('M17 첨부 GC', () => {
     })
   })
 
+  /**
+   * **예약된 스윕은 예약 시점에 있던 파일만 본다.**
+   *
+   * `pick-attachment`는 파일을 **먼저** 첨부 폴더에 복사하고, 그 참조를 적는
+   * `update-task`는 렌더러를 한 바퀴 돌아 나중에 온다. 그 왕복 사이에 영구 삭제가
+   * 예약해 둔 GC가 커밋과 함께 착륙하면, 방금 고른 파일이 아무도 참조하지 않는
+   * 것으로 보여 쓸려 나간다 — 첨부 목록에는 남았는데 파일은 없어서 눌러도 아무 일도
+   * 일어나지 않는 첨부가 된다. 창은 디바운스 300ms이고, 저장이 실패 중이면 재시도
+   * 백오프 전체(최대 30초)로 벌어진다.
+   */
+  describe('예약과 커밋 사이에 들어온 첨부는 건드리지 않는다', () => {
+    /** `pick-attachment`가 하는 일: 파일만 폴더에 넣는다. 참조는 아직 없다. */
+    const pick = (storedName: string): void => {
+      const src = join(outside, `picked-${storedName}`)
+      writeFileSync(src, 'payload', 'utf-8')
+      db.copyAttachment(src, storedName)
+    }
+
+    it('영구 삭제가 예약한 스윕이 방금 고른 파일을 지우지 않는다', () => {
+      attach('t1', 'aaa-keep.txt')
+      attach('t2', 'bbb-doomed.txt')
+      db.closeDatabase() // 두 할일과 두 사본이 디스크에 있다
+
+      db.deleteTask('t2')
+      db.permanentDeleteTask('t2') // 예약 — 삭제는 아직 디바운스 안이다
+      pick('ccc-picked.txt') // update-task는 아직 렌더러 왕복 중
+      db.closeDatabase() // 커밋 = 예약된 스윕이 여기서 돈다
+
+      expect(stored(), '아직 참조가 안 적힌 파일을 고아로 봤다').toEqual(['aaa-keep.txt', 'ccc-picked.txt'])
+    })
+
+    it('휴지통 비우기가 예약한 스윕도 마찬가지다', () => {
+      attach('t1', 'aaa-keep.txt')
+      attach('t2', 'bbb-doomed.txt')
+      db.closeDatabase()
+
+      db.deleteTask('t2')
+      db.emptyTrash()
+      pick('ccc-picked.txt')
+      db.closeDatabase()
+
+      expect(stored()).toEqual(['aaa-keep.txt', 'ccc-picked.txt'])
+    })
+
+    // 예약이 겹칠 때 스냅샷을 다시 찍으면 그 사이에 들어온 파일이 후보가 되어
+    // 같은 창이 그대로 다시 열린다 — 첫 스냅샷을 유지해야 한다.
+    it('예약이 겹쳐도 그 사이 파일은 살아남는다', () => {
+      attach('t1', 'aaa-keep.txt')
+      attach('t2', 'bbb-doomed.txt')
+      attach('t3', 'ddd-doomed.txt')
+      db.closeDatabase()
+
+      db.deleteTask('t2')
+      db.permanentDeleteTask('t2') // 1차 예약
+      pick('ccc-picked.txt')
+      db.deleteTask('t3')
+      db.permanentDeleteTask('t3') // 2차 예약
+      db.closeDatabase()
+
+      expect(stored()).toEqual(['aaa-keep.txt', 'ccc-picked.txt'])
+    })
+
+    // 살려 두는 것이 영영 새는 것이면 안 된다: 참조가 끝내 오지 않으면
+    // 다음 부팅의 무제한 스윕이 걷는다.
+    it('끝내 참조되지 않으면 다음 부팅이 걷는다', () => {
+      attach('t1', 'aaa-keep.txt')
+      db.closeDatabase()
+
+      db.deleteTask('t1')
+      db.permanentDeleteTask('t1')
+      pick('ccc-picked.txt')
+      db.closeDatabase()
+      db.initDatabase() // 다음 부팅
+
+      expect(stored()).toEqual([])
+    })
+  })
+
   // 휴지통은 되돌릴 수 있는 상태다. 거기 있는 참조까지 죽은 것으로 세면
   // 복원한 할일의 첨부가 사라진다.
   it('휴지통에 있는 할일의 첨부는 남긴다', () => {
