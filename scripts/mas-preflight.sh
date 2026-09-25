@@ -34,7 +34,18 @@ else
   note "(Developer ID Application 인증서로는 App Store에 올릴 수 없습니다)"
 fi
 
-if security find-identity -v | grep -qE "3rd Party Mac Developer Installer|Apple Distribution"; then
+# 여기서만은 'Apple Distribution' 을 받지 않는다. 그건 **앱** 서명 인증서고, .pkg 를
+# flatten 하는 설치 인증서는 따로다 — electron-builder 는 이름으로 정확히
+# '3rd Party Mac Developer Installer:' 만 찾는다(app-builder-lib 의 macPackager → findIdentity).
+# 대안(|)을 하나 더 열어 두면 앱 인증서만 깔린 맥에서 이 줄이 초록으로 통과하고,
+# 유니버설 빌드를 두 아키텍처 다 돌린 **뒤에야**
+# 'Cannot find valid "3rd Party Mac Developer Installer" identity' 로 터진다.
+# 프리플라이트가 막으려던 낭비가 정확히 그것이다. (src/main/masPreflight.test.ts 가 못박는다)
+# (29행의 앱 인증서 검사는 반대로 둘 다 정당하다 — 'Apple Distribution' 이
+#  '3rd Party Mac Developer Application' 의 새 이름이다. 거기는 좁히지 말 것.)
+# `-p codesigning` 도 여기서는 일부러 없다 — 설치 신원은 서명 정책 신원이 아니어서
+# 그 옵션을 주면 목록에서 아예 사라진다.
+if security find-identity -v | grep -qE "3rd Party Mac Developer Installer"; then
   ok "설치 패키지 서명 인증서 있음"
 else
   bad "설치 패키지(.pkg) 서명 인증서 없음"
