@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, dialog, globalShortcut, Notification } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, Notification } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
@@ -6,25 +6,17 @@ import { initDatabase, closeDatabase, getTasks, holdSaves } from './database'
 import { dueReminders } from './reminders'
 import { setupIpcHandlers } from './ipc-handlers'
 import { setupAppIpc } from './app-ipc'
-import { uiStrings } from './ui-language'
+import { seedUiLanguage, uiStrings } from './ui-language'
 import { currentBundleId, currentCapabilities } from './capabilities'
 import { runMigrationOnBoot, setupMigrationIpc } from './migration/boot'
 import { applyAppMenu } from './app-menu'
-import { disposeLicensing, initLicensing } from './licensing/service'
+import { disposeLicensing, initLicensing, licenseStoreSalvaged } from './licensing/service'
 import { handleGoogleCallback } from './google-auth-flow'
-import { appDocumentUrl, isAppDocumentUrl } from './navigation-guard'
+import { createWindow, showOrCreateMainWindow } from './main-window'
 import { isAppScheme, findAppSchemeArg } from '../shared/app-id'
 
 // 리마인더 폴러 인터벌 핸들 (모듈 스코프에서 선언해 will-quit 핸들러에서 접근 가능)
 let reminderInterval: ReturnType<typeof setInterval> | null = null
-
-/** 브라우저에서 돌아왔으니 창을 앞으로 가져온다. */
-function focusMainWindow(): void {
-  const [win] = BrowserWindow.getAllWindows()
-  if (!win) return
-  if (win.isMinimized()) win.restore()
-  win.focus()
-}
 
 /**
  * 구글 OAuth 콜백 URL 하나를 처리한다. macOS(open-url)와 Windows(second-instance argv)가
@@ -32,74 +24,10 @@ function focusMainWindow(): void {
  */
 function receiveOAuthCallback(url: string): void {
   void handleGoogleCallback(url)
-  focusMainWindow()
-}
-
-function createWindow(): void {
-  const startUrl = appDocumentUrl(
-    is.dev ? process.env.ELECTRON_RENDERER_URL : undefined,
-    join(__dirname, '../renderer/index.html')
-  )
-  const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    show: false,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 15 },
-    backgroundColor: '#1C1C1E',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: true,
-      contextIsolation: true
-    }
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    try {
-      const parsed = new URL(details.url)
-      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
-        shell.openExternal(details.url)
-      }
-    } catch {
-      /* ignore */
-    }
-    return { action: 'deny' }
-  })
-
-  // **이 창은 앱 문서 밖으로 나가지 않는다** (`navigation-guard.ts` 참고).
-  //
-  // 위 `setWindowOpenHandler`는 **새 창**만 본다. 같은 창이 다른 문서로 넘어가는 길 —
-  // 창에 파일 떨어뜨리기, `location.href`, `target=_self` 링크, 폼 제출 — 은 하나도
-  // 지나지 않는다. 그리고 넘어간 문서에서 preload가 다시 돌아 `window.api`가 통째로
-  // 노출된다(Electron 40에서 실측: 79개 키).
-  //
-  // **세 이벤트 다 건다.**
-  //   - `will-navigate`      최상위 프레임의 시작 네비게이션
-  //   - `will-frame-navigate` 하위 프레임까지 (최상위에서는 이쪽이 먼저 발화한다).
-  //                          오늘 iframe이 없다는 것은 방어가 아니라 우연이다.
-  //   - `will-redirect`      **서버가 주는 3xx.** 앞의 둘은 리다이렉트 홉에서 발화하지
-  //                          않는다 — 허용된 URL로 출발해 302 한 번이면 가드를 넘어
-  //                          다른 오리진에 착륙하고, 그 문서가 `window.api`를 물려받는다.
-  //                          Electron 40에서 실측했다(79개 키). 홉마다 다시 검사한다.
-  const blockForeignNavigation = (details: { url: string; preventDefault: () => void }): void => {
-    if (isAppDocumentUrl(details.url, startUrl)) return
-    details.preventDefault()
-    console.warn('[security] 앱 문서 밖으로의 네비게이션을 막았다:', details.url)
-  }
-  mainWindow.webContents.on('will-navigate', blockForeignNavigation)
-  mainWindow.webContents.on('will-frame-navigate', blockForeignNavigation)
-  mainWindow.webContents.on('will-redirect', blockForeignNavigation)
-
-  // 가드가 비교할 기준과 실제로 로드하는 값이 **같은 문자열**이어야 한다. 예전처럼
-  // `loadFile(경로)`가 URL을 스스로 만들면 기준을 손으로 한 번 더 조립하게 되고,
-  // 둘이 갈리는 순간 가드가 정상 문서를 막아 앱이 아예 안 뜬다.
-  mainWindow.loadURL(startUrl)
+  // 창을 닫아 둔 채 브라우저에서 돌아오는 경우가 있다 — macOS는 마지막 창을 닫아도
+  // 앱을 끝내지 않는다. 그때는 만들어서 보여 준다: 예전에는 여기서 조용히 돌아가
+  // 토큰만 저장되고 사용자는 성공했는지 알 수 없었다.
+  showOrCreateMainWindow()
 }
 
 // 단일 인스턴스 락. 두 가지를 동시에 한다:
@@ -119,7 +47,7 @@ if (!singleInstance) {
   app.on('second-instance', (_event, argv) => {
     const url = findAppSchemeArg(argv)
     if (url) receiveOAuthCallback(url)
-    else focusMainWindow() // 그냥 두 번 실행한 경우 — 새 창 대신 기존 창을 앞으로
+    else showOrCreateMainWindow() // 그냥 두 번 실행한 경우 — 새 창 대신 기존 창을 앞으로
   })
 
   bootstrap()
@@ -152,9 +80,31 @@ function bootstrap(): void {
       app.setAsDefaultProtocolClient(bundleId)
     }
 
-    // **번들 ID 마이그레이션 — 디스크 쓰기를 먼저 붙든다.** initDatabase는 읽기만 하고,
-    // 첫 실행 시퀀스(백업·Keychain 검증)가 끝난 뒤에야 `releaseSaves()`로 푼다.
-    // IPC 핸들러가 아직 없으므로 렌더러의 mutation이 그 사이에 끼어들 길도 없다.
+    // **메인이 스스로 띄우는 문구의 언어를 여기서 정한다.** 바로 아래 두 대화상자 —
+    // initDatabase 실패 알림과 `runMigrationOnBoot`의 Keychain 안내 — 는 창보다 먼저
+    // 뜨므로 렌더러의 `set-language`가 도착하기 전이다. 씨앗이 없으면 기본값 'ko'에
+    // 묶여 영어 사용자도 한국어 모달을 봤다(`ui-language.ts` 참고). 렌더러가 말하면
+    // 그쪽이 이긴다.
+    //
+    // `app.getLocale()`은 whenReady 뒤라야 값이 선다. 그래도 감싸는 이유는 이 줄이
+    // 그 위 주석("창 만드는 길을 먼저 연다")과 같은 구간에 있기 때문이다 — 여기서
+    // 던지면 `createWindow()`까지 전부 안 돌아 창 없는 독 아이콘이 남는다. 언어 하나
+    // 때문에 앱이 안 뜨는 것보다, 기본값으로 계속 가고 로그를 남기는 편이 낫다.
+    try {
+      seedUiLanguage(app.getLocale())
+    } catch (error) {
+      console.error('[bootstrap] OS 로케일을 읽지 못했다 — 기본 언어로 계속한다', error)
+    }
+
+    // **번들 ID 마이그레이션 — 디스크 쓰기를 먼저 붙든다.** 첫 실행 시퀀스(백업·
+    // Keychain 검증)가 끝난 뒤에야 `releaseSaves()`로 푼다. IPC 핸들러가 아직
+    // 없으므로 렌더러의 mutation이 그 사이에 끼어들 길도 없다.
+    //
+    // 여기 "initDatabase는 읽기만 한다"고 적혀 있었는데 거짓이었다. 손상본 격리
+    // (rename)와 첨부 GC(unlink)는 `save()`를 지나지 않아 `holdSaves()`를 비껴갔고,
+    // 그래서 전환 전 백업이 만들어지기 **전에** 사용자의 첨부를 영구 삭제했다.
+    // 이제 그 둘을 `database.ts`가 붙들린 동안 미룬다 — 여기 순서는 그대로 두되,
+    // **이 구간이 안전하다는 보장은 저쪽에 있다**(`quarantineWhenReleased`).
     holdSaves()
     try {
       initDatabase()
@@ -182,6 +132,25 @@ function bootstrap(): void {
     // `licensing()`을 호출 시점에 읽으므로 순서가 뒤여도 안전하다 —
     // 렌더러의 첫 IPC는 페이지 로드 뒤라 이 줄보다 한참 뒤다.
     initLicensing()
+
+    // **깨진 license.json 을 옆으로 치운 부팅은 그 사실을 말한다.**
+    //
+    // `licenseStore.read()`는 못 읽는 파일을 `.corrupt-<ts>` 사본으로 복사해 두고 빈
+    // 레코드로 시작한다(licenseStore.ts). 그 사건이 `console.error` 한 줄로만 남아
+    // 있어서, 돈 낸 사람에게는 등록한 키가 이유 없이 사라지고 enforcement를 켠 뒤에는
+    // "체험 기간이 끝났습니다"만 떴다 — 옆에 복구되는 사본이 있다는 것도, 키를 다시
+    // 넣으면 끝이라는 것도 알 길이 없었다. `licenseStoreSalvaged()`는 바로 이 한 줄을
+    // 위해 만들어 두고 **부르는 곳이 하나도 없던** 함수다. `initLicensing()`이 읽기를
+    // 딱 한 번 하므로 이 질문은 여기서 한 번만 물으면 된다.
+    //
+    // 스토어 빌드에서는 띄우지 않는다. 그쪽은 키를 쓰지 않아 안내가 거짓말이고,
+    // "키를 다시 넣으세요"는 앱 안에서 외부 결제로 유도하는 문구라 Apple 3.1.1에
+    // 걸린다 — 그 질문의 답은 이미 `needsLicenseKey`가 갖고 있다(capabilities.ts).
+    // 잠그는가(`enforcesLicense`)가 아니라 **키를 쓰는 채널인가**가 기준이다:
+    // 지금은 enforcement가 꺼져 있어도 사라진 등록 정보는 똑같이 사라진 것이다.
+    if (licenseStoreSalvaged() && currentCapabilities().needsLicenseKey) {
+      dialog.showErrorBox(uiStrings().licenseSalvagedTitle, uiStrings().licenseSalvagedBody)
+    }
 
     // 리마인더 폴러: 60초마다 도래한 리마인더를 확인하고 시스템 알림 발화.
     // isSupported()는 '플랫폼이 알림을 띄울 수 있는가'만 답한다(사용자 허용 여부는 알 수 없다).
