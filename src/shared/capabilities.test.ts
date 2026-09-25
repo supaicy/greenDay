@@ -123,3 +123,23 @@ describe('enforcesLicense — 잠그는가', () => {
     }
   })
 })
+
+describe('inheritsLegacyData', () => {
+  // MAS 는 샌드박스 컨테이너라 옛 userData 를 아예 못 읽는다. 그런데 컨테이너에는
+  // 자기 데이터가 쌓여 무결성 검사가 'ok' 가 되므로, 이 술어가 없으면 마이그레이션
+  // 배너가 "haru 데이터를 정상적으로 읽었다 — 지워도 된다"를 거짓으로 말한다.
+  it('is off under the MAS sandbox', () => {
+    expect(capabilitiesFor(facts({ isMas: true })).inheritsLegacyData).toBe(false)
+  })
+
+  // 직접 배포판은 옛 앱과 같은 userData 를 본다 — 여기가 실제 이전 경로다.
+  it('is on for a direct-download build', () => {
+    expect(capabilitiesFor(facts()).inheritsLegacyData).toBe(true)
+    expect(capabilitiesFor(facts({ isDev: true })).inheritsLegacyData).toBe(true)
+  })
+
+  // 옛 haru 는 macOS 전용이었다 — Microsoft Store 와는 무관한 제약이다.
+  it('is unrelated to the Microsoft Store', () => {
+    expect(capabilitiesFor(facts({ isWindowsStore: true })).inheritsLegacyData).toBe(true)
+  })
+})

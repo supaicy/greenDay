@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { handle } from '../ipc-gate'
 import { realCrypto, releaseSaves, holdSaves } from '../database'
 import { uiStrings } from '../ui-language'
-import { isBridgeBuild } from '../capabilities'
+import { currentCapabilities, isBridgeBuild } from '../capabilities'
 import { readGoogleConfig } from '../google-config'
 import type { MigrationStatus } from '../../shared/migration'
 import { clearBridgeSnooze, runBridge, snoozeBridgeNotice } from './bridge'
@@ -24,6 +24,17 @@ let status: MigrationStatus = { mode: 'none' }
 /** 옛 앱이 남아 있을 자리. 사용자가 다른 곳에 뒀으면 못 보지만, 그때는 안내를 안 하는 쪽이 맞다. */
 function oldAppPaths(): string[] {
   return ['/Applications/haru.app', join(app.getPath('home'), 'Applications', 'haru.app')]
+}
+
+/**
+ * 옛 앱이 보이는가 — **이어받는 빌드에서만** 묻는다.
+ *
+ * MAS 판에서 `/Applications/haru.app` 이 보인다고 안내를 띄우면, 샌드박스 컨테이너에
+ * 새로 쌓인 자기 데이터를 "haru 에게서 이어받았다"고 잘못 말하게 된다. 그쪽에서는
+ * 질문 자체를 하지 않는다(`capabilities.inheritsLegacyData`).
+ */
+function oldAppVisible(): boolean {
+  return currentCapabilities().inheritsLegacyData && oldAppPaths().some((p) => existsSync(p))
 }
 
 export function runMigrationOnBoot(input: { singleInstance: boolean; bundleId: string }): MigrationStatus {
@@ -55,7 +66,7 @@ export function runMigrationOnBoot(input: { singleInstance: boolean; bundleId: s
             defaultId: 0
           })
         },
-        oldAppPresent: () => oldAppPaths().some((p) => existsSync(p)),
+        oldAppPresent: oldAppVisible,
         googleTokensReadable: () => readGoogleConfig(join(userData, 'google-config.json'), realCrypto).tokens !== null
       }).status
     }
