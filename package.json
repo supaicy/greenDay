@@ -71,7 +71,7 @@
     "autoprefixer": "^10.4.20",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "electron": "^40.8.0",
+    "electron": "^40.10.6",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
     "i18next": "^26.3.6",
