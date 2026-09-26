@@ -128,7 +128,7 @@
 
 <div class="lede" style="border-left-color: var(--accent); margin-top: 1rem">
   <p><strong>진단 후 수정까지 끝냈습니다 — 결함 65건 중 63건을 고쳤고, 2건은 재현해 보니 결함이 아니어서 의도적으로 두었습니다.</strong>
-  커밋 52개, 전부 "고치기 전에 실패하는 테스트"를 먼저 세운 뒤 적용했습니다. 의존성 취약점은 재검증 범위가 커서 판단을 남겼습니다(6장).</p>
+  커밋 57개, 전부 "고치기 전에 실패하는 테스트"를 먼저 세운 뒤 적용했습니다. 의존성 취약점 35건도 이어서 닫았습니다 — <code>npm audit</code> 0건(6장).</p>
   <p>테스트는 <strong>1,450 → 2,120개</strong>(파일 79 → 114)로 늘었고 전부 통과합니다. typecheck 0,
   lint 0 errors, 빌드 성공, 새 프로필로 실제 앱 부팅까지 확인했습니다. 추가된 줄의 <strong>3분의 2가 테스트</strong>입니다
   (테스트 5,424줄 / 소스 2,811줄) — 회귀를 막는 것이 수정 자체보다 중요해서입니다.</p>
@@ -472,43 +472,56 @@
 밴드가 24시간으로 열린 뒤라 시각 밖 누락이 사라졌습니다). 둘 다 재현을 시도한 뒤 결함이 아니라고
 판정했습니다.</p>
 
-<h2>6. 손대지 않은 잔여 작업 — 결정이 필요한 것</h2>
+<h2>6. 의존성 취약점 — 35건에서 0건으로</h2>
 
-<div class="lede" style="border-left-color: var(--crit)">
-  <p><strong><code>npm audit</code>이 35건을 보고합니다 — critical 1, high 26.</strong>
-  진단 범위 밖이라 고치지 않았습니다. 둘로 갈립니다.</p>
+<div class="lede">
+  <p><strong>진단 직후에는 <code>npm audit</code>이 35건(critical 1 · high 26)을 보고했고, 재검증 범위가 커서
+  판단을 남겨 두었습니다. 그 뒤 제안한 순서대로 처리해 <span class="verified">0건</span>이 됐습니다.</strong></p>
 </div>
 
 <div class="scroll">
 <table>
-  <thead><tr><th>대상</th><th>등급</th><th>실제 위험</th><th>올리는 비용</th></tr></thead>
+  <thead><tr><th>단계</th><th>무엇</th><th>닫은 것</th><th>실측 검증</th></tr></thead>
   <tbody>
     <tr>
-      <td><code>electron</code> 자체<br><span class="sub">설치 <code>^40.8.0</code></span></td>
-      <td><span class="tag t-high">high</span></td>
-      <td><strong>사용자에게 나가는 런타임이라 이것만 성격이 다릅니다.</strong>
-      service worker가 <code>executeJavaScript</code> IPC 응답을 위조 가능(CVSS 5.9),
-      iframe 권한 요청에 잘못된 origin 전달(CVSS 5.4). 둘 다 이 앱이 이미 신경 쓰는
-      영역(<code>navigation-guard.ts</code>, <code>sandbox: true</code>,
-      <code>contextIsolation: true</code>)과 겹칩니다.</td>
-      <td>Electron 메이저 업 — 창 생성·네비게이션 가드·safeStorage·알림 권한 재검증</td>
+      <td class="num">1</td>
+      <td><code>electron</code> 40.8.0 → <strong>40.10.6</strong></td>
+      <td>권고 25건 중 24건. <span class="tag t-high">high</span> 둘 — custom protocol의
+      교차 출처 읽기, <code>Function.prototype.bind</code> 하이재킹으로 context isolation 우회</td>
+      <td>같은 메이저라 패치 라인. 선언 하한도 올려 <code>npm ci</code> 회귀 방지</td>
     </tr>
     <tr>
-      <td>빌드 툴체인<br><span class="sub"><code>tar</code>, <code>@xmldom/xmldom</code>,
-      <code>app-builder-lib</code>, <code>dmg-builder</code> 등</span></td>
-      <td><span class="tag t-crit">critical</span> <span class="tag t-high">high</span></td>
-      <td><code>tar</code>의 하드링크 경로 탈출(CVSS 8.2)이 가장 높지만,
-      <strong>출하물에 들어가지 않고 빌드 머신에서만 돕니다.</strong></td>
-      <td><code>electron-builder@26</code> 메이저 업 — 그 패키지가 MAS·공증·dmg 경로
-      전부를 잡고 있어 출하 경로를 다시 검증해야 합니다</td>
+      <td class="num">2</td>
+      <td><code>electron</code> → <strong>41.10.7</strong></td>
+      <td>40.x가 못 닫은 마지막 1건 — sandboxed iframe의 <code>allow-popups</code> 우회
+      (41.10.3+ 필요)</td>
+      <td>메이저 업. Chromium 144 → 146. <code>require</code>·<code>process</code> 미노출,
+      preload 83키 전부, IPC 왕복 + DB 쓰기, 네비게이션 가드 차단을 실제로 확인</td>
+    </tr>
+    <tr>
+      <td class="num">3</td>
+      <td><code>electron-builder</code> 25.1.8 → <strong>26.15.3</strong></td>
+      <td><span class="tag t-crit">critical</span> <code>tar</code> 하드링크 경로 탈출
+      (CVSS 8.2) 등 20건</td>
+      <td><code>--mac --dir</code>로 실제 패키징하고 <strong>만들어진
+      <code>Greenday.app</code>을 띄워</strong> 번들 ID·버전·런타임·출하 플래그까지 확인</td>
+    </tr>
+    <tr>
+      <td class="num">4</td>
+      <td>lockfile 갱신 (15건)</td>
+      <td>출하물에 닿는 둘: <code>electron-updater</code>(교차 출처 리다이렉트에서
+      <code>Authorization</code> 헤더 유출, prod 의존성), <code>uuid</code>(버퍼 경계 검사).
+      나머지는 vite·vitest·postcss 등 개발 도구</td>
+      <td>전부 기존 semver 범위 안이라 <code>package.json</code>은 그대로. vitest 자체가
+      올라가서 스위트가 그대로 도는지 확인</td>
     </tr>
   </tbody>
 </table>
 </div>
 
-<p>권하는 순서: <strong>(1) electron 패치 라인만 올려 재검증, (2) electron-builder는 다음 릴리스
-준비와 묶어서.</strong> 둘 다 이번 작업처럼 "고치고 테스트 붙이기"로 끝나지 않고 재검증 범위가
-커서, 판단을 남겨 두는 편이 맞다고 봤습니다. <code>TODOS.md</code>에 [P1]로 적어 두었습니다.</p>
+<p><strong>서명·공증·MAS 업로드는 인증서가 필요해 검증하지 못했습니다.</strong> electron-builder
+업그레이드는 설정 파싱과 패키징까지만 확인했으니, 첫 실제 릴리스 때 그 경로를 반드시 다시 봐야 합니다.
+<code>TODOS.md</code>에 그렇게 적어 두었습니다.</p>
 
 <h2>7. 남은 한계 — 확인하지 못한 것</h2>
 

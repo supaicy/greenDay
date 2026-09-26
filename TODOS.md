@@ -5,23 +5,26 @@
 전수 진단으로 결함 65건을 찾아 63건을 고쳤다(브랜치 `qa/2026-09-25-diagnosis-fixes`, 커밋 51).
 보고서: `docs/reports/2026-09-25-전체-진단.html`. 아래는 **그 작업에서 의도적으로 남긴 것**이다.
 
-### [P1] 의존성 취약점 35건 — 결정 필요
+### ~~[P1] 의존성 취약점 35건~~ ✅ DONE (2026-09-26)
 
-`npm audit`: critical 1 · high 26 · moderate 4 · low 4. 두 갈래로 갈린다.
+**`npm audit`: 35 → 0건.** 제안한 순서 그대로 electron 먼저, electron-builder 다음,
+남은 것은 lockfile 갱신으로 닫았다.
 
-- **`electron` 자체가 high** (설치된 `^40.8.0`이 취약 범위 `1.3.1 - 41.10.2`에 든다).
-  실제로 사용자에게 나가는 런타임이라 이것만 성격이 다르다. 내용은 권한/IPC 계열이고
-  (service worker가 `executeJavaScript` IPC 응답을 위조 가능 CVSS 5.9, iframe 권한 요청에
-  잘못된 origin 전달 CVSS 5.4) 둘 다 이 앱의 위협 모델(`navigation-guard.ts`,
-  `sandbox: true`, `contextIsolation: true`)과 겹친다. 올리면 Electron 메이저 업이라
-  **재검증 범위가 크다** — 창 생성·네비게이션 가드·safeStorage·알림 권한을 다시 봐야 한다.
-- **나머지는 전부 빌드 툴체인**(electron-builder 의존 트리의 `tar` critical CVSS 8.2,
-  `@xmldom/xmldom`, `app-builder-lib`, `dmg-builder` 등). 출하물에 들어가지 않고 빌드 머신에서만
-  돈다. `tar` 수정은 `electron-builder@26.15.3` **메이저 업**을 요구하고, 그 패키지가
-  MAS·공증·dmg 경로 전부를 잡고 있어 올리면 출하 경로를 다시 검증해야 한다.
+- `electron` 40.8.0 → **40.10.6** (`4b045dc`) — 권고 25건 중 24건. high 둘 포함
+  (custom protocol CORS 우회, `Function.prototype.bind`로 context isolation 우회).
+  선언 하한도 올려 `npm ci`가 되돌아가지 않게 했다.
+- `electron` 40.10.6 → **41.10.7** (`ee16442`) — 40.x가 못 닫은 마지막 하나
+  (sandboxed iframe의 allow-popups 우회, 41.10.3+ 필요). Chromium 144 → 146.
+  메이저 업이라 신뢰 경계·preload 표면·IPC 왕복·네비게이션 가드를 실측으로 다시 확인했다.
+- `electron-builder` 25.1.8 → **26.15.3** (`4a6661d`) — `tar` critical(CVSS 8.2) 등 20건.
+  `--mac --dir`로 실제 패키징하고 **만들어진 `Greenday.app`을 띄워** 확인했다.
+- 남은 15건은 semver 범위 안이라 lockfile만 갱신 (`57번째 커밋`).
+  출하물에 닿는 둘: `electron-updater` 6.8.3 → 6.8.9(교차 출처 리다이렉트에서
+  `Authorization` 헤더 유출, prod 의존성), `uuid` 11.1.0 → 11.1.1(버퍼 경계 검사).
 
-판단이 필요해서 손대지 않았다. 권하는 순서: (1) electron 패치 라인만 올려 재검증,
-(2) electron-builder는 다음 릴리스 준비와 묶어서.
+**검증하지 못한 것:** 서명·공증·MAS 업로드는 인증서가 필요하다. electron-builder
+업그레이드는 설정 파싱과 패키징까지만 확인했다 — **첫 실제 릴리스 때 그 경로를
+반드시 다시 봐야 한다.**
 
 ### [P3] bisect 가능성
 
