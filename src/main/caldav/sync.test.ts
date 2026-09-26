@@ -655,7 +655,13 @@ describe('서머타임 경계의 반복 시리즈', () => {
     })
   const lineOf = (ics: string, name: string): string =>
     ics.split('\r\n').find((l) => l.startsWith(`${name}:`)) ?? ''
-  const icsOf = (t: TaskRow): string => serializeEvent(taskToEvent(t)!, NOW)
+  const icsOf = (t: TaskRow): string => {
+    const event = taskToEvent(t)
+    // `!`로 넘기면 taskToEvent가 null을 주게 회귀했을 때 serializeEvent 안에서
+    // 엉뚱한 타입 오류로 터진다. 여기서 먼저 못 박아 실패 지점을 분명히 한다.
+    if (!event) throw new Error('taskToEvent가 null을 돌려줬다 — 테스트 전제가 깨졌다')
+    return serializeEvent(event, NOW)
+  }
 
   it('DTSTART를 UTC로 적지 않는다 — 적으면 전환 뒤 09:00 회차가 10:00에 뜬다', () => {
     expect(lineOf(icsOf(standup()), 'DTSTART')).toBe('DTSTART:20260301T090000')
@@ -761,7 +767,9 @@ describe('날짜로 못 읽는 시간값은 그 회차만 버린다', () => {
     const event = taskToEvent(
       recurring({ scheduled_start: '2026-08-01T09:00:00', scheduled_end: 'zzzzzzzzzzzzzzzz' })
     )
-    expect(event?.start).toBe(localToIso('2026-08-03', '09:00'))
-    expect(new Date(event!.end).getTime()).toBeGreaterThan(new Date(event!.start).getTime())
+    expect(event).not.toBeNull()
+    if (!event) return
+    expect(event.start).toBe(localToIso('2026-08-03', '09:00'))
+    expect(new Date(event.end).getTime()).toBeGreaterThan(new Date(event.start).getTime())
   })
 })

@@ -1,5 +1,45 @@
 # TODOS
 
+## 2026-09-26 진단 후 남은 것
+
+전수 진단으로 결함 65건을 찾아 63건을 고쳤다(브랜치 `qa/2026-09-25-diagnosis-fixes`, 커밋 51).
+보고서: `docs/reports/2026-09-25-전체-진단.html`. 아래는 **그 작업에서 의도적으로 남긴 것**이다.
+
+### [P1] 의존성 취약점 35건 — 결정 필요
+
+`npm audit`: critical 1 · high 26 · moderate 4 · low 4. 두 갈래로 갈린다.
+
+- **`electron` 자체가 high** (설치된 `^40.8.0`이 취약 범위 `1.3.1 - 41.10.2`에 든다).
+  실제로 사용자에게 나가는 런타임이라 이것만 성격이 다르다. 내용은 권한/IPC 계열이고
+  (service worker가 `executeJavaScript` IPC 응답을 위조 가능 CVSS 5.9, iframe 권한 요청에
+  잘못된 origin 전달 CVSS 5.4) 둘 다 이 앱의 위협 모델(`navigation-guard.ts`,
+  `sandbox: true`, `contextIsolation: true`)과 겹친다. 올리면 Electron 메이저 업이라
+  **재검증 범위가 크다** — 창 생성·네비게이션 가드·safeStorage·알림 권한을 다시 봐야 한다.
+- **나머지는 전부 빌드 툴체인**(electron-builder 의존 트리의 `tar` critical CVSS 8.2,
+  `@xmldom/xmldom`, `app-builder-lib`, `dmg-builder` 등). 출하물에 들어가지 않고 빌드 머신에서만
+  돈다. `tar` 수정은 `electron-builder@26.15.3` **메이저 업**을 요구하고, 그 패키지가
+  MAS·공증·dmg 경로 전부를 잡고 있어 올리면 출하 경로를 다시 검증해야 한다.
+
+판단이 필요해서 손대지 않았다. 권하는 순서: (1) electron 패치 라인만 올려 재검증,
+(2) electron-builder는 다음 릴리스 준비와 묶어서.
+
+### [P3] bisect 가능성
+
+수정 38건을 병렬 적용하면서 여러 건이 같은 파일(`useStore.ts`·`ipc-handlers.ts` 등)을
+건드렸고, 먼저 커밋된 쪽이 옆 수정의 변경을 함께 안고 갔다. **브랜치 끝은 전부 초록**이지만
+중간 커밋 일부는 단독으로 빌드되지 않는다. 히스토리를 정리하려면 rebase가 필요하다.
+
+### [P4] 이미 고아가 된 데이터
+
+휴지통 하위작업 버그(`bfa8b55`)로 이미 보이지 않게 된 행이 기존 사용자 파일에 있으면
+그대로 남는다 — 수정은 새로 생기는 것만 막는다. 마이그레이션이 필요하면 별도 작업이다.
+
+### 확인하지 못한 범위
+
+MAS 샌드박스 빌드, 실제 iCloud·Google 서버 왕복, 알림 권한 승인 상태, 실제 라이선스
+활성화(`IS_ENFORCED = false`로 테스트), 다중 디스플레이. 동기화 수정들은 서버 대역 위에서만
+검증됐다.
+
 ## 트렁크 결정 (2026-08-15, 확정)
 
 - **`supaicy/coordinate`가 트렁크다.** main은 4월에 갈라진 실험 가지로 동결.
