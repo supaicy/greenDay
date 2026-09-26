@@ -26,6 +26,33 @@
 업그레이드는 설정 파싱과 패키징까지만 확인했다 — **첫 실제 릴리스 때 그 경로를
 반드시 다시 봐야 한다.**
 
+### [P2] 출시를 막고 있는 것 — 사람이 받아 와야 하는 둘 (2026-09-26 실측)
+
+인증서는 **이미 다 있다.** 이 맥 키체인에 `Apple Distribution`,
+`3rd Party Mac Developer Installer`, `Developer ID Application`이 모두 있고
+(팀 `32R6RHXU36`), notarytool 프로파일 `haru`와 키체인 `AC_PASSWORD`(업로드용),
+`gh` 로그인까지 준비돼 있다. 새로 발급할 인증서는 없다.
+
+`npm run mas:preflight`이 걸러내는 ✗는 둘뿐이다.
+
+1. **`resources/embedded.provisionprofile` 이 없다.** developer.apple.com →
+   Identifiers에 `com.begreen.greenday` 등록(없으면) → Profiles → **Mac App Store
+   Connect** 유형, App ID `com.begreen.greenday`, 인증서 `Apple Distribution` →
+   내려받아 그 경로에 저장. 옛 번들 ID(`com.supaicy.haru`)로 발급하면 프리플라이트가
+   "다른 앱의 것"으로 잡는다.
+2. **`GOOGLE_OAUTH_CLIENT_ID` 가 없다.** Google Cloud 콘솔 → 사용자 인증 정보 →
+   OAuth 클라이언트 ID → **데스크톱 앱** 유형(번들 ID를 묻는 iOS 유형이 아니다).
+   범위는 `calendar.app.created` 하나. 비밀이 아니다 — 클라이언트 보안 비밀은 쓰지 않는다.
+   자세한 것은 `docs/howto-Google-OAuth-클라이언트.md`.
+
+**직접 배포 채널은 2번만 있으면 지금 바로 된다** — 프로비저닝 프로파일은 App Store
+전용이라 `GOOGLE_OAUTH_CLIENT_ID=<값> npm run release`로 서명·공증된 dmg를 낼 수 있다.
+
+GitHub Actions 자동화는 시크릿 7개가 더 필요하다(현재 `HOMEBREW_TAP_TOKEN` 하나만
+등록됨): `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_B64`, `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER`, `APPLE_TEAM_ID`, `GOOGLE_OAUTH_CLIENT_ID`. 로컬 릴리스만
+한다면 없어도 된다.
+
 ### [P3] bisect 가능성
 
 수정 38건을 병렬 적용하면서 여러 건이 같은 파일(`useStore.ts`·`ipc-handlers.ts` 등)을
