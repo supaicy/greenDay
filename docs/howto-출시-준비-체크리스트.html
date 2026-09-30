@@ -132,7 +132,7 @@
 <main>
 
 <h1>Greenday 출시 준비 체크리스트</h1>
-<p class="sub">2026-09-26 확인 · 팀 <code>32R6RHXU36</code> (MINSEOK SHIN) · 번들 ID <code>com.begreen.greenday</code></p>
+<p class="sub">2026-09-26 확인, 09-30 갱신 · 팀 <code>32R6RHXU36</code> (MINSEOK SHIN) · 번들 ID <code>com.begreen.greenday</code></p>
 
 <div class="lede">
   <p><strong>인증서는 이미 다 있습니다.</strong> 이 맥의 키체인과 저장소를 실제로 확인했고, App Store 제출에
@@ -140,6 +140,8 @@
   <p>빠진 것은 <strong>딱 두 개</strong>입니다 — 프로비저닝 프로파일 파일 하나, Google OAuth 클라이언트 ID 문자열 하나.
   둘 다 developer.apple.com과 Google Cloud 콘솔에서 받아야 하고, <strong>로그인이 필요해서 제가 대신 할 수 없습니다.</strong>
   아래 2단계만 해주시면 그 뒤는 제가 전부 합니다.</p>
+  <p><strong>App ID <code>com.begreen.greenday</code>는 이미 등록돼 있습니다</strong>(2026-09-30 확인) —
+  등록 단계는 건너뛰고 프로파일 발급부터 하시면 됩니다.</p>
 </div>
 
 <h2>지금 상태</h2>
@@ -181,6 +183,13 @@
       <span class="note"><code>gh</code> 로그인됨 (<code>supaicy</code>). 직접 배포의 릴리스 게시에 씁니다</span></span>
     <span class="who me">준비됨</span>
   </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>App ID</b> <code>com.begreen.greenday</code>
+      <span class="note">Apple 계정에 <strong>이미 등록돼 있습니다</strong>(2026-09-30 확인). 새로 만들 필요 없습니다 —
+      바로 Profiles로 가면 됩니다</span></span>
+    <span class="who me">준비됨</span>
+  </div>
   <div class="ledger-row missing">
     <span class="mark n">✗</span>
     <span class="what"><b>프로비저닝 프로파일</b> <code>resources/embedded.provisionprofile</code>
@@ -205,19 +214,28 @@
 <div class="step">
   <span class="step-n">1</span>
   <div class="step-body">
-    <h3>App ID가 등록돼 있는지 확인</h3>
-    <p class="path"><b>developer.apple.com</b> → 로그인 → <b>Certificates, Identifiers &amp; Profiles</b> → <b>Identifiers</b></p>
-    <p>목록에서 <code>com.begreen.greenday</code>를 찾습니다.</p>
-    <ul>
-      <li><strong>있으면</strong> 2로 넘어갑니다.</li>
-      <li><strong>없으면</strong> <b>+</b> → <b>App IDs</b> → <b>App</b> → Platform <b>macOS</b> →
-        Bundle ID는 <b>Explicit</b>을 고르고 <code>com.begreen.greenday</code>를 그대로 입력 → Description은 <code>Greenday</code> →
-        Capabilities는 <strong>기본값 그대로 두면 됩니다</strong>(이 앱이 쓰는 샌드박스 권한은 별도 등록이 필요 없습니다) → Continue → Register.</li>
-    </ul>
+    <h3>App ID — 이미 있습니다. 대신 <em>이름</em>을 고치세요</h3>
+    <p class="path"><b>developer.apple.com</b> → <b>Certificates, Identifiers &amp; Profiles</b> → <b>Identifiers</b></p>
+    <p>2026-09-30 확인 결과 목록은 이렇습니다:</p>
+<pre><code>Name        Identifier
+BicMac      com.supaicy.bicmac     ← 다른 제품, 무관
+Greenday    com.supaicy.haru       ← 옛 것. 배포된 적 없음
+Greenday    com.begreen.greenday   ← 우리가 쓸 것. 이미 등록됨</code></pre>
+    <p><strong>필요한 App ID는 이미 있습니다.</strong> 새로 등록할 것이 없으니 2로 넘어가셔도 됩니다.
+    다만 그 전에 한 가지만 정리하는 편이 안전합니다.</p>
     <div class="warn-box">
-      <strong>철자가 정확해야 합니다.</strong> <code>com.begreen.greenday</code> — 2026-09-07에 <code>com.supaicy.haru</code>에서
-      바꾼 값입니다. 옛 ID로 발급하면 프리플라이트가 "다른 앱의 것"이라고 잡아냅니다.
+      <strong>둘 다 이름이 "Greenday"입니다.</strong> Identifier는 다른데 라벨이 같아서, 다음 단계의 프로파일
+      드롭다운과 <strong>App Store Connect의 Bundle ID 드롭다운</strong>에서 잘못 고르기 쉽습니다.
+      그리고 <strong>App Store Connect 앱 레코드는 한 번 만들면 Bundle ID를 바꿀 수 없습니다.</strong>
+      <br><br>
+      <code>com.supaicy.haru</code>를 열어 Description을 <code>Greenday (OLD — do not use)</code> 처럼
+      바꿔 두세요. Identifier는 못 바꾸지만 <strong>이름은 바꿀 수 있습니다.</strong>
     </div>
+    <p><strong>지우지는 마세요.</strong> <code>com.supaicy.haru</code>는 한 번도 배포된 적이 없어
+    (실제로 나간 v1.4.1의 번들 ID는 <code>com.haru.app</code>이었습니다 —
+    <code>docs/explanation-번들-ID-마이그레이션.md</code>) 사용자도 App Store Connect 레코드도 붙어 있지
+    않습니다. 지워도 안전하지만 얻는 것이 없고, 참조하는 프로파일이 남아 있으면 삭제가 막히거나
+    그 프로파일이 무효가 됩니다. 라벨만 바꾸면 헷갈림은 사라집니다.</p>
   </div>
 </div>
 

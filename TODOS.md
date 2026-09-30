@@ -35,11 +35,18 @@
 
 `npm run mas:preflight`이 걸러내는 ✗는 둘뿐이다.
 
-1. **`resources/embedded.provisionprofile` 이 없다.** developer.apple.com →
-   Identifiers에 `com.begreen.greenday` 등록(없으면) → Profiles → **Mac App Store
-   Connect** 유형, App ID `com.begreen.greenday`, 인증서 `Apple Distribution` →
-   내려받아 그 경로에 저장. 옛 번들 ID(`com.supaicy.haru`)로 발급하면 프리플라이트가
-   "다른 앱의 것"으로 잡는다.
+1. **`resources/embedded.provisionprofile` 이 없다.** App ID
+   `com.begreen.greenday`는 **이미 등록돼 있다**(2026-09-30 확인) — Profiles →
+   **Mac App Store Connect** 유형, App ID `com.begreen.greenday`, 인증서
+   `Apple Distribution` → 내려받아 그 경로에 저장.
+
+   **주의: Identifiers에 "Greenday"라는 이름이 둘이다.** `com.supaicy.haru`(옛 것)와
+   `com.begreen.greenday`(쓸 것)의 Name이 같아서, 프로파일 드롭다운과 **App Store
+   Connect의 Bundle ID 드롭다운**에서 잘못 고르기 쉽다. ASC 앱 레코드는 만든 뒤에
+   Bundle ID를 바꿀 수 없다. 옛 것의 Description을 `Greenday (OLD — do not use)`로
+   바꿔 두면 된다(Identifier는 못 바꾸지만 이름은 바뀐다). **지우지는 말 것** —
+   배포된 적이 없어 지워도 안전하지만 얻는 것이 없고, 참조하는 프로파일이 있으면
+   삭제가 막히거나 그 프로파일이 무효가 된다.
 2. **`GOOGLE_OAUTH_CLIENT_ID` 가 없다.** Google Cloud 콘솔 → 사용자 인증 정보 →
    OAuth 클라이언트 ID → **데스크톱 앱** 유형(번들 ID를 묻는 iOS 유형이 아니다).
    범위는 `calendar.app.created` 하나. 비밀이 아니다 — 클라이언트 보안 비밀은 쓰지 않는다.
