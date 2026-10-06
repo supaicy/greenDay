@@ -93,6 +93,7 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
       // 나중에 허용하면 여기서 열린다. 백업도 안내도 다시 하지 않는다.
       const sentinel = checkSentinel(sentinelPath, deps.crypto)
       const locked = applyGate(sentinel, hasStoredCiphertexts(deps.userData))
+      refreshSentinelIfOpen(sentinelPath, deps.crypto, sentinel, locked)
       return {
         status: {
           mode: 'arrival',
@@ -102,7 +103,9 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
           secretsLocked: locked,
           lockReason: locked ? sentinel : null,
           googleReconnect: needsGoogleReconnect(deps, locked),
-          oldAppRemovable: canRemoveOldApp(deps, locked) && !existing.arrival?.oldAppHintDismissed,
+          // 닫은 안내가 먼저다 — 다시 뜨지 않을 안내를 위해 매 실행 데이터 파일과 `.bak`을
+          // 통째로 파싱하지 않는다.
+          oldAppRemovable: !existing.arrival?.oldAppHintDismissed && canRemoveOldApp(deps, locked),
           oldAppHintDismissed: existing.arrival?.oldAppHintDismissed ?? false
         },
         state: existing
@@ -129,10 +132,9 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
     }
     const locked = applyGate(sentinel, ciphertexts)
 
-    // 재 볼 것이 없었고 암호화가 되는 환경이면 지금 sentinel을 심는다 — 다음 실행부터는
-    // "같은 키인가"를 잴 수 있다. 잠긴 상태에서는 심지 않는다: 새 키로 만든 sentinel이
-    // 옛 암호문을 "검증"하는 척하게 된다.
-    if (sentinel === 'skipped' && !locked) writeSentinel(sentinelPath, deps.crypto)
+    // 재 볼 것이 없었거나(skipped) 지킬 것이 없어 면제로 열렸으면 지금 sentinel을 심는다 —
+    // 다음 실행부터는 "같은 키인가"를 잴 수 있다. 잠긴 상태에서는 심지 않는다.
+    refreshSentinelIfOpen(sentinelPath, deps.crypto, sentinel, locked)
 
     // 8. OAuth. 잠겼으면 토큰을 읽을 수 없으니 재로그인이다. 열렸어도 실제로 읽히는지
     //    한 번 본다(봉투 형식·계정 결속은 그쪽 모듈의 규칙이다).
@@ -217,6 +219,9 @@ function applyGate(sentinel: SentinelCheck | 'skipped', ciphertexts: boolean): b
   // 사용자가 브리지가 심어 둔 sentinel 앞에서 Keychain을 거부하면(`denied`, 혹은
   // `unavailable`·`mismatch`·`corrupt`) 지킬 것이 없는데도 영구히 잠겼다. 판정은
   // sentinel 결과가 아니라 "지킬 것이 있는가"에 걸려야 한다.
+  //
+  // 여기서 열면 낡은 sentinel을 지금 키로 바꿔 심어야 한다 — 호출처의
+  // `refreshSentinelIfOpen`이 한다. 안 그러면 사용자가 다음에 넣은 비밀값이 잠긴다.
   if (!ciphertexts) {
     unlockSecrets()
     return false
@@ -227,6 +232,36 @@ function applyGate(sentinel: SentinelCheck | 'skipped', ciphertexts: boolean): b
   }
   unlockSecrets()
   return false
+}
+
+/**
+ * 게이트가 열렸는데 sentinel이 `ok`가 아니면 지금 키로 새로 심는다 — **두 분기가 같이 쓴다.**
+ * `releaseSecretsLock`이 하는 일과 같고, 다른 점은 "사용자가 눌렀는가" 대신 "지킬 것이
+ * 없었는가"가 근거라는 것뿐이다.
+ *
+ * 열렸는데 `ok`가 아닌 경우는 둘이다: 재 볼 것이 없었다(`skipped`, 첫 실행), 혹은
+ * `applyGate`의 "지킬 암호문이 없다" 면제로 열렸다(`missing`·`denied`·`unavailable`·
+ * `mismatch`·`corrupt`). 뒤쪽에서 낡은 sentinel을 그대로 두면 안 된다. 면제가 열어 주는
+ * 사람은 연동을 하나도 안 쓴 v1.4.1 사용자이고, 그 사람이 다음에 하는 일이 바로 AI 키·
+ * CalDAV 암호·Google 연결을 **지금 키로** 넣는 것이다. 그러면 다음 실행(`completedBefore`)이
+ * `ciphertexts=true`와 같은 낡은 결과를 보고 잠근다 — 방금 올바르게 넣은 비밀값 앞에서
+ * 닫을 수 없는 보호 모드 배너, 거짓 "Google 다시 연결", `oldAppRemovable=false`.
+ *
+ * 잠겼으면 절대 심지 않는다: 지킬 옛 암호문이 있는데 새 키로 sentinel을 만들면 그것을
+ * "검증"하는 척하게 된다. 반대로 열린 경우는 정의상 지킬 암호문이 없으니(`applyGate`)
+ * 새 sentinel이 거짓으로 보증할 대상이 없다.
+ *
+ * 최선 노력이다. `writeSentinel`은 실패를 로그로 남기고 `'failed'`/`'unavailable'`을
+ * 돌려줄 뿐이며, 그래도 게이트는 이미 열린 채다 — 다음 실행이 같은 면제로 다시 시도한다.
+ */
+function refreshSentinelIfOpen(
+  sentinelPath: string,
+  crypto: KeyCrypto,
+  sentinel: SentinelCheck | 'skipped',
+  locked: boolean
+): void {
+  if (locked || sentinel === 'ok') return
+  writeSentinel(sentinelPath, crypto)
 }
 
 /**

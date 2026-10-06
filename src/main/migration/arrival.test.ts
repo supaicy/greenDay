@@ -4,11 +4,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { dismissOldAppHint, releaseSecretsLock, runArrival } from './arrival'
 import { runBridge } from './bridge'
-import { BRIDGE_BACKUP_DIR, MIGRATION_STATE_FILE, SENTINEL_FILE, readState } from './handoff'
+import { BRIDGE_BACKUP_DIR, MIGRATION_STATE_FILE, SENTINEL_FILE, checkIntegrity, readState } from './handoff'
 import { _resetSecretsGateForTests, secretsGate } from './secrets-gate'
 import { sealSecret } from '../secret-envelope'
 import { DEFAULT_GOOGLE_CONFIG, readGoogleConfig } from '../google-config'
 import { fakeCrypto } from './fake-crypto.helper'
+
+// 실제 구현을 그대로 감싼다 — 동작은 같고, "불렸는가"만 볼 수 있게 한다.
+vi.mock('./handoff', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./handoff')>()
+  return { ...actual, checkIntegrity: vi.fn(actual.checkIntegrity) }
+})
 
 /**
  * 새 번들 ID(v2.0.0)의 첫 실행 — codex 6단계의 분기 하나하나.
@@ -178,6 +184,67 @@ describe('Keychain 거부·잠김·항목 없음 — 보호 모드', () => {
     expect(runArrival(deps()).status).toMatchObject({ sentinel: 'mismatch', secretsLocked: false, oldAppRemovable: true })
   })
 
+  // 위 면제가 열어 주는 사용자가 바로 다음에 하는 일이 연동 추가다(AI 키·CalDAV 암호·Google).
+  // 면제가 낡은 sentinel 을 그대로 두면, 방금 지금 키로 올바르게 넣은 비밀값 앞에서 다음
+  // 실행(completedBefore)이 `ciphertexts=true` + 같은 낡은 결과를 보고 잠근다 — 닫을 수 없는
+  // 보호 모드 배너, 거짓 "Google 다시 연결", `oldAppRemovable=false`.
+  describe('면제로 열었으면 지금 키로 sentinel 을 새로 심는다 — 다음에 넣은 비밀값이 잠기지 않는다', () => {
+    const AI_KEY = (key: string) => JSON.stringify({ apiKey_enc: fakeCrypto(key).encrypt('sk-live') })
+
+    it.each([
+      ['mismatch', 'old', () => writeFileSync(join(tmp, SENTINEL_FILE), fakeCrypto('old').encrypt('tampered'), 'utf-8')],
+      ['corrupt', 'old', () => writeFileSync(join(tmp, SENTINEL_FILE), 'not base64 !!', 'utf-8')],
+      ['denied', 'new-random-key', () => {}]
+    ] as const)('첫 실행 %s → 열림, 비밀값을 넣은 다음 실행도 열림', (expected, key, tamper) => {
+      seedFromBridge()
+      tamper()
+      const first = runArrival(deps({ crypto: fakeCrypto(key) }))
+      expect(first.status).toMatchObject({ performed: true, sentinel: expected, secretsLocked: false })
+
+      // 사용자가 지금 키로 AI 키를 넣는다.
+      writeFileSync(join(tmp, 'ai-config.json'), AI_KEY(key), 'utf-8')
+      _resetSecretsGateForTests()
+
+      const second = runArrival(deps({ crypto: fakeCrypto(key) }))
+      expect(second.status).toMatchObject({
+        performed: false,
+        sentinel: 'ok',
+        secretsLocked: false,
+        lockReason: null,
+        oldAppRemovable: true
+      })
+      expect(secretsGate().locked).toBe(false)
+    })
+
+    it('completedBefore 분기도 같다 — 거기서 처음 낡은 sentinel 을 본 경우(missing·mismatch)', () => {
+      seedFromBridge()
+      runArrival(deps())
+      // 완료된 설치에서 sentinel 이 사라지거나 다른 키 것으로 바뀌었다. 지킬 것은 아직 없다.
+      rmSync(join(tmp, SENTINEL_FILE))
+      expect(runArrival(deps()).status).toMatchObject({ performed: false, sentinel: 'missing', secretsLocked: false })
+      writeFileSync(join(tmp, 'ai-config.json'), AI_KEY('old'), 'utf-8')
+      expect(runArrival(deps()).status).toMatchObject({ sentinel: 'ok', secretsLocked: false })
+
+      rmSync(join(tmp, 'ai-config.json'))
+      writeFileSync(join(tmp, SENTINEL_FILE), fakeCrypto('old').encrypt('tampered'), 'utf-8')
+      expect(runArrival(deps()).status).toMatchObject({ performed: false, sentinel: 'mismatch', secretsLocked: false })
+      writeFileSync(join(tmp, 'ai-config.json'), AI_KEY('old'), 'utf-8')
+      expect(runArrival(deps()).status).toMatchObject({ sentinel: 'ok', secretsLocked: false })
+      expect(secretsGate().locked).toBe(false)
+    })
+
+    // 반대쪽도 못박는다: 지킬 암호문이 있는 잠금 앞에서는 절대 새로 심지 않는다 —
+    // 새 키 sentinel 이 옛 암호문을 "검증"하는 척하게 된다.
+    it('잠겼으면 sentinel 을 건드리지 않는다', () => {
+      seedFromBridge()
+      seedGoogleTokens()
+      const before = readFileSync(join(tmp, SENTINEL_FILE), 'utf-8')
+      expect(runArrival(deps({ crypto: fakeCrypto('new') })).status.secretsLocked).toBe(true)
+      expect(runArrival(deps({ crypto: fakeCrypto('new') })).status.secretsLocked).toBe(true)
+      expect(readFileSync(join(tmp, SENTINEL_FILE), 'utf-8')).toBe(before)
+    })
+  })
+
   it('사용자가 명시적으로 풀면(재연결 뒤) 새 sentinel 을 심고 연다', () => {
     seedFromBridge()
     seedGoogleTokens()
@@ -301,6 +368,19 @@ describe('가장자리', () => {
     const r = runArrival(deps())
     expect(r.status.oldAppHintDismissed).toBe(true)
     expect(r.status.oldAppRemovable).toBe(false)
+  })
+
+  // 닫은 안내는 다시 뜨지 않으니, 매 실행 데이터 파일과 .bak 을 통째로 파싱할 이유가 없다.
+  it('안내를 닫았으면 completedBefore 는 옛 앱·무결성 판정을 아예 하지 않는다', () => {
+    seedFromBridge()
+    runArrival(deps())
+    dismissOldAppHint(tmp)
+    const oldAppPresent = vi.fn(() => true)
+    vi.mocked(checkIntegrity).mockClear()
+    const r = runArrival(deps({ oldAppPresent }))
+    expect(r.status).toMatchObject({ performed: false, oldAppRemovable: false, oldAppHintDismissed: true })
+    expect(oldAppPresent).not.toHaveBeenCalled()
+    expect(checkIntegrity).not.toHaveBeenCalled()
   })
 
   it('DB 스키마는 건드리지 않는다 — 데이터 파일 바이트가 같다', () => {
