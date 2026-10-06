@@ -1,6 +1,6 @@
 # Greenday 개발자 문서
 
-Electron 40 + React 19 + TypeScript macOS 앱 Greenday 의 개발·릴리스 문서. [Diátaxis](https://diataxis.fr) 네 갈래로 나눴다 — **배우려면 튜토리얼, 일을 끝내려면 하우투, 사실을 찾으려면 레퍼런스, 왜 그런지 알려면 설명.**
+Electron 41 + React 19 + TypeScript macOS 앱 Greenday 의 개발·릴리스 문서. [Diátaxis](https://diataxis.fr) 네 갈래로 나눴다 — **배우려면 튜토리얼, 일을 끝내려면 하우투, 사실을 찾으려면 레퍼런스, 왜 그런지 알려면 설명.**
 
 모든 문장은 2026-09-08 기준 코드·테스트·스크립트에서 확인한 것만 적었다. 코드가 바뀌면 문서가 낡는다 — 파일 경로와 심벌 이름을 적어 두었으니 의심되면 그 자리를 연다.
 

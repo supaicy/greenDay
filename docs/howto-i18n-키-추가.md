@@ -75,9 +75,9 @@ interface MainStrings {
 }
 ```
 
-읽을 때는 `src/main/ui-language.ts` 의 `uiStrings()` 를 쓴다. 렌더러가 언어를 바꾸면 `set-language` IPC 로 메인에 알리고(`app-ipc.ts`), 그 값으로 이 표를 고른다. 언어가 실제로 바뀐 때만 앱 메뉴를 다시 짓는다.
+읽을 때는 `src/main/ui-language.ts` 의 `uiStrings()` 를 쓴다. 렌더러가 말하기 전에는 부팅 때 OS 로케일로 씨앗을 심는다(`seedUiLanguage(app.getLocale())` — `ko*` 면 한국어, 아니면 영어). 렌더러가 언어를 바꾸면 `set-language` IPC 로 메인에 알리고(`app-ipc.ts`), 그 뒤로는 그 값으로 이 표를 고른다. 언어가 실제로 바뀐 때만 앱 메뉴를 다시 짓는다.
 
-오늘 여기 있는 문구: 리마인더 알림 제목, 알림 권한 확인용 배너, 앱 메뉴 "보기", 데이터 파일 읽기 실패 대화상자, 새 번들 ID 첫 실행의 Keychain 안내. 렌더러가 그릴 수 있는 것은 여기 넣지 않는다 — 창이 뜨기 전에 띄워야 하거나 OS 알림처럼 렌더러 밖에 있는 것만이다.
+오늘 여기 있는 문구: 리마인더 알림 제목, 알림 권한 확인용 배너, 앱 메뉴 "보기", 데이터 파일 읽기 실패 대화상자, 라이선스 파일 복구 안내, 종료 저장 실패 대화상자, 새 번들 ID 첫 실행의 Keychain 안내, 첨부 열기 대화상자의 형식 이름, 그리고 캘린더 연동(CalDAV·Google)의 상태·오류 문장 — 렌더러가 IPC 응답의 `message` 를 그대로 출력하므로 메인이 언어에 맞춰 만든다. 오류 문장(`caldavErrors`·`googleErrors`)의 키는 오류 객체의 `code` 와 같은 값(`CalDavErrorKey`·`GoogleErrorKey`)이다. CalDAV 쪽은 code 를 하나 늘리고 여기 안 넣으면 컴파일이 깨진다. Google 의 `OAuthError.code` 는 `string` 이라 타입이 다 못 잡고, 모르는 code 는 "알 수 없는 오류"(`syncErrorUnknown`)로 접힌다 — 그러니 code 를 늘리면 여기에도 같이 넣는다. 렌더러가 그릴 수 있는 것은 여기 넣지 않는다 — 창이 뜨기 전에 띄워야 하거나 OS 알림처럼 렌더러 밖에 있는 것만이다.
 
 ## 브리지·마이그레이션 문구를 고칠 때
 

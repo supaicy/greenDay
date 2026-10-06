@@ -58,9 +58,9 @@ git push origin v2.0.0
 
 ## 5. 워크플로가 하는 일 (순서대로)
 
-`release.yml`, `macos-latest`, Node 20.
+`release.yml`, `macos-latest`, Node 24 (electron 41 이 Node 22.12 이상을 요구한다).
 
-1. `npm ci`
+1. `npm ci`, 이어서 **Health stack** — `npm run verify`(typecheck·lint·test). 시크릿 확인보다 먼저 돈다 — 빨간 커밋이 20분짜리 공증까지 가지 않게
 2. **Preflight** — 시크릿 7종 존재 확인 (3절)
 3. **API 키 파일 생성** — `APPLE_API_KEY_B64` 를 디코드해 `AuthKey.p8` 로
 4. **Build app** — `GREENDAY_RELEASE=1 GOOGLE_OAUTH_CLIENT_ID=… npx electron-vite build`. `GREENDAY_RELEASE=1`(과 `GITHUB_ACTIONS=true`)이면 `electron.vite.config.ts` 가 클라이언트 ID 가 비었을 때 **throw** 한다 — preflight 와 이중 방어
@@ -85,7 +85,7 @@ spctl -a -vvv -t exec /tmp/rel/mnt/Greenday.app 2>&1 | grep Notarized
 hdiutil detach /tmp/rel/mnt
 ```
 
-이 넷은 `scripts/release.sh` 4/4 단계가 로컬 릴리스에서 하는 검사와 같다 — dmg 를 마운트해 **사용자가 받는 그 앱**을 본다(빌드 중간 산출물이 아니라).
+이 넷은 `scripts/release.sh` 5/5 단계가 로컬 릴리스에서 하는 검사와 같다 — dmg 를 마운트해 **사용자가 받는 그 앱**을 본다(빌드 중간 산출물이 아니라).
 
 고정 주소도 확인한다. 사이트(`begreen.dev`)와 README 가 이 주소를 쓴다:
 
@@ -115,7 +115,7 @@ GOOGLE_OAUTH_CLIENT_ID=<id> npm run release
 gh release edit v2.0.0 --draft=false --latest     # 스크립트가 draft 까지만 한다
 ```
 
-이 길은 cask 를 갱신하지 않는다. 그리고 태그를 만들지 않는다 — electron-builder 가 `package.json` 버전으로 릴리스를 만든다.
+이 길도 빌드 전에 `npm run verify` 를 돈다(2/5 단계 — CI 와 같은 정의). 이 길은 cask 를 갱신하지 않는다. 그리고 태그를 만들지 않는다 — electron-builder 가 `package.json` 버전으로 릴리스를 만든다.
 
 ## 확인하지 못한 것
 

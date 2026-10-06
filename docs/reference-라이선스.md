@@ -1,6 +1,6 @@
 # 레퍼런스 — 라이선스
 
-2026-09-08 `ebf40d6` 기준. 출처는 `src/main/licensing/*`, `src/shared/license.ts`, `src/shared/capabilities.ts`, `src/renderer/src/licensing/*`. 설계 이유는 [explanation-라이선스-게이트와-MAS.md](explanation-라이선스-게이트와-MAS.md).
+2026-09-08 `ebf40d6` 기준(2026-10-07 `5894ea5` 에서 `inheritsLegacyData`·테스트 줄 수를 다시 맞췄다). 출처는 `src/main/licensing/*`, `src/shared/license.ts`, `src/shared/capabilities.ts`, `src/renderer/src/licensing/*`. 설계 이유는 [explanation-라이선스-게이트와-MAS.md](explanation-라이선스-게이트와-MAS.md).
 
 ## 서버와 엔드포인트 (`licensing/endpoints.ts`, `licenseClient.ts`)
 
@@ -161,15 +161,16 @@ needsLicenseKey:    !isStoreBuild
 enforcesLicense:    !isDevBuild && !isStoreBuild
 updatesViaStore:    isStoreBuild
 isBridge:           isBridgeBuild === true
+inheritsLegacyData: !isMas
 ```
 
-| 빌드 | `canSelfUpdate` | `hasGlobalShortcuts` | `needsLicenseKey` | `enforcesLicense` | `updatesViaStore` | `isBridge` |
-|---|---|---|---|---|---|---|
-| 직접 배포 (`npm run release` / 태그) | ✓ | ✓ | ✓ | ✓ (잠금은 `IS_ENFORCED` 도 참일 때) | – | – |
-| MAS (`mas:build`) | – | – | – | – | ✓ | – |
-| 브리지 (`package:bridge`) | – | ✓ | ✓ | ✓ | – | ✓ |
-| 개발 (`npm run dev`) | – | ✓ | ✓ | – | – | – |
-| 로컬 `npm run build` 뒤 맨 Electron | – (`is.dev`) | ✓ | ✓ | ✓ | – | – |
+| 빌드 | `canSelfUpdate` | `hasGlobalShortcuts` | `needsLicenseKey` | `enforcesLicense` | `updatesViaStore` | `isBridge` | `inheritsLegacyData` |
+|---|---|---|---|---|---|---|---|
+| 직접 배포 (`npm run release` / 태그) | ✓ | ✓ | ✓ | ✓ (잠금은 `IS_ENFORCED` 도 참일 때) | – | – | ✓ |
+| MAS (`mas:build`) | – | – | – | – | ✓ | – | – |
+| 브리지 (`package:bridge`) | – | ✓ | ✓ | ✓ | – | ✓ | ✓ |
+| 개발 (`npm run dev`) | – | ✓ | ✓ | – | – | – | ✓ |
+| 로컬 `npm run build` 뒤 맨 Electron | – (`is.dev`) | ✓ | ✓ | ✓ | – | – | ✓ |
 
 `isDevBuild` 는 빌드 시점 `__IS_DEV_BUILD__`, `isDev` 는 런타임 `!app.isPackaged`. 잠금 판정에는 앞엣것만 쓴다. 판정은 `main/capabilities.ts` 한 곳에서 `process.mas` 를 읽고, `mas-preflight.sh` 4/6 이 다른 곳에서 읽지 않는지 검사한다.
 
@@ -202,4 +203,4 @@ interface PublicLicenseState {
 
 ## 테스트 자산
 
-`licensing/testTokens.ts` 가 진짜 ed25519 키쌍을 만들어 서버와 같은 형식으로 서명한다 — 가짜 검증 함수를 주입하지 않는다. `licenseManager.test.ts`(1,550줄)·`clockAttacks.test.ts`(412줄)가 시계 조작·유예·경합을 시뮬레이션한다.
+`licensing/testTokens.ts` 가 진짜 ed25519 키쌍을 만들어 서버와 같은 형식으로 서명한다 — 가짜 검증 함수를 주입하지 않는다. `licenseManager.test.ts`(1,681줄)·`clockAttacks.test.ts`(445줄)가 시계 조작·유예·경합을 시뮬레이션한다.

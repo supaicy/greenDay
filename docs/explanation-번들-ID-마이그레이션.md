@@ -38,19 +38,19 @@ sentinel 이 핵심 장치다. `'keycheck-v1'` 을 브리지의 키로 암호화
 
 ## 왜 업데이트 feed 를 나누나
 
-브리지가 "옛 앱이 받는 마지막 것" 이려면 새 앱 릴리스가 옛 앱에 **닿지 않아야** 한다. electron-updater(GitHub provider)는 저장소의 Latest 릴리스에서 `<channel>-mac.yml` 을 읽고, 채널이 없으면 `latest`, 파일이 없으면 업데이트를 제안하지 않는다. 그래서 새 앱은 `publish.channel: greenday` 로 `greenday-mac.yml` 을 만들고, 브리지는 `channel: latest` 로 `latest-mac.yml` 을 만든다. v2.0.0 이 Latest 가 돼도 거기엔 `latest-mac.yml` 이 없으므로 옛 앱은 아무것도 받지 않는다. 다른 번들 ID 의 앱이 옛 자리에 앉는 사고가 **구조적으로** 없다. 업데이터 캐시 디렉터리(`greenday-updater` vs `ticktick-updater`)도 같은 이유로 나눴다 — 전환 기간에 두 앱이 나란히 깔리면 서로의 내려받은 파일을 덮어쓴다.
+브리지가 "옛 앱이 받는 마지막 것" 이려면 새 앱 릴리스가 옛 앱에 **닿지 않아야** 한다. electron-updater(GitHub provider)는 저장소의 Latest 릴리스에서 `<channel>-mac.yml` 을 읽고, 채널이 없으면 `latest`, 파일이 없으면 업데이트를 제안하지 않는다. 그래서 새 앱은 `publish.channel: greenday` 로 `greenday-mac.yml` 을 만들고, 브리지는 `channel: latest` 로 `latest-mac.yml` 을 만든다. v2.0.0 이 Latest 가 돼도 거기엔 `latest-mac.yml` 이 없으므로 옛 앱은 아무것도 받지 않는다. 다른 번들 ID 의 앱이 옛 자리에 앉는 사고가 **구조적으로** 없다. 업데이터 캐시 디렉터리도 같은 이유로 나누려 했지만(`greenday-updater` vs `ticktick-updater`), electron-builder 가 그 설정을 버리고 package.json `name` 에서 유도해 **두 앱 모두 `ticktick-updater` 를 쓴다**(`src/shared/updaterCacheDir.test.ts` 가 못박는다). 전환 기간에 두 앱이 나란히 깔리면 내려받은 파일이 겹칠 수 있는데, 최악이 재다운로드 한 번이라 받아들였다.
 
 feed 분리가 막지 못하는 것이 하나 있다. v2.0.0 이 Latest 가 된 **뒤**에 처음 업데이트를 확인하는 v1.4.1 사용자는 브리지도 못 받는다(Latest 에 `latest-mac.yml` 이 없으므로). 그래서 브리지와 v2.0.0 사이에 2~4주 대기가 있다. 이 대기를 없애는 방법은 새 앱 릴리스를 별도 저장소(예: `greenday-releases`)로 보내 `supaicy/greenDay` 의 Latest 를 영원히 v1.5.0 으로 두는 것이다 — BicMac 이 이미 쓰는 방식이다. 채택하지 않은 이유는 저장소를 새로 만드는 것이 사람 몫이고 사이트 주소·README·워크플로 세 곳이 같이 바뀌기 때문이다. 채널 분리만으로도 "옛 앱이 새 앱을 받는" 사고는 막히므로, 남는 것은 laggard 문제 하나이고 그건 대기로 다룬다.
 
 ## 보호 모드 — 실수를 막지 결정을 뒤집지 않는다
 
-새 앱 첫 실행에서 sentinel 이 `ok` 가 아니면(거부·잠김·항목 없음·다른 키·손상) `secrets-gate` 를 잠근다. 잠긴 동안 세 writer 는 저장 직전에 **파일에 있던 암호문을 되살린다.** 비밀을 못 읽은 채 설정을 저장해도 원본이 사라지지 않는다. 사용자가 나중에 "항상 허용" 을 누르고 다시 열면 다음 실행이 sentinel 을 다시 재고 그대로 복호화된다.
+새 앱 첫 실행에서 **지킬 암호문이 저장돼 있는데** sentinel 이 `ok` 가 아니면(거부·잠김·항목 없음·다른 키·손상) `secrets-gate` 를 잠근다. 지킬 암호문이 없으면 열고 현재 키로 sentinel 을 새로 써 둔다 — 그래야 나중에 넣은 비밀값이 다음 실행에서 낡은 sentinel 때문에 잠기지 않는다. 잠긴 동안 세 writer 는 저장 직전에 **파일에 있던 암호문을 되살린다.** 비밀을 못 읽은 채 설정을 저장해도 원본이 사라지지 않는다. 사용자가 나중에 "항상 허용" 을 누르고 다시 열면 다음 실행이 sentinel 을 다시 재고 그대로 복호화된다.
 
 두 가지는 일부러 막지 않는다. 새 값을 넣는 저장(값이 있는 저장)은 사용자의 명시적 선택이라 그대로 쓴다. 연결 해제(`clearSecret`)도 마찬가지다 — 잠겼다고 저장된 자격증명을 못 지우게 하면 보호가 인질이 된다. 보호 모드는 실수를 막는 것이지 결정을 뒤집는 것이 아니다.
 
 해제는 자동으로 하지 않는다. 배너의 "다시 연결했습니다 — 보호 해제" 가 지금 키로 새 sentinel 을 심고 여는 유일한 명시적 경로다. 자동으로 풀면 새 키로 만든 sentinel 이 옛 암호문을 "검증" 하는 척하게 된다.
 
-첫 실행 시퀀스 전체는 `holdSaves()` 로 디스크 쓰기를 붙든 채 돈다. IPC 핸들러가 아직 등록되지 않은 시점이라 렌더러의 mutation 이 끼어들 길도 없고, `finally` 에서 `releaseSaves()` 하므로 중간에 던져도 앱이 영영 저장을 못 하게 되지는 않는다. 첫 버전은 **DB 스키마를 바꾸지 않는다** — `arrival.ts` 는 `ticktick-data.json` 을 읽지도 쓰지도 않는다(테스트가 바이트 동일성을 본다). 옛 앱으로 되돌아가는 길이 언제나 열려 있다.
+첫 실행 시퀀스 전체는 `holdSaves()` 로 디스크 쓰기를 붙든 채 돈다. IPC 핸들러가 아직 등록되지 않은 시점이라 렌더러의 mutation 이 끼어들 길도 없고, `finally` 에서 `releaseSaves()` 하므로 중간에 던져도 앱이 영영 저장을 못 하게 되지는 않는다. 첫 버전은 **DB 스키마를 바꾸지 않는다** — `arrival.ts` 는 `ticktick-data.json` 을 쓰지 않는다 — 백업으로 복사하고 "옛 앱 지워도 됩니다" 판정에서 파싱해 볼 뿐이다(테스트가 바이트 동일성을 본다). 옛 앱으로 되돌아가는 길이 언제나 열려 있다.
 
 ## 트레이드오프
 

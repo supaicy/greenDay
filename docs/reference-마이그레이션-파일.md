@@ -1,6 +1,6 @@
 # 레퍼런스 — 번들 ID 마이그레이션 파일
 
-2026-09-08 `ebf40d6` 기준. 출처는 `src/main/migration/{handoff,bridge,arrival,secrets-gate,boot}.ts`, `src/shared/migration.ts`, `src/main/database.ts`. 왜 이렇게 만들었는지는 [explanation-번들-ID-마이그레이션.md](explanation-번들-ID-마이그레이션.md).
+2026-09-08 `ebf40d6` 기준(2026-10-07 `5894ea5` 에서 `runArrival`·`applyGate`·`oldAppRemovable` 을 다시 맞췄다). 출처는 `src/main/migration/{handoff,bridge,arrival,secrets-gate,boot}.ts`, `src/shared/migration.ts`, `src/main/database.ts`. 왜 이렇게 만들었는지는 [explanation-번들-ID-마이그레이션.md](explanation-번들-ID-마이그레이션.md).
 
 모든 경로는 `app.getPath('userData')` = `~/Library/Application Support/ticktick/` 아래다(개발 중 `--user-data-dir` 를 줬으면 그 폴더). 두 앱(옛 `com.haru.app`, 새 `com.begreen.greenday`)이 **같은 폴더**를 본다.
 
@@ -56,7 +56,7 @@
 
 **쓰기** (`writeStateAtomic`): 디렉터리 확보 → 임시 파일 `.migration-state.json.<pid>.<Date.now()>.tmp` 를 `O_WRONLY|O_CREAT|O_TRUNC`, 모드 `0600` 으로 열어 JSON(들여쓰기 2) 쓰기 → `fsync` → `rename` → **부모 디렉터리 fsync**(지원 안 하는 FS 면 무시). `database.ts` 의 커밋과 같은 규약.
 
-**멱등**: 브리지는 `bridge.appVersion === 지금 버전` 이고 `sentinelPath` 가 있고 sentinel 이 `ok` 면 1~4 를 건너뛴다. 새 앱은 `arrival.completedAt !== null && arrival.bundleId === 지금 ID` 면 백업·안내를 다시 하지 않고 **sentinel 만 매 실행 다시 잰다**.
+**멱등**: 브리지는 `bridge.appVersion === 지금 버전` 이고 `sentinelPath` 가 있고 sentinel 이 `ok` 면 1~4 를 건너뛴다. 새 앱은 `arrival.completedAt !== null && arrival.bundleId === 지금 ID` 면 백업·안내를 다시 하지 않고 **sentinel 만 매 실행 다시 잰다**(열렸는데 결과가 `ok` 가 아니면 지금 키로 다시 심는다).
 
 ## `keycheck.sentinel`
 
@@ -99,9 +99,9 @@ attachments/
 
 `backupExists(userData, name)` 는 매니페스트 존재로 판단한다. 새 앱은 브리지가 만든 것이 있으면 그것을 쓰고, 없으면 자기가 만든다.
 
-## 무결성 (`checkIntegrity`, 브리지만)
+## 무결성 (`checkIntegrity`)
 
-`ticktick-data.json` 과 `.bak` 을 파싱만 한다 — **고치지 않는다**(복구는 `database.ts` 몫).
+`ticktick-data.json` 과 `.bak` 을 파싱만 한다 — **고치지 않는다**(복구는 `database.ts` 몫). 브리지는 결과를 상태 파일의 `integrity` 에 적고, 새 앱은 옛 앱이 있을 때 `oldAppRemovable` 판정에 쓴다(`status === 'ok'` 일 때만 안내).
 
 | primary | backup | `status` | `backupReadable` |
 |---|---|---|---|
@@ -133,33 +133,33 @@ interface ArrivalStatus {
   secretsLocked: boolean                     // 보호 모드
   lockReason: SentinelCheck | null           // 잠겼을 때 sentinel 결과. 'skipped' 로 잠기는 일은 없다
   googleReconnect: boolean                   // tokens_enc 가 있고 (잠겼거나 실제로 안 읽힘)
-  oldAppRemovable: boolean                   // !locked && 옛 앱 존재 && !dismissed
+  oldAppRemovable: boolean                   // !locked && 옛 앱 존재 && 무결성 ok && !dismissed
   oldAppHintDismissed: boolean
 }
 type MigrationStatus = BridgeStatus | ArrivalStatus | { mode: 'none' }
 ```
 
-옛 앱 존재 판정 경로: `/Applications/haru.app`, `~/Applications/haru.app`.
+옛 앱 존재 판정 경로: `/Applications/haru.app`, `~/Applications/haru.app`. `capabilities.inheritsLegacyData` 가 false 인 빌드(MAS — 샌드박스라 옛 데이터를 못 읽는다)에서는 언제나 "없음"이다(`boot.ts` `oldAppVisible`).
 
 ## 새 앱 첫 실행 순서 (`runArrival`)
 
 ```
 singleInstance 가 false → 아무것도 안 함 (곧 quit 할 인스턴스)
 holdSaves()
-  이미 completedAt 있음 → sentinel 만 재고 게이트 갱신 → 반환
+  이미 completedAt 있음 → sentinel 만 재고 게이트 갱신 → (열렸고 ok 가 아니면 writeSentinel) → 반환
   백업 (브리지 것이 있으면 그것)
   bridgeMarker = state.bridge !== null
   ciphertexts = hasStoredCiphertexts()   // ai-config.apiKey_enc | calendar-config.password_enc | google-config.tokens_enc
   (bridgeMarker || ciphertexts) 면: notifyKeychain() [동기 대화상자] → sentinel = checkSentinel()
   locked = applyGate(sentinel, ciphertexts)
-  sentinel === 'skipped' && !locked → writeSentinel()   // 다음 실행부터 잴 수 있게
+  !locked && sentinel !== 'ok' → writeSentinel()        // 다음 실행부터 잴 수 있게 (refreshSentinelIfOpen)
   googleReconnect = tokens_enc 있음 && (locked || !googleTokensReadable())
-  oldAppRemovable = !locked && oldAppPresent()
+  oldAppRemovable = !locked && oldAppPresent() && checkIntegrity(userData).status === 'ok'
   writeStateAtomic(arrival.completedAt = now)
 finally releaseSaves()
 ```
 
-`applyGate`: `skipped`·`ok` → 연다. `missing` 이고 암호문이 없으면 → 연다(잴 것도 지킬 것도 없다). `missing/unavailable/denied/mismatch/corrupt`(`LOCKING`) → `lockSecrets(reason)`.
+`applyGate`: `skipped`·`ok` → 연다. 암호문이 없으면 결과가 무엇이든 → 연다(지킬 것이 없다). 암호문이 있고 `missing/unavailable/denied/mismatch/corrupt`(`LOCKING`) → `lockSecrets(reason)`.
 
 `index.ts` 는 `holdSaves()` 를 `initDatabase()` **앞**에서 부르고, IPC 핸들러 등록 전에 `runMigrationOnBoot` 를 돌린다 — 렌더러 mutation 이 끼어들 길이 없다. 실패하면 로그만 남기고 `releaseSaves()` 한 뒤 앱은 계속 뜬다.
 
@@ -194,6 +194,6 @@ preserveCiphertext(next, existingFilePath, field, clearSecret = false)
 | `ai-config.json` | `apiKey_enc` (있으면 "암호문 있음") |
 | `calendar-config.json` | `password_enc` |
 | `google-config.json` | `tokens_enc` — `googleHasTokens`, 그리고 `readGoogleConfig().tokens !== null` 로 "실제로 읽히는가" |
-| `ticktick-data.json`, `.bak` | 무결성 판정만. **새 앱의 `arrival.ts` 는 이 파일을 읽지도 쓰지도 않는다**(테스트가 바이트 동일성을 본다) |
+| `ticktick-data.json`, `.bak` | 백업 복사와 무결성 판정만. **새 앱의 `arrival.ts` 는 이 파일을 쓰지 않는다** — 백업으로 복사하고 `oldAppRemovable` 의 `checkIntegrity` 로 파싱해 볼 뿐이다(테스트가 바이트 동일성을 본다) |
 
 메인 프로세스가 Keychain 안내로 띄우는 문구는 `src/shared/main-strings.ts` 의 `keychainNotice*`, 렌더러 배너·모달 문구는 로케일 `migration.*`. 원문은 `docs/reports/2026-09-07-bridge-copy.md`.
