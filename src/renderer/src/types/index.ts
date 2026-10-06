@@ -129,7 +129,8 @@ export interface AiMessage {
 export type { AiConfig } from '../../../shared/ai-config'
 
 /**
- * 부모와 한 번에 만들 하위작업. 앱은 한 단계만 만들므로 더 중첩하지 않는다.
+ * 부모와 한 번에 만들 하위작업(`AddTaskOptions.subtasks`). **이 API는** 직계 한 단계만
+ * 받는다 — 앱 자체는 하위작업 아래에 또 하위작업을 둘 수 있다(상세 패널의 SubtaskList).
  */
 export interface SubtaskDraft {
   title: string

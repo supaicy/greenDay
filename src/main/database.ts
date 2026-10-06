@@ -449,7 +449,7 @@ function commitSync(target: number): void {
  *
  * 결과를 **돌려준다.** 예전에는 여기서 오류를 삼켰고, 그러면 마지막 편집을
  * 잃은 종료와 정상 종료가 호출처에서 구별되지 않았다. 종료를 막을지는 셸이
- * 정할 일이라 판정만 내보낸다(`main/index.ts`의 `will-quit` — 이 워크트리 밖).
+ * 정할 일이라 판정만 내보낸다(`main/index.ts`의 `will-quit`).
  */
 function flushSave(): boolean {
   if (saveTimer) {
@@ -1066,25 +1066,52 @@ export function deleteTask(id: string): void {
   save()
 }
 /**
- * 삭제를 되돌린다. **`deleteTask`의 거울이어야 한다.**
+ * 삭제를 되돌리고 **실제로 휴지통에서 꺼낸 id를 돌려준다.** 렌더러는 이 목록을 그대로
+ * 옮긴다(`useStore`의 `applyRestored`) — 화면이 집합을 따로 짐작하지 않는다.
  *
- * 그쪽은 자손 전부를 함께 내리는데 이쪽은 그 한 행만 되살렸다. 그래서 Cmd+Z
- * 한 번이 "부모는 살아났는데 하위작업 셋은 휴지통에 남은" 상태를 만들었고,
- * 화면에서는 하위작업이 통째로 사라진 것으로 보였다.
+ * 왜 main이 답하는가: 렌더러의 `Task`에는 `deleted_with`가 없어서 한때 "같은
+ * `deletedAt`의 자손"으로 근사했는데, 그 근사와 이 함수가 갈리는 경우가 셋 있었다 —
+ * 중간 행 복원(아래 1), 낡은 연결(아래 2), 휴지통 복원 뒤의 되돌리기(아래 3). 갈리면
+ * '휴지통 비우기'가 화면에 살아 있는 행을 영구 삭제하거나, 디스크에는 살아 있는 행이
+ * 화면에서는 휴지통에 남는다. 판정을 한 곳에 두고 다른 쪽은 결과만 받는다.
  *
- * 되살릴 자손은 `deleted_with`로 고른다 — `trashTree`가 함께 내린 자손에는 깊이와
- * 상관없이 그 조작의 뿌리 id를 적어 둔다(부팅 정리가 휴지통으로 보낸 행도 같다).
- * 그 전에 따로 지운 자손은 사용자가 따로 지운 것이니 휴지통에 그대로 두고, **그
- * 아래로는 내려가지 않는다**: 따로 지운 B 아래의 C를 올리면 C는 휴지통에 남은 부모에
- * 매달려 어느 화면에도 없게 된다(아래 조상 올리기와 같은 이유).
+ * 규칙:
+ * 1. **휴지통의 행**이면 그 행이 속한 삭제 조작 `op = deleted_with ?? id`와 시각
+ *    `at = deleted_at`을 읽는다. 그 행을 올리고, 자손 중 **같은 조작·같은 시각**
+ *    (`deleted_with === op && deleted_at === at`)인 행을 올린다. 그래서 A→B→C에서 A를
+ *    지운 뒤 B만 복원해도 B와 함께 내려간 C가 따라온다(C의 표시는 B가 아니라 뿌리 A다).
+ * 2. 시각까지 보는 이유는 **낡은 연결**이다. A→{B,D}에서 A를 지우고(T1) B를 복원하면
+ *    조상 A가 올라오면서 D는 `deleted_with = A`로 남는다. A를 다시 지우면(T2) D는 이미
+ *    휴지통이라 그 조작에 속하지 않는데, `deleted_with`만 보면 A 복원이 D를 끌어올린다.
+ * 3. **이미 살아 있는 행**이면 되돌리기(Cmd+Z)다 — 그 사이 휴지통에서 자손 하나를 복원해
+ *    조상인 이 행이 먼저 올라왔을 수 있다. 그때는 자손 중 `deleted_with === id`인 행을
+ *    올린다. 예전에는 여기서 그냥 돌아가, 렌더러가 화면에 살린 D가 디스크에서는 휴지통에
+ *    남았다.
+ *
+ * 어느 쪽이든 맞지 않는 휴지통 행에서 멈추고 **그 아래로 내려가지 않는다**: 따로 지운
+ * B 아래의 C를 올리면 C는 휴지통에 남은 부모에 매달려 어느 화면에도 없게 된다.
+ * `deleted_with`가 null인 옛 행(마이그레이션 전)은 1의 `op`가 자기 id라 자손을 묶지
+ * 않는다 — 렌더러도 이 답을 받으므로 갈리지 않는다.
  */
-export function restoreTask(id: string): void {
+export function restoreTask(id: string): string[] {
   assertWritable()
-  const parent = data.tasks.find((t) => t.id === id)
-  if (!parent) return
-  if (!parent.deleted_at) return
-  parent.deleted_at = null
-  parent.deleted_with = null
+  const row = data.tasks.find((t) => t.id === id)
+  if (!row) return []
+  const restored: string[] = []
+  const revive = (t: Record<string, unknown>): void => {
+    t.deleted_at = null
+    t.deleted_with = null
+    restored.push(t.id as string)
+  }
+  let sameOperation: (t: Record<string, unknown>) => boolean
+  if (row.deleted_at) {
+    const op = row.deleted_with ?? row.id
+    const at = row.deleted_at
+    sameOperation = (t) => t.deleted_with === op && t.deleted_at === at
+    revive(row)
+  } else {
+    sameOperation = (t) => t.deleted_with === id
+  }
   const leftBehind = new Set<unknown>()
   for (const t of descendantsOf(data.tasks, id)) {
     if (leftBehind.has(t.parent_id)) {
@@ -1092,13 +1119,13 @@ export function restoreTask(id: string): void {
       continue
     }
     if (!t.deleted_at) continue
-    if (t.deleted_with !== id) {
+    if (!sameOperation(t)) {
       leftBehind.add(t.id)
       continue
     }
-    t.deleted_at = null
-    t.deleted_with = null
+    revive(t)
   }
+  if (restored.length === 0) return []
   // **되살아난 행을 휴지통에 남은 부모에 매달아 두지 않는다.**
   // 휴지통은 계층 없이 평평하게 그려서 하위작업 행에도 복원 버튼이 있다(TrashView).
   // 그런데 목록 뷰는 전부 `isTopLevel`로 거르고 하위작업은 **살아 있는** 부모의 상세
@@ -1108,8 +1135,9 @@ export function restoreTask(id: string): void {
   // (`permanentDeleteTask`가 자손을 함께 걷는다). 휴지통을 비우면
   // 이번엔 부모 행만 사라져, 보이지도 고치지도 지우지도 못하는 행이 영원히 남는다.
   // 조상**만** 올린다 — 그 조상의 다른 하위작업까지 끌어올리면 restoreTask(부모)와
-  // 같아져, 사용자가 고른 한 줄이 가족 전체를 되살린다.
-  let child = parent
+  // 같아져, 사용자가 고른 한 줄이 가족 전체를 되살린다. 올린 조상도 돌려주는 목록에
+  // 넣는다 — 렌더러가 그것까지 옮겨야 화면과 디스크가 같다.
+  let child = row
   const walked = new Set<string>([id])
   while (typeof child.parent_id === 'string') {
     const parentId = child.parent_id
@@ -1117,13 +1145,11 @@ export function restoreTask(id: string): void {
     // 손상된 파일의 자기참조·순환 parent_id에 여기서 멈추지 않으면 앱이 통째로 선다.
     if (!ancestor || walked.has(ancestor.id as string)) break
     walked.add(ancestor.id as string)
-    if (ancestor.deleted_at) {
-      ancestor.deleted_at = null
-      ancestor.deleted_with = null
-    }
+    if (ancestor.deleted_at) revive(ancestor)
     child = ancestor
   }
   save()
+  return restored
 }
 export function permanentDeleteTask(id: string): void {
   assertWritable()
@@ -2051,7 +2077,7 @@ function writeFileWithSync(target: string, contents: string): void {
  *
  * 판정을 돌려주는 것이 요점이다 — 마지막 편집을 잃은 종료와 정상 종료를 호출처가
  * 구별할 수 있어야 한다. 무엇을 할지(종료를 막을지, 사용자에게 알릴지)는 셸이
- * 정한다(`main/index.ts` — 이 워크트리 밖).
+ * 정한다(`main/index.ts`).
  */
 export function closeDatabase(): boolean {
   return flushSave()

@@ -124,7 +124,8 @@ describe('deleted_with 마이그레이션', () => {
     ])
     db.initDatabase()
 
-    db.restoreTask('p')
+    // 렌더러는 이 답을 그대로 옮긴다 — 짐작하던 시절의 "같은 시각이면 함께"와 갈리지 않는다.
+    expect(db.restoreTask('p')).toEqual(['p'])
     expect(activeIds(), '따로 지운 자식이 부모 복원에 되살아났다').toEqual(['p'])
     expect(trashIds()).toEqual(['c'])
   })

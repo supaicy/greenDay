@@ -436,13 +436,64 @@ async function resyncFromMain(): Promise<void> {
 }
 
 /**
+ * 휴지통 복원을 main에 맡기고, **main이 되살렸다고 답한 id만** 화면에서 옮긴다.
+ *
+ * 무엇이 함께 올라오는지(같은 삭제로 내려간 자손, 매달린 조상, 되돌리기의 남은 자손)는
+ * main의 `restoreTask`만 안다 — 판정 재료인 `deleted_with`가 렌더러의 `Task`에는 없다.
+ * 화면이 "같은 `deletedAt`의 자손"으로 따로 짐작하던 시절에는 중간 행 복원·낡은
+ * 연결·휴지통 복원 뒤의 되돌리기에서 둘이 갈렸고, 그 상태로 '휴지통 비우기'를 누르면
+ * 화면에 살아 있는 행이 디스크에서 영구 삭제됐다. 그래서 낙관적으로 먼저 옮기지 않는다:
+ * 로컬 IPC 한 번이라 기다려도 눈에 띄지 않고, 거절되면 화면은 처음부터 그대로다.
+ */
+async function restoreOnMain(id: string): Promise<void> {
+  let answer: unknown
+  try {
+    answer = await window.api.restoreTask(id)
+  } catch (error) {
+    report('restoreTask', error)
+    return
+  }
+  applyRestored(answer)
+}
+
+/**
+ * main의 답을 화면에 옮긴다. 휴지통에서 꺼내 `deletedAt`을 지우는 것뿐이다.
+ *
+ * 답이 배열이 아니거나(모양을 모르는 main), 답의 id가 화면 어디에도 없으면(답이 오기
+ * 전에 '휴지통 비우기'가 화면의 휴지통을 비웠다 — main은 복원을 먼저 처리했으니 그
+ * 행은 디스크에 살아 있다) 짐작하지 않고 main에서 다시 읽는다.
+ */
+function applyRestored(answer: unknown): void {
+  if (!Array.isArray(answer)) {
+    console.error('[restoreTask] main의 답이 id 목록이 아니다', answer)
+    void resyncFromMain()
+    return
+  }
+  const ids = new Set(answer.filter((x): x is string => typeof x === 'string'))
+  if (ids.size === 0) return
+  let unseen = false
+  useStore.setState((s) => {
+    const live = new Set(s.tasks.map((t) => t.id))
+    const back = s.trashTasks.filter((t) => ids.has(t.id) && !live.has(t.id))
+    const placed = new Set([...live, ...back.map((t) => t.id)])
+    unseen = [...ids].some((x) => !placed.has(x))
+    if (back.length === 0) return {}
+    return {
+      trashTasks: s.trashTasks.filter((t) => !ids.has(t.id)),
+      tasks: [...s.tasks, ...back.map((t) => ({ ...t, deletedAt: null }))]
+    }
+  })
+  if (unseen) void resyncFromMain()
+}
+
+/**
  * `parentId`로 이어진 자손 전부의 id(자기 자신 제외). **한 단계가 아니다** — main의
  * `descendantsOf`와 같은 규칙이어야 화면과 디스크가 재시작 전후로 갈리지 않는다.
  * 상세 패널은 하위작업에도 SubtaskList를 그려 A→B→C가 생기는데, 직계만 내리면
  * 손자가 살아 남아 살아 있는 부모가 없는, 어느 화면에도 없는 행이 됐다.
- * `include`가 false인 행은 넣지도 그 아래로 내려가지도 않는다. 순환 parentId에 멈추도록 본 id를 센다.
+ * 순환 parentId에 멈추도록 본 id를 센다. (복원 집합은 여기서 고르지 않는다 — `restoreOnMain`.)
  */
-function descendantIds(rows: Task[], id: string, include: (t: Task) => boolean = () => true): string[] {
+function descendantIds(rows: Task[], id: string): string[] {
   const children = new Map<string, Task[]>()
   for (const t of rows) {
     if (!t.parentId) continue
@@ -455,7 +506,7 @@ function descendantIds(rows: Task[], id: string, include: (t: Task) => boolean =
   const queue = [id]
   while (queue.length) {
     for (const child of children.get(queue.shift() as string) ?? []) {
-      if (seen.has(child.id) || !include(child)) continue
+      if (seen.has(child.id)) continue
       seen.add(child.id)
       out.push(child.id)
       queue.push(child.id)
@@ -472,7 +523,12 @@ function descendantIds(rows: Task[], id: string, include: (t: Task) => boolean =
  */
 interface DeletedTaskUndo {
   task: Task
-  /** 부모와 **같은 조작으로** 함께 내려간 하위작업. 되돌릴 때 같이 올라온다. */
+  /**
+   * 부모와 **같은 조작으로** 함께 내려간 자손(하위작업만이 아니라 깊이와 상관없이)의 id.
+   * 되돌릴 때 무엇을 올릴지는 이 목록이 아니라 main의 `restoreTask` 답이 정한다 — 그
+   * 사이 휴지통에서 일부를 복원했을 수 있다. 이름은 이미 쌓인 undo 페이로드와 맞추려고
+   * 그대로 둔다.
+   */
   subtaskIds: string[]
 }
 
@@ -1001,39 +1057,8 @@ export const useStore = create<Store>((set, get) => ({
     for (const t of [copy, ...subtasks]) persist('createTask', () => window.api.createTask(t))
   },
   restoreTask: async (id) => {
-    const task = get().trashTasks.find((t) => t.id === id)
-    if (task) {
-      // main의 `restoreTask`는 **같은 삭제로 함께 내려간** 자손까지 되살린다
-      // (화면에서는 같은 `deletedAt` 타임스탬프가 그 증거다). 화면도 같은 규칙을 써야
-      // 재시작 전후가 다르지 않다 — 따로 지웠던 하위작업은 휴지통에 남긴다.
-      set((s) => {
-        // 깊이와 상관없이 같은 삭제의 자손을 올린다. 같은 삭제가 아닌 자손에서는 멈추고
-        // 그 아래로 내려가지 않는다 — 따로 지운 B 아래의 C를 올리면 C는 휴지통의 부모에
-        // 매달린다(main의 `restoreTask`와 같은 규칙).
-        const backIds = new Set([id, ...descendantIds(s.trashTasks, id, (t) => t.deletedAt === task.deletedAt)])
-        const back = s.trashTasks.filter((t) => backIds.has(t.id))
-        // **휴지통에 남은 부모에 매달린 채로 올리지 않는다.** 목록 뷰는 전부
-        // isTopLevel로 거르고 하위작업은 살아 있는 부모의 상세 안에서만 그려지므로,
-        // 부모를 휴지통에 둔 채 자식만 올리면 그 할일은 어느 화면에도 없다 —
-        // 사용자에게는 "복원했더니 사라졌다"다. main의 `restoreTask`가 같은 규칙으로
-        // 조상을 함께 올린다(databaseRestoreTask.test.ts). 조상만 올린다 —
-        // 그 조상의 다른 하위작업까지 끌어올리면 부모를 복원한 것과 같아진다.
-        const trashed = new Map(s.trashTasks.map((t) => [t.id, t]))
-        let child: Task | undefined = task
-        while (child?.parentId && !backIds.has(child.parentId)) {
-          const ancestor = trashed.get(child.parentId)
-          if (!ancestor) break // 부모가 살아 있으면 더 올릴 것이 없다
-          back.push(ancestor)
-          backIds.add(ancestor.id)
-          child = ancestor
-        }
-        return {
-          trashTasks: s.trashTasks.filter((t) => !backIds.has(t.id)),
-          tasks: [...s.tasks, ...back.map((t) => ({ ...t, deletedAt: null }))]
-        }
-      })
-    }
-    persist('restoreTask', () => window.api.restoreTask(id))
+    // 무엇이 함께 올라오는지는 main이 답한다(`restoreOnMain`). 화면은 그 목록을 옮길 뿐이다.
+    await restoreOnMain(id)
   },
   permanentDeleteTask: async (id) => {
     // main의 `permanentDeleteTask`처럼 자손 전부를 걷는다 — 휴지통에 손자가 남으면
@@ -1201,29 +1226,16 @@ export const useStore = create<Store>((set, get) => ({
     const action = stack[stack.length - 1]
     set({ undoStack: stack.slice(0, -1) })
     if (action.type === 'deleteTask') {
-      const { task, subtaskIds } = readDeletedTaskUndo(action.data)
-      // 부모와 함께 내려간 자손을 같이 올린다. main의 `restoreTask`도 같은
-      // 집합을 되살리므로(같은 삭제로 `deleted_with`가 이 부모인 자손), 화면과 디스크가
-      // 어긋나지 않는다 — IPC는 부모 id 하나면 된다.
-      const ids = new Set<string>([task.id, ...subtaskIds])
-      set((s) => {
-        const restored = s.trashTasks.filter((t) => ids.has(t.id))
-        return {
-          trashTasks: s.trashTasks.filter((t) => !ids.has(t.id)),
-          tasks: [...s.tasks, ...restored.map((t) => ({ ...t, deletedAt: null }))]
-        }
-      })
-      persist('restoreTask', () => window.api.restoreTask(task.id))
+      const { task } = readDeletedTaskUndo(action.data)
+      // IPC는 부모 id 하나이고, 무엇이 올라왔는지는 main의 답을 그대로 옮긴다.
+      // 페이로드의 자손 목록으로 옮기면 안 된다: 그 사이 휴지통에서 자손 하나를 복원해
+      // 부모가 이미 살아 있으면, 남은 자손을 main이 올리는지는 main만 안다.
+      await restoreOnMain(task.id)
     } else if (action.type === 'deleteTasks') {
       const ids = action.data as string[]
-      set((s) => {
-        const restored = s.trashTasks.filter((t) => ids.includes(t.id))
-        return {
-          trashTasks: s.trashTasks.filter((t) => !ids.includes(t.id)),
-          tasks: [...s.tasks, ...restored.map((t) => ({ ...t, deletedAt: null }))]
-        }
-      })
-      for (const id of ids) persist('restoreTask', () => window.api.restoreTask(id))
+      // 하나씩 main에 묻는다. 뿌리가 먼저 올라오면 그 아래 행의 답은 빈 목록이고,
+      // 자식이 먼저 실려 조상을 끌어올렸으면 뿌리의 답이 남은 자손이다 — 합이 전부다.
+      await Promise.all(ids.map((id) => restoreOnMain(id)))
     }
   },
 

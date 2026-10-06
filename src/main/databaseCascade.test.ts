@@ -167,3 +167,109 @@ describe('일괄 삭제도 자손 전부를 내린다', () => {
     expect(trashRow('C')?.deleted_with).toBeNull()
   })
 })
+
+/**
+ * **main이 복원의 권위다** — `restoreTask`는 실제로 휴지통에서 꺼낸 id를 돌려주고,
+ * 렌더러는 그 목록을 그대로 옮긴다(`useStore.test.ts`의 '복원은 main의 답을 그대로').
+ *
+ * 렌더러가 `deletedAt`이 같은지로 집합을 따로 짐작하던 시절에는 둘이 갈렸다: 중간
+ * 행 B를 복원하면 화면은 C를 살렸는데 main은 C를 휴지통에 남겼고, 그 뒤 '휴지통
+ * 비우기'가 화면에 멀쩡히 보이는 C를 영구 삭제했다.
+ */
+describe('restoreTask는 되살린 id를 돌려준다', () => {
+  const sorted = (ids: unknown): string[] => [...(ids as string[])].sort()
+
+  it('중간 행 B를 복원하면 같은 삭제로 내려간 C도 함께 올라온다 — 휴지통을 비워도 C는 남는다', () => {
+    threeLevels()
+    db.deleteTask('A')
+    const back = db.restoreTask('B')
+    expect(sorted(back), 'B와 그 아래 C, 매달린 조상 A').toEqual(['A', 'B', 'C'])
+    expect(activeIds()).toEqual(['A', 'B', 'C', 'Z'])
+    expect(trashIds()).toEqual([])
+    db.emptyTrash()
+    expect(activeIds(), '화면에 보이던 C가 휴지통 비우기에 영구 삭제됐다').toContain('C')
+  })
+
+  it('복원한 행이 고른 하위작업만 데려오고, 같은 뿌리의 다른 가지는 남긴다', () => {
+    threeLevels()
+    db.createTask({ id: 'D', title: 'D', listId: 'inbox', parentId: 'A' })
+    db.deleteTask('A')
+    expect(sorted(db.restoreTask('B'))).toEqual(['A', 'B', 'C'])
+    expect(trashIds()).toEqual(['D'])
+  })
+
+  // 낡은 연결: 첫 삭제의 표시(`deleted_with = A`)가 남은 D가 두 번째 삭제의 복원에
+  // 끌려 올라오면 안 된다 — 두 번째 삭제 때 D는 이미 휴지통이라 그 조작에 속하지 않았다.
+  it('같은 뿌리의 다른 삭제로 남은 행(낡은 연결)은 다시 지운 뿌리를 복원해도 올라오지 않는다', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      db.createTask({ id: 'A', title: 'A', listId: 'inbox' })
+      db.createTask({ id: 'B', title: 'B', listId: 'inbox', parentId: 'A' })
+      db.createTask({ id: 'D', title: 'D', listId: 'inbox', parentId: 'A' })
+      vi.setSystemTime(new Date('2026-10-01T00:00:00.000Z'))
+      db.deleteTask('A') // T1: A, B, D
+      db.restoreTask('B') // B와 조상 A만 — D는 deleted_with = A로 남는다
+      vi.setSystemTime(new Date('2026-10-01T00:00:05.000Z'))
+      db.deleteTask('A') // T2: A, B (D는 이미 휴지통이라 건너뛴다)
+
+      expect(sorted(db.restoreTask('A'))).toEqual(['A', 'B'])
+      expect(trashIds(), '따로 남아 있던 D가 다른 삭제의 복원에 끌려 올라왔다').toEqual(['D'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // 되돌리기(Cmd+Z)는 뿌리 id로 `restoreTask`를 부른다. 그 사이 휴지통에서 자손 하나를
+  // 복원해 뿌리가 이미 살아 있으면, 예전에는 그 자리에서 돌아가 D가 디스크에서는
+  // 휴지통에 남고 화면에서는 살아났다.
+  it('뿌리가 이미 살아 있어도(휴지통 복원 뒤의 되돌리기) 그 삭제의 남은 자손을 올린다', () => {
+    threeLevels()
+    db.createTask({ id: 'D', title: 'D', listId: 'inbox', parentId: 'A' })
+    db.deleteTask('A')
+    expect(sorted(db.restoreTask('C'))).toEqual(['A', 'B', 'C'])
+    expect(trashIds()).toEqual(['D'])
+
+    expect(sorted(db.restoreTask('A')), '살아 있는 뿌리라고 아무것도 안 했다').toEqual(['D'])
+    expect(activeIds()).toEqual(['A', 'B', 'C', 'D', 'Z'])
+    expect(trashIds()).toEqual([])
+  })
+
+  it('살아 있는 뿌리의 되돌리기도 따로 지운 행과 그 아래는 남긴다', () => {
+    threeLevels()
+    db.createTask({ id: 'D', title: 'D', listId: 'inbox', parentId: 'A' })
+    db.createTask({ id: 'E', title: 'E', listId: 'inbox', parentId: 'D' })
+    db.deleteTask('D') // D, E — 따로 지운 가지
+    db.deleteTask('A') // A, B, C
+    db.restoreTask('B') // B, C, 조상 A
+    expect(db.restoreTask('A')).toEqual([])
+    expect(trashIds()).toEqual(['D', 'E'])
+  })
+
+  it('자식을 먼저 실은 일괄 삭제도 뿌리를 가리키고, 뿌리 복원이 전부를 돌려준다', () => {
+    threeLevels()
+    db.batchUpdateTasks(['C', 'A'], { deleted: true })
+    expect(trashRow('C')?.deleted_with).toBe('A')
+    expect(trashRow('B')?.deleted_with).toBe('A')
+    expect(sorted(db.restoreTask('A'))).toEqual(['A', 'B', 'C'])
+    expect(trashIds()).toEqual([])
+  })
+
+  it('순환 parent_id가 일괄 삭제에 실려도 둘 다 내려가고 되살아난다', () => {
+    db.createTask({ id: 'a', title: 'a', listId: 'inbox' })
+    db.createTask({ id: 'b', title: 'b', listId: 'inbox', parentId: 'a' })
+    db.updateTask({ id: 'a', parentId: 'b' }) // a ↔ b
+    db.batchUpdateTasks(['a', 'b'], { deleted: true })
+    expect(trashIds()).toEqual(['a', 'b'])
+    expect(sorted(db.restoreTask('a'))).toEqual(['a', 'b'])
+    expect(trashIds()).toEqual([])
+    db.batchUpdateTasks(['b', 'a'], { deleted: true })
+    expect(sorted(db.restoreTask('a'))).toEqual(['a', 'b'])
+    expect(activeIds()).toEqual(['a', 'b'])
+  })
+
+  it('없는 id나 되살릴 것이 없으면 빈 목록이다', () => {
+    threeLevels()
+    expect(db.restoreTask('nope')).toEqual([])
+    expect(db.restoreTask('A')).toEqual([])
+  })
+})

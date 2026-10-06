@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { useStore } from './useStore'
 import type { Task, AiMessage } from '../types'
 import { getScheduledForOccurrence } from '../utils/scheduledTime'
@@ -895,94 +898,190 @@ describe('duplicateTask — 하위작업이 섞인 리스트', () => {
 })
 
 /**
+ * 진짜 main(`src/main/database.ts`)에 `window.api`를 잇는다.
+ *
+ * 복원 집합은 main이 정하고 화면은 그 답을 옮기기만 한다. 그 약속이 지켜지는지는
+ * main을 흉내 낸 목으로는 못 본다 — 목이 틀린 답을 주면 테스트도 같이 틀린다. 그래서
+ * 실제 main 모듈을 임시 폴더에 띄우고 IPC를 함수 호출로 바꿔 끼운다(호출 순서와
+ * 비동기 반환은 `ipcRenderer.invoke`와 같다).
+ *
+ * 경로를 변수로 둔다 — 리터럴로 import하면 `tsc --build`가 main 파일을 렌더러
+ * 프로젝트(tsconfig.web.json)로 끌어들여 TS6307로 실패한다. 그래서 타입도 필요한
+ * 만큼만 여기 적는다.
+ */
+interface MainDb {
+  initDatabase(): void
+  closeDatabase(): boolean
+  createTask(task: Record<string, unknown>): void
+  updateTask(task: Record<string, unknown>): void
+  deleteTask(id: string): void
+  restoreTask(id: string): unknown
+  permanentDeleteTask(id: string): void
+  emptyTrash(): void
+  batchUpdateTasks(ids: string[], updates: Record<string, unknown>): void
+  getLists(): unknown[]
+  getTasks(): unknown[]
+  getTrashTasks(): unknown[]
+  getHabits(): unknown[]
+  getHabitLogs(): unknown[]
+  getFolders(): unknown[]
+  getPomodoroSessions(): unknown[]
+  getScore(): unknown
+}
+const MAIN_DATABASE = '../../../main/database'
+
+function useRealMain(): { db: () => MainDb } {
+  let db: MainDb | null = null
+  let dir = ''
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'greenday-store-main-'))
+    const at = dir
+    vi.resetModules()
+    vi.doMock('electron', () => ({
+      app: { getPath: () => at, getVersion: () => '0.0.0-test' },
+      safeStorage: { isEncryptionAvailable: () => false }
+    }))
+    const main = (await import(/* @vite-ignore */ MAIN_DATABASE)) as MainDb
+    main.initDatabase()
+    db = main
+    const ipc =
+      <A extends unknown[]>(fn: (...args: A) => unknown) =>
+      (...args: A): Promise<unknown> =>
+        new Promise((resolve) => resolve(fn(...args)))
+    vi.stubGlobal('window', {
+      api: {
+        ...window.api,
+        getLists: vi.fn(ipc(main.getLists)),
+        getTasks: vi.fn(ipc(main.getTasks)),
+        getTrashTasks: vi.fn(ipc(main.getTrashTasks)),
+        getHabits: vi.fn(ipc(main.getHabits)),
+        getHabitLogs: vi.fn(ipc(main.getHabitLogs)),
+        getFolders: vi.fn(ipc(main.getFolders)),
+        getPomodoroSessions: vi.fn(ipc(main.getPomodoroSessions)),
+        getScore: vi.fn(ipc(main.getScore)),
+        createTask: vi.fn(ipc(main.createTask)),
+        deleteTask: vi.fn(ipc(main.deleteTask)),
+        restoreTask: vi.fn(ipc(main.restoreTask)),
+        permanentDeleteTask: vi.fn(ipc(main.permanentDeleteTask)),
+        emptyTrash: vi.fn(ipc(main.emptyTrash)),
+        batchUpdateTasks: vi.fn(ipc(main.batchUpdateTasks))
+      }
+    })
+  })
+  afterEach(() => {
+    db?.closeDatabase()
+    db = null
+    vi.doUnmock('electron')
+    rmSync(dir, { recursive: true, force: true })
+  })
+  return {
+    db: () => {
+      if (!db) throw new Error('main이 아직 뜨지 않았다')
+      return db
+    }
+  }
+}
+
+/** main에 행을 만들고 화면을 main에서 다시 읽는다(앱 시작과 같은 경로). 부모가 먼저 와야 한다. */
+async function seed(db: MainDb, rows: Task[]): Promise<void> {
+  for (const t of rows) db.createTask({ ...t })
+  useStore.setState({ undoStack: [] })
+  await useStore.getState().loadData()
+}
+
+const sortedIds = (list: { id: string }[]): string[] => list.map((t) => t.id).sort()
+
+/** 화면의 살아 있는 목록·휴지통이 디스크와 정확히 같은 집합인지. */
+function expectInSync(db: MainDb): void {
+  const s = useStore.getState()
+  expect(sortedIds(s.tasks), '살아 있는 목록이 화면과 디스크에서 다르다').toEqual(
+    sortedIds(db.getTasks() as { id: string }[])
+  )
+  expect(sortedIds(s.trashTasks), '휴지통이 화면과 디스크에서 다르다').toEqual(
+    sortedIds(db.getTrashTasks() as { id: string }[])
+  )
+}
+
+/**
  * H5 — 하위작업이 있는 할일을 지우고 되돌리면 하위작업이 휴지통에 남았다.
  *
  * 삭제는 하위작업까지 함께 내리는데(아래 첫 테스트) 되돌리기는 부모 하나만
- * 올렸다. 화면에서는 하위작업이 통째로 사라진 것으로 보인다. main의
- * `restoreTask`도 같은 비대칭을 갖고 있었고, 양쪽을 함께 고쳐야 재시작 전후가
- * 같아진다(`databaseRestoreTask.test.ts`가 main 쪽을 못 박는다).
+ * 올렸다. 화면에서는 하위작업이 통째로 사라진 것으로 보인다. 지금은 main의
+ * `restoreTask`가 되살린 id를 돌려주고 화면은 그것을 그대로 옮긴다
+ * (`databaseRestoreTask.test.ts`가 main 쪽 규칙을 못 박는다).
  */
 describe('삭제 되돌리기와 하위작업', () => {
+  const main = useRealMain()
   const family = (): Task[] => [
     task({ id: 'p', title: '부모' }),
     task({ id: 'c1', title: '하위1', parentId: 'p' }),
     task({ id: 'c2', title: '하위2', parentId: 'p' })
   ]
-  const ids = (list: Task[]): string[] => list.map((t) => t.id).sort()
+  const ids = sortedIds
 
   it('삭제는 하위작업까지 휴지통으로 내린다', async () => {
-    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await seed(main.db(), family())
     await useStore.getState().removeTask('p')
 
     expect(useStore.getState().tasks).toEqual([])
     expect(ids(useStore.getState().trashTasks)).toEqual(['c1', 'c2', 'p'])
+    expectInSync(main.db())
   })
 
   it('되돌리기가 하위작업도 같이 올린다', async () => {
-    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await seed(main.db(), family())
     await useStore.getState().removeTask('p')
     await useStore.getState().popUndo()
 
     expect(ids(useStore.getState().tasks), '하위작업이 휴지통에 남았다').toEqual(['c1', 'c2', 'p'])
     expect(useStore.getState().trashTasks).toEqual([])
     expect(useStore.getState().tasks.every((t) => t.deletedAt === null)).toBe(true)
-    // IPC는 부모 id 하나면 된다 — main이 같은 집합을 되살린다.
+    // IPC는 부모 id 하나다 — 무엇이 올라왔는지는 main이 답한다.
     expect(window.api.restoreTask).toHaveBeenCalledWith('p')
+    expectInSync(main.db())
   })
 
   it('휴지통 화면의 개별 복원도 하위작업을 데려온다', async () => {
-    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await seed(main.db(), family())
     await useStore.getState().removeTask('p')
     await useStore.getState().restoreTask('p')
 
     expect(ids(useStore.getState().tasks)).toEqual(['c1', 'c2', 'p'])
     expect(useStore.getState().trashTasks).toEqual([])
+    expectInSync(main.db())
   })
 
   // main은 "같은 조작으로 함께 내려간" 하위작업만 되살린다(`deleted_with` 표시).
-  // 화면도 같은 규칙을 써야 재시작 전후가 다르지 않은데, 렌더러의 `Task`에는 그
-  // 표시가 없어서 **삭제 시각이 같은가**로 근사한다.
-  //
-  // 그래서 휴지통 상태를 손으로 세운다. `removeTask`를 두 번 부르면 두 삭제가
-  // 같은 밀리초에 떨어져 시각이 구별되지 않는다 — 사람의 조작에서는 일어나지
-  // 않지만 테스트에서는 매번 일어난다. 근사가 어긋나는 그 드문 경우에도 손해는
-  // "화면이 하위작업 하나를 더 되살려 보여 준다"까지이고, 다음 로드에서 main의
-  // 판정으로 정정된다.
+  // 화면은 그 답을 받으므로 두 삭제가 같은 밀리초에 떨어져도(테스트에서는 매번
+  // 그렇다) 갈리지 않는다 — 예전의 "삭제 시각이 같은가" 근사는 바로 거기서 틀렸다.
   it('따로 지웠던 하위작업은 휴지통에 그대로 둔다', async () => {
-    const earlier = '2026-08-28T00:00:00.000Z'
-    const later = '2026-08-28T00:00:01.000Z'
-    useStore.setState({
-      tasks: [],
-      trashTasks: [
-        task({ id: 'c1', parentId: 'p', deletedAt: earlier }),
-        task({ id: 'p', deletedAt: later }),
-        task({ id: 'c2', parentId: 'p', deletedAt: later })
-      ],
-      undoStack: []
-    })
+    await seed(main.db(), family())
+    await useStore.getState().removeTask('c1')
+    await useStore.getState().removeTask('p')
     await useStore.getState().restoreTask('p')
 
     expect(ids(useStore.getState().tasks)).toEqual(['c2', 'p'])
     expect(ids(useStore.getState().trashTasks)).toEqual(['c1'])
+    expectInSync(main.db())
   })
 
   // 이 버전으로 올라오기 전에 쌓인 undo가 스택에 남아 있을 수 있다.
   it('옛 모양의 undo 페이로드도 읽는다', async () => {
-    const parent = task({ id: 'p', title: '부모', deletedAt: '2026-08-28T00:00:00.000Z' })
-    useStore.setState({
-      tasks: [],
-      trashTasks: [parent],
-      undoStack: [{ type: 'deleteTask', description: '', data: parent, timestamp: 1 }]
-    })
+    await seed(main.db(), [task({ id: 'p', title: '부모' })])
+    main.db().deleteTask('p')
+    await useStore.getState().loadData()
+    const parent = useStore.getState().trashTasks[0]
+    useStore.setState({ undoStack: [{ type: 'deleteTask', description: '', data: parent, timestamp: 1 }] })
     await useStore.getState().popUndo()
     expect(ids(useStore.getState().tasks)).toEqual(['p'])
+    expectInSync(main.db())
   })
 
-  // 화면도 main과 같은 규칙을 써야 한다 — 부모를 휴지통에 둔 채 자식만 올리면
-  // 뷰는 isTopLevel로 거르고 하위작업은 살아 있는 부모의 상세 안에서만 그려져서,
-  // 되살린 할일이 어느 화면에도 나타나지 않는다.
+  // 부모를 휴지통에 둔 채 자식만 올리면 뷰는 isTopLevel로 거르고 하위작업은 살아 있는
+  // 부모의 상세 안에서만 그려져서, 되살린 할일이 어느 화면에도 나타나지 않는다.
+  // main이 조상을 함께 올리고 그것도 답에 넣는다.
   it('하위작업만 복원하면 부모도 함께 올라온다', async () => {
-    useStore.setState({ tasks: family(), trashTasks: [], undoStack: [] })
+    await seed(main.db(), family())
     await useStore.getState().removeTask('p')
     expect(ids(useStore.getState().trashTasks)).toEqual(['c1', 'c2', 'p'])
 
@@ -995,6 +1094,7 @@ describe('삭제 되돌리기와 하위작업', () => {
     )
     expect(ids(invisible), '살아났는데 부모가 휴지통이라 어느 화면에도 없다').toEqual([])
     expect(ids(live)).toContain('c1')
+    expectInSync(main.db())
   })
 })
 
@@ -1012,45 +1112,55 @@ describe('삭제 캐스케이드 — 손자까지', () => {
     task({ id: 'c', title: 'C', parentId: 'b' }),
     task({ id: 'z', title: '무관' })
   ]
-  const ids = (list: Task[]): string[] => list.map((t) => t.id).sort()
+  const ids = sortedIds
 
-  it('removeTask가 손자까지 휴지통으로 내리고, 되돌리기가 모두 올린다', async () => {
-    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [] })
-    await useStore.getState().removeTask('a')
-    expect(ids(useStore.getState().tasks), '손자가 살아 남았다').toEqual(['z'])
-    expect(ids(useStore.getState().trashTasks)).toEqual(['a', 'b', 'c'])
+  describe('main과 함께', () => {
+    const main = useRealMain()
 
-    await useStore.getState().popUndo()
-    expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
-    expect(useStore.getState().trashTasks).toEqual([])
-  })
+    it('removeTask가 손자까지 휴지통으로 내리고, 되돌리기가 모두 올린다', async () => {
+      await seed(main.db(), tree())
+      await useStore.getState().removeTask('a')
+      expect(ids(useStore.getState().tasks), '손자가 살아 남았다').toEqual(['z'])
+      expect(ids(useStore.getState().trashTasks)).toEqual(['a', 'b', 'c'])
+      expectInSync(main.db())
 
-  it('휴지통의 뿌리 복원이 손자까지 데려온다', async () => {
-    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [] })
-    await useStore.getState().removeTask('a')
-    await useStore.getState().restoreTask('a')
-    expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
-    expect(useStore.getState().trashTasks).toEqual([])
-  })
+      await useStore.getState().popUndo()
+      expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
+      expect(useStore.getState().trashTasks).toEqual([])
+      expectInSync(main.db())
+    })
 
-  it('batchDelete가 손자까지 내리고 main에도 그 id를 모두 보낸다', async () => {
-    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [], batchMode: true, batchSelectedIds: ['a'] })
-    await useStore.getState().batchDelete()
-    expect(ids(useStore.getState().tasks)).toEqual(['z'])
-    expect(ids(useStore.getState().trashTasks)).toEqual(['a', 'b', 'c'])
-    const sent = vi.mocked(window.api.batchUpdateTasks).mock.calls.at(-1)?.[0] as string[]
-    expect([...sent].sort()).toEqual(['a', 'b', 'c'])
+    it('휴지통의 뿌리 복원이 손자까지 데려온다', async () => {
+      await seed(main.db(), tree())
+      await useStore.getState().removeTask('a')
+      await useStore.getState().restoreTask('a')
+      expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
+      expect(useStore.getState().trashTasks).toEqual([])
+      expectInSync(main.db())
+    })
 
-    await useStore.getState().popUndo()
-    expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
-  })
+    it('batchDelete가 손자까지 내리고 main에도 그 id를 모두 보낸다', async () => {
+      await seed(main.db(), tree())
+      useStore.setState({ batchMode: true, batchSelectedIds: ['a'] })
+      await useStore.getState().batchDelete()
+      expect(ids(useStore.getState().tasks)).toEqual(['z'])
+      expect(ids(useStore.getState().trashTasks)).toEqual(['a', 'b', 'c'])
+      const sent = vi.mocked(window.api.batchUpdateTasks).mock.calls.at(-1)?.[0] as string[]
+      expect([...sent].sort()).toEqual(['a', 'b', 'c'])
 
-  it('영구 삭제가 휴지통의 손자까지 지운다', async () => {
-    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [] })
-    await useStore.getState().removeTask('a')
-    await useStore.getState().permanentDeleteTask('a')
-    expect(useStore.getState().trashTasks, '휴지통에 자손이 고아로 남았다').toEqual([])
-    expect(ids(useStore.getState().tasks)).toEqual(['z'])
+      await useStore.getState().popUndo()
+      expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
+      expectInSync(main.db())
+    })
+
+    it('영구 삭제가 휴지통의 손자까지 지운다', async () => {
+      await seed(main.db(), tree())
+      await useStore.getState().removeTask('a')
+      await useStore.getState().permanentDeleteTask('a')
+      expect(useStore.getState().trashTasks, '휴지통에 자손이 고아로 남았다').toEqual([])
+      expect(ids(useStore.getState().tasks)).toEqual(['z'])
+      expectInSync(main.db())
+    })
   })
 
   it('손상된 순환 parentId에서 멈춘다', async () => {
@@ -1061,6 +1171,166 @@ describe('삭제 캐스케이드 — 손자까지', () => {
     })
     await useStore.getState().removeTask('p')
     expect(ids(useStore.getState().trashTasks)).toEqual(['p', 'q'])
+  })
+})
+
+/**
+ * **복원은 main의 답을 그대로 옮긴다.**
+ *
+ * 렌더러가 "같은 `deletedAt`의 자손"으로 집합을 짐작하던 시절, main과 갈리는 경우가
+ * 있었다. 갈린 채로 '휴지통 비우기'를 누르면 화면에는 살아 있는 행이 디스크에서
+ * 영구 삭제되고, 반대로 디스크에는 살아 있는 행이 화면에서는 휴지통에 남았다.
+ * 아래는 그 경우들을 실제 main과 함께 돌려 화면과 디스크가 같은 집합인지 본다.
+ */
+describe('복원은 main의 답을 그대로 — 화면과 디스크가 같은 집합', () => {
+  const main = useRealMain()
+  const abc = (): Task[] => [
+    task({ id: 'A', title: 'A' }),
+    task({ id: 'B', title: 'B', parentId: 'A' }),
+    task({ id: 'C', title: 'C', parentId: 'B' }),
+    task({ id: 'Z', title: '무관' })
+  ]
+
+  it('중간 행 B를 복원한 뒤 휴지통을 비워도 화면의 C가 디스크에서 사라지지 않는다', async () => {
+    await seed(main.db(), abc())
+    await useStore.getState().removeTask('A')
+    await useStore.getState().restoreTask('B')
+    expectInSync(main.db())
+    expect(sortedIds(useStore.getState().tasks)).toEqual(['A', 'B', 'C', 'Z'])
+
+    await useStore.getState().emptyTrash()
+    expectInSync(main.db())
+    expect(sortedIds(main.db().getTasks() as { id: string }[]), '화면에 보이던 C가 영구 삭제됐다').toContain('C')
+  })
+
+  it('낡은 연결: 다시 지운 뿌리를 복원해도 따로 남아 있던 D는 휴지통에 남는다 — 화면도', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await seed(main.db(), [
+        task({ id: 'A', title: 'A' }),
+        task({ id: 'B', title: 'B', parentId: 'A' }),
+        task({ id: 'D', title: 'D', parentId: 'A' })
+      ])
+      vi.setSystemTime(new Date('2026-10-01T00:00:00.000Z'))
+      await useStore.getState().removeTask('A')
+      await useStore.getState().restoreTask('B')
+      vi.setSystemTime(new Date('2026-10-01T00:00:05.000Z'))
+      await useStore.getState().removeTask('A')
+      await useStore.getState().restoreTask('A')
+
+      expect(sortedIds(useStore.getState().trashTasks)).toEqual(['D'])
+      expectInSync(main.db())
+      await useStore.getState().emptyTrash()
+      expectInSync(main.db())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('A 삭제 → 휴지통에서 C 복원 → 되돌리기: D가 디스크와 화면에서 함께 올라온다', async () => {
+    await seed(main.db(), [...abc(), task({ id: 'D', title: 'D', parentId: 'A' })])
+    await useStore.getState().removeTask('A')
+    await useStore.getState().restoreTask('C')
+    expect(sortedIds(useStore.getState().trashTasks)).toEqual(['D'])
+    expectInSync(main.db())
+
+    await useStore.getState().popUndo()
+    expect(sortedIds(useStore.getState().tasks)).toEqual(['A', 'B', 'C', 'D', 'Z'])
+    expect(useStore.getState().trashTasks).toEqual([])
+    expectInSync(main.db())
+  })
+
+  it('자식을 먼저 고른 일괄 삭제도 뿌리 복원 하나로 전부 올라온다', async () => {
+    await seed(main.db(), abc())
+    useStore.setState({ batchMode: true, batchSelectedIds: ['C', 'A'] })
+    await useStore.getState().batchDelete()
+    expect(sortedIds(useStore.getState().trashTasks)).toEqual(['A', 'B', 'C'])
+    await useStore.getState().restoreTask('A')
+    expect(sortedIds(useStore.getState().tasks)).toEqual(['A', 'B', 'C', 'Z'])
+    expectInSync(main.db())
+  })
+
+  it('순환 parentId가 실린 일괄 삭제도 둘 다 내려가고 복원된다', async () => {
+    main.db().createTask({ ...task({ id: 'a', title: 'a' }) })
+    main.db().createTask({ ...task({ id: 'b', title: 'b', parentId: 'a' }) })
+    main.db().updateTask({ id: 'a', parentId: 'b' })
+    await seed(main.db(), [])
+    useStore.setState({ batchMode: true, batchSelectedIds: ['a', 'b'] })
+    await useStore.getState().batchDelete()
+    expect(sortedIds(main.db().getTrashTasks() as { id: string }[])).toEqual(['a', 'b'])
+    expectInSync(main.db())
+    await useStore.getState().restoreTask('a')
+    expect(sortedIds(useStore.getState().tasks)).toEqual(['a', 'b'])
+    expectInSync(main.db())
+  })
+})
+
+describe('복원은 main의 답을 그대로 — 목으로 본 적용 규칙', () => {
+  const at = '2026-08-28T00:00:00.000Z'
+
+  it('돌려받은 id만 옮긴다 — 같은 시각의 자손이라고 짐작해 더 올리지 않는다', async () => {
+    vi.mocked(window.api.restoreTask).mockResolvedValue(['x', 'q'])
+    useStore.setState({
+      tasks: [],
+      trashTasks: [
+        task({ id: 'p', deletedAt: at }),
+        task({ id: 'x', parentId: 'p', deletedAt: at }),
+        task({ id: 'y', parentId: 'x', deletedAt: at }),
+        task({ id: 'q', deletedAt: '2026-01-01T00:00:00.000Z' })
+      ]
+    })
+    await useStore.getState().restoreTask('x')
+    expect(sortedIds(useStore.getState().tasks)).toEqual(['q', 'x'])
+    expect(sortedIds(useStore.getState().trashTasks)).toEqual(['p', 'y'])
+    expect(useStore.getState().tasks.every((t) => t.deletedAt === null)).toBe(true)
+  })
+
+  it('main이 거절하면 화면은 그대로다', async () => {
+    vi.mocked(window.api.restoreTask).mockRejectedValue(new Error('boom'))
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    useStore.setState({ tasks: [], trashTasks: [task({ id: 'p', deletedAt: at })] })
+    await useStore.getState().restoreTask('p')
+    expect(sortedIds(useStore.getState().trashTasks)).toEqual(['p'])
+    expect(useStore.getState().tasks).toEqual([])
+    error.mockRestore()
+  })
+
+  // 답의 모양을 모르면 짐작하지 않고 main에서 통째로 다시 읽는다.
+  const reloadFrom = (live: Record<string, unknown>[], trash: Record<string, unknown>[]): void => {
+    Object.assign(window.api, {
+      getLists: vi.fn(async () => []),
+      getTasks: vi.fn(async () => live),
+      getTrashTasks: vi.fn(async () => trash),
+      getHabits: vi.fn(async () => []),
+      getHabitLogs: vi.fn(async () => []),
+      getFolders: vi.fn(async () => []),
+      getPomodoroSessions: vi.fn(async () => []),
+      getScore: vi.fn(async () => ({ total: 0, events: [], taskNet: {} }))
+    })
+  }
+
+  it('배열이 아닌 답이면 main에서 다시 읽는다', async () => {
+    vi.mocked(window.api.restoreTask).mockResolvedValue(undefined)
+    reloadFrom([{ id: 'p', title: 'p', list_id: 'inbox' }], [{ id: 'c', title: 'c', list_id: 'inbox', deleted_at: at }])
+    useStore.setState({ tasks: [], trashTasks: [task({ id: 'p', deletedAt: at }), task({ id: 'c', deletedAt: at })] })
+    await useStore.getState().restoreTask('p')
+    await vi.waitFor(() => expect(sortedIds(useStore.getState().tasks)).toEqual(['p']))
+    expect(sortedIds(useStore.getState().trashTasks)).toEqual(['c'])
+  })
+
+  // 답이 오기 전에 '휴지통 비우기'가 화면의 휴지통을 비웠다 — 옮길 행이 화면에 없다.
+  // main은 복원을 먼저 처리했으니(IPC는 순서대로 간다) 그 행은 디스크에 살아 있다.
+  it('돌려받은 id가 화면 어디에도 없으면 main에서 다시 읽는다', async () => {
+    let answer: (ids: string[]) => void = () => {}
+    vi.mocked(window.api.restoreTask).mockReturnValue(new Promise((r) => (answer = r)))
+    Object.assign(window.api, { emptyTrash: vi.fn() })
+    reloadFrom([{ id: 'p', title: 'p', list_id: 'inbox' }], [])
+    useStore.setState({ tasks: [], trashTasks: [task({ id: 'p', deletedAt: at })] })
+    const restoring = useStore.getState().restoreTask('p')
+    await useStore.getState().emptyTrash()
+    answer(['p'])
+    await restoring
+    await vi.waitFor(() => expect(sortedIds(useStore.getState().tasks)).toEqual(['p']))
   })
 })
 
