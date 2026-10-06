@@ -160,11 +160,11 @@
 <div class="step">
   <div class="step-n">0</div>
   <div class="step-body">
-    <p>Xcode 27이 새로 깔리면서 라이선스 동의가 풀렸습니다. 이 상태에서는 <code>git</code>과
-    서명 도구가 전부 멈춰서, 제가 커밋도 빌드 서명도 할 수 없습니다. <b>터미널.app</b>을 열고 붙여넣은 뒤
-    맥 로그인 비밀번호를 입력하세요(입력해도 화면에 글자가 안 보이는 것이 정상입니다).</p>
+    <p>Xcode 27이 새로 깔리면서 라이선스 동의가 풀렸습니다. git은 제가 Command Line Tools 쪽으로 돌려 쓰고 있지만,
+    <b>App Store 업로드 도구(<code>altool</code>)는 Xcode에만 있어서</b> 동의 없이는 C단계의 업로드가 멈춥니다.
+    <b>터미널.app</b>을 열고 붙여넣은 뒤 맥 로그인 비밀번호를 입력하세요(입력해도 화면에 글자가 안 보이는 것이 정상입니다).</p>
     <div class="cmd"><pre id="c-license">sudo xcodebuild -license accept</pre><button type="button" data-copy="c-license">복사</button></div>
-    <p class="path">동의가 되면 제가 자동으로 알아채고 커밋·PR·병합을 이어서 합니다.</p>
+    <p class="path">A·B보다 먼저 할 필요는 없습니다. 업로드 전까지만 해 두시면 됩니다.</p>
   </div>
 </div>
 
