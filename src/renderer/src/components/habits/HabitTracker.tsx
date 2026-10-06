@@ -200,7 +200,12 @@ export function HabitTracker() {
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleAdd()
-                if (e.key === 'Escape') setShowAdd(false)
+                if (e.key === 'Escape') {
+                  // 이 Escape는 여기서 쓴다 — 전역 단축키(useKeyboardShortcuts)가 선택까지
+                  // 해제하지 않도록 알린다.
+                  e.preventDefault()
+                  setShowAdd(false)
+                }
               }}
               placeholder={t('habits.namePlaceholder')}
               className={`flex-1 bg-transparent text-sm outline-none ${isDark ? 'text-gray-200 placeholder-gray-600' : 'text-gray-700 placeholder-gray-400'}`}

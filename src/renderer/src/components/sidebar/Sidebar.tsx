@@ -359,7 +359,12 @@ export function Sidebar() {
                 onKeyDown={(e) => {
                   if (e.nativeEvent.isComposing) return
                   if (e.key === 'Enter') handleAddFolder()
-                  if (e.key === 'Escape') setShowNewFolder(false)
+                  if (e.key === 'Escape') {
+                    // 이 Escape는 여기서 쓴다 — 전역 단축키(useKeyboardShortcuts)가 선택까지
+                    // 해제해 상세 패널을 닫지 않도록 알린다.
+                    e.preventDefault()
+                    setShowNewFolder(false)
+                  }
                 }}
                 placeholder={t('nav.folderNamePlaceholder')}
                 className={`flex-1 text-sm px-2 py-1 rounded outline-none ${isDark ? 'bg-sidebar-hover text-white placeholder-sidebar-muted' : 'bg-gray-200 text-gray-800 placeholder-gray-400'}`}
@@ -435,6 +440,8 @@ export function Sidebar() {
                   if (e.nativeEvent.isComposing) return
                   if (e.key === 'Enter') handleAddList()
                   if (e.key === 'Escape') {
+                    // 새 폴더 이름칸과 같다 — 이 Escape는 여기서 쓴다.
+                    e.preventDefault()
                     setShowNewList(false)
                     setNewListFolderId(null)
                   }

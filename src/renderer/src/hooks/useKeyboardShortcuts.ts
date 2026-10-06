@@ -59,11 +59,29 @@ export function useKeyboardShortcuts() {
       } = useStore.getState()
 
       // Escape: 패널 닫기 / 선택 해제
+      //
+      // **계약: Escape를 자기 몫으로 쓴 쪽은 `preventDefault()`로 알린다.** 그러면
+      // 여기서 아무것도 하지 않는다. 알리는 쪽은 둘이다.
+      //
+      // 1. Radix 오버레이. document 캡처 단계에서 먼저 닫고 preventDefault만 건다 —
+      //    전파는 막지 않으므로 이 window 핸들러까지 온다. 그때 스토어는 이미
+      //    갱신돼 있어서, 이 가드가 없으면 아래 체인이 한 칸 더 내려가 오버레이를
+      //    닫은 Escape 한 번이 선택된 태스크까지 해제해버린다.
+      // 2. 손으로 쓴 입력칸의 onKeyDown — 할일 추가칸 AddTask, 하위작업 입력칸
+      //    SubtaskList, 새 폴더·새 리스트 이름 Sidebar, 습관 추가 HabitTracker.
+      //    React는 루트에 위임해 처리하므로 그 안의 preventDefault는 버블 단계의
+      //    이 window 리스너보다 먼저 네이티브 이벤트에 찍힌다. 예전에는 이 칸들이
+      //    알리지 않아서, 추가칸을 닫으려던 Escape가 `showAddTask`를 내린 뒤 체인을
+      //    한 칸 더 내려와 오른쪽 상세 패널(App.tsx: `selectedTaskId`가 null이면
+      //    TaskDetail 언마운트)까지 닫았다.
+      //
+      // **입력칸이라는 이유만으로 양보하지 않는다.** 한때 아래 선택 해제가
+      // INPUT/TEXTAREA/contentEditable 전부에 양보했는데, 상세 패널의 제목칸·
+      // CodeMirror 노트·검색창은 Escape를 따로 쓰지 않는다 — 그곳에서 Escape가
+      // 아무것도 하지 않게 됐다. 그 칸들에서는 Escape가 패널을 닫는 것이 맞다.
+      // 새로 만드는 입력칸이 Escape를 쓴다면 그 핸들러에서 preventDefault를 걸 것
+      // (useKeyboardShortcuts.test.tsx가 양쪽을 못 박는다).
       if (key === 'Escape') {
-        // Radix는 document 캡처 단계에서 먼저 닫고 preventDefault만 건다 —
-        // 전파는 막지 않으므로 이 window 핸들러까지 온다. 그때 스토어는 이미
-        // 갱신돼 있어서 아래 체인이 한 칸 더 내려가고, 결국 오버레이를 닫은
-        // Escape 한 번이 선택된 태스크까지 해제해버린다.
         if (e.defaultPrevented) return
         if (showQuickAdd) {
           useStore.getState().setShowQuickAdd(false)
@@ -74,23 +92,6 @@ export function useKeyboardShortcuts() {
           return
         }
         if (selectedTaskId) {
-          // **글자를 치는 중이면 선택을 건드리지 않는다.** 아래 Cmd+Z가 입력칸에
-          // 양보하는 것과 같은 이유인데, 여기서는 잃는 것이 더 크다.
-          //
-          // 손으로 쓴 onKeyDown(할일 추가칸 AddTask, 하위작업 입력칸 SubtaskList,
-          // 새 폴더·새 리스트 이름 Sidebar, 습관 추가 HabitTracker)은 Escape를 자기
-          // 몫으로 처리하면서 `preventDefault()`를 걸지 않는다. 그래서 위의
-          // `defaultPrevented` 가드가 걸리지 않고, 그 핸들러가 이미 `showAddTask`를
-          // 내려놓은 뒤라 체인이 한 칸 더 내려와 여기까지 온다 — 추가칸을 닫으려고
-          // 누른 Escape 한 번이 오른쪽 상세 패널(App.tsx: `selectedTaskId`가 null이면
-          // TaskDetail 언마운트)까지 같이 닫았다. 하위작업 입력칸에서는 글자만
-          // 지우려던 사용자가 작업하던 패널을 통째로 잃었다.
-          //
-          // 호출처마다 preventDefault를 붙이는 대신 여기 한 곳에서 막는다. 새로
-          // 만드는 입력칸이 또 잊어도 같은 버그가 돌아오지 않는다. 오버레이를 닫는
-          // 위 두 단계는 그대로 두므로(Radix의 `defaultPrevented` 계약도 그대로),
-          // 입력칸 밖에서 누른 Escape는 예전과 똑같이 선택을 해제한다.
-          if (isTextEntry(e.target)) return
           selectTask(null)
           return
         }

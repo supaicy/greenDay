@@ -109,7 +109,12 @@ export function SubtaskList({ taskId }: { taskId: string }) {
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return
             if (e.key === 'Enter') handleAdd()
-            if (e.key === 'Escape') setNewTitle('')
+            if (e.key === 'Escape') {
+              // 이 Escape는 여기서 쓴다 — 전역 단축키(useKeyboardShortcuts)가 선택까지
+              // 해제해 상세 패널을 닫지 않도록 알린다.
+              e.preventDefault()
+              setNewTitle('')
+            }
           }}
           placeholder={t('detail.addSubtask')}
           className={`flex-1 bg-transparent text-sm outline-none ${
