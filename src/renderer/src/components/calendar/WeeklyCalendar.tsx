@@ -276,7 +276,7 @@ export function WeeklyCalendar(): React.ReactElement {
               함께 움직인다. z-10은 오버레이(110/111)·토스트(90) 아래다. */}
             <div className="sticky top-0 z-10">
               {/* 요일 헤더 */}
-              <div className={`flex border-b ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+              <div className={`flex border-b ${isDark ? 'border-gray-700 bg-[#1C1C1E]' : 'border-gray-200 bg-white'}`}>
                 {/* 시간 칼럼 빈칸 */}
                 <div className="w-16 flex-shrink-0" />
                 {weekDays.map((day) => {

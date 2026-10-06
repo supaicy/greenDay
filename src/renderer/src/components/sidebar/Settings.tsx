@@ -227,6 +227,27 @@ const PRIVACY_URL: Record<string, string> = {
   en: 'https://begreen.dev/privacy'
 }
 
+/**
+ * '지금 다운로드'·'다시 받기'. **누르자마자 막대로 바꾼다.**
+ *
+ * 첫 진행 이벤트가 올 때까지 버튼과 (다시 받기라면) 실패 문구가 그대로 남아, 눌렀는지
+ * 알 수 없었다. 0% 막대를 먼저 세우고, 실패하면 App.tsx의 'update-download-error'
+ * 리스너가 다시 받기 상태로 되돌린다.
+ *
+ * invoke의 거절에서도 되돌린다. 보통은 위 리스너가 먼저 했으므로 같은 값을 한 번 더
+ * 쓰는 것뿐이지만, 진행 이벤트가 오기 전에 끊긴 다운로드가 마침 한 시간 확인과 겹치면
+ * 메인이 그것을 확인 실패로 보낸다(main/index.ts) — 그때 막대가 0%에 얼지 않게 한다.
+ * 거절을 버리지 않으면 렌더러 콘솔에 처리되지 않은 rejection도 남는다.
+ */
+function startUpdateDownload(): void {
+  const download = window.api.downloadUpdate
+  if (!download) return
+  useStore.setState({ updateDownloadFailed: false, updateDownloadProgress: 0 })
+  download().catch(() => {
+    useStore.setState({ updateDownloadProgress: null, updateDownloadFailed: true })
+  })
+}
+
 export function Settings() {
   const { t } = useTranslation()
   const theme = useStore((s) => s.theme)
@@ -768,9 +789,10 @@ export function Settings() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {/* 다운로드가 끊겼다. 막대는 App.tsx가 내렸고, 여기서 무엇이 실패했는지
+                    {/* 다운로드나 설치가 끊겼다. 막대는 App.tsx가 내렸고, 여기서 실패를
                         말하고 같은 버튼을 '다시 받기'로 돌려준다. 확인 실패 문구를 빌려 쓰면
-                        새 버전 카드 옆에서 "확인 실패"라고 말하게 된다. */}
+                        새 버전 카드 옆에서 "확인 실패"라고 말하게 된다. 문구가 원인을 짚지
+                        않는 것은 이 채널이 설치 실패(Squirrel·quitAndInstall)도 실어 와서다. */}
                     {updateDownloadFailed && !updateReady && (
                       <div className="flex items-center gap-1.5">
                         <AlertTriangle size={13} className={errorText(isDark)} />
@@ -779,13 +801,7 @@ export function Settings() {
                     )}
                     <button
                       type="button"
-                      onClick={() =>
-                        updateReady
-                          ? window.api.installUpdate?.()
-                          : // 실패는 'update-download-error'로 따로 온다. invoke의 거절까지
-                            // 버리지 않으면 렌더러 콘솔에 처리되지 않은 rejection이 남는다.
-                            window.api.downloadUpdate?.()?.catch(() => {})
-                      }
+                      onClick={() => (updateReady ? window.api.installUpdate?.() : startUpdateDownload())}
                       className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
                     >
                       {t(

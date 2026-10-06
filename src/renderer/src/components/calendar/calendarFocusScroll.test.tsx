@@ -47,7 +47,7 @@ beforeEach(() => {
     deleteTask: vi.fn()
   }
   const s = useStore.getState() as unknown as Record<string, unknown>
-  snapshot = { tasks: s.tasks }
+  snapshot = { tasks: s.tasks, theme: s.theme }
 })
 afterEach(() => {
   cleanup()
@@ -137,6 +137,18 @@ describe('WeeklyCalendar — 열 때 종일 할일이 밀려나지 않는다', (
     // 안쪽에 또 sticky가 있으면 두 고정 층이 서로 겹친다.
     expect(pinned?.querySelector('.sticky')).toBeNull()
     expect(pinned?.parentElement?.firstElementChild).toBe(pinned)
+  })
+
+  it('다크 모드에서 고정 층(요일 헤더 + 종일 행)이 한 면이다 — 배경이 갈리지 않는다', () => {
+    // 헤더만 `bg-gray-900`, 종일 행은 `bg-[#1C1C1E]`이라 고정된 띠가 두 색으로 갈려 보였다.
+    useStore.setState({ theme: 'dark' } as never)
+    seedAllDay()
+    const { container } = render(<WeeklyCalendar />)
+    const grid = (container.querySelector('section') as HTMLElement).parentElement as HTMLElement
+    const pinned = grid.previousElementSibling as HTMLElement
+    const layers = Array.from(pinned.children) as HTMLElement[]
+    expect(layers).toHaveLength(2)
+    for (const layer of layers) expect(layer).toHaveClass('bg-[#1C1C1E]')
   })
 
   it('마운트 때 격자를 08:00(WEEK_FOCUS_HOUR)으로 스크롤한다', () => {

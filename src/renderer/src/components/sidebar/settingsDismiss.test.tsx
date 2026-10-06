@@ -14,7 +14,7 @@
  * `onOpenChange`를 직접 잡고, "닫힌 상태에서 받은 닫힘 신호"라는 계약을 본다.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStore } from '../../store/useStore'
@@ -134,6 +134,56 @@ describe('업데이트 다운로드 실패 표시', () => {
     expect((window.api as unknown as { downloadUpdate: ReturnType<typeof vi.fn> }).downloadUpdate).toHaveBeenCalled()
     // 확인 실패가 아니다 — 버전은 이미 물어봤고 새 버전이 있다는 답을 받았다.
     expect(screen.queryByText(en.settings.updateCheckFailed)).toBeNull()
+  })
+
+  /**
+   * Value: protects=다시 받기를 누르면 바로 반응하는 것 — 첫 진행 이벤트가 오기 전까지 버튼이
+   *   그대로 남아 아무 일도 없는 것처럼 보였고, 실패 문구도 그대로 떠 있었다; fails_when=클릭이
+   *   스토어를 낙관적으로 바꾸지 않거나(막대 대신 버튼이 남는다), invoke 거절에 다시 받기 상태를
+   *   되살리지 않으면(진행 이벤트 없이 끊긴 다운로드가 0% 막대에 언다); why_new=클릭 직후의
+   *   화면은 어느 테스트도 보지 않았다; seam=none
+   */
+  it('다시 받기를 누르면 즉시 막대로 바뀌고 실패 문구를 내린다', async () => {
+    const api = window.api as unknown as { downloadUpdate: ReturnType<typeof vi.fn> }
+    // 진행 이벤트도 결과도 아직 안 온 상태 — 누른 직후의 화면을 본다.
+    api.downloadUpdate.mockImplementation(() => new Promise(() => {}))
+    useStore.setState({
+      showSettings: true,
+      updateChecked: true,
+      updateFailed: false,
+      updateAvailable: { version: '9.9.9', downloadUrl: 'https://example.com/r' },
+      updateDownloadProgress: null,
+      updateDownloadFailed: true,
+      updateReady: false
+    } as never)
+    render(<Settings />)
+    const retry = await screen.findByRole('button', { name: en.settings.updateDownloadRetry })
+    act(() => retry.click())
+    expect(api.downloadUpdate).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: en.settings.updateDownloadRetry })).toBeNull()
+    expect(screen.queryByText(en.settings.updateDownloadFailed)).toBeNull()
+    expect(screen.getByText(en.settings.updateDownloading.replace('{{percent}}', '0'))).toBeTruthy()
+  })
+
+  it('받기 요청 자체가 거절되면 다시 받기 상태로 돌아온다', async () => {
+    const api = window.api as unknown as { downloadUpdate: ReturnType<typeof vi.fn> }
+    api.downloadUpdate.mockImplementation(async () => {
+      throw new Error('net::ERR_CONNECTION_RESET')
+    })
+    useStore.setState({
+      showSettings: true,
+      updateChecked: true,
+      updateFailed: false,
+      updateAvailable: { version: '9.9.9', downloadUrl: 'https://example.com/r' },
+      updateDownloadProgress: null,
+      updateDownloadFailed: false,
+      updateReady: false
+    } as never)
+    render(<Settings />)
+    const now = await screen.findByRole('button', { name: en.settings.updateDownloadNow })
+    await act(async () => now.click())
+    expect(await screen.findByRole('button', { name: en.settings.updateDownloadRetry })).toBeTruthy()
+    expect(useStore.getState().updateDownloadProgress).toBeNull()
   })
 
   it('새 버전 카드가 있으면 확인 실패 문구를 함께 띄우지 않는다', async () => {

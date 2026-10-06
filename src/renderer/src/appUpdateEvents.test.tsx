@@ -94,6 +94,29 @@ describe('업데이트 다운로드 실패 이벤트', () => {
     expect(s.updateAvailable).toEqual({ version: '9.9.9', downloadUrl: 'https://example.com/r' })
   })
 
+  it('"재시작하여 설치"를 거둔다 — 이 채널은 설치 단계의 실패도 실어 온다', () => {
+    // macOS Squirrel·quitAndInstall의 실패도 'update-download-error'로 온다. `updateReady`가
+    // 남아 있으면 같은 실패를 되풀이할 설치 버튼만 계속 내민다.
+    useStore.setState({ updateReady: true } as never)
+    render(<App />)
+    fire('onUpdateDownloadError')
+    const s = useStore.getState() as unknown as Record<string, unknown>
+    expect(s.updateReady).toBe(false)
+    expect(s.updateDownloadFailed).toBe(true)
+  })
+
+  it('실패 뒤 다운로드가 끝나면 실패 표시를 내리고 설치를 내민다', () => {
+    // 진행 이벤트 없이 바로 끝나는 경우(캐시에 이미 있던 파일)도 있다 — 그때 실패 문구가
+    // "재시작하여 설치" 옆에 남으면 안 된다.
+    render(<App />)
+    fire('onUpdateDownloadError')
+    fire('onUpdateDownloaded')
+    const s = useStore.getState() as unknown as Record<string, unknown>
+    expect(s.updateDownloadFailed).toBe(false)
+    expect(s.updateReady).toBe(true)
+    expect(s.updateDownloadProgress).toBeNull()
+  })
+
   it('다시 받기가 진행되기 시작하면 실패 표시를 내린다', () => {
     render(<App />)
     fire('onUpdateDownloadError')

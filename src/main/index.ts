@@ -189,14 +189,25 @@ function bootstrap(): void {
         }
       })
 
+      // 다운로드가 진행 중인가 — 아래 'error' 리스너가 확인 실패와 가르는 데 쓴다.
+      // 다운로드 시작은 `app-ipc.ts`의 'download-update'라 여기서 직접 보이지 않으므로
+      // 첫 진행 이벤트로 세운다. 끝은 성공('update-downloaded')·실패('error')·취소다.
+      let downloading = false
+
       autoUpdater.on('download-progress', (progress) => {
+        downloading = true
         const wins = BrowserWindow.getAllWindows()
         if (wins.length > 0) {
           wins[0].webContents.send('update-download-progress', Math.round(progress.percent))
         }
       })
 
+      autoUpdater.on('update-cancelled', () => {
+        downloading = false
+      })
+
       autoUpdater.on('update-downloaded', () => {
+        downloading = false
         const wins = BrowserWindow.getAllWindows()
         if (wins.length > 0) {
           wins[0].webContents.send('update-downloaded')
@@ -237,9 +248,17 @@ function bootstrap(): void {
       // 'error'를 낸다(`checkForUpdates()`의 catch 절). 그 밖의 'error' — 다운로드,
       // macOS Squirrel의 네이티브 오류, 설치 실패 — 는 전부 다운로드 단계다. 오류
       // 문구(`Cannot check for updates:`)로 가르지 않는 것은 라이브러리 내부 문자열이라서다.
+      //
+      // **단, 다운로드가 진행 중이면 그쪽이 이긴다.** 확인은 사용자의 다운로드와 상관없이
+      // 한 시간마다 돈다. 그 확인이 날아가는 중에 다운로드가 끊기면 `checksInFlight`만
+      // 보고 'update-error'로 내보냈고, 설정은 새 버전 카드가 있으면 확인 실패를 숨기므로
+      // 아무 말 없이 진행 막대만 얼었다. 남는 틈: 진행 이벤트가 한 번도 오기 전에 끊긴
+      // 다운로드가 마침 확인과 겹치면 여전히 확인 실패로 나간다 — 그때는 렌더러가
+      // invoke의 거절로 다시 받기 버튼을 되살린다(Settings.tsx).
       let checksInFlight = 0
       autoUpdater.on('error', (err) => {
-        const duringCheck = checksInFlight > 0
+        const duringCheck = checksInFlight > 0 && !downloading
+        downloading = false
         console.error(duringCheck ? '[updater] 업데이트 확인 실패' : '[updater] 업데이트 다운로드 실패', err)
         const wins = BrowserWindow.getAllWindows()
         if (wins.length > 0) {
@@ -285,8 +304,10 @@ function bootstrap(): void {
    * 제목·노트·마감일이 경고 한 줄 없이 사라질 수 있었다. 업데이터의
    * `autoInstallOnAppQuit` 재시작도 같은 경로를 탄다.
    *
-   * `flushSave()`는 멱등이라(이미 확정됐으면 바로 true) 두 경로에 다 걸어도 된다 —
-   * Windows·Linux의 창 닫기 경로는 `window-all-closed`가 계속 맡는다.
+   * 거는 자리는 셋이다: `before-quit`(모든 종료), `will-quit`(창이 다 닫힌 뒤 — 아래),
+   * 그리고 Windows·Linux의 `window-all-closed`(거기서는 창 닫기가 곧 종료다).
+   * `flushSave()`는 멱등이라(이미 확정됐으면 바로 true) 한 종료가 셋을 다 지나도 된다.
+   * **macOS의 `window-all-closed`에는 걸지 않는다** — 그 자리의 주석 참고.
    *
    * 판정을 버리지 않는다. `closeDatabase()`가 boolean을 돌려주는 이유가 바로
    * "마지막 편집을 잃은 종료와 정상 종료를 구별하라"는 것이었는데(database.ts),
@@ -313,14 +334,16 @@ function bootstrap(): void {
   app.on('before-quit', () => flushBeforeExit({ alert: true }))
 
   app.on('window-all-closed', () => {
-    // macOS에서 이 이벤트는 **창이 닫혔다**일 뿐 종료가 아니다 — 앱은 독에 남고
-    // 다음 편집이 저장을 다시 건다. 여기서 "종료 중 저장 실패"를 띄우면 거짓이고,
-    // 진짜 종료 때 `before-quit`이 한 번 더 띄운다. 플러시는 하되 말은 종료 때 한다.
-    const quitting = process.platform !== 'darwin'
-    flushBeforeExit({ alert: quitting })
-    if (quitting) {
-      app.quit()
-    }
+    // macOS에서 이 이벤트는 **창이 닫혔다**일 뿐 종료가 아니다 — 앱은 독에 남는다.
+    // 그래서 **플러시도 하지 않는다.** 예전에는 말없이 플러시만 했는데, 종료 플러시는
+    // 걸려 있던 재시도 타이머를 지우고 실패해도 새로 걸지 않는다(프로세스가 곧 끝난다는
+    // 가정, database.ts `flushSave`). 창이 없으니 다음 편집이 재시도를 되살릴 일도 없어,
+    // 디스크가 잠깐 막힌 사이 창을 닫으면 편집이 재시도도 경고도 없이 메모리에만 남았다.
+    // 여기서 손대지 않으면 평소의 디바운스·재시도가 그대로 돌고, 진짜 종료는
+    // `before-quit`/`will-quit`이 플러시하고 실패를 알린다.
+    if (process.platform === 'darwin') return
+    flushBeforeExit({ alert: true })
+    app.quit()
   })
 
   app.on('will-quit', () => {

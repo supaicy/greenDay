@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const listeners = new Map<string, ((...args: unknown[]) => unknown)[]>()
 const closeDatabase = vi.fn(() => true)
 const showErrorBox = vi.fn()
+const quit = vi.fn()
 
 vi.mock('electron', () => ({
   app: {
@@ -28,7 +29,7 @@ vi.mock('electron', () => ({
     on: (event: string, cb: (...args: unknown[]) => unknown) => {
       listeners.set(event, [...(listeners.get(event) ?? []), cb])
     },
-    quit: vi.fn(),
+    quit,
     setAsDefaultProtocolClient: vi.fn(),
     getPath: () => '/tmp/greenday-test',
     isPackaged: false
@@ -95,6 +96,7 @@ beforeEach(async () => {
   closeDatabase.mockReset()
   closeDatabase.mockReturnValue(true)
   showErrorBox.mockClear()
+  quit.mockClear()
   listeners.clear()
   vi.resetModules()
   await import('./index')
@@ -114,9 +116,13 @@ describe('종료 경로가 DB를 플러시한다', () => {
     expect(closeDatabase).toHaveBeenCalledTimes(1)
   })
 
-  it("'window-all-closed'(윈도·리눅스 창 닫기)도 계속 플러시한다", () => {
+  // 플랫폼을 고정한다 — 이 테스트를 macOS에서 돌리면 아래 "macOS는 플러시하지 않는다"와
+  // 같은 가지를 타게 된다.
+  it.each(['win32', 'linux'] as const)("'window-all-closed'(%s 창 닫기 = 종료)는 플러시하고 끝낸다", (platform) => {
+    setPlatform(platform)
     fire('window-all-closed')
     expect(closeDatabase).toHaveBeenCalledTimes(1)
+    expect(quit).toHaveBeenCalledTimes(1)
   })
 
   it('플러시가 실패하면 조용히 넘어가지 않고 사용자에게 알린다', () => {
@@ -143,12 +149,21 @@ describe('종료 경로가 DB를 플러시한다', () => {
  *   두 번 돌아, 같은 대화상자 두 개가 연달아 떴다.
  */
 describe('종료 플러시 실패 알림은 한 번뿐이고, 종료일 때만 뜬다', () => {
-  it('macOS에서 창을 닫는 것은 종료가 아니다 — 플러시는 하되 대화상자는 띄우지 않는다', () => {
+  /**
+   * Regression: macOS에서 저장이 실패하는 중에 창을 닫으면 재시도가 사라졌다.
+   *
+   * 예전에는 여기서 말없이 플러시만 했다. 그런데 종료 플러시(`flushSave`)는 걸려 있던
+   * 재시도 타이머를 지우고, 실패해도 새로 걸지 않는다 — 곧 끝날 프로세스라는 가정이다.
+   * macOS는 창을 닫아도 앱이 살아 있고, 창이 없으니 다음 편집이 재시도를 되살리지도
+   * 않는다. 편집이 재시도도 경고도 없이 메모리에만 남았다. 손대지 않는 것이 고침이다.
+   */
+  it('macOS에서 창을 닫는 것은 종료가 아니다 — 플러시도, 대화상자도, 종료도 하지 않는다', () => {
     setPlatform('darwin')
     closeDatabase.mockReturnValue(false)
     fire('window-all-closed')
-    expect(closeDatabase).toHaveBeenCalled()
+    expect(closeDatabase).not.toHaveBeenCalled()
     expect(showErrorBox).not.toHaveBeenCalled()
+    expect(quit).not.toHaveBeenCalled()
   })
 
   it('macOS: 창을 닫아 둔 뒤 종료하면 그때 한 번 알린다', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterAll } from 'vitest'
+import { describe, it, expect, vi, afterAll, afterEach } from 'vitest'
 import { EventEmitter } from 'node:events'
 
 /**
@@ -96,8 +96,19 @@ class FakeUpdater extends EventEmitter {
   autoDownload = true
   autoInstallOnAppQuit = false
   checkCalls = 0
+  /**
+   * 켜 두면 확인이 끝나지 않고 매달린다 — 한 시간마다 도는 확인이 **진행 중인 동안**
+   * 다른 'error'가 오는 상황을 만든다. `settle`로 풀어 준다.
+   */
+  hangChecks = false
+  settle: (() => void) | null = null
   checkForUpdates(): Promise<unknown> {
     this.checkCalls += 1
+    if (this.hangChecks) {
+      return new Promise((resolve) => {
+        this.settle = () => resolve(null)
+      })
+    }
     return Promise.reject(new Error('net::ERR_INTERNET_DISCONNECTED')).catch((e: Error) => {
       this.emit('error', e, `Cannot check for updates: ${e.stack}`)
       throw e
@@ -162,9 +173,21 @@ const onUnhandled = (reason: unknown): void => {
 process.on('unhandledRejection', onUnhandled)
 afterAll(() => process.off('unhandledRejection', onUnhandled))
 
+/**
+ * 한 시간 확인 인터벌의 콜백을 잡아 둔다. 진짜 타이머는 그대로 걸되(지연이 한 시간이라
+ * 테스트 중에는 안 돈다) 콜백을 손에 쥐어야 "확인이 진행 중인 동안"을 만들 수 있다.
+ */
+const realSetInterval = globalThis.setInterval
+const intervals: { fn: () => void; ms: number }[] = []
+globalThis.setInterval = ((fn: () => void, ms?: number, ...rest: unknown[]) => {
+  intervals.push({ fn, ms: ms ?? 0 })
+  return realSetInterval(fn, ms, ...rest)
+}) as typeof setInterval
+
 await import('./index')
 // `whenReady().then(...)` 본문과 마이크로태스크가 정리될 시간.
 await new Promise((r) => setTimeout(r, 50))
+globalThis.setInterval = realSetInterval
 /** 부팅 확인이 남긴 것. 아래 다운로드 describe가 `sent`를 비우기 전에 찍어 둔다. */
 const sentAtBoot = sent.map((s) => s[0])
 
@@ -205,5 +228,61 @@ describe('업데이트 다운로드가 실패했을 때', () => {
     const channels = sent.map((s) => s[0])
     expect(channels).toContain('update-download-error')
     expect(channels).not.toContain('update-error')
+  })
+})
+
+/**
+ * Regression: 한 시간마다 도는 확인이 진행 중일 때 다운로드가 끊기면 '확인 실패'로 나갔다.
+ *
+ * 리스너는 `checksInFlight > 0`만 보고 확인 실패로 판정했다. 그런데 백그라운드 확인은
+ * 사용자가 '지금 다운로드'를 누른 것과 상관없이 한 시간마다 돈다 — 그 확인이 날아가는
+ * 중에 다운로드가 끊기면 'update-error'로 나갔고, 설정은 새 버전 카드가 있으면 확인 실패를
+ * 숨기므로 아무 말도 없이 진행 막대만 그 자리에 얼었다. 다운로드가 진행 중이면 그쪽이 이긴다.
+ */
+describe('확인이 진행 중일 때 다운로드가 끊기면', () => {
+  const hourly = (): { fn: () => void } => {
+    const found = intervals.find((i) => i.ms === 60 * 60 * 1000)
+    expect(found, '한 시간 확인 인터벌을 찾지 못했다 — 프로브가 헛돈다').toBeDefined()
+    return found as { fn: () => void }
+  }
+
+  // 단언이 먼저 실패해도 매달린 확인을 풀어 다음 테스트가 오염되지 않게.
+  afterEach(async () => {
+    fakeUpdater.settle?.()
+    fakeUpdater.settle = null
+    fakeUpdater.hangChecks = false
+    await new Promise((r) => setTimeout(r, 0))
+  })
+
+  it("다운로드 실패('update-download-error')로 알린다", async () => {
+    sent.length = 0
+    fakeUpdater.hangChecks = true
+    hourly().fn() // 한 시간 확인이 시작돼 아직 안 끝났다
+    fakeUpdater.emit('download-progress', { percent: 40 })
+    fakeUpdater.emit('error', new Error('net::ERR_CONNECTION_RESET'))
+    const channels = sent.map((s) => s[0])
+    expect(channels).toContain('update-download-error')
+    expect(channels).not.toContain('update-error')
+  })
+
+  it('다운로드가 끝난 뒤의 확인 실패는 다시 확인 실패다 — 깃발이 남지 않는다', async () => {
+    sent.length = 0
+    fakeUpdater.emit('download-progress', { percent: 10 })
+    fakeUpdater.emit('error', new Error('net::ERR_CONNECTION_RESET'))
+    sent.length = 0
+    hourly().fn() // 이번 확인은 실패한다(기본 모드)
+    await new Promise((r) => setTimeout(r, 0))
+    const channels = sent.map((s) => s[0])
+    expect(channels).toContain('update-error')
+    expect(channels).not.toContain('update-download-error')
+  })
+
+  it("'update-downloaded'도 깃발을 내린다", async () => {
+    fakeUpdater.emit('download-progress', { percent: 99 })
+    fakeUpdater.emit('update-downloaded', {})
+    sent.length = 0
+    hourly().fn()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(sent.map((s) => s[0])).toContain('update-error')
   })
 })

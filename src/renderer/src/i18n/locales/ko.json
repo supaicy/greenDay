@@ -421,7 +421,7 @@
     "updateDownloading": "다운로드 중… {{percent}}%",
     "updateInstall": "재시작하여 설치",
     "updateDownloadNow": "지금 다운로드",
-    "updateDownloadFailed": "다운로드 실패 — 네트워크 연결을 확인하고 다시 시도하세요",
+    "updateDownloadFailed": "업데이트를 받거나 설치하지 못했습니다",
     "updateDownloadRetry": "다시 다운로드",
     "updateViewRelease": "릴리스 노트 보기",
     "notifPermProbeSent": "테스트 알림을 보냈습니다. 배너가 보이지 않았다면 시스템 설정 → 알림에서 Greenday를 허용하세요.",
