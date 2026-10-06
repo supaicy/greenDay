@@ -22,6 +22,12 @@
   출하물에 닿는 둘: `electron-updater` 6.8.3 → 6.8.9(교차 출처 리다이렉트에서
   `Authorization` 헤더 유출, prod 의존성), `uuid` 11.1.0 → 11.1.1(버퍼 경계 검사).
 
+**2026-10-06 재측정: 그 뒤 새로 공개된 권고 18건**(high 8 · moderate 10). 비파괴
+`npm audit fix`로 undici·http-cache-semantics·source-map-js 3건을 닫아 **15건**이 남았다
+(아래 [P2] 남은 권고). audit이 "바로 고칠 수 있다"고 표시한 fast-glob·postcss-nested·
+electron-builder-squirrel-windows는 상위 패키지 경유 표시라 실제로는 안 닫혔다 —
+**표시 개수가 아니라 고친 뒤 재조회한 값을 적을 것.**
+
 **검증하지 못한 것:** 서명·공증·MAS 업로드는 인증서가 필요하다. electron-builder
 업그레이드는 설정 파싱과 패키징까지만 확인했다 — **첫 실제 릴리스 때 그 경로를
 반드시 다시 봐야 한다.**
@@ -44,9 +50,11 @@
    `com.begreen.greenday`(쓸 것)의 Name이 같아서, 프로파일 드롭다운과 **App Store
    Connect의 Bundle ID 드롭다운**에서 잘못 고르기 쉽다. ASC 앱 레코드는 만든 뒤에
    Bundle ID를 바꿀 수 없다. 옛 것의 Description을 `Greenday (OLD — do not use)`로
-   바꿔 두면 된다(Identifier는 못 바꾸지만 이름은 바뀐다). **지우지는 말 것** —
-   배포된 적이 없어 지워도 안전하지만 얻는 것이 없고, 참조하는 프로파일이 있으면
-   삭제가 막히거나 그 프로파일이 무효가 된다.
+   바꿔 두거나, **프로파일 먼저 지우고 App ID를 지워도 된다**(2026-09-30 사용자에게
+   안내한 방식). 배포된 적이 없고 저장소 어디도 `com.supaicy.haru`를 쓰지 않는다(확인함).
+   지운 Identifier는 다시 등록할 수 없지만 다시 쓸 일이 없다. 순서만 지킬 것 — App ID를
+   참조하는 프로파일이 남아 있으면 삭제가 막히거나 그 프로파일이 무효가 된다.
+   `com.supaicy.bicmac`(BicMac)은 별개 앱이라 건드리지 않는다.
 2. **`GOOGLE_OAUTH_CLIENT_ID` 가 없다.** Google Cloud 콘솔 → 사용자 인증 정보 →
    OAuth 클라이언트 ID → **데스크톱 앱** 유형(번들 ID를 묻는 iOS 유형이 아니다).
    범위는 `calendar.app.created` 하나. 비밀이 아니다 — 클라이언트 보안 비밀은 쓰지 않는다.
@@ -60,11 +68,37 @@ GitHub Actions 자동화는 시크릿 7개가 더 필요하다(현재 `HOMEBREW_
 `APPLE_API_ISSUER`, `APPLE_TEAM_ID`, `GOOGLE_OAUTH_CLIENT_ID`. 로컬 릴리스만
 한다면 없어도 된다.
 
+### [P2] 남은 dev 의존성 권고 15건 — 위험 수용 (2026-10-06, 재검토 2027-01-06)
+
+고칠 버전이 **존재하지 않거나** 메이저 이주가 필요한 것들이다. 판단 기준은 "dev 의존성이라
+괜찮다"가 아니라(electron·react도 devDependencies라 `--omit=dev` 0건은 출하물 안전의
+증거가 못 된다 — codex 지적) **취약 함수에 바깥 사람이 정한 입력이 닿는가**다.
+
+| 경로 | 권고 | 고칠 길 | 닿는 입력 |
+|---|---|---|---|
+| tailwindcss 3.4.19 → braces 3.0.3, micromatch, chokidar, fast-glob | 깊게 중첩된 패턴의 스택 소진 DoS (high) | braces 패치 버전 없음(3.0.3이 최신). Tailwind 4 이주 | `tailwind.config.js`의 content 글롭 — 우리가 쓴 고정 문자열뿐 |
+| tailwindcss → postcss-nested 6.2.0 → postcss-selector-parser 6.1.4 | 평탄한 선택자 파싱 이차 복잡도 (moderate) | 7.1.6에만 있음. postcss-nested 6.x가 ^6을 요구 → Tailwind 4 | `src/renderer/src/index.css`(324줄)와 Tailwind 생성 CSS — 외부 CSS 없음 |
+| electron-builder 26.15.3 → app-builder-lib → @electron/get 3 → global-agent → roarr → sprintf-js 1.1.3 | 무제한 정밀도 지정자 DoS (moderate) | sprintf-js 패치 없음. @electron/get 5.x는 global-agent를 뺐지만 ESM·Node≥22.12 — builder가 올려야 함. audit이 권하는 26.5.0은 **다운그레이드**라 거부 | roarr 로그 포맷 문자열 — 라이브러리 상수, 패키징 때만 실행 |
+
+출하되는 `app.asar`에는 `dependencies`만 들어가고 위 패키지는 하나도 없다. 렌더러
+번들에도 빌드 도구는 들어가지 않는다.
+
+**재검토:** Tailwind 4 이주(출시 후 별도 작업), electron-builder가 @electron/get 5로 올리는
+릴리스, 또는 2027-01-06 중 가장 이른 때.
+
+**Tailwind 4 이주 때 함께:** `tailwind-merge`를 2.6 → 3.x로 되돌린다. 2026-10-06에
+Tailwind 3 위에 Tailwind 4 전용인 3.6.0이 깔려 있던 것을 2.6으로 맞췄다. 소스의 클래스 토큰
+550개 전 쌍(약 30만)에서 두 버전 출력이 같음을 확인한 뒤라 동작 변화는 없다.
+
 ### [P3] bisect 가능성
 
 수정 38건을 병렬 적용하면서 여러 건이 같은 파일(`useStore.ts`·`ipc-handlers.ts` 등)을
 건드렸고, 먼저 커밋된 쪽이 옆 수정의 변경을 함께 안고 갔다. **브랜치 끝은 전부 초록**이지만
 중간 커밋 일부는 단독으로 빌드되지 않는다. 히스토리를 정리하려면 rebase가 필요하다.
+
+**처리 (2026-10-06 결정):** 트렁크에는 **squash 병합**으로 올린다 — 트렁크 이력은 커밋
+하나라 bisect가 깨지지 않고, 결함별 세부 커밋은 원격 브랜치와 PR에 남는다. rebase로
+61개를 다시 쓰지 않는다(일부는 커밋 설명과 실제 변경도 어긋나 있어 보존할 가치가 낮다).
 
 ### [P4] 이미 고아가 된 데이터
 
@@ -76,6 +110,12 @@ GitHub Actions 자동화는 시크릿 7개가 더 필요하다(현재 `HOMEBREW_
 MAS 샌드박스 빌드, 실제 iCloud·Google 서버 왕복, 알림 권한 승인 상태, 실제 라이선스
 활성화(`IS_ENFORCED = false`로 테스트), 다중 디스플레이. 동기화 수정들은 서버 대역 위에서만
 검증됐다.
+
+**MAS 샌드박스 검증은 TestFlight로 한다(2026-10-06 결정).** `mas:build`는 Apple
+Distribution 서명이라 이 맥에서 바로 실행되지 않는다 — 로컬에서 띄우려면 `mas-dev` 타깃과
+이 맥을 등록한 개발 프로파일이 따로 필요하다(codex 지적, 원래 계획의 "로컬 샌드박스
+검증"은 성립하지 않았다). 대신 업로드 → Mac용 TestFlight 내부 테스트로 **심사에 낼 바로
+그 바이너리**를 설치해 확인한다. 특히 Google 로그인의 루프백 콜백.
 
 ## 트렁크 결정 (2026-08-15, 확정)
 

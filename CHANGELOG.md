@@ -11,6 +11,23 @@ All notable changes to this project will be documented in this file.
 
 보고서: `docs/reports/2026-09-25-전체-진단.html`
 
+### Changed — 2026-10-06 출시 준비
+
+- **설정 창이 닫히자마자 다시 열리던 것.** 닫힘 신호가 `toggleSettings()`(토글)를 불러서,
+  닫힘 애니메이션(150ms) 중에 Escape나 바깥 클릭이 한 번 더 오면 도로 열렸다. 패키징한
+  앱을 직접 조작하다 발견했다 — 가려진 창에서는 애니메이션이 멈춰 Escape마다 열림·닫힘이
+  번갈았다. 이제 열려 있을 때만 닫는다.
+- **App Store 업로드가 유니버설 확인을 실제로 한다.** `scripts/mas-upload.sh`가 실행 파일을
+  `-maxdepth 3`으로 찾았는데 실제 위치는 깊이 4라, 그 검사는 한 번도 돌지 않고 조용히 넘어갔다.
+  이제 못 찾거나 유니버설이 아니면 멈추고, 마지막 커밋보다 오래된 같은 버전 pkg도 거절한다.
+- **`mas:build`도 빌드 전에 `npm run verify`를 돈다.** 직접 배포(`release.sh`·CI)에만 있었다.
+- **CI의 Node 20 → 24.** electron 41은 Node ≥ 22.12를 요구한다 — 로컬만 초록이고 태그를 밀면
+  CI에서만 깨질 상태였다. `releaseGate.test.ts`가 electron의 engines와 대조한다.
+- `tailwind-merge` 3.6 → 2.6. 3.x는 Tailwind 4 전용인데 Tailwind 3 위에 깔려 있었다. 소스의
+  클래스 토큰 550개 전 쌍에서 출력이 같음을 확인한 뒤라 화면 변화는 없다.
+- 새로 공개된 dev 의존성 권고 18건 중 3건(undici·http-cache-semantics·source-map-js)을 닫았다.
+  남은 15건은 고칠 버전이 없거나 Tailwind 4가 필요해 위험 판단과 함께 `TODOS.md`에 남겼다.
+
 ### 왜 초록 지표가 놓쳤는가
 
 - `vitest.config.ts`가 시간대를 `Asia/Seoul` 하나로 못박아, 오프셋이 음수인 지역에서만

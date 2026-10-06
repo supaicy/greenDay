@@ -70,8 +70,8 @@ mas:
   extendInfo:
     ITSAppUsesNonExemptEncryption: false
   # developer.apple.com에서 'Mac App Store' 유형으로 발급받아 이 경로에 둔다.
-  # **지금 들어 있는 파일은 옛 App ID(com.supaicy.haru)용이다.** 번들 ID를 바꿨으므로
-  # com.begreen.greenday 로 새로 발급해 교체해야 한다 — 그 전까지
+  # 옛 App ID(com.supaicy.haru)용 파일은 치웠다(2026-10-06 현재 이 경로에 파일이 없다).
+  # com.begreen.greenday 로 새로 발급해 넣어야 한다 — 그 전까지
   # scripts/mas-preflight.sh 의 프로파일 항목이 실패하는 것이 정상이다.
   # 다른 앱의 프로파일로도 빌드는 되고 업로드에서 거절되므로, preflight 가 미리 막는다.
   provisioningProfile: resources/embedded.provisionprofile
