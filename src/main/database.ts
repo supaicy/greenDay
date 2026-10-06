@@ -7,11 +7,13 @@ import {
   fsyncSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   unlinkSync,
   writeFileSync
@@ -168,7 +170,8 @@ let gcArmedNames: readonly string[] | null = null
 /**
  * **붙들려 있는 동안 미뤄 둔 파괴적 파일 조작.**
  *
- * `holdSaves()`는 "디스크 쓰기를 붙든다"는 약속인데, 격리(rename)와 첨부 GC(unlink)는
+ * `holdSaves()`는 "디스크 쓰기를 붙든다"는 약속인데, 격리(rename)와 첨부 GC(당시 unlink,
+ * 지금은 `attachments-quarantine/`으로의 이동과 30일 지난 격리분의 삭제)는
  * `save()`를 지나지 않는 직접 조작이라 그 가드를 통째로 비껴갔다. 부팅 순서가
  * `holdSaves() → initDatabase() → runMigrationOnBoot()`(index.ts)이므로, 첫 실행에서
  * 그 둘이 **전환 전 백업(`backup-before-greenday-2/`)보다 먼저** 돌았다:
@@ -461,7 +464,7 @@ function flushSave(): boolean {
   // **종료 플러시는 붙들려 있어도 쓴다.** 그러니 미뤄 둔 격리가 남아 있으면 여기서
   // 반드시 먼저 치운다 — 안 그러면 우리 데이터가 손상본 자리로 rename돼 사용자가
   // 잃은 원본이 통째로 사라진다. 첨부 GC는 미룬 채로 둔다: 종료 직전에 파일을
-  // 지워서 얻을 것이 없고, 다음 부팅이 어차피 다시 판정한다.
+  // 걷어서 얻을 것이 없고, 다음 부팅이 어차피 다시 판정한다.
   quarantineDeferred()
   try {
     commitSync(revision)
@@ -1538,40 +1541,160 @@ function listAttachmentNames(): string[] {
   }
 }
 
+/** 걷어 낸 첨부가 진짜로 지워지기 전에 머무는 기간. 그동안은 손으로 되찾을 수 있다. */
+const ATTACHMENT_QUARANTINE_MS = 30 * 24 * 60 * 60 * 1000
+
 /**
- * 참조가 사라진 첨부 사본을 지운다. 지운 개수를 돌려준다.
+ * 걷어 낸 첨부가 머무는 폴더 — `<userData>/attachments-quarantine/`.
+ *
+ * **첨부 폴더 안이 아니라 옆이다.** 안에 두면 다음 스윕의 `listAttachmentNames()`와
+ * 백업 아카이브의 폴더 훑기(`readdirSync(attachmentsDir)`)가 그것을 다시 본다.
+ */
+function attachmentQuarantineDir(): string {
+  return path.join(path.dirname(attachmentsDir), 'attachments-quarantine')
+}
+
+/**
+ * 격리 폴더를 **진짜 디렉터리로만** 돌려준다. 없으면 `create`일 때 만든다.
+ *
+ * 그 자리에 심링크가 놓여 있으면 null이다 — 따라가면 이동은 첨부를 바깥 아무 곳에나
+ * 내려놓고, 30일 정리는 첨부 폴더 밖의 파일을 지우는 원시연산이 된다. 파일이 놓여
+ * 있어도 null이다. null이면 호출자는 **아무것도 옮기지도 지우지도 않는다.**
+ */
+function attachmentQuarantineRoot(create: boolean): string | null {
+  const dir = attachmentQuarantineDir()
+  let stat = lstatOrNull(dir)
+  if (!stat && create) {
+    try {
+      mkdirSync(dir)
+    } catch (error) {
+      console.error(`[db] 첨부 격리 폴더 ${dir}를 만들지 못했다 — 첨부를 그대로 둔다`, error)
+      return null
+    }
+    stat = lstatOrNull(dir)
+  }
+  if (!stat) return null
+  if (!stat.isDirectory()) {
+    console.error(`[db] ${dir}가 디렉터리가 아니다(심링크 포함) — 첨부 격리·정리를 건너뛴다`)
+    return null
+  }
+  return dir
+}
+
+/**
+ * 30일이 지난 격리분을 지운다. 최선 노력이다 — 실패는 적어 두고 넘어간다.
+ *
+ * 나이는 격리 폴더 바로 아래 항목(스윕 폴더)의 `lstat` mtime으로 잰다. 스윕 폴더의
+ * mtime은 그 안으로 첨부를 옮겨 넣은 순간이다. `rmSync`의 재귀 삭제는 심링크를
+ * 따라가지 않는다 — 링크를 만나면 링크만 지운다.
+ */
+function purgeAttachmentQuarantine(now: number): void {
+  const dir = attachmentQuarantineRoot(false)
+  if (!dir) return
+  let entries: string[]
+  try {
+    entries = readdirSync(dir)
+  } catch (error) {
+    console.error(`[db] 첨부 격리 폴더 ${dir}를 읽지 못했다`, error)
+    return
+  }
+  for (const name of entries) {
+    const full = path.join(dir, name)
+    const stat = lstatOrNull(full)
+    if (!stat || now - Number(stat.mtimeMs) < ATTACHMENT_QUARANTINE_MS) continue
+    try {
+      rmSync(full, { recursive: true, force: true })
+    } catch (error) {
+      console.error(`[db] 30일 지난 첨부 격리분 ${full}를 지우지 못했다`, error)
+    }
+  }
+}
+
+/**
+ * 참조가 사라진 첨부 사본을 **첨부 폴더에서 걷어 낸다.** 걷어 낸 개수를 돌려준다.
  *
  * 행이 실제로 없어지는 자리(`permanentDeleteTask`·`emptyTrash`)와 시작 시점에
  * 돈다. 시작 시점이 필요한 이유: 참조만 떼는 경로(`updateTask`로 목록에서 제거)는
  * 행을 지우지 않으므로 그때는 아직 "휴지통에서 되돌릴 수 있는" 상태이고,
  * 다음 부팅이 그 판정이 확정되는 첫 지점이다.
+ *
+ * **지우지 않고 `attachments-quarantine/<시각>-XXXXXX/원래이름`으로 옮긴다.**
+ * 여기서 바로 unlink하던 때, `.bak`에서 복구한 부팅이 영구 손실을 냈다: 그 세션의
+ * `data.tasks`는 한 저장 낡아서, 마지막으로 커밋된 쓰기에서 붙인 첨부는 손상된
+ * primary(곧 `.corrupt-*`로 치워진다)에만 참조가 남아 있다. 그것이 "참조 없음"으로
+ * 보여 지워졌고, 남겨 둔 손상본 사본은 없는 파일을 가리키게 됐다. 복구 부팅에서
+ * GC를 건너뛰는 것으로는 못 막는다 — 다음 부팅이 같은 판정으로 지운다. 판정이 틀릴
+ * 수 있는 이상, 걷는 일은 되돌릴 수 있어야 한다.
+ *
+ * **되찾는 법:** `<userData>/attachments-quarantine/` 아래 스윕 폴더에서 파일을
+ * 원래 이름 그대로 `attachments/`로 다시 옮기면, 그 이름을 참조하는 할일이 다시
+ * 연다. 격리분은 30일 뒤 다음 GC가 지운다(`purgeAttachmentQuarantine`).
+ *
+ * 옮기지 못하면(격리 폴더를 못 만듦, 다른 볼륨이라 rename 실패 등) **그 자리에
+ * 둔다** — unlink로 떨어지지 않는다. 디렉터리도 옮기지 않는다: 예전 unlink가 거기서
+ * 실패해 남겼고, 앱이 만드는 모양도 아니다.
  */
 export function gcAttachments(onlyNames?: readonly string[] | null): number {
   if (dbReadFailed || !attachmentsDir) return 0
-  // **붙들려 있으면 한 개도 지우지 않는다.** unlink는 `save()`를 지나지 않으므로
-  // `holdSaves()`가 막지 못했고, 첫 실행에서는 그 때문에 전환 전 백업이 만들어지기
-  // 전에 첨부가 사라졌다 — `.bak`이 낡아 그 할일을 모르면 아직 살아 있는 사진·PDF가
-  // "참조 없음"으로 보인다. 미루면 백업이 원본 폴더를 통째로 담은 뒤에 걷는다.
+  // **붙들려 있으면 한 개도 옮기지 않고, 격리분도 정리하지 않는다.** 이 조작들은
+  // `save()`를 지나지 않으므로 `holdSaves()`가 막지 못했고, 첫 실행에서는 그 때문에
+  // 전환 전 백업이 만들어지기 전에 첨부가 사라졌다 — `.bak`이 낡아 그 할일을 모르면
+  // 아직 살아 있는 사진·PDF가 "참조 없음"으로 보인다. 미루면 백업이 원본 폴더를
+  // 통째로 담은 뒤에 걷는다.
   if (savesHeld) {
     gcAttachmentsWhenReleased = true
     return 0
   }
+  // 이번 스윕이 옮길 것보다 **먼저** 정리한다 — 방금 옮긴 것이 같은 호출에서 지워질
+  // 여지를 처음부터 없앤다(mtime으로도 그럴 수 없지만, 순서로도 막아 둔다).
+  purgeAttachmentQuarantine(Date.now())
   let names = listAttachmentNames()
-  // **예약된 스윕은 예약 시점의 스냅샷 안에서만 지운다** — `gcArmedNames` 주석 참고.
+  // **예약된 스윕은 예약 시점의 스냅샷 안에서만 걷는다** — `gcArmedNames` 주석 참고.
   // 부팅 스윕은 아무것도 넘기지 않아 예전 그대로 전부 본다.
   if (onlyNames) {
     const armed = new Set(onlyNames)
     names = names.filter((name) => armed.has(name))
   }
+  // 파일과 심링크만 옮긴다. 이름은 `readdirSync`가 준 것이라 경로 구분자가 없다 —
+  // 원본은 언제나 첨부 폴더 바로 아래다.
+  const doomed = unreferencedAttachments(names, data.tasks).filter((name) => {
+    const stat = lstatOrNull(path.join(attachmentsDir, name))
+    return Boolean(stat && (stat.isFile() || stat.isSymbolicLink()))
+  })
+  if (doomed.length === 0) return 0
+
+  const quarantineRoot = attachmentQuarantineRoot(true)
+  if (!quarantineRoot) return 0
+  let sweepDir: string
+  try {
+    // 스윕마다 새 폴더 — 같은 이름이 두 번 걸려도 앞선 격리분을 덮지 않는다.
+    // `mkdtempSync`가 접미사를 붙여 같은 밀리초의 두 스윕도 갈라 놓는다.
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    sweepDir = mkdtempSync(path.join(quarantineRoot, `${stamp}-`))
+  } catch (error) {
+    console.error('[db] 첨부 격리 스윕 폴더를 만들지 못했다 — 첨부를 그대로 둔다', error)
+    return 0
+  }
+
   let removed = 0
-  for (const name of unreferencedAttachments(names, data.tasks)) {
+  for (const name of doomed) {
     try {
-      // `unlinkSync`는 링크를 따라가지 않는다 — 링크 자체만 지운다.
-      unlinkSync(path.join(attachmentsDir, name))
+      // `renameSync`는 링크를 따라가지 않는다 — 심링크면 링크 자체가 옮겨진다.
+      renameSync(path.join(attachmentsDir, name), path.join(sweepDir, name))
       removed++
-    } catch {
-      // 디렉터리이거나 권한이 없다. 남긴다.
+    } catch (error) {
+      // 다른 볼륨(EXDEV)이거나 권한이 없다. **지우지 않고** 남긴다 — 다음 GC가 다시 본다.
+      console.error(`[db] 첨부 ${name}를 격리하지 못해 그대로 둔다`, error)
     }
+  }
+  if (removed === 0) {
+    try {
+      rmdirSync(sweepDir)
+    } catch {
+      /* 빈 스윕 폴더가 남아도 30일 뒤 정리된다 */
+    }
+  } else {
+    console.info(`[db] 참조 없는 첨부 ${removed}개를 ${sweepDir}로 옮겼다(30일 보관)`)
   }
   return removed
 }
