@@ -199,6 +199,9 @@ export function HabitTracker() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
+                // 한글 IME 조합 중 Enter·Escape는 IME 몫이다. 반쯤 조합된 이름을 추가하거나
+                // 조합을 끝내려던 Escape가 폼을 닫지 않게 한다(AddTask·SubtaskList·Sidebar와 같다).
+                if (e.nativeEvent.isComposing) return
                 if (e.key === 'Enter') handleAdd()
                 if (e.key === 'Escape') {
                   // 이 Escape는 여기서 쓴다 — 전역 단축키(useKeyboardShortcuts)가 선택까지

@@ -31,7 +31,6 @@ import { PriorityMenu } from './PriorityMenu'
 import { RecurringPicker } from './RecurringPicker'
 import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
-import { SubtaskList } from './SubtaskList'
 import { TagPicker } from './TagPicker'
 import { TaskContextMenu } from './TaskContextMenu'
 import { TaskItem } from './TaskItem'
@@ -1254,6 +1253,9 @@ describe('할일 드래그 — 드래그와 드롭의 effect가 맞는가', () =
  *
  * userEvent가 아니라 fireEvent로 보낸다: 실제 상황과 같게 **입력칸에서** 올라온
  * Escape여야 한다(포커스가 아니라 이벤트 target이 판정 기준이다).
+ *
+ * 하위작업·습관·사이드바 입력칸과 IME 조합 중 Escape는 Escape 계약을 맡은
+ * hooks/useKeyboardShortcuts.test.tsx에 있다.
  */
 describe('입력칸에서 누른 Escape', () => {
   it('할일 추가칸을 닫을 뿐, 열려 있던 상세 패널을 함께 닫지 않는다', () => {
@@ -1271,29 +1273,6 @@ describe('입력칸에서 누른 Escape', () => {
     fireEvent.keyDown(input, { key: 'Escape' })
 
     expect(useStore.getState().showAddTask).toBe(false)
-    expect(useStore.getState().selectedTaskId).toBe('task-1')
-  })
-
-  it('하위작업 입력칸에서는 글자만 지우고 상세 패널을 살려 둔다', () => {
-    useStore.setState({
-      selectedTaskId: 'task-1',
-      showAddTask: false,
-      showQuickAdd: false,
-      tasks: [] as never
-    })
-    const { container } = render(
-      <>
-        <ShortcutHarness />
-        <SubtaskList taskId="task-1" />
-      </>
-    )
-    const input = container.querySelector('input[type="text"]') as HTMLInputElement
-    fireEvent.change(input, { target: { value: '초안 쓰기' } })
-
-    fireEvent.keyDown(input, { key: 'Escape' })
-
-    // 글자만 지우려던 사용자가 작업하던 패널을 통째로 잃었다.
-    expect(input.value).toBe('')
     expect(useStore.getState().selectedTaskId).toBe('task-1')
   })
 

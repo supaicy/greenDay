@@ -68,7 +68,7 @@ export function useKeyboardShortcuts() {
       //    갱신돼 있어서, 이 가드가 없으면 아래 체인이 한 칸 더 내려가 오버레이를
       //    닫은 Escape 한 번이 선택된 태스크까지 해제해버린다.
       // 2. 손으로 쓴 입력칸의 onKeyDown — 할일 추가칸 AddTask, 하위작업 입력칸
-      //    SubtaskList, 새 폴더·새 리스트 이름 Sidebar, 습관 추가 HabitTracker.
+      //    SubtaskList(지울 글자가 있을 때만), 새 폴더·새 리스트 이름 Sidebar, 습관 추가 HabitTracker.
       //    React는 루트에 위임해 처리하므로 그 안의 preventDefault는 버블 단계의
       //    이 window 리스너보다 먼저 네이티브 이벤트에 찍힌다. 예전에는 이 칸들이
       //    알리지 않아서, 추가칸을 닫으려던 Escape가 `showAddTask`를 내린 뒤 체인을
@@ -81,7 +81,12 @@ export function useKeyboardShortcuts() {
       // 아무것도 하지 않게 됐다. 그 칸들에서는 Escape가 패널을 닫는 것이 맞다.
       // 새로 만드는 입력칸이 Escape를 쓴다면 그 핸들러에서 preventDefault를 걸 것
       // (useKeyboardShortcuts.test.tsx가 양쪽을 못 박는다).
+      //
+      // **IME 조합 중이면 아무것도 하지 않는다.** 한글을 치다 누른 Escape는 IME가 조합을
+      // 끝내는 데 쓴다(keydown이 isComposing, WebKit에선 keyCode 229로 온다). 제목칸처럼
+      // 자기 Escape가 없는 칸에서 이걸 받으면 음절 하나를 치다 상세 패널이 닫힌다.
       if (key === 'Escape') {
+        if (e.isComposing || e.keyCode === 229) return
         if (e.defaultPrevented) return
         if (showQuickAdd) {
           useStore.getState().setShowQuickAdd(false)

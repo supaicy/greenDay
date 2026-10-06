@@ -18,10 +18,19 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import i18n from '../i18n'
 import { useStore } from '../store/useStore'
 import { HabitTracker } from '../components/habits/HabitTracker'
+import { Sidebar } from '../components/sidebar/Sidebar'
 import { SubtaskList } from '../components/tasks/SubtaskList'
 import { useKeyboardShortcuts } from './useKeyboardShortcuts'
 
-const STORE_KEYS = ['selectedTaskId', 'showQuickAdd', 'showAddTask', 'tasks', 'habits', 'habitLogs'] as const
+const STORE_KEYS = [
+  'selectedTaskId',
+  'showQuickAdd',
+  'showAddTask',
+  'tasks',
+  'habits',
+  'habitLogs',
+  'addHabit'
+] as const
 let storeSnapshot: Record<string, unknown>
 
 beforeAll(async () => {
@@ -82,6 +91,89 @@ describe('자기 Escape가 없는 입력칸 — 상세 패널을 닫는다', () 
 
     expect(useStore.getState().selectedTaskId).toBe(null)
   })
+
+  it('하위작업 입력칸이 비어 있으면 지울 글자가 없으니 패널을 닫는다', () => {
+    // 하위작업 입력칸은 상세 패널에 늘 열려 있다. 빈 칸에서도 Escape를 가져가면
+    // 그 칸에 포커스가 있는 한 Escape로 패널을 닫을 길이 없다.
+    useStore.setState({ tasks: [] as never })
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <SubtaskList taskId="task-1" />
+      </>
+    )
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(useStore.getState().selectedTaskId).toBe(null)
+  })
+})
+
+/**
+ * 한글 IME: 조합 중 Escape는 IME가 조합을 끝내는 데 쓴다. 이때 keydown은
+ * `isComposing: true`(WebKit/Chromium은 keyCode 229도 함께)로 온다. 제목칸처럼 자기
+ * Escape가 없는 칸에서 이걸 패널 닫기로 받으면 음절 하나를 치다 패널이 사라진다.
+ */
+describe('IME 조합 중 Escape — 아무것도 닫지 않는다', () => {
+  it('isComposing인 Escape는 선택을 해제하지 않는다', () => {
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <input type="text" defaultValue="장보" />
+      </>
+    )
+    const input = container.querySelector('input') as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true })
+
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+
+  it('keyCode 229(조합 중 표지)인 Escape도 같다', () => {
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <input type="text" defaultValue="장보" />
+      </>
+    )
+    const input = container.querySelector('input') as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape', keyCode: 229 })
+
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+
+  it('습관 이름칸: 조합 중 Enter는 반쯤 조합된 이름을 추가하지 않는다', () => {
+    const addHabit = vi.fn()
+    useStore.setState({ habits: [] as never, habitLogs: [] as never, addHabit: addHabit as never })
+    const { container } = render(<HabitTracker />)
+    fireEvent.click(screen.getAllByRole('button', { name: new RegExp(i18n.t('habits.add')) })[0])
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '운도' } })
+
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+
+    expect(addHabit).not.toHaveBeenCalled()
+  })
+
+  it('습관 이름칸: 조합 중 Escape는 폼을 닫지 않는다', () => {
+    useStore.setState({ habits: [] as never, habitLogs: [] as never })
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <HabitTracker />
+      </>
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: new RegExp(i18n.t('habits.add')) })[0])
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement
+    fireEvent.change(input, { target: { value: '운도' } })
+
+    fireEvent.keyDown(input, { key: 'Escape', isComposing: true })
+
+    expect(container.querySelector('input[type="text"]')).not.toBeNull()
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
 })
 
 describe('Escape를 자기 몫으로 쓰는 입력칸 — 상세 패널을 살려 둔다', () => {
@@ -136,6 +228,22 @@ describe('Escape를 자기 몫으로 쓰는 입력칸 — 상세 패널을 살�
     fireEvent.keyDown(input, { key: 'Escape' })
 
     expect(container.querySelector('input[type="text"]')).toBeNull()
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+
+  it('새 폴더 이름칸(Sidebar)은 폼만 닫는다', () => {
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <Sidebar />
+      </>
+    )
+    fireEvent.click(screen.getByTitle(i18n.t('nav.addFolder')))
+    const input = screen.getByPlaceholderText(i18n.t('nav.folderNamePlaceholder')) as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(container.querySelector(`input[placeholder="${i18n.t('nav.folderNamePlaceholder')}"]`)).toBeNull()
     expect(useStore.getState().selectedTaskId).toBe('task-1')
   })
 })
