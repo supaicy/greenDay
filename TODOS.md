@@ -90,6 +90,73 @@ GitHub Actions 자동화는 시크릿 7개가 더 필요하다(현재 `HOMEBREW_
 Tailwind 3 위에 Tailwind 4 전용인 3.6.0이 깔려 있던 것을 2.6으로 맞췄다. 소스의 클래스 토큰
 550개 전 쌍(약 30만)에서 두 버전 출력이 같음을 확인한 뒤라 동작 변화는 없다.
 
+### [P2] 배포 전 리뷰 3회차에서 남은 것 (2026-10-07, 수정 주기 상한 3에 도달)
+
+ship 리뷰는 수정 주기를 셋까지만 돈다. 3회차에서 나온 것은 CRITICAL이 없고 화면·디스크 불일치나
+데이터 손실도 없어서, 다시 리뷰받지 못할 로직 변경을 넣지 않고 여기 남긴다. **출시 후 첫 작업으로.**
+
+- **되돌리기가 이전 삭제의 행까지 끌어올린다** (`database.ts` `restoreTask`의 '이미 살아 있는 행' 분기 —
+  리뷰어 셋이 따로 발견). 이 분기는 `deleted_with === id`만 보고 시각은 안 본다. A→{B,D}: A 삭제(T1) →
+  휴지통에서 B 복원(A 함께 살아남, D는 남김) → A 다시 삭제(T2) → Cmd+Z가 T1의 D까지 살린다. 일괄 되돌리기는
+  뿌리가 아닌 id에도 restore를 불러 같은 분기를 탄다. 화면은 main의 답을 그대로 옮기므로 화면과 디스크는
+  일치하고 지운 것도 다시 지울 수 있다 — 과잉 복원이지 손실이 아니다. 고칠 것: 삭제 시각을 undo 페이로드에
+  싣고 `restoreTask(id, at?)`로 넘겨 이 분기도 `deleted_at === at`을 보게, 일괄 되돌리기는 뿌리만 부르게.
+  휴지통 복원 버튼 연타도 같은 분기를 탄다 — 처리 중에는 버튼을 막을 것.
+- **업데이트 오류 분류가 공유 'error' 이벤트에 기대고 있다** (`index.ts` `checksInFlight`/`downloading`).
+  다운로드 중 정시 확인이 실패하면(GitHub API 403 등) 멀쩡한 다운로드가 '실패'로 보이고, 그때 '다시 다운로드'를
+  누르면 다운로드가 겹친다. 확인 실패는 `checkForUpdates().catch`에서, 다운로드 실패는 `app-ipc.ts`의
+  download-update 거부에서 보내도록 출처에서 가를 것.
+- **리프레시 토큰 없는 Google 연결은 동작하지 않는다** (`isSameGrant`가 그런 그랜트를 자기 자신과도 다르게 본다).
+  `prompt=consent`·`access_type=offline`라 실제로는 드물다. 연결 시점에 `no_refresh_token`으로 거절하거나
+  액세스 토큰으로 비교. 지금은 확보 중 캘린더가 원격에 새로 생기고 저장되지 않을 수 있다.
+- 일괄 되돌리기가 id마다 store를 따로 써서 렌더가 N번(`Promise.all(ids.map(restoreOnMain))`); `resyncFromMain`이
+  진행 중이면 새 요청을 버린다(대기 플래그로 한 번 더); `useRealMain` 테스트 하네스가 진행 중인 비동기 저장을
+  기다리지 않고 임시 폴더를 지운다; `google:connect` 실패 경로 두 곳은 테스트가 없다; `DeletedTaskUndo.subtaskIds`는
+  이제 읽는 곳이 없다; 주간 캘린더 `bg-[#1C1C1E]` 두 곳은 `surface.canvas` 토큰으로.
+
+### [P3] 배포 전 리뷰에서 이월한 것 (2026-10-07, 사용자 결정: TODOS로)
+
+ship 배포 전 리뷰(리뷰어 8 + 레드팀)가 찾은 것 중 출시를 막지 않아 미룬 것. 출처는
+리뷰 로그(`gstack-review-read`)와 PR 본문의 Pre-Landing Review 절.
+
+- **업그레이드 직후 첫 동기화 몰림** (`caldav/sync.ts` 지문의 `wallclock` 마커, 완료 회차 단일화) —
+  완료한 반복 회차가 많은 사용자는 첫 동기화에서 회차마다 PUT이 직렬로 나간다(1년 매일 습관 ≈ 365건).
+  한 번만 일어나는 교정이지만 상한이 없다. 실행당 상한(예: 200) 후 다음 실행으로 넘기거나 진행 표시.
+- **AI 설정을 요청마다 디스크에서 다시 읽음** (`ai-service.ts` `snapshot()` → `hydrateFromDisk()`) —
+  메인 스레드 동기 I/O + safeStorage 복호화가 요청마다. 그리고 `saveAiConfig`가 쓰기 실패를 삼켜서,
+  디스크에 못 쓴 채 방금 켠 localOnly가 다음 요청에 디스크의 옛 값으로 되돌아갈 수 있다(보안 리뷰,
+  신뢰도 5). 한 번만 읽고, 저장 실패는 `setAiConfig`가 던지게.
+- **이중 인코딩된 태그·첨부를 빈 배열로 읽음** (`useStore.ts` `parseStringArray`) — 그 뒤 편집이
+  `[새것]`으로 덮어써 옛 참조를 잃고, 다음 부팅 GC가 파일을 지운다. 한 단계 더 풀어 보기.
+- **부팅 복구 전 스냅숏 없음** (`database.ts` `healUnreachableTasks`) — 바꾼 행의 원래 값을 남기지 않고
+  `.bak`은 다음 저장에 회전된다. 고친 경우가 있으면 `ticktick-data.json.pre-heal-<ts>` 한 번.
+- **일괄 완료가 반복 원본마다 따로 저장** (`useStore.ts` `batchComplete` → `updateTask` k번) — 한 번의 set + IPC로.
+- **저장된 오류 문구가 쓴 순간의 언어로 고정** (`ipc-handlers.ts` `lastError`) — 코드로 저장하고 읽을 때 번역.
+- **Google 오류 코드가 번역표와 컴파일 타임에 묶이지 않음** (`ipc-handlers.ts` `describeGoogleError`의 캐스트).
+- **ErrorBoundary가 테마 키 `'ticktick-theme'`를 따로 적음** — 스토어와 공유하는 상수로.
+- **이주 안내 무결성 검사가 primary가 멀쩡해도 `.bak`까지 파싱** (`migration/handoff.ts` `checkIntegrity`) —
+  `handoff.test.ts`가 `backupReadable`을 계약으로 고정해서 이번에 건드리지 않았다. 숨긴 안내는 이제 검사를 안 한다.
+- **일·주 캘린더의 초점 시각이 다름**(06:00 / 08:00) — 24시간 밴드가 된 뒤라 하나로 맞출지 결정.
+- **단순화 권고(advisory)**: `TIME_OF_DAY`와 `ai-service.ts`의 `TIME_RE` 중복, 정렬 슬롯 "엄격 증가" 규칙이
+  main·렌더러에 복붙, `restoreTask`와 부팅 복구의 조상 걷기 중복, 렌더러 `parsePlainObject`와 main
+  `parseOverrides` 중복, `habitCompletionRate`의 안 쓰는 `windowDays` 인자, `completedOccurrence`가
+  같은 파일의 `toIsoOrNull`·`reanchor`를 다시 구현.
+- **(2회차) Google `invalid_client`가 설치된 모든 사용자의 그랜트를 지운다** — 클라이언트를 실수로 지웠다
+  복구하는 운영 사고에도 전부 재연결이 필요해진다. 지울 때 revoke도 하지 않아 Google 계정 쪽 승인은 남는다.
+  invalid_client는 토큰을 남기고 오류만 보여 줄지, 지우기 전에 best-effort revoke를 할지 결정(보안, 신뢰도 4).
+- **(2회차) 토큰 파일을 잠깐 못 읽은 것을 '연결 해제'로 본다** (`readGoogleConfig`가 복호화 실패를 `tokens:null`로) —
+  거절 아닌 경로에서 그랜트를 지울 수 있다. 원본 파일의 tokens_enc 유무로 판정(신뢰도 3).
+- **(2회차) Keychain을 거부한 사용자는 실행마다 sentinel 재작성을 시도** (`arrival.ts` `refreshSentinelIfOpen`) —
+  두 번째 Keychain 창이 뜨는지 실기 확인 필요. 뜬다면 denied·unavailable은 건너뛴다(신뢰도 4).
+- **(2회차) 복제와 반복 스폰이 직계 하위작업만 복사** (`duplicateTask`, 반복 다음 회차) — 3단계 트리의 손자가
+  빠진다. 삭제·복원은 이제 모든 후손을 다루므로 맞출지 결정.
+- **(2회차) 종일 영역 높이 상한에 넘침 표시가 없다** — 주간 칸 96px·일간 30vh를 넘는 종일 할일은 스크롤하기 전엔
+  안 보인다(macOS 오버레이 스크롤바). 하단 페이드나 "+N".
+- **(2회차) 트리 탐색 비용·중복** — `trashBatch`가 뿌리마다, 렌더러 `batchDelete`가 id마다 자식 인덱스를 새로 만든다
+  (O(k·n), 할일 앱 규모에서는 수십 ms). main `descendantsOf`와 렌더러 `descendantIds`를 `src/shared/`로 하나로.
+- **테스트 빈틈**: AI 스트림 오류 채널의 요청 id 가드(`useStore.test.ts`의 가짜 버스가 오류 채널을 비워 둠),
+  `createWindow`가 네비게이션 가드를 실제로 거는지(`navigation-guard.test.ts`는 판정만 본다).
+
 ### [P3] bisect 가능성
 
 수정 38건을 병렬 적용하면서 여러 건이 같은 파일(`useStore.ts`·`ipc-handlers.ts` 등)을

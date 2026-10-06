@@ -526,8 +526,8 @@ interface DeletedTaskUndo {
   /**
    * 부모와 **같은 조작으로** 함께 내려간 자손(하위작업만이 아니라 깊이와 상관없이)의 id.
    * 되돌릴 때 무엇을 올릴지는 이 목록이 아니라 main의 `restoreTask` 답이 정한다 — 그
-   * 사이 휴지통에서 일부를 복원했을 수 있다. 이름은 이미 쌓인 undo 페이로드와 맞추려고
-   * 그대로 둔다.
+   * 사이 휴지통에서 일부를 복원했을 수 있다. 지금은 기록용이고 읽는 곳이 없다(undo 스택은
+   * 메모리에만 있어 맞출 옛 페이로드도 없다 — 정리는 TODOS).
    */
   subtaskIds: string[]
 }
@@ -988,11 +988,8 @@ export const useStore = create<Store>((set, get) => ({
     if (task) {
       get().pushUndo({
         type: 'deleteTask',
-        // **자손 id까지 싣는다.** 아래 `set`이 자손도 함께 휴지통으로
-        // 옮기는데(main의 `deleteTask`도 같다), undo 데이터가 부모 하나뿐이면
-        // 되돌리기가 부모만 되살려 하위작업이 휴지통에 영영 남았다. 화면에서는
-        // 하위작업이 통째로 사라진 것으로 보인다. `batchDelete`는 처음부터
-        // id 목록을 싣고 있었다 — 단건 경로만 빠져 있었다.
+        // 되돌리기는 부모 id 하나로 main의 `restoreTask`에 묻고, main이 실제로 되살린
+        // id만 화면에 옮긴다(`restoreOnMain`). 자손 목록은 기록으로만 싣는다.
         data: { task, subtaskIds } satisfies DeletedTaskUndo,
         description: i18n.t('undo.taskDeleted', { title: task.title }),
         timestamp: Date.now()
@@ -1143,7 +1140,8 @@ export const useStore = create<Store>((set, get) => ({
     const subtaskIds = ids.flatMap((id) => descendantIds(allTasks, id))
     const allDeletedIds = [...new Set([...ids, ...subtaskIds])]
     const deletedTasks = allTasks.filter((t) => allDeletedIds.includes(t.id))
-    // 삭제 전 undo 스택에 ID 목록 저장 (popUndo deleteTasks 핸들러가 trashTasks에서 ID로 복원)
+    // 삭제 전 undo 스택에 ID 목록 저장 — 되돌릴 때 id마다 main에 묻고, main이 되살렸다고
+    // 답한 것만 휴지통에서 옮긴다.
     get().pushUndo({
       type: 'deleteTasks',
       description: i18n.t('undo.tasksDeleted', { count: allDeletedIds.length }),

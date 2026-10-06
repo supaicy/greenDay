@@ -31,8 +31,8 @@ interface Setup {
   lastCommit: number | null
   /** 'clt-only'면 기본 git은 실패하고 Command Line Tools(DEVELOPER_DIR)로만 돈다 */
   git?: 'clt-only'
-  /** 자격증명을 환경변수로 준다 — 그러면 검증·업로드(xcrun 가짜)까지 간다 */
-  creds?: boolean
+  /** 자격증명 경로. 'env'는 환경변수로, 'keychain'은 Apple ID만 환경변수·암호는 키체인에서 */
+  creds?: 'env' | 'keychain'
 }
 
 const PASSWORD = 'abcd-efgh-ijkl-mnop'
@@ -75,19 +75,26 @@ function upload(s: Setup): { code: number | null; out: string; args: string } {
         ? `[ "$DEVELOPER_DIR" = /Library/Developer/CommandLineTools ] || { echo "Xcode license" >&2; exit 69; }; echo ${s.lastCommit}`
         : `echo ${s.lastCommit}`
   stub(bin, 'git', gitBody)
-  stub(bin, 'security', 'exit 1')
+  // 키체인 경로: `security find-generic-password -w`가 암호를 내놓는다.
+  stub(bin, 'security', s.creds === 'keychain' ? `echo "${PASSWORD}"` : 'exit 1')
   // 받은 인자를 그대로 적어 둔다 — 암호가 프로세스 목록(argv)에 실렸는지 본다.
   const argsLog = join(root, 'xcrun-args')
   stub(
     bin,
     'xcrun',
     s.creds
-      ? `echo "$*" >> "${argsLog}"; echo "XCRUN-CALLED"; case "$*" in *--validate-app*) echo "VERIFY SUCCEEDED";; esac; exit 0`
+      ? // @env:로 넘기면 altool은 자기 환경에서 읽는다 — 거기 없으면 실패하는 진짜와 같게.
+        `[ "$APPLE_APP_PASSWORD" = "${PASSWORD}" ] || { echo "NO-ENV-PASSWORD"; exit 1; }; echo "$*" >> "${argsLog}"; echo "XCRUN-CALLED"; case "$*" in *--validate-app*) echo "VERIFY SUCCEEDED";; esac; exit 0`
       : 'echo "XCRUN-CALLED"; exit 1'
   )
 
   const { APPLE_ID: _id, APPLE_APP_PASSWORD: _pw, ...env } = process.env
-  const creds = s.creds ? { APPLE_ID: 'dev@example.com', APPLE_APP_PASSWORD: PASSWORD } : {}
+  const creds =
+    s.creds === 'env'
+      ? { APPLE_ID: 'dev@example.com', APPLE_APP_PASSWORD: PASSWORD }
+      : s.creds === 'keychain'
+        ? { APPLE_ID: 'dev@example.com' }
+        : {}
   const r = spawnSync('bash', [SCRIPT], {
     cwd: root,
     encoding: 'utf-8',
@@ -149,11 +156,20 @@ describe('mas-upload 산출물 검사', () => {
   //   why_new=no test reached the altool calls with credentials before; seam=none
   // argv는 같은 맥의 어떤 프로세스든 `ps`로 읽는다. 검증·업로드는 몇 분 걸린다.
   it('앱 암호를 명령줄 인자로 넘기지 않는다 — 환경변수 참조로만', () => {
-    const r = upload({ app: true, archs: UNIVERSAL, lastCommit: FRESH, creds: true })
+    const r = upload({ app: true, archs: UNIVERSAL, lastCommit: FRESH, creds: 'env' })
     expect(r.out).toContain('업로드 완료')
     expect(r.args).toContain('--validate-app')
     expect(r.args).toContain('--upload-app')
     expect(r.args).toContain('@env:APPLE_APP_PASSWORD')
+    expect(r.args).not.toContain(PASSWORD)
+  })
+
+  // 키체인에서 읽은 암호는 셸 변수일 뿐 환경에 없다 — export가 빠지면 @env:가 빈 값을 읽는다.
+  // 환경변수로 받은 경우는 bash가 이미 물려받아 export 없이도 통과하므로 이 경로가 필요하다.
+  it('키체인에서 읽은 암호도 altool 환경으로 넘긴다', () => {
+    const r = upload({ app: true, archs: UNIVERSAL, lastCommit: FRESH, creds: 'keychain' })
+    expect(r.out).not.toContain('NO-ENV-PASSWORD')
+    expect(r.out).toContain('업로드 완료')
     expect(r.args).not.toContain(PASSWORD)
   })
 
