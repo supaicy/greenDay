@@ -21,7 +21,7 @@
     "verify": "npm run typecheck && npm run lint && npm test",
     "release": "bash scripts/release.sh",
     "mas:preflight": "bash scripts/mas-preflight.sh",
-    "mas:build": "bash scripts/mas-preflight.sh && GREENDAY_RELEASE=1 electron-vite build && electron-builder --mac mas --universal",
+    "mas:build": "bash scripts/mas-preflight.sh && npm run verify && GREENDAY_RELEASE=1 electron-vite build && electron-builder --mac mas --universal",
     "mas:upload": "bash scripts/mas-upload.sh"
   },
   "dependencies": {

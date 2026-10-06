@@ -38,17 +38,37 @@ fi
 PKG="$PKG_LIST"
 echo "  $PKG ($(du -h "$PKG" | cut -f1))"
 
-# 유니버설인지 확인. 한쪽 아키텍처만 담겨 있으면 절반의 사용자가 못 쓴다.
-APP_BIN="$(find "$(dirname "$PKG")" -maxdepth 3 -path "*$APP_NAME.app/Contents/MacOS/*" -type f 2>/dev/null | head -1)"
-if [ -n "$APP_BIN" ]; then
-  archs="$(lipo -archs "$APP_BIN" 2>/dev/null)"
-  if [ -n "$archs" ]; then
-    case "$archs" in
-      *arm64*x86_64*|*x86_64*arm64*) echo "  아키텍처: $archs (유니버설)" ;;
-      *) echo "  경고: 아키텍처가 '$archs' 뿐입니다 — 나머지 맥에서는 실행되지 않습니다" >&2 ;;
-    esac
-  fi
+# **같은 버전의 지난 pkg를 걸러 낸다.** `mas:build`는 dist/를 비우지 않고 pkg 이름에는
+# 버전만 들어가므로, 버전을 안 올린 채 소스를 고치고 빌드를 잊으면 예전 pkg가 위
+# 검사를 그대로 통과했다. pkg가 마지막 커밋보다 오래됐으면 그 커밋은 들어 있지 않다.
+LAST_COMMIT="$(git log -1 --format=%ct 2>/dev/null || true)"
+PKG_MTIME="$(stat -f %m "$PKG")"
+if [ -n "$LAST_COMMIT" ] && [ "$PKG_MTIME" -lt "$LAST_COMMIT" ]; then
+  echo "ERROR: pkg가 마지막 커밋보다 오래됐습니다 — 최신 소스가 들어 있지 않습니다." >&2
+  echo "    rm -rf dist/mas* && npm run mas:build" >&2
+  exit 1
 fi
+
+# 유니버설인지 확인. 한쪽 아키텍처만 담겨 있으면 절반의 사용자가 못 쓴다.
+#
+# 실행 파일은 pkg 옆 `Greenday.app/Contents/MacOS/Greenday`로 **깊이 4**다. 예전에는
+# -maxdepth 3이라 한 번도 찾지 못했고, 못 찾으면 조용히 넘어가서 이 검사는 실제로
+# 돈 적이 없었다(2026-10-06 codex 검토에서 발견). 이제 못 찾거나 못 읽어도 멈춘다 —
+# 확인하지 못한 것을 확인한 것처럼 올리지 않는다.
+APP_BIN="$(dirname "$PKG")/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+if [ ! -f "$APP_BIN" ]; then
+  echo "ERROR: pkg 옆에 앱 실행 파일이 없어 아키텍처를 확인할 수 없습니다: $APP_BIN" >&2
+  echo "    rm -rf dist/mas* && npm run mas:build" >&2
+  exit 1
+fi
+archs="$(lipo -archs "$APP_BIN" 2>/dev/null)"
+case "$archs" in
+  *arm64*x86_64*|*x86_64*arm64*) echo "  아키텍처: $archs (유니버설)" ;;
+  *)
+    echo "ERROR: 아키텍처가 '${archs:-알 수 없음}'입니다 — 유니버설이 아니면 일부 맥에서 실행되지 않습니다." >&2
+    exit 1
+    ;;
+esac
 
 echo "── 2/3  Apple 계정"
 

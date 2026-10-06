@@ -77,4 +77,30 @@ describe('릴리스 경로 헬스 스택', () => {
     ).toBeGreaterThanOrEqual(0)
     expect(gate, '헬스 스택이 빌드 뒤에 있다').toBeLessThan(build)
   })
+
+  it('mas:build 도 빌드보다 먼저 헬스 스택을 돈다', () => {
+    // App Store 경로만 비어 있었다(2026-10-06 codex 검토). 의존성을 바꾼 뒤에도
+    // 지난번 초록 기록을 믿고 pkg 를 만들면, 심사에 들어가는 바이너리가 가장 덜
+    // 검증된 것이 된다.
+    const pkg = JSON.parse(readFileSync(PACKAGE_JSON, 'utf-8')) as {
+      scripts: Record<string, string | undefined>
+    }
+    const mas = pkg.scripts['mas:build'] ?? ''
+    expect(mas.search(BUILDS), 'mas:build 에서 electron-vite build 를 못 찾았다').toBeGreaterThanOrEqual(0)
+    expect(mas.search(RUNS_VERIFY), 'mas:build 에 헬스 스택이 없다').toBeGreaterThanOrEqual(0)
+    expect(mas.search(RUNS_VERIFY), '헬스 스택이 빌드 뒤에 있다').toBeLessThan(mas.search(BUILDS))
+  })
+
+  it('release.yml 의 Node 가 Electron 이 요구하는 버전 이상이다', () => {
+    // electron 41 은 Node >= 22.12.0 을 요구하는데 워크플로는 20 에 머물러 있었다.
+    // 로컬(24)에서 초록이어도 태그를 밀면 CI 에서만 깨진다.
+    const yml = stripComments(readFileSync(WORKFLOW, 'utf-8'))
+    const m = yml.match(/node-version:\s*['"]?(\d+)/)
+    expect(m, 'release.yml 에서 node-version 을 못 찾았다').not.toBeNull()
+    const engines = JSON.parse(
+      readFileSync(join(ROOT, 'node_modules', 'electron', 'package.json'), 'utf-8')
+    ) as { engines?: { node?: string } }
+    const need = Number(engines.engines?.node?.match(/(\d+)/)?.[1] ?? 0)
+    expect(Number(m?.[1]), `CI Node ${m?.[1]} < electron 요구 ${engines.engines?.node}`).toBeGreaterThanOrEqual(need)
+  })
 })

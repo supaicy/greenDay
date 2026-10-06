@@ -56,7 +56,7 @@ echo "── 2/6  프로비저닝 프로파일"
 
 if [ ! -f "$PROFILE" ]; then
   bad "프로파일이 없습니다: $PROFILE"
-  note "developer.apple.com → Profiles → 'Mac App Store' 유형으로 발급"
+  note "developer.apple.com → Profiles → Distribution → 'Mac App Store Connect' 유형으로 발급"
   note "App ID는 반드시 $BUNDLE_ID 여야 합니다"
   note "받은 파일을 $PROFILE 로 저장하세요"
 else

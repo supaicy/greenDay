@@ -22,7 +22,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # electron 41 은 Node >= 22.12 를 요구한다 — 20 에서는 로컬만 초록이고
+          # 태그를 밀면 여기서만 깨졌다. 로컬 검증과 같은 메이저로 맞춘다.
+          # (releaseGate.test.ts 가 electron 의 engines 와 대조한다)
+          node-version: 24
           cache: npm
 
       - run: npm ci
