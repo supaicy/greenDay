@@ -12,7 +12,7 @@
  * 달라지지 않는다.
  */
 
-import { BrowserWindow, shell, type WebContents } from 'electron'
+import { app, BrowserWindow, shell, type WebContents } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { appDocumentUrl, isAppDocumentUrl } from './navigation-guard'
@@ -94,8 +94,16 @@ export function createWindow(): BrowserWindow {
  * `focusMainWindow`)는 그때 그냥 `return`했다 — 창을 닫아 둔 채 브라우저에서
  * 구글 OAuth를 마치고 돌아오면 토큰은 저장되는데 보여 줄 창이 없어 아무 일도
  * 일어나지 않았고, 사용자는 성공했는지 알 길이 없었다.
+ *
+ * **앱이 준비되기 전에는 아무것도 하지 않고 null을 돌려준다.** macOS에서 greenday://
+ * 링크로 앱을 처음 켜면 `open-url`이 'ready'보다 먼저 온다(index.ts가 그래서 그
+ * 리스너를 whenReady 밖에 건다). 그때 `new BrowserWindow`는 "Cannot create
+ * BrowserWindow before app is ready"로 던지고, 살아남더라도 whenReady의
+ * `createWindow()`가 창을 하나 더 만든다. 창은 whenReady가 띄운다 — 콜백 자체는
+ * 호출처가 이 함수와 따로 넘긴다(`receiveOAuthCallback`).
  */
-export function showOrCreateMainWindow(): BrowserWindow {
+export function showOrCreateMainWindow(): BrowserWindow | null {
+  if (!app.isReady()) return null
   const [win] = BrowserWindow.getAllWindows()
   if (!win) return createWindow()
   if (win.isMinimized()) win.restore()
@@ -127,7 +135,10 @@ let quickAddPending = false
 export function requestQuickAdd(): void {
   const hadWindow = BrowserWindow.getAllWindows().length > 0
   const win = showOrCreateMainWindow()
-  if (!hadWindow) {
+  // 준비 전이면 창이 아직 없다 — whenReady가 띄운 창의 렌더러가 단축키를 등록하며
+  // 밀린 것을 가져간다(`flushPendingQuickAdd`). 실제로는 단축키 등록이 렌더러에서
+  // 오므로 이 길에 들어올 일은 없다.
+  if (!win || !hadWindow) {
     quickAddPending = true
     return
   }

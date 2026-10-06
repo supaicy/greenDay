@@ -225,18 +225,38 @@ function bootstrap(): void {
        * 중…"에서 영원히 멈춘다. 라이브러리 오류 문구는 렌더러로 넘기지 않는다 —
        * 사용자 문구는 i18n에 있고, 원문은 여기 로그에 남는 편이 쓸모 있다.
        */
+      //
+      // **확인 실패와 다운로드 실패를 가른다.** 라이브러리는 둘 다 같은 'error'로
+      // 알린다(다운로드 쪽은 `downloadUpdate`의 `dispatchError`). 예전에는 전부
+      // 'update-error'로 보내서, 다운로드가 끊기면 설정이 "업데이트 확인 실패 —
+      // 네트워크를 확인하세요"를 "새 버전 사용 가능" 카드 옆에 띄우고 진행 막대는
+      // 그 자리에서 멈췄다 — 다시 받을 버튼도 돌아오지 않았다.
+      //
+      // 가르는 기준은 **우리가 연 확인이 아직 진행 중인가**다. 확인은 아래
+      // `checkForUpdates`로만 시작되고, 라이브러리는 그 프라미스가 끝나기 **전에**
+      // 'error'를 낸다(`checkForUpdates()`의 catch 절). 그 밖의 'error' — 다운로드,
+      // macOS Squirrel의 네이티브 오류, 설치 실패 — 는 전부 다운로드 단계다. 오류
+      // 문구(`Cannot check for updates:`)로 가르지 않는 것은 라이브러리 내부 문자열이라서다.
+      let checksInFlight = 0
       autoUpdater.on('error', (err) => {
-        console.error('[updater] 업데이트 확인 실패', err)
+        const duringCheck = checksInFlight > 0
+        console.error(duringCheck ? '[updater] 업데이트 확인 실패' : '[updater] 업데이트 다운로드 실패', err)
         const wins = BrowserWindow.getAllWindows()
         if (wins.length > 0) {
-          wins[0].webContents.send('update-error')
+          wins[0].webContents.send(duringCheck ? 'update-error' : 'update-download-error')
         }
       })
 
       // 프라미스를 끊어 준다. 위 리스너가 이미 사용자에게 알렸으므로 여기서 더 할
       // 일은 없지만, 그냥 버리면 그 자체가 처리되지 않은 rejection이 된다.
       const checkForUpdates = (): void => {
-        void autoUpdater.checkForUpdates().catch(() => {})
+        checksInFlight += 1
+        void autoUpdater
+          .checkForUpdates()
+          .catch(() => {})
+          .finally(() => {
+            checksInFlight -= 1
+          })
       }
       checkForUpdates()
       const updateInterval = setInterval(checkForUpdates, 60 * 60 * 1000)
@@ -272,22 +292,40 @@ function bootstrap(): void {
    * "마지막 편집을 잃은 종료와 정상 종료를 구별하라"는 것이었는데(database.ts),
    * 아무도 그 값을 읽지 않고 있었다. 종료를 막지는 않는다 — 못 나가게 가두는
    * 편이 더 나쁘다 — 대신 조용히 잃지는 않게 알린다.
+   *
+   * **알림은 프로세스당 한 번이다.** Windows·Linux는 `window-all-closed` →
+   * `app.quit()` → `before-quit` → `will-quit`으로 이 함수가 세 번 돌고, 디스크가
+   * 막혀 있으면 세 번 다 실패한다 — 같은 대화상자가 줄줄이 떴다.
+   *
+   * **`will-quit`에서도 플러시한다.** `before-quit`은 창이 닫히기 **전**이다. 창이
+   * 닫히면서 TaskDetail이 `beforeunload`로 밀린 노트를, blur로 제목을 보내는데,
+   * 그 update-task가 `save()`의 300ms 디바운스를 걸어 둔 채 프로세스가 먼저
+   * 끝났다. `will-quit`은 창이 전부 닫힌 뒤라 그 쓰기가 이미 도착해 있다.
    */
-  const flushBeforeExit = (): void => {
+  let quitFlushAlerted = false
+  const flushBeforeExit = ({ alert }: { alert: boolean }): void => {
     if (closeDatabase()) return
+    if (!alert || quitFlushAlerted) return
+    quitFlushAlerted = true
     dialog.showErrorBox(uiStrings().quitFlushFailedTitle, uiStrings().quitFlushFailedBody)
   }
 
-  app.on('before-quit', flushBeforeExit)
+  app.on('before-quit', () => flushBeforeExit({ alert: true }))
 
   app.on('window-all-closed', () => {
-    flushBeforeExit()
-    if (process.platform !== 'darwin') {
+    // macOS에서 이 이벤트는 **창이 닫혔다**일 뿐 종료가 아니다 — 앱은 독에 남고
+    // 다음 편집이 저장을 다시 건다. 여기서 "종료 중 저장 실패"를 띄우면 거짓이고,
+    // 진짜 종료 때 `before-quit`이 한 번 더 띄운다. 플러시는 하되 말은 종료 때 한다.
+    const quitting = process.platform !== 'darwin'
+    flushBeforeExit({ alert: quitting })
+    if (quitting) {
       app.quit()
     }
   })
 
   app.on('will-quit', () => {
+    // 창이 닫히며 도착한 마지막 쓰기(위 주석). 할 일이 없으면 바로 true.
+    flushBeforeExit({ alert: true })
     // 리마인더 폴러 정리
     if (reminderInterval) clearInterval(reminderInterval)
     // 라이선스 마감 타이머 정리 — 안 끄면 종료가 최대 24일 지연된다.

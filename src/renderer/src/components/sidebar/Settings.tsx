@@ -240,6 +240,7 @@ export function Settings() {
   const updateChecked = useStore((s) => s.updateChecked)
   const updateFailed = useStore((s) => s.updateFailed)
   const updateDownloadProgress = useStore((s) => s.updateDownloadProgress)
+  const updateDownloadFailed = useStore((s) => s.updateDownloadFailed)
   const updateReady = useStore((s) => s.updateReady)
   const aiConfig = useStore((s) => s.aiConfig)
   const aiConnected = useStore((s) => s.aiConnected)
@@ -714,10 +715,12 @@ export function Settings() {
                   <CheckCircle2 size={13} className={successText(isDark)} />
                   <span className={`text-xs ${labelText(isDark)}`}>{t('settings.updateViaAppStore')}</span>
                 </div>
-              ) : updateFailed ? (
+              ) : updateFailed && !updateAvailable ? (
                 // **실패 가지가 '최신' 가지보다 먼저다.** 뒤에 두면 확인이 실패한
                 // 상태가 `updateChecked && !updateAvailable`에 먼저 걸려 "최신
                 // 버전입니다"라고 거짓말한다 — 버전을 한 번도 못 물어본 채로.
+                // 새 버전을 이미 알고 있으면 띄우지 않는다: 아래 카드가 그 답이고,
+                // 한 시간 뒤 재확인이 실패했다고 그 답이 거짓이 되지는 않는다.
                 <div className="flex items-center gap-1.5 mt-1">
                   <AlertTriangle size={13} className={errorText(isDark)} />
                   <span className={`text-xs ${errorText(isDark)}`}>{t('settings.updateCheckFailed')}</span>
@@ -764,13 +767,36 @@ export function Settings() {
                     </p>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => (updateReady ? window.api.installUpdate?.() : window.api.downloadUpdate?.())}
-                    className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
-                  >
-                    {t(updateReady ? 'settings.updateInstall' : 'settings.updateDownloadNow')}
-                  </button>
+                  <div className="space-y-1.5">
+                    {/* 다운로드가 끊겼다. 막대는 App.tsx가 내렸고, 여기서 무엇이 실패했는지
+                        말하고 같은 버튼을 '다시 받기'로 돌려준다. 확인 실패 문구를 빌려 쓰면
+                        새 버전 카드 옆에서 "확인 실패"라고 말하게 된다. */}
+                    {updateDownloadFailed && !updateReady && (
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle size={13} className={errorText(isDark)} />
+                        <span className={`text-xs ${errorText(isDark)}`}>{t('settings.updateDownloadFailed')}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateReady
+                          ? window.api.installUpdate?.()
+                          : // 실패는 'update-download-error'로 따로 온다. invoke의 거절까지
+                            // 버리지 않으면 렌더러 콘솔에 처리되지 않은 rejection이 남는다.
+                            window.api.downloadUpdate?.()?.catch(() => {})
+                      }
+                      className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
+                    >
+                      {t(
+                        updateReady
+                          ? 'settings.updateInstall'
+                          : updateDownloadFailed
+                            ? 'settings.updateDownloadRetry'
+                            : 'settings.updateDownloadNow'
+                      )}
+                    </button>
+                  </div>
                 )}
 
                 <button

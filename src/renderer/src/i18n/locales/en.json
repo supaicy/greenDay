@@ -421,6 +421,8 @@
     "updateDownloading": "Downloading... {{percent}}%",
     "updateInstall": "Restart to install",
     "updateDownloadNow": "Download now",
+    "updateDownloadFailed": "Download failed — check your network connection and try again",
+    "updateDownloadRetry": "Try download again",
     "updateViewRelease": "View release notes",
     "notifPermProbeSent": "Sent a test notification. If you did not see a banner, allow Greenday in System Settings -> Notifications.",
     "notifPermUnsupported": "This system cannot display notifications, so reminders will not arrive.",

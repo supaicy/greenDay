@@ -62,7 +62,8 @@ vi.mock('electron-updater', () => ({
 
 vi.mock('electron', () => ({
   ipcMain: { handle: (channel: string, listener: Handler) => handlers.set(channel, listener) },
-  app: { getPath: () => '/tmp/greenday-quickadd-test', getVersion: () => '0.0.0-test' },
+  // `showOrCreateMainWindow`는 준비 전에는 창을 만들지 않는다(mainWindow.test.ts).
+  app: { getPath: () => '/tmp/greenday-quickadd-test', getVersion: () => '0.0.0-test', isReady: () => true },
   dialog: { showOpenDialog: vi.fn(), showSaveDialog: vi.fn() },
   Notification: Object.assign(
     vi.fn(() => ({ show: vi.fn() })),

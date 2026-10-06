@@ -98,3 +98,57 @@ describe('업데이트 확인 실패 표시', () => {
     expect(screen.queryByText(en.settings.upToDate)).toBeNull()
   })
 })
+
+/**
+ * Value: protects=다운로드가 실패하면 설정이 **다운로드** 실패를 말하고 다시 받을 버튼을 돌려주는 것,
+ *   그리고 확인 실패 문구가 "새 버전 사용 가능" 카드와 함께 뜨지 않는 것; fails_when=Settings.tsx가
+ *   `updateDownloadFailed`를 그리지 않거나, 확인 실패 가지가 `updateAvailable`을 보지 않으면(새 버전을
+ *   알려 준 직후 "업데이트 확인 실패 — 네트워크를 확인하세요"가 그 카드 위에 같이 떴다); why_new=
+ *   main이 다운로드 실패를 'update-error'로 보내던 시절에는 이 상태가 아예 없었다(updaterError.test.ts);
+ *   seam=none (위 다이얼로그 대역 재사용. 카드는 `canSelfUpdate`일 때만 그리므로 capabilities를 준다)
+ */
+describe('업데이트 다운로드 실패 표시', () => {
+  beforeEach(() => {
+    ;(window as unknown as Record<string, unknown>).api = {
+      capabilities: vi.fn(async () => ({ canSelfUpdate: true, updatesViaStore: false, isBridge: false })),
+      downloadUpdate: vi.fn(async () => {}),
+      installUpdate: vi.fn(),
+      openExternal: vi.fn()
+    }
+  })
+
+  it('다운로드가 실패하면 다운로드 실패를 말하고 다시 받기 버튼을 돌려준다', async () => {
+    useStore.setState({
+      showSettings: true,
+      updateChecked: true,
+      updateFailed: false,
+      updateAvailable: { version: '9.9.9', downloadUrl: 'https://example.com/r' },
+      updateDownloadProgress: null,
+      updateDownloadFailed: true,
+      updateReady: false
+    } as never)
+    render(<Settings />)
+    expect(await screen.findByText(en.settings.updateDownloadFailed)).toBeTruthy()
+    const retry = screen.getByRole('button', { name: en.settings.updateDownloadRetry })
+    retry.click()
+    expect((window.api as unknown as { downloadUpdate: ReturnType<typeof vi.fn> }).downloadUpdate).toHaveBeenCalled()
+    // 확인 실패가 아니다 — 버전은 이미 물어봤고 새 버전이 있다는 답을 받았다.
+    expect(screen.queryByText(en.settings.updateCheckFailed)).toBeNull()
+  })
+
+  it('새 버전 카드가 있으면 확인 실패 문구를 함께 띄우지 않는다', async () => {
+    // 한 시간 뒤 재확인이 실패해도 앞서 받은 "새 버전 있음"은 여전히 참이다.
+    useStore.setState({
+      showSettings: true,
+      updateChecked: true,
+      updateFailed: true,
+      updateAvailable: { version: '9.9.9', downloadUrl: 'https://example.com/r' },
+      updateDownloadProgress: null,
+      updateDownloadFailed: false,
+      updateReady: false
+    } as never)
+    render(<Settings />)
+    expect(await screen.findByText(en.settings.updateAvailable)).toBeTruthy()
+    expect(screen.queryByText(en.settings.updateCheckFailed)).toBeNull()
+  })
+})

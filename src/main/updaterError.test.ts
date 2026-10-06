@@ -103,7 +103,17 @@ class FakeUpdater extends EventEmitter {
       throw e
     })
   }
-  downloadUpdate = vi.fn()
+  /**
+   * 다운로드 실패도 같은 'error'로 온다(`downloadUpdate`의 `errorHandler` →
+   * `dispatchError` → `emit("error", e, …)`). 확인 실패와 이벤트 이름이 같다는 것이
+   * 이 파일 아래쪽 describe의 요점이다.
+   */
+  downloadUpdate(): Promise<unknown> {
+    return Promise.reject(new Error('net::ERR_CONNECTION_RESET')).catch((e: Error) => {
+      this.emit('error', e, String(e.stack))
+      throw e
+    })
+  }
   quitAndInstall = vi.fn()
 }
 const fakeUpdater = new FakeUpdater()
@@ -155,6 +165,8 @@ afterAll(() => process.off('unhandledRejection', onUnhandled))
 await import('./index')
 // `whenReady().then(...)` 본문과 마이크로태스크가 정리될 시간.
 await new Promise((r) => setTimeout(r, 50))
+/** 부팅 확인이 남긴 것. 아래 다운로드 describe가 `sent`를 비우기 전에 찍어 둔다. */
+const sentAtBoot = sent.map((s) => s[0])
 
 describe('업데이트 확인이 실패했을 때', () => {
   it('부팅이 실제로 checkForUpdates를 불렀다 — 프로브가 헛돌지 않는지 먼저 본다', () => {
@@ -168,6 +180,30 @@ describe('업데이트 확인이 실패했을 때', () => {
   })
 
   it('렌더러에 실패를 알린다 — 설정이 "업데이트 확인 중…"에 갇히지 않게', () => {
-    expect(sent.map((s) => s[0])).toContain('update-error')
+    expect(sentAtBoot).toContain('update-error')
+  })
+
+  it('확인 실패를 다운로드 실패로 말하지 않는다', () => {
+    expect(sentAtBoot).not.toContain('update-download-error')
+  })
+})
+
+/**
+ * Regression: 다운로드 실패가 "업데이트 확인 실패"로 보였고 진행 막대가 멈췄다.
+ *
+ * electron-updater는 다운로드 실패도 'error'로 알린다. 리스너가 그걸 전부
+ * 'update-error'로 보내서, 렌더러는 `updateFailed`를 세우고 설정은 "업데이트 확인
+ * 실패 — 네트워크를 확인하세요"를 **"새 버전 사용 가능" 카드 바로 위에** 띄웠다.
+ * `updateDownloadProgress`는 그대로라 막대가 그 자리에서 멈추고 다시 받기 버튼도
+ * 돌아오지 않았다 — 앱을 다시 켜는 것 말고는 빠져나갈 길이 없었다.
+ */
+describe('업데이트 다운로드가 실패했을 때', () => {
+  it("확인 실패와 다른 채널('update-download-error')로 알린다", async () => {
+    sent.length = 0
+    // app-ipc.ts의 'download-update' 핸들러가 하는 일 — 렌더러가 '지금 다운로드'를 눌렀다.
+    await fakeUpdater.downloadUpdate().catch(() => {})
+    const channels = sent.map((s) => s[0])
+    expect(channels).toContain('update-download-error')
+    expect(channels).not.toContain('update-error')
   })
 })

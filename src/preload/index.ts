@@ -96,6 +96,13 @@ const api = {
     ipcRenderer.on('update-error', handler)
     return () => ipcRenderer.removeListener('update-error', handler)
   },
+  // 다운로드 실패는 확인 실패와 **다른 채널**이다 — 같은 'update-error'로 받으면 설정이
+  // "업데이트 확인 실패"를 새 버전 카드 옆에 띄우고 진행 막대가 멈춘다(`main/index.ts`).
+  onUpdateDownloadError: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('update-download-error', handler)
+    return () => ipcRenderer.removeListener('update-download-error', handler)
+  },
   onUpdateProgress: (callback: (percent: number) => void) => {
     const handler = (_: Electron.IpcRendererEvent, percent: number): void => callback(percent)
     ipcRenderer.on('update-download-progress', handler)
