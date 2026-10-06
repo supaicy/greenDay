@@ -13,6 +13,7 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { NETWORK_TIMEOUT_MS } from '../net-timeout'
+import type { GoogleErrorKey } from '../../shared/main-strings'
 
 export const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -170,15 +171,23 @@ const TOKEN_TIMEOUT_MS = NETWORK_TIMEOUT_MS
  * 저장된 토큰을 버리는 조건으로 **그대로** 쓴다 — 여기서 이름을 보존하는 것과 저기서
  * 토큰을 버리는 것이 어긋나지 않게 한 곳에 둔다.
  *
- * 그 밖의 모든 것(`network`·`bad_response`·5xx·모르는 이름)은 거절이 아니라 불통이거나
- * 모르는 것이다. CLAUDE.md의 "거부와 불통을 뭉치지 말 것"과 같은 규칙 — 이름이
- * **있을 때만** 닫는다. 상태 코드만으로는 절대 닫지 않는다.
+ * 그 밖의 모든 것(`network`·`bad_response`·`token_failed`·`no_token`)은 거절이 아니라
+ * 불통이거나 모르는 것이다. `token_failed`는 이 이름들을 뺀 모든 비정상 응답이다 —
+ * 구글의 5xx와 모르는 이름이 여기로 온다. CLAUDE.md의 "거부와 불통을 뭉치지 말 것"과
+ * 같은 규칙 — 이름이 **있을 때만** 닫는다. 상태 코드만으로는 절대 닫지 않는다.
+ *
+ * 이 이름은 그대로 `OAuthError.code`가 되어 화면 문장을 고르는 키로 쓰인다. 그래서
+ * 이름마다 `GoogleErrorKey`(shared/main-strings.ts)에 번역이 있어야 컴파일된다 — 없으면
+ * 재연결이 필요한 순간에 "알 수 없는 오류"로 접힌다.
  */
-export const OAUTH_REFUSAL_CODES: ReadonlySet<string> = new Set([
+const REFUSAL_NAMES = [
   'invalid_grant',
   'invalid_client',
   'unauthorized_client'
-])
+] as const satisfies readonly GoogleErrorKey[]
+
+/** 조회는 구글이 준 아무 문자열로 하므로 `string` 집합으로 내보낸다. 원소의 검사는 위 배열이 한다. */
+export const OAUTH_REFUSAL_CODES: ReadonlySet<string> = new Set<string>(REFUSAL_NAMES)
 
 async function postToken(
   fetchImpl: FetchLike,

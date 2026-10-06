@@ -10,10 +10,12 @@ import {
   needsRefresh,
   revokeToken,
   OAuthError,
+  OAUTH_REFUSAL_CODES,
   SCOPES,
   type FetchLike,
   type TokenSet
 } from './oauth'
+import { mainStrings } from '../../shared/main-strings'
 
 const CLIENT_ID = '123-abc.apps.googleusercontent.com'
 const REDIRECT = 'com.supaicy.haru:/oauth2redirect'
@@ -221,6 +223,20 @@ describe('refreshTokens', () => {
         refreshTokens({ clientId: CLIENT_ID, refreshToken: 'rt', now: NOW }, fetchImpl)
       ).rejects.toMatchObject({ name: 'OAuthError', code: 'token_failed' })
     }
+  })
+})
+
+/**
+ * 거절 이름은 그대로 `OAuthError.code`가 되고, 화면 문장은 그 code로 고른다. 번역이 없는
+ * 이름은 "알 수 없는 오류"로 접혀 사용자가 다시 연결해야 한다는 것을 모른다. 타입
+ * (`satisfies readonly GoogleErrorKey[]`)이 먼저 막고, 이것은 두 언어 모두 빈 문장이
+ * 아닌지까지 본다.
+ */
+describe('OAUTH_REFUSAL_CODES', () => {
+  it.each(['ko', 'en'] as const)('모든 거절 이름에 %s 문장이 있다', (lang) => {
+    const sentences = mainStrings(lang).googleErrors as Record<string, string | undefined>
+    expect(OAUTH_REFUSAL_CODES.size).toBeGreaterThan(0)
+    for (const code of OAUTH_REFUSAL_CODES) expect(sentences[code], code).toBeTruthy()
   })
 })
 

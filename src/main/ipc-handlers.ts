@@ -517,17 +517,32 @@ export function setupIpcHandlers(): void {
   const resolveClientId = (): string => BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
 
   /**
-   * 구글이 그랜트를 **거절했다고 단정할 수 있는** code — `invalid_grant`(토큰 취소)와
-   * `invalid_client`·`unauthorized_client`(OAuth 클라이언트가 지워졌거나 릴리스 사이에
-   * 클라이언트 ID가 바뀜). 목록은 `google/oauth.ts`의 `OAUTH_REFUSAL_CODES` 한 곳에
-   * 있다. 저장된 토큰을 버리는 것은 이때뿐이다. 나머지는 전부 "닿지 못했다"이거나
-   * "모르겠다"다 — `network`(fetch가 던짐: 오프라인·DNS·TLS·30초 상한),
-   * `bad_response`(JSON이 아님: 캡티브 포털의 HTML), `token_failed`(이름 없는 거절을
-   * 뺀 모든 비정상 응답 — 구글의 5xx도 여기로 온다), `no_token`. 이것들로 자격증명을
-   * 지우면 다음 시도에 멀쩡히 될 연결을 우리 손으로 끊는다. 라이선스 클라이언트의
-   * `KNOWN_REFUSALS`와 같은 규칙이다.
+   * 두 사본이 **같은 그랜트**인가 — 같은 리프레시 토큰을 들고 있을 때만 그렇다.
+   *
+   * 실행 하나는 시작할 때 읽은 사본(`snapshot`)으로 요청을 보낸다. 요청마다 최대 30초라
+   * 그 사이 사용자가 끊거나 다시 연결할 수 있고, 그러면 이 실행이 얻은 것(갱신한 토큰·
+   * 캘린더 id·동기화 상태·오류 문장)은 지금 저장된 연결(`current`)의 것이 아니다.
+   *
+   * 한쪽이라도 리프레시 토큰이 없으면 **다르다**고 본다. `null === null`은 "둘 다
+   * 모른다"이지 같은 연결이라는 증거가 아니다 — 끊고 리프레시 토큰 없이 다시 연결한
+   * 새 연결을 옛 사본으로 덮게 된다.
    */
-  const GOOGLE_REFUSAL_CODES = OAUTH_REFUSAL_CODES
+  const isSameGrant = (snapshot: GoogleConfig, current: GoogleConfig): boolean => {
+    const held = snapshot.tokens?.refreshToken
+    return Boolean(held) && current.tokens?.refreshToken === held
+  }
+
+  /**
+   * 실패를 `lastError`에 적는다 — **이 실행이 붙잡은 연결이 아직 저장돼 있을 때만.**
+   * 그 사이 끊었으면 깨끗이 비운 설정에 오류가 남고, 다시 연결했으면 새 계정에 옛
+   * 계정의 오류("다시 연결해 주세요")가 붙는다. 화면에 돌려줄 문장은 어느 쪽이든 만든다.
+   */
+  const noteGoogleError = (snapshot: GoogleConfig, error: unknown): string => {
+    const message = describeGoogleError(error)
+    const current = loadGoogle()
+    if (isSameGrant(snapshot, current)) storeGoogle({ ...current, lastError: message })
+    return message
+  }
 
   /**
    * 유효한 액세스 토큰을 확보한다. 만료가 가까우면 미리 갱신하고 갱신 결과를 저장한다.
@@ -538,7 +553,8 @@ export function setupIpcHandlers(): void {
    * **갱신이 끝난 뒤의 저장은 지금 디스크에 있는 값 위에 한다.** 갱신은 최대 30초
    * 걸리고, 그 사이 사용자가 "연결 해제"를 누를 수 있다. 시작할 때 읽어 둔 `config`로
    * 쓰면 지운 리프레시 토큰이 되살아난다. 그래서 갱신에 쓴 리프레시 토큰이 아직
-   * 저장돼 있을 때만(같은 그랜트일 때만) 그 결과를 반영한다.
+   * 저장돼 있을 때만(`isSameGrant`) 그 결과를 반영한다. 실패도 같다 — 바뀐 연결에는
+   * 토큰도 오류 문장도 손대지 않는다.
    */
   const ensureGoogleToken = async (config: GoogleConfig): Promise<GoogleConfig> => {
     // 아래 두 message는 **로그·cause 추적용이다.** 화면에 나가는 문장은
@@ -563,12 +579,16 @@ export function setupIpcHandlers(): void {
         throw new OAuthError('not_connected', '갱신 도중 구글 연결이 해제되었습니다.')
       }
       // 갱신하는 동안 다시 연결됐다 — 그쪽이 더 새 그랜트다. 우리 결과는 버린다.
-      if (current.tokens.refreshToken !== config.tokens.refreshToken) return current
+      if (!isSameGrant(config, current)) return current
       const next = { ...current, tokens }
       storeGoogle(next)
       return next
     } catch (error) {
-      // 위에서 우리가 던진 `not_connected`도 여기로 온다 — 아래 저장은 현재 값 위라 안전하다.
+      // 그 사이 끊었거나(위에서 우리가 던진 `not_connected`도 이 경우다) 다시 연결했다.
+      // 이 실패는 지금 저장된 연결의 것이 아니므로 아무것도 쓰지 않는다 — 토큰을 버리지
+      // 않는 것은 물론이고, 새 계정에 옛 그랜트의 오류 문장을 붙이지도 않는다.
+      const current = loadGoogle()
+      if (!isSameGrant(config, current)) throw error
       // **거부와 불통을 뭉치지 않는다.** 구글이 실제로 그랜트를 거절했을 때만 토큰을
       // 버린다. 오프라인·DNS·TLS 순간 실패는 `OAuthError('network')`로 오는데, 갱신
       // 실패를 전부 "그랜트가 죽었다"로 읽으면 비행기에서 "지금 동기화" 한 번이
@@ -577,15 +597,12 @@ export function setupIpcHandlers(): void {
       // OAuth 동의를 처음부터 다시 받아야 하고, 이 경로는 `revokeToken`도 안 부르니
       // 구글 계정에는 죽은 승인이 남는다.
       //
-      // 저장은 **지금 디스크에 있는 값** 위에 한다(위 주석). 토큰을 버리는 것도 거절된
-      // 바로 그 그랜트가 아직 저장돼 있을 때뿐이다 — 그 사이 다시 연결했으면 새 연결은
-      // 이 거절과 무관하다.
-      const refused = error instanceof OAuthError && GOOGLE_REFUSAL_CODES.has(error.code)
-      const current = loadGoogle()
-      const sameGrant = current.tokens?.refreshToken === config.tokens.refreshToken
+      // 버리는 것은 이름 있는 거절(`OAUTH_REFUSAL_CODES`, google/oauth.ts)일 때뿐이다.
+      // `token_failed`는 그 이름들을 뺀 모든 비정상 응답(구글의 5xx 포함)이라 불통 쪽이다.
+      const refused = error instanceof OAuthError && OAUTH_REFUSAL_CODES.has(error.code)
       storeGoogle({
         ...current,
-        tokens: refused && sameGrant ? null : current.tokens,
+        tokens: refused ? null : current.tokens,
         lastError: describeGoogleError(error)
       })
       throw error
@@ -599,10 +616,15 @@ export function setupIpcHandlers(): void {
    * 쓸 캘린더를 확보한다 — 앱이 만든 `Greenday` 캘린더. `calendar.app.created` 범위는
    * 그 하나에만 닿으므로 사용자가 고를 것이 없다. 저장된 id가 죽었으면(지웠거나 다른
    * 계정) 새로 만들고 동기화 상태를 비운다. 연결 직후와 매 동기화 앞에서 부른다.
+   *
+   * 확보하는 동안 연결이 바뀌었으면 **여기서 멈춘다.** 저장만 건너뛰고 결과를 돌려주면
+   * 호출처가 끊은 계정을 향해 동기화 본문을 돌린다(`ensureGoogleToken`과 같은 code).
    */
   const ensureGoogleCalendar = async (config: GoogleConfig): Promise<GoogleConfig> => {
     const { config: next } = await ensureAppCalendar(googleClient(config), config)
-    storeIfSameGrant(config, next)
+    if (!storeIfSameGrant(config, next)) {
+      throw new OAuthError('not_connected', '캘린더를 확보하는 동안 구글 연결이 바뀌었습니다.')
+    }
     return next
   }
 
@@ -616,8 +638,7 @@ export function setupIpcHandlers(): void {
    * 옛 사본으로 덮는다. 둘 다 이번 실행의 결과를 버리는 게 맞다.
    */
   const storeIfSameGrant = (snapshot: GoogleConfig, next: GoogleConfig): boolean => {
-    const current = loadGoogle()
-    if (!current.tokens || current.tokens.refreshToken !== snapshot.tokens?.refreshToken) return false
+    if (!isSameGrant(snapshot, loadGoogle())) return false
     storeGoogle(next)
     return true
   }
@@ -639,8 +660,10 @@ export function setupIpcHandlers(): void {
       connected = { ...config, tokens, lastError: null }
       storeGoogle(connected)
     } catch (error) {
+      // 시작할 때의 사본(`config`)이 아니라 지금 값 위에 적는다 — 브라우저 동의는 몇 분이
+      // 걸릴 수 있고, 사본을 통째로 쓰면 그 사이 바뀐 연결을 되돌린다.
       const message = describeGoogleError(error)
-      storeGoogle({ ...config, lastError: message })
+      storeGoogle({ ...loadGoogle(), lastError: message })
       return { ok: false, message }
     }
     // 로그인 직후 캘린더까지 확보한다 — 사용자가 고를 단계가 없으므로 여기서 끝나야
@@ -649,9 +672,7 @@ export function setupIpcHandlers(): void {
       await ensureGoogleCalendar(connected)
       return { ok: true, message: null }
     } catch (error) {
-      const message = describeGoogleError(error)
-      storeGoogle({ ...loadGoogle(), lastError: message })
-      return { ok: false, message }
+      return { ok: false, message: noteGoogleError(connected, error) }
     }
   })
 
@@ -682,8 +703,11 @@ export function setupIpcHandlers(): void {
     if (db.isDatabaseReadOnly()) {
       return { ok: false, message: uiStrings().syncBlockedReadOnly, result: null }
     }
+    // 이 실행이 붙잡은 연결. 실패를 적기 전에 이것이 아직 저장된 연결인지 대조한다.
+    let grant = loaded
     try {
-      const config = await ensureGoogleCalendar(await ensureGoogleToken(loaded))
+      grant = await ensureGoogleToken(loaded)
+      const config = await ensureGoogleCalendar(grant)
       const result = await runGoogleSync({
         client: googleClient(config),
         calendarId: config.calendarId ?? '',
@@ -707,9 +731,7 @@ export function setupIpcHandlers(): void {
       })
       return { ok: true, message: null, result: summary }
     } catch (error) {
-      const message = describeGoogleError(error)
-      storeGoogle({ ...loadGoogle(), lastError: message })
-      return { ok: false, message, result: null }
+      return { ok: false, message: noteGoogleError(grant, error), result: null }
     }
   })
 

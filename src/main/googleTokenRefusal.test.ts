@@ -13,11 +13,12 @@
  * 누를 때마다 갱신 경로를 타므로, 나쁜 네트워크 한 순간이면 충분했다.
  *
  * CLAUDE.md가 라이선스 클라이언트에 못박아 둔 규칙과 같다 — "거부와 불통을 뭉치지
- * 말 것". 여기서 거부는 `invalid_grant` 하나뿐이다.
+ * 말 것". 여기서 거부는 이름 있는 거절(`OAUTH_REFUSAL_CODES`, google/oauth.ts)뿐이다.
  */
 
 import { describe, it, expect, vi, afterAll, beforeEach } from 'vitest'
 import { OAuthError } from './google/oauth'
+import { GoogleApiError } from './google/calendar'
 import { mainStrings } from '../shared/main-strings'
 import type { GoogleConfig } from './google-config'
 
@@ -27,7 +28,10 @@ const handlers = new Map<string, Handler>()
 // 디스크 대신 쓰는 저장소. `writeGoogleConfig`가 여기에 쓴 것이 곧 파일 내용이다 —
 // `tokens: null`이 오면 `encodeGoogleConfig`가 `tokens_enc: null`을 쓴다.
 let stored: GoogleConfig
-const { refreshTokens } = vi.hoisted(() => ({ refreshTokens: vi.fn() }))
+const { refreshTokens, ensureAppCalendar } = vi.hoisted(() => ({
+  refreshTokens: vi.fn(),
+  ensureAppCalendar: vi.fn()
+}))
 
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false }, electronApp: {}, optimizer: {} }))
 vi.mock('electron-updater', () => ({ autoUpdater: { downloadUpdate: vi.fn(), quitAndInstall: vi.fn() } }))
@@ -74,9 +78,7 @@ vi.mock('./google/oauth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./google/oauth')>()
   return { ...actual, refreshTokens, revokeToken: vi.fn() }
 })
-vi.mock('./google/app-calendar', () => ({
-  ensureAppCalendar: async (_client: unknown, config: unknown) => ({ config, created: false })
-}))
+vi.mock('./google/app-calendar', () => ({ ensureAppCalendar }))
 vi.mock('./google-sync', () => ({
   runGoogleSync: vi.fn(async () => ({ state: {}, created: 0, updated: 0, deleted: 0, failures: [] }))
 }))
@@ -102,6 +104,13 @@ function invoke(channel: string, ...args: unknown[]): unknown {
 
 beforeEach(() => {
   refreshTokens.mockReset()
+  ensureAppCalendar.mockReset()
+  ensureAppCalendar.mockImplementation(async (_client: unknown, config: unknown) => ({ config, created: false }))
+  // `mockClear`로는 안 된다 — 쓰이지 않고 남은 `…Once`가 다음 테스트로 샌다.
+  vi.mocked(runGoogleSync).mockReset()
+  vi.mocked(runGoogleSync).mockImplementation(
+    async () => ({ state: {}, created: 0, updated: 0, deleted: 0, failures: [] }) as never
+  )
   stored = {
     // 액세스 토큰은 이미 만료 — 수동 동기화를 누르는 순간의 평범한 상태다.
     tokens: {
@@ -255,5 +264,110 @@ describe('갱신 도중 바뀐 연결을 옛 사본으로 덮지 않는다', () 
 
     // 거절된 것은 옛 그랜트다. 그것 때문에 방금 받은 연결을 끊으면 안 된다.
     expect(stored.tokens?.refreshToken).toBe('REFRESH-NEW')
+    // 오류 문장도 옛 그랜트의 것이다. 방금 연결한 계정에 "다시 연결해 주세요"를 붙이면
+    // 사용자는 막 성공한 연결이 죽었다고 읽는다.
+    expect(stored.lastError).toBeNull()
+  })
+
+  it('갱신 중 다시 연결 + 옛 그랜트 갱신 성공 — 새 연결을 옛 토큰으로 덮지 않는다', async () => {
+    refreshTokens.mockImplementation(async () => {
+      stored = { ...stored, tokens: { ...NEW_GRANT } }
+      return {
+        accessToken: 'old-grant-fresh',
+        refreshToken: 'REFRESH-KEEP-ME',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        scope: 'https://www.googleapis.com/auth/calendar.app.created'
+      }
+    })
+
+    await invoke('google:sync-now')
+
+    expect(stored.tokens?.refreshToken).toBe('REFRESH-NEW')
+    expect(stored.tokens?.accessToken).toBe('new-access')
+  })
+})
+
+const NEW_GRANT = {
+  accessToken: 'new-access',
+  refreshToken: 'REFRESH-NEW',
+  expiresAt: '2099-01-01T00:00:00.000Z',
+  scope: 'https://www.googleapis.com/auth/calendar.app.created'
+}
+
+const FRESH = {
+  accessToken: 'fresh',
+  refreshToken: 'REFRESH-KEEP-ME',
+  expiresAt: '2099-01-01T00:00:00.000Z',
+  scope: 'https://www.googleapis.com/auth/calendar.app.created'
+}
+
+/**
+ * 캘린더 확보(`ensureAppCalendar`)도 요청이고 최대 30초 걸린다. 그 사이 끊으면
+ * 저장은 건너뛰었지만 **결과를 그대로 돌려줘서** 동기화 본문이 끊은 계정을 향해 돌았다.
+ * 그 계정의 토큰은 이미 회수됐으니 본문은 401로 실패하고, 바깥 catch가 그 오류를
+ * 방금 깨끗하게 끊은 설정에 적었다 — 사용자는 끊었는데 "인증 오류"가 남는다.
+ */
+describe('실행 도중 바뀐 연결로는 계속하지 않는다', () => {
+  it('캘린더 확보 중 연결 해제 — 동기화 본문을 돌리지 않고, 끊은 설정에 오류를 적지 않는다', async () => {
+    refreshTokens.mockResolvedValue({ ...FRESH })
+    ensureAppCalendar.mockImplementationOnce(async (_client: unknown, config: GoogleConfig) => {
+      await invoke('google:disconnect')
+      return { config: { ...config, calendarId: 'cal-2' }, created: true }
+    })
+    // 회수된 토큰으로 본문이 돌면 이렇게 끝난다.
+    vi.mocked(runGoogleSync).mockRejectedValueOnce(new GoogleApiError(401, '인증이 만료되었습니다.', 'unauthorized'))
+
+    const result = (await invoke('google:sync-now')) as { ok: boolean; message: string }
+
+    expect(result.ok).toBe(false)
+    // 화면에는 "연결되어 있지 않다"가 간다 — 개발자용 message가 아니라 code로 고른 문장.
+    expect(result.message).toBe(mainStrings('ko').googleErrors.not_connected)
+    expect(runGoogleSync).not.toHaveBeenCalled()
+    expect(stored.tokens).toBeNull()
+    expect(stored.lastError).toBeNull()
+    // 해제가 남긴 캘린더 id도 그대로다 — 이 실행의 결과는 하나도 저장되지 않는다.
+    expect(stored.calendarId).toBe('cal-1')
+  })
+
+  it('할당량에 걸려 멈춘 동기화 도중 연결 해제 — 상태 저장이 토큰을 되살리지 않는다', async () => {
+    refreshTokens.mockResolvedValue({ ...FRESH })
+    vi.mocked(runGoogleSync).mockImplementationOnce(async () => {
+      await invoke('google:disconnect')
+      return {
+        state: { t1: {} },
+        created: 1,
+        updated: 0,
+        deleted: 0,
+        failures: [],
+        stoppedBy: new GoogleApiError(429, '요청이 너무 잦습니다.', 'rate_limit')
+      } as never
+    })
+
+    const result = (await invoke('google:sync-now')) as { ok: boolean }
+
+    expect(result.ok).toBe(false)
+    expect(stored.tokens).toBeNull()
+    expect(stored.lastError).toBeNull()
+    expect(stored.syncState).toEqual({})
+  })
+
+  /**
+   * 리프레시 토큰이 없는 연결 둘은 "같은 그랜트"가 아니다. `null === null`을 같다고 보면
+   * 끊고 다시 연결한 새 연결을 옛 사본의 액세스 토큰으로 덮는다.
+   */
+  it('리프레시 토큰 없는 연결 — 캘린더 확보 중 다시 연결하면 새 연결을 덮지 않는다', async () => {
+    stored = {
+      ...stored,
+      tokens: { ...FRESH, accessToken: 'old-access', refreshToken: null }
+    }
+    ensureAppCalendar.mockImplementationOnce(async (_client: unknown, config: GoogleConfig) => {
+      stored = { ...stored, tokens: { ...NEW_GRANT, refreshToken: null } }
+      return { config, created: false }
+    })
+
+    await invoke('google:sync-now')
+
+    expect(stored.tokens?.accessToken).toBe('new-access')
+    expect(runGoogleSync).not.toHaveBeenCalled()
   })
 })
