@@ -10,7 +10,7 @@
  * 것과 배선이 된 것은 따로 깨진다.
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterAll, beforeAll, beforeEach } from 'vitest'
 import type { CalendarConfig } from './calendar-config'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
@@ -55,6 +55,11 @@ const APP_DOCUMENT = `${APP_ORIGIN}/index.html`
 const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
 beforeAll(() => {
   process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
+})
+// 저장만 하고 되돌리지 않아 같은 워커의 다음 파일에 이 값이 샜다.
+afterAll(() => {
+  if (previousRendererUrl === undefined) delete process.env.ELECTRON_RENDERER_URL
+  else process.env.ELECTRON_RENDERER_URL = previousRendererUrl
 })
 
 /* 우리 문서에서 온 호출. **발신자 검사가 생긴 뒤로 `{}`는 통과하지 않는다** —

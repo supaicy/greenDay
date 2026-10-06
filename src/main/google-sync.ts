@@ -5,7 +5,7 @@
  * 판단이라 두 번 구현할 이유가 없다. 여기서는 그 계획을 구글 API 호출로 옮기기만 한다.
  */
 
-import { GoogleApiError, GoogleCalendarClient } from './google/calendar'
+import { GoogleApiError, type GoogleCalendarClient } from './google/calendar'
 import { eventUid, fingerprint, planSync, type SyncState, type TaskRow } from './caldav/sync'
 
 export interface GoogleSyncResult {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   GoogleCalendarClient,
-  GoogleApiError,
+  type GoogleApiError,
   toGoogleEventId,
   eventToGoogle,
   googleToEvent

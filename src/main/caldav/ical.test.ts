@@ -52,7 +52,7 @@ describe('foldLine', () => {
   })
 
   it('긴 줄을 CRLF+공백으로 접는다', () => {
-    const folded = foldLine('SUMMARY:' + 'a'.repeat(200))
+    const folded = foldLine(`SUMMARY:${'a'.repeat(200)}`)
     expect(folded).toContain('\r\n ')
     for (const part of folded.split('\r\n ')) {
       expect(Buffer.from(part, 'utf-8').length).toBeLessThanOrEqual(75)
@@ -60,14 +60,14 @@ describe('foldLine', () => {
   })
 
   it('한글이 코드포인트 중간에서 잘리지 않는다', () => {
-    const folded = foldLine('SUMMARY:' + '가'.repeat(100))
+    const folded = foldLine(`SUMMARY:${'가'.repeat(100)}`)
     // 잘린 조각이 유효한 UTF-8이면 대체 문자(U+FFFD)가 생기지 않는다.
     expect(folded).not.toContain('�')
-    expect(unfoldLines(folded).join('')).toBe('SUMMARY:' + '가'.repeat(100))
+    expect(unfoldLines(folded).join('')).toBe(`SUMMARY:${'가'.repeat(100)}`)
   })
 
   it('접은 줄은 다시 펼치면 원문과 같다', () => {
-    const original = 'DESCRIPTION:' + '내일 회의 준비 자료 정리하기 '.repeat(10)
+    const original = `DESCRIPTION:${'내일 회의 준비 자료 정리하기 '.repeat(10)}`
     expect(unfoldLines(foldLine(original)).join('')).toBe(original)
   })
 })
