@@ -330,7 +330,10 @@ export function Settings() {
   return (
     // 배경·Escape·포커스 트랩은 Radix Dialog가 담당. toggleSettings는 인자를
     // 무시하는 토글이라 닫힘 신호만 받는다(open(true)에 뒤집히지 않게).
-    <Dialog open={showSettings} onOpenChange={(open) => !open && toggleSettings()}>
+    // **열려 있을 때만** 뒤집는다. Radix는 닫힘 애니메이션 동안 콘텐츠를 남겨 두고
+    // Escape·바깥 클릭을 계속 받아서, 그 사이 두 번째 닫힘 신호가 토글을 다시 뒤집어
+    // 다이얼로그를 도로 열었다(settingsDismiss.test.tsx).
+    <Dialog open={showSettings} onOpenChange={(open) => !open && showSettings && toggleSettings()}>
       {/* 헤더는 고정하고 본문만 스크롤한다. 이전에는 카드 전체가 스크롤 컨테이너라
           내용이 뷰포트의 ~2.8배인 이 패널에서 아래로 내려가면 닫기 버튼이 사라졌다. */}
       <DialogContent
