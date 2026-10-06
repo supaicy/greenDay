@@ -332,6 +332,50 @@ export function setupIpcHandlers(): void {
     return error.status === null ? text : `${text} (${error.status})`
   }
 
+  /**
+   * 두 사본이 **같은 계정**인가 — 오리진과 사용자명이 같고, 지금 사본에 비밀번호가 남아 있다.
+   *
+   * 연결 확인·동기화는 시작할 때 읽은 사본(`snapshot`)으로 요청을 보낸다. 동기화는 바뀐
+   * 할일마다 요청 한 건, 건마다 최대 30초라 그 사이 사용자가 "연결 해제"(무료, 즉시)를
+   * 누르거나 다른 서버로 옮길 수 있다. 그때 끝에서 사본을 통째로 쓰면 지운 사용자명·
+   * 비밀번호·캘린더 주소·동기화 상태가 되살아난다 — 사용자는 끊었다고 믿는데 앱은 계속
+   * 그 캘린더에 쓴다. 구글 쪽 `isSameGrant`가 닫은 것과 같은 종류다.
+   *
+   * 오리진은 `calendar:save-credentials`의 결속 판정과 같은 `normalizedOrigin`으로 본다.
+   * 그쪽이 "같은 계정"이라 보고 비밀번호를 유지하는 변경(대소문자·기본 포트)에 여기서
+   * 결과를 버리면, 이미 서버에 올린 일정을 다음 동기화가 다시 만든다.
+   * 비밀번호 값은 비교하지 않는다 — 같은 계정의 비밀번호만 바꾼 것은 같은 연결이다.
+   */
+  const isSameCalDavAccount = (snapshot: CalendarConfig, current: CalendarConfig): boolean => {
+    const origin = normalizedOrigin(snapshot.serverUrl)
+    return (
+      origin !== null &&
+      origin === normalizedOrigin(current.serverUrl) &&
+      Boolean(snapshot.username) &&
+      current.username === snapshot.username &&
+      Boolean(current.password)
+    )
+  }
+
+  /** 동기화 상태는 캘린더 하나의 것이다 — 그 사이 다른 캘린더를 골랐으면 같은 대상이 아니다. */
+  const isSameCalDavTarget = (snapshot: CalendarConfig, current: CalendarConfig): boolean =>
+    isSameCalDavAccount(snapshot, current) && current.calendarUrl === snapshot.calendarUrl
+
+  /**
+   * **이 실행이 붙잡은 연결이 아직 저장돼 있을 때만**, 지금 디스크에 있는 값 위에 이 실행이
+   * 가진 필드만 얹어 쓴다. 바뀌었거나 끊겼으면 아무것도 쓰지 않는다 — 끊은 설정에 오류
+   * 문장을 남기지도, 새 연결에 옛 실행의 상태를 붙이지도 않는다. 렌더러에 돌려줄 답은
+   * 호출처가 그대로 만든다.
+   */
+  const storeIfSameCalDav = (
+    snapshot: CalendarConfig,
+    same: (snapshot: CalendarConfig, current: CalendarConfig) => boolean,
+    patch: Partial<Pick<CalendarConfig, 'syncState' | 'lastSyncAt' | 'lastError'>>
+  ): void => {
+    const current = loadCalendarConfig()
+    if (same(snapshot, current)) storeCalendarConfig({ ...current, ...patch })
+  }
+
   handle('calendar:get-config', 'free', () => toPublicConfig(loadCalendarConfig()))
 
   handle(
@@ -387,12 +431,14 @@ export function setupIpcHandlers(): void {
         password: config.password
       })
       const calendars = await client.discoverCalendars()
-      storeCalendarConfig({ ...config, lastError: null })
+      // 확인하는 동안 끊었거나 계정을 바꿨으면 쓰지 않는다(`isSameCalDavAccount` 참고).
+      // 계정의 확인이라 그 사이 고른 캘린더는 상관없다 — 고른 것을 되돌리지 않는다.
+      storeIfSameCalDav(config, isSameCalDavAccount, { lastError: null })
       // 일정을 담을 수 없는 컬렉션(미리알림 등)은 고를 수 없게 미리 걸러 보낸다.
       return { ok: true, message: null, calendars: calendars.filter((c) => c.supportsEvents) }
     } catch (error) {
       const message = describeError(error)
-      storeCalendarConfig({ ...config, lastError: message })
+      storeIfSameCalDav(config, isSameCalDavAccount, { lastError: message })
       return { ok: false, message, calendars: [] }
     }
   })
@@ -465,8 +511,9 @@ export function setupIpcHandlers(): void {
         state: config.syncState,
         now: new Date().toISOString()
       })
-      storeCalendarConfig({
-        ...config,
+      // 시작 사본(`config`)을 통째로 쓰면 그 사이의 "연결 해제"가 되돌려진다
+      // (`isSameCalDavAccount` 참고). 같은 연결·같은 캘린더일 때만 지금 값 위에 얹는다.
+      storeIfSameCalDav(config, isSameCalDavTarget, {
         syncState: result.state,
         lastSyncAt: new Date().toISOString(),
         lastError: null
@@ -475,7 +522,7 @@ export function setupIpcHandlers(): void {
       return { ok: true, message: null, result: summary }
     } catch (error) {
       const message = describeError(error)
-      storeCalendarConfig({ ...config, lastError: message })
+      storeIfSameCalDav(config, isSameCalDavTarget, { lastError: message })
       return { ok: false, message, result: null }
     }
   })
