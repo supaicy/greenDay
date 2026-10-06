@@ -193,6 +193,35 @@ describe('refreshTokens', () => {
       expect((error as OAuthError).message).toContain('다시 연결')
     }
   })
+
+  /**
+   * 그랜트를 영구히 거절하는 이름은 `invalid_grant`만이 아니다. 릴리스 사이에 빌드의
+   * 클라이언트 ID가 바뀌었거나 OAuth 클라이언트가 지워졌으면 구글은 `invalid_client`·
+   * `unauthorized_client`로 답한다. 이것을 `token_failed`(일시 장애와 같은 칸)로 접으면
+   * 호출처가 죽은 토큰을 영원히 들고 "연결됨"이라고 말한다.
+   */
+  it.each([
+    ['invalid_client', 401],
+    ['unauthorized_client', 400]
+  ])('영구 거절(%s)은 이름을 그대로 code로 남긴다', async (name, status) => {
+    const { fetchImpl } = jsonFetch({ error: name, error_description: 'The OAuth client was deleted.' }, status)
+    await expect(
+      refreshTokens({ clientId: CLIENT_ID, refreshToken: 'rt', now: NOW }, fetchImpl)
+    ).rejects.toMatchObject({ name: 'OAuthError', code: name })
+  })
+
+  it('모르는 이름과 5xx는 여전히 token_failed다 — 거절 목록을 이름 없이 넓히지 않는다', async () => {
+    for (const [payload, status] of [
+      [{ error: 'server_error' }, 503],
+      [{ error: 'temporarily_unavailable' }, 400],
+      [{}, 500]
+    ] as const) {
+      const { fetchImpl } = jsonFetch(payload, status)
+      await expect(
+        refreshTokens({ clientId: CLIENT_ID, refreshToken: 'rt', now: NOW }, fetchImpl)
+      ).rejects.toMatchObject({ name: 'OAuthError', code: 'token_failed' })
+    }
+  })
 })
 
 describe('needsRefresh', () => {
@@ -281,7 +310,9 @@ describe('토큰 요청 상한', () => {
 
     // 여기가 끝나지 않으면 `google:sync-now`가 갱신 단계에서 통째로 멈춘다.
     expect(settled, '상한이 없어 토큰 갱신이 끝나지 않았다').not.toBe('hung')
-    expect(settled).toBeInstanceOf(OAuthError)
+    // 타입만 보면 `token_failed`(거부 쪽으로 읽힐 수 있는 값)로 바뀌어도 통과한다.
+    // 응답하지 않은 것은 **불통**이다 — 호출처가 토큰을 남기는 근거가 이 code다.
+    expect(settled).toMatchObject({ name: 'OAuthError', code: 'network' })
     expect(seen[0]).toBeInstanceOf(AbortSignal)
     expect(asked).toEqual([30_000])
   })

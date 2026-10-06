@@ -7,6 +7,7 @@
 
 import { parseMultistatus, findAll, textOf, type DavResponse } from './dav-xml'
 import { parseEvents, type CalendarEvent } from './ical'
+import { NETWORK_TIMEOUT_MS } from '../net-timeout'
 
 export interface CalDavCredentials {
   /** 예: https://caldav.icloud.com */
@@ -42,6 +43,12 @@ export type CalDavErrorCode =
   | 'network'
   | 'protocol'
   | 'server'
+  /**
+   * 설정된 서버 주소가 https가 아니다. 서버에 닿기도 전에 **우리가** 거절한 것이라
+   * `protocol`("응답을 이해할 수 없다")로 접으면 사용자는 서버 탓으로 읽는다.
+   * 화면 문장은 code로만 고르므로(ipc-handlers) 따로 있어야 이 말이 나간다.
+   */
+  | 'insecure_url'
 
 export class CalDavError extends Error {
   readonly code: CalDavErrorCode
@@ -111,15 +118,15 @@ const MAX_REDIRECTS = 3
  * `busy`로 잠긴 채 남고(해제가 await 뒤 finally에 있다) 취소할 방법이 없다.
  * `runSync`는 바뀐 할일마다 한 번씩 부르므로 그 곱만큼 늘어난다.
  *
- * 30초는 구글 클라이언트(`google/calendar.ts`)와 같은 값이다 — 같은 화면의 두 연동이
- * 서로 다른 상한을 가질 이유가 없다. 상한에 걸린 요청은 아래 catch가 `network`로
+ * 값은 `net-timeout.ts`의 공용 상수(30초)다 — 구글 토큰·구글 캘린더와 같다. 같은 화면의
+ * 연동들이 서로 다른 상한을 가질 이유가 없다. 상한에 걸린 요청은 아래 catch가 `network`로
  * 접는다: 응답하지 않는 것은 **불통**이지 서버의 거부가 아니다.
  *
  * 리다이렉트를 따라갈 때는 홉마다 새로 걸린다(최대 MAX_REDIRECTS + 1회). 한 번의
  * 호출이 무한히 매달리지 않는다는 보장은 그대로고, 신호를 재귀에 꿰는 것보다
  * `google/calendar.ts`와 모양을 맞추는 쪽을 골랐다.
  */
-const REQUEST_TIMEOUT_MS = 30_000
+const REQUEST_TIMEOUT_MS = NETWORK_TIMEOUT_MS
 
 export class CalDavClient {
   private readonly credentials: CalDavCredentials
@@ -137,7 +144,7 @@ export class CalDavClient {
     const url = new URL(credentials.serverUrl)
     if (url.protocol !== 'https:') {
       // 자격증명을 Basic 헤더로 매 요청 보낸다. 평문 전송은 허용하지 않는다.
-      throw new CalDavError('protocol', 'CalDAV 서버 주소는 https여야 합니다.')
+      throw new CalDavError('insecure_url', 'CalDAV 서버 주소는 https여야 합니다.')
     }
     this.credentials = credentials
     this.fetchImpl = fetchImpl ?? ((u, init) => fetch(u, init))

@@ -15,7 +15,7 @@
  * 한국어여야 함을 못박는다: 영어로 바꿔 박아서 통과시키는 "고침"을 막는다.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterAll, beforeEach, afterEach } from 'vitest'
 import { mainStrings } from '../shared/main-strings'
 import { CalDavError } from './caldav/client'
 import { GoogleApiError } from './google/calendar'
@@ -28,7 +28,10 @@ const EN = mainStrings('en')
 
 let calConfig: Record<string, unknown> = {}
 const runSync = vi.fn(async () => ({ state: {}, created: 0, updated: 0, deleted: 0, failures: [], skippedNoDate: 0 }))
-const runGoogleSync = vi.fn(async () => ({ state: {}, created: 0, updated: 0, deleted: 0, failures: [] }))
+const runGoogleSync = vi.fn(
+  async (): Promise<Record<string, unknown>> => ({ state: {}, created: 0, updated: 0, deleted: 0, failures: [] })
+)
+const writeGoogleConfig = vi.fn((_path: string, _config: Record<string, unknown>) => {})
 // 인자 타입을 적어 둔다 — `vi.fn(async () => …)`면 `mock.calls`가 빈 튜플이라
 // 형식 이름을 꺼내 보는 아래 단언이 타입 단계에서 막힌다.
 const showOpenDialog = vi.fn(
@@ -78,11 +81,16 @@ vi.mock('./google-config', async (importOriginal) => {
     ...actual,
     readGoogleConfig: () => ({
       ...actual.DEFAULT_GOOGLE_CONFIG,
-      tokens: { accessToken: 'a', refreshToken: 'r', expiry: new Date(Date.now() + 3_600_000).toISOString() },
+      tokens: {
+        accessToken: 'a',
+        refreshToken: 'r',
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        scope: 'https://www.googleapis.com/auth/calendar.app.created'
+      },
       calendarId: 'cal-1',
       syncState: {}
     }),
-    writeGoogleConfig: vi.fn()
+    writeGoogleConfig
   }
 })
 
@@ -100,9 +108,18 @@ const { setUiLanguage } = await import('./ui-language')
 setupIpcHandlers()
 
 const APP_ORIGIN = 'http://localhost:5173'
+// 바꾼 환경변수는 되돌린다 — 저장하지 않으면 같은 워커의 다음 파일에 값이 샌다
+// (calendarIpcBoundary.test.ts와 같은 방식).
+const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
+const previousClientId = process.env.GOOGLE_OAUTH_CLIENT_ID
 process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
 // 개발 머신에 값이 있으면 google:connect가 실제 인증 흐름으로 빠진다.
 delete process.env.GOOGLE_OAUTH_CLIENT_ID
+afterAll(() => {
+  if (previousRendererUrl === undefined) delete process.env.ELECTRON_RENDERER_URL
+  else process.env.ELECTRON_RENDERER_URL = previousRendererUrl
+  if (previousClientId !== undefined) process.env.GOOGLE_OAUTH_CLIENT_ID = previousClientId
+})
 
 function invoke(channel: string, ...args: unknown[]): unknown {
   const handler = handlers.get(channel)
@@ -123,6 +140,7 @@ beforeEach(() => {
   calConfig = {}
   runSync.mockReset()
   runGoogleSync.mockReset()
+  writeGoogleConfig.mockClear()
   showOpenDialog.mockClear()
   setUiLanguage('en')
 })
@@ -176,6 +194,49 @@ describe('영어 UI에서 연동 오류가 한국어로 새지 않는다', () =>
     runGoogleSync.mockRejectedValueOnce(new OAuthError('some_future_code', '나중에 생길 오류'))
     const r = (await invoke('google:sync-now')) as { message: string }
     expect(r.message).toBe(EN.syncErrorUnknown)
+  })
+
+  it('CalDAV 서버 주소가 http면 https가 필요하다고 말한다 — calendar:test-connection', async () => {
+    // 예전에는 `protocol`로 접혀 "응답을 이해할 수 없습니다"가 떴다. 서버에 닿기도 전에
+    // 우리가 거절한 것인데 서버 탓으로 들렸다.
+    calConfig = { ...CONNECTED, serverUrl: 'http://caldav.example.com' }
+    const r = (await invoke('calendar:test-connection')) as { ok: boolean; message: string }
+    expect(r.ok).toBe(false)
+    expect(r.message).toBe(EN.caldavErrors.insecure_url)
+    expect(r.message).not.toBe(EN.caldavErrors.protocol)
+
+    setUiLanguage('ko')
+    const ko = (await invoke('calendar:test-connection')) as { message: string }
+    expect(ko.message).toBe(mainStrings('ko').caldavErrors.insecure_url)
+    expect(ko.message).toMatch(/https/)
+  })
+
+  it('구글 할당량에 걸려 멈춘 동기화 — 실패로 알리되 올린 만큼의 상태는 저장한다', async () => {
+    // runGoogleSync가 던지지 않고 멈춘 결과를 돌려준다(google-sync.ts의 stoppedBy).
+    runGoogleSync.mockResolvedValueOnce({
+      state: { 'task-1': { href: 'cal-1', etag: null, fingerprint: 'f1', sequence: 0 } },
+      created: 1,
+      updated: 0,
+      deleted: 0,
+      skippedNoDate: 0,
+      failures: [{ taskId: 'task-2', message: '요청이 너무 잦습니다.' }],
+      stoppedBy: new GoogleApiError(429, '요청이 너무 잦습니다. 잠시 후 다시 시도하세요.', 'rate_limit')
+    })
+    const r = (await invoke('google:sync-now')) as {
+      ok: boolean
+      message: string
+      result: Record<string, unknown> | null
+    }
+    expect(r.ok).toBe(false)
+    expect(r.message).toBe(`${EN.googleErrors.rate_limit} (429)`)
+    // 요약은 그대로 보여 준다 — 몇 개가 올라갔고 몇 개가 남았는지. 오류 객체는 넘기지 않는다.
+    expect(r.result).toMatchObject({ created: 1, failures: [{ taskId: 'task-2' }] })
+    expect(r.result).not.toHaveProperty('stoppedBy')
+    expect(r.result).not.toHaveProperty('state')
+    const saved = writeGoogleConfig.mock.lastCall?.[1]
+    expect(saved?.syncState).toEqual({ 'task-1': { href: 'cal-1', etag: null, fingerprint: 'f1', sequence: 0 } })
+    // 끝난 동기화가 아니므로 마지막 동기화 시각은 찍지 않는다.
+    expect(saved?.lastSyncAt ?? null).toBeNull()
   })
 
   it('구글 클라이언트 ID 미설정 — google:connect', async () => {

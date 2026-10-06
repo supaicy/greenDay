@@ -18,7 +18,15 @@ export type MainLanguage = (typeof MAIN_LANGUAGES)[number]
  * `caldavErrors[error.code]`로 인덱싱하니, CalDAV 쪽 code가 하나 늘고 여기에
  * 없으면 **컴파일이 깨져서** 번역 누락이 조용히 지나가지 않는다.
  */
-export type CalDavErrorKey = 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'network' | 'protocol' | 'server'
+export type CalDavErrorKey =
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'conflict'
+  | 'network'
+  | 'protocol'
+  | 'server'
+  | 'insecure_url'
 
 export type GoogleErrorKey =
   // GoogleApiError
@@ -33,6 +41,9 @@ export type GoogleErrorKey =
   | 'not_connected'
   | 'no_refresh_token'
   | 'invalid_grant'
+  // 클라이언트 쪽 영구 거절 — OAuth 클라이언트가 지워졌거나 릴리스 사이에 ID가 바뀌었다.
+  | 'invalid_client'
+  | 'unauthorized_client'
   | 'token_failed'
   | 'access_denied'
   | 'auth_failed'
@@ -131,7 +142,8 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
       conflict: '캘린더 쪽에서 먼저 바뀌었습니다. 다시 동기화해 주세요.',
       network: '캘린더 서버에 연결하지 못했습니다.',
       protocol: '캘린더 서버의 응답을 이해할 수 없습니다. 서버 주소를 확인하세요.',
-      server: '캘린더 서버가 오류를 돌려줬습니다.'
+      server: '캘린더 서버가 오류를 돌려줬습니다.',
+      insecure_url: '서버 주소는 https://로 시작해야 합니다. 암호가 암호화되지 않은 채 전송되지 않도록 http 주소는 받지 않습니다.'
     },
     googleErrors: {
       unauthorized: '구글 인증이 만료되었습니다. 다시 연결해 주세요.',
@@ -144,6 +156,10 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
       not_connected: '구글 계정이 연결되어 있지 않습니다.',
       no_refresh_token: '구글 연결이 만료되었습니다. 다시 연결해 주세요.',
       invalid_grant: '구글 연결이 만료되었습니다. 다시 연결해 주세요.',
+      invalid_client:
+        '구글이 이 앱의 연결을 더 이상 받지 않습니다. 다시 연결해 주세요. 계속되면 앱을 최신 버전으로 업데이트하세요.',
+      unauthorized_client:
+        '구글 연결이 이 버전의 앱과 맞지 않습니다. 다시 연결해 주세요. 계속되면 앱을 최신 버전으로 업데이트하세요.',
       token_failed: '구글에서 토큰을 받지 못했습니다. 다시 시도하세요.',
       access_denied: '권한 요청을 취소했습니다.',
       auth_failed: '구글 인증에 실패했습니다. 다시 시도하세요.',
@@ -193,7 +209,9 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
       conflict: 'The calendar changed first. Sync again.',
       network: 'Could not reach the calendar server.',
       protocol: 'Could not make sense of the calendar server reply. Check the server address.',
-      server: 'The calendar server returned an error.'
+      server: 'The calendar server returned an error.',
+      insecure_url:
+        'The server address must start with https://. Plain http addresses are refused so your password is never sent unencrypted.'
     },
     googleErrors: {
       unauthorized: 'Your Google sign-in expired. Connect again.',
@@ -206,6 +224,10 @@ const STRINGS: Record<MainLanguage, MainStrings> = {
       not_connected: 'No Google account is connected.',
       no_refresh_token: 'Your Google connection expired. Connect again.',
       invalid_grant: 'Your Google connection expired. Connect again.',
+      invalid_client:
+        'Google no longer accepts connections from this app. Connect again, and if this keeps happening, update the app.',
+      unauthorized_client:
+        'Your Google connection does not match this version of the app. Connect again, and if this keeps happening, update the app.',
       token_failed: 'Google did not issue a token. Try again.',
       access_denied: 'You cancelled the permission request.',
       auth_failed: 'Google sign-in failed. Try again.',

@@ -17,7 +17,7 @@ import {
   type GoogleConfig
 } from './google-config'
 import { GoogleCalendarClient, GoogleApiError } from './google/calendar'
-import { needsRefresh, refreshTokens, revokeToken, OAuthError } from './google/oauth'
+import { needsRefresh, refreshTokens, revokeToken, OAuthError, OAUTH_REFUSAL_CODES } from './google/oauth'
 import { startGoogleAuth } from './google-auth-flow'
 import { runGoogleSync } from './google-sync'
 import { ensureAppCalendar } from './google/app-calendar'
@@ -517,20 +517,28 @@ export function setupIpcHandlers(): void {
   const resolveClientId = (): string => BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
 
   /**
-   * 구글이 그랜트를 **거절했다고 단정할 수 있는** code. 저장된 토큰을 버리는 것은
-   * 이때뿐이다. 나머지는 전부 "닿지 못했다"이거나 "모르겠다"다 — `network`(fetch가
-   * 던짐: 오프라인·DNS·TLS·30초 상한), `bad_response`(JSON이 아님: 캡티브 포털의
-   * HTML), `token_failed`(`invalid_grant`가 아닌 모든 비정상 응답 — 구글의 5xx도
-   * 여기로 온다), `no_token`. 이것들로 자격증명을 지우면 다음 시도에 멀쩡히 될
-   * 연결을 우리 손으로 끊는다. 라이선스 클라이언트의 `KNOWN_REFUSALS`와 같은 규칙이다.
+   * 구글이 그랜트를 **거절했다고 단정할 수 있는** code — `invalid_grant`(토큰 취소)와
+   * `invalid_client`·`unauthorized_client`(OAuth 클라이언트가 지워졌거나 릴리스 사이에
+   * 클라이언트 ID가 바뀜). 목록은 `google/oauth.ts`의 `OAUTH_REFUSAL_CODES` 한 곳에
+   * 있다. 저장된 토큰을 버리는 것은 이때뿐이다. 나머지는 전부 "닿지 못했다"이거나
+   * "모르겠다"다 — `network`(fetch가 던짐: 오프라인·DNS·TLS·30초 상한),
+   * `bad_response`(JSON이 아님: 캡티브 포털의 HTML), `token_failed`(이름 없는 거절을
+   * 뺀 모든 비정상 응답 — 구글의 5xx도 여기로 온다), `no_token`. 이것들로 자격증명을
+   * 지우면 다음 시도에 멀쩡히 될 연결을 우리 손으로 끊는다. 라이선스 클라이언트의
+   * `KNOWN_REFUSALS`와 같은 규칙이다.
    */
-  const GOOGLE_REFUSAL_CODES = new Set(['invalid_grant'])
+  const GOOGLE_REFUSAL_CODES = OAUTH_REFUSAL_CODES
 
   /**
    * 유효한 액세스 토큰을 확보한다. 만료가 가까우면 미리 갱신하고 갱신 결과를 저장한다.
-   * 구글이 그랜트를 거절하면(`invalid_grant`) 토큰을 버린다 — 죽은 토큰을 들고 계속
-   * 시도해 봐야 소용없고, 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
+   * 구글이 그랜트를 거절하면 토큰을 버린다 — 죽은 토큰을 들고 계속 시도해 봐야
+   * 소용없고, 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
    * 서버에 **닿지 못한** 실패는 거절이 아니므로 토큰을 남긴다.
+   *
+   * **갱신이 끝난 뒤의 저장은 지금 디스크에 있는 값 위에 한다.** 갱신은 최대 30초
+   * 걸리고, 그 사이 사용자가 "연결 해제"를 누를 수 있다. 시작할 때 읽어 둔 `config`로
+   * 쓰면 지운 리프레시 토큰이 되살아난다. 그래서 갱신에 쓴 리프레시 토큰이 아직
+   * 저장돼 있을 때만(같은 그랜트일 때만) 그 결과를 반영한다.
    */
   const ensureGoogleToken = async (config: GoogleConfig): Promise<GoogleConfig> => {
     // 아래 두 message는 **로그·cause 추적용이다.** 화면에 나가는 문장은
@@ -549,10 +557,18 @@ export function setupIpcHandlers(): void {
         },
         (url, init) => fetch(url, init)
       )
-      const next = { ...config, tokens }
+      const current = loadGoogle()
+      if (!current.tokens) {
+        // 갱신하는 동안 연결이 해제됐다. 받은 토큰을 저장하면 해제가 무효가 된다.
+        throw new OAuthError('not_connected', '갱신 도중 구글 연결이 해제되었습니다.')
+      }
+      // 갱신하는 동안 다시 연결됐다 — 그쪽이 더 새 그랜트다. 우리 결과는 버린다.
+      if (current.tokens.refreshToken !== config.tokens.refreshToken) return current
+      const next = { ...current, tokens }
       storeGoogle(next)
       return next
     } catch (error) {
+      // 위에서 우리가 던진 `not_connected`도 여기로 온다 — 아래 저장은 현재 값 위라 안전하다.
       // **거부와 불통을 뭉치지 않는다.** 구글이 실제로 그랜트를 거절했을 때만 토큰을
       // 버린다. 오프라인·DNS·TLS 순간 실패는 `OAuthError('network')`로 오는데, 갱신
       // 실패를 전부 "그랜트가 죽었다"로 읽으면 비행기에서 "지금 동기화" 한 번이
@@ -560,8 +576,18 @@ export function setupIpcHandlers(): void {
       // 보호 모드가 아니면 `preserveCiphertext`가 되살릴 것도 없다). 그러면 브라우저
       // OAuth 동의를 처음부터 다시 받아야 하고, 이 경로는 `revokeToken`도 안 부르니
       // 구글 계정에는 죽은 승인이 남는다.
+      //
+      // 저장은 **지금 디스크에 있는 값** 위에 한다(위 주석). 토큰을 버리는 것도 거절된
+      // 바로 그 그랜트가 아직 저장돼 있을 때뿐이다 — 그 사이 다시 연결했으면 새 연결은
+      // 이 거절과 무관하다.
       const refused = error instanceof OAuthError && GOOGLE_REFUSAL_CODES.has(error.code)
-      storeGoogle({ ...config, tokens: refused ? null : config.tokens, lastError: describeGoogleError(error) })
+      const current = loadGoogle()
+      const sameGrant = current.tokens?.refreshToken === config.tokens.refreshToken
+      storeGoogle({
+        ...current,
+        tokens: refused && sameGrant ? null : current.tokens,
+        lastError: describeGoogleError(error)
+      })
       throw error
     }
   }
@@ -576,8 +602,24 @@ export function setupIpcHandlers(): void {
    */
   const ensureGoogleCalendar = async (config: GoogleConfig): Promise<GoogleConfig> => {
     const { config: next } = await ensureAppCalendar(googleClient(config), config)
-    storeGoogle(next)
+    storeIfSameGrant(config, next)
     return next
+  }
+
+  /**
+   * **이 실행이 시작할 때의 연결이 아직 그대로일 때만 저장한다.**
+   *
+   * 저장할 값은 시작할 때 읽은 사본 위에 만든다. 그 사이(캘린더 확보·동기화 본문은
+   * 요청 수십 건, 건마다 최대 30초) 사용자가 "연결 해제"를 누르면 디스크의 토큰은
+   * 이미 지워졌는데, 끝에서 사본을 통째로 쓰면 지운 리프레시 토큰이 되살아난다 —
+   * 사용자는 끊었다고 믿는데 앱은 계속 그 계정에 쓴다. 다시 연결했다면 새 연결을
+   * 옛 사본으로 덮는다. 둘 다 이번 실행의 결과를 버리는 게 맞다.
+   */
+  const storeIfSameGrant = (snapshot: GoogleConfig, next: GoogleConfig): boolean => {
+    const current = loadGoogle()
+    if (!current.tokens || current.tokens.refreshToken !== snapshot.tokens?.refreshToken) return false
+    storeGoogle(next)
+    return true
   }
 
   handle('google:get-config', 'free', () => ({
@@ -648,13 +690,21 @@ export function setupIpcHandlers(): void {
         tasks: db.getTasks() as unknown as TaskRow[],
         state: config.syncState
       })
-      storeGoogle({
+      const { state, stoppedBy, ...summary } = result
+      if (stoppedBy) {
+        // 할당량에 걸려 중간에 멈췄다. 올린 만큼의 상태는 저장해야 다음 동기화가
+        // 같은 쓰기를 다시 태우지 않는다. 끝난 동기화가 아니므로 lastSyncAt은 두고,
+        // 요약(올린 수·남은 수)은 그대로 보여 준다.
+        const message = describeGoogleError(stoppedBy)
+        storeIfSameGrant(config, { ...config, syncState: state, lastError: message })
+        return { ok: false, message, result: summary }
+      }
+      storeIfSameGrant(config, {
         ...config,
-        syncState: result.state,
+        syncState: state,
         lastSyncAt: new Date().toISOString(),
         lastError: null
       })
-      const { state, ...summary } = result
       return { ok: true, message: null, result: summary }
     } catch (error) {
       const message = describeGoogleError(error)

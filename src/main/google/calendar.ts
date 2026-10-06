@@ -7,6 +7,7 @@
 
 import { stampList, type CalendarEvent } from '../caldav/ical'
 import type { FetchLike } from './oauth'
+import { NETWORK_TIMEOUT_MS } from '../net-timeout'
 
 const API_BASE = 'https://www.googleapis.com/calendar/v3'
 
@@ -209,8 +210,8 @@ export function googleToEvent(raw: Record<string, unknown>): CalendarEvent | nul
   }
 }
 
-/** 요청 하나의 상한. 이유는 `caldav/client.ts`의 같은 상수에 적어 두었다. */
-const REQUEST_TIMEOUT_MS = 30_000
+/** 요청 하나의 상한 — 공용 값(`net-timeout.ts`). 이유는 `caldav/client.ts`의 같은 자리에 적어 두었다. */
+const REQUEST_TIMEOUT_MS = NETWORK_TIMEOUT_MS
 
 export class GoogleCalendarClient {
   private readonly accessToken: string

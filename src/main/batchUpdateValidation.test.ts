@@ -12,7 +12,7 @@
  * 정책이 옳은 것과 배선이 된 것은 따로 깨진다 — 이 결함이 정확히 후자였다.
  */
 
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterAll, beforeAll, beforeEach } from 'vitest'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
 const handlers = new Map<string, Handler>()
@@ -43,9 +43,15 @@ const { setupIpcHandlers } = await import('./ipc-handlers')
    발신자 검사가 생긴 뒤로 `{}`는 통과하지 않는다. */
 const APP_ORIGIN = 'http://localhost:5173'
 const APP_DOCUMENT = `${APP_ORIGIN}/index.html`
+const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
 beforeAll(() => {
   process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
   setupIpcHandlers()
+})
+// 저장만 하고 되돌리지 않으면 같은 워커의 다음 파일에 이 값이 샌다(calendarIpcBoundary.test.ts와 같은 방식).
+afterAll(() => {
+  if (previousRendererUrl === undefined) delete process.env.ELECTRON_RENDERER_URL
+  else process.env.ELECTRON_RENDERER_URL = previousRendererUrl
 })
 beforeEach(() => {
   db.updateTask.mockClear()

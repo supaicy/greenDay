@@ -15,7 +15,7 @@
  * 같은 규칙을 동기화 채널 둘에도 적용한다.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterAll, beforeEach } from 'vitest'
 import { mainStrings } from '../shared/main-strings'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
@@ -86,8 +86,11 @@ vi.mock('./google-config', async (importOriginal) => {
       tokens: {
         accessToken: 'a',
         refreshToken: 'r',
-        // 갱신이 필요 없도록 넉넉히 — 네트워크로 새지 않게.
-        expiry: new Date(Date.now() + 3_600_000).toISOString()
+        // 갱신이 필요 없도록 넉넉히 — 네트워크로 새지 않게. 필드 이름은 `TokenSet`의
+        // `expiresAt`이다(예전 `expiry`는 아무도 읽지 않는 이름이라 needsRefresh 목이
+        // 없으면 만료된 토큰으로 보였다).
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        scope: 'https://www.googleapis.com/auth/calendar.app.created'
       },
       calendarId: 'cal-1',
       syncState: { 'task-1': { id: 'g1', fingerprint: 'f1' } }
@@ -111,7 +114,13 @@ const { setupIpcHandlers } = await import('./ipc-handlers')
 setupIpcHandlers()
 
 const APP_ORIGIN = 'http://localhost:5173'
+// 되돌리지 않으면 같은 워커의 다음 파일에 값이 샌다(calendarIpcBoundary.test.ts와 같은 방식).
+const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
 process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
+afterAll(() => {
+  if (previousRendererUrl === undefined) delete process.env.ELECTRON_RENDERER_URL
+  else process.env.ELECTRON_RENDERER_URL = previousRendererUrl
+})
 
 function invoke(channel: string, ...args: unknown[]): unknown {
   const handler = handlers.get(channel)

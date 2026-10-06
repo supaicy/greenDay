@@ -16,8 +16,9 @@
  * 말 것". 여기서 거부는 `invalid_grant` 하나뿐이다.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, afterAll, beforeEach } from 'vitest'
 import { OAuthError } from './google/oauth'
+import { mainStrings } from '../shared/main-strings'
 import type { GoogleConfig } from './google-config'
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown
@@ -81,10 +82,17 @@ vi.mock('./google-sync', () => ({
 }))
 
 const { setupIpcHandlers } = await import('./ipc-handlers')
+const { runGoogleSync } = await import('./google-sync')
 setupIpcHandlers()
 
 const APP_ORIGIN = 'http://localhost:5173'
+// 되돌리지 않으면 같은 워커의 다음 파일에 값이 샌다(calendarIpcBoundary.test.ts와 같은 방식).
+const previousRendererUrl = process.env.ELECTRON_RENDERER_URL
 process.env.ELECTRON_RENDERER_URL = APP_ORIGIN
+afterAll(() => {
+  if (previousRendererUrl === undefined) delete process.env.ELECTRON_RENDERER_URL
+  else process.env.ELECTRON_RENDERER_URL = previousRendererUrl
+})
 
 function invoke(channel: string, ...args: unknown[]): unknown {
   const handler = handlers.get(channel)
@@ -151,5 +159,101 @@ describe('구글 토큰 갱신 실패: 거부와 불통을 가른다', () => {
     expect(result.ok).toBe(false)
     // 가드가 "아무것도 안 지운다"로 넘어가면 죽은 연결이 영원히 남는다.
     expect(stored.tokens).toBeNull()
+  })
+})
+
+/**
+ * `invalid_grant`만 거절이 아니다. 릴리스 사이에 빌드의 클라이언트 ID가 바뀌었거나
+ * OAuth 클라이언트가 지워지면 구글은 `invalid_client`·`unauthorized_client`로 답한다.
+ * 예전에는 그것이 `token_failed`로 접혀 죽은 그랜트를 영원히 들고 "연결됨"이라고 했다.
+ */
+describe('클라이언트 쪽 영구 거절도 토큰을 버리고 재연결을 안내한다', () => {
+  it.each(['invalid_client', 'unauthorized_client'])('%s', async (code) => {
+    refreshTokens.mockRejectedValue(new OAuthError(code, '구글이 이 앱의 연결을 거절했습니다.'))
+
+    const result = (await invoke('google:sync-now')) as { ok: boolean; message: string }
+
+    expect(result.ok).toBe(false)
+    expect(stored.tokens).toBeNull()
+    // 일반 문구("알 수 없는 오류")로 접히면 사용자는 무엇을 해야 하는지 모른다.
+    const sentence = (mainStrings('ko').googleErrors as Record<string, string | undefined>)[code]
+    expect(sentence).toBeTruthy()
+    expect(result.message).toBe(sentence)
+    expect(stored.lastError).toBe(sentence)
+  })
+})
+
+/**
+ * 갱신은 최대 30초 걸린다. 그 사이 사용자가 "연결 해제"를 누르면 디스크의 토큰은 이미
+ * 지워졌는데, catch가 sync-now를 시작할 때 읽어 둔 사본으로 `tokens: config.tokens`를
+ * 다시 써서 **지운 리프레시 토큰이 되살아났다.** 저장은 언제나 지금 디스크에 있는 값
+ * 위에 한다.
+ */
+describe('갱신 도중 바뀐 연결을 옛 사본으로 덮지 않는다', () => {
+  it('갱신 중 연결 해제 + 불통(network) — 지운 토큰을 되살리지 않는다', async () => {
+    refreshTokens.mockImplementation(async () => {
+      await invoke('google:disconnect')
+      throw new OAuthError('network', '구글 서버에 연결하지 못했습니다.')
+    })
+
+    await invoke('google:sync-now')
+
+    expect(stored.tokens).toBeNull()
+  })
+
+  it('갱신 중 연결 해제 + 갱신 성공 — 새 토큰도 저장하지 않는다', async () => {
+    refreshTokens.mockImplementation(async () => {
+      await invoke('google:disconnect')
+      return {
+        accessToken: 'fresh',
+        refreshToken: 'REFRESH-KEEP-ME',
+        expiresAt: '2099-01-01T00:00:00.000Z',
+        scope: 'https://www.googleapis.com/auth/calendar.app.created'
+      }
+    })
+
+    const result = (await invoke('google:sync-now')) as { ok: boolean }
+
+    expect(result.ok).toBe(false)
+    expect(stored.tokens).toBeNull()
+  })
+
+  // 갱신이 끝난 뒤 동기화 본문(최대 수십 건의 요청)이 도는 동안에도 같다. 끝에서 저장하는
+  // 사본은 시작할 때의 것이라, 그 사이 끊은 연결의 토큰을 되살렸다.
+  it('동기화 본문 도중 연결 해제 — 끝난 뒤 저장이 토큰을 되살리지 않는다', async () => {
+    refreshTokens.mockResolvedValue({
+      accessToken: 'fresh',
+      refreshToken: 'REFRESH-KEEP-ME',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      scope: 'https://www.googleapis.com/auth/calendar.app.created'
+    })
+    vi.mocked(runGoogleSync).mockImplementationOnce(async () => {
+      await invoke('google:disconnect')
+      return { state: { t1: {} }, created: 1, updated: 0, deleted: 0, failures: [], stoppedBy: null } as never
+    })
+
+    await invoke('google:sync-now')
+
+    expect(stored.tokens).toBeNull()
+  })
+
+  it('갱신 중 다시 연결 + 옛 그랜트 거절(invalid_grant) — 새로 받은 토큰은 지우지 않는다', async () => {
+    refreshTokens.mockImplementation(async () => {
+      stored = {
+        ...stored,
+        tokens: {
+          accessToken: 'new-access',
+          refreshToken: 'REFRESH-NEW',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+          scope: 'https://www.googleapis.com/auth/calendar.app.created'
+        }
+      }
+      throw new OAuthError('invalid_grant', '구글 연결이 만료되었습니다. 다시 연결해 주세요.')
+    })
+
+    await invoke('google:sync-now')
+
+    // 거절된 것은 옛 그랜트다. 그것 때문에 방금 받은 연결을 끊으면 안 된다.
+    expect(stored.tokens?.refreshToken).toBe('REFRESH-NEW')
   })
 })

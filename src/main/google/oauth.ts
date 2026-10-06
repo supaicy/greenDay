@@ -12,6 +12,7 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto'
+import { NETWORK_TIMEOUT_MS } from '../net-timeout'
 
 export const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -144,20 +145,40 @@ interface TokenResponse {
 }
 
 /**
- * 토큰 요청 하나의 상한.
+ * 토큰 요청 하나의 상한 — 값은 `net-timeout.ts`의 공용 상수다(본문 동기화·CalDAV와 같다).
  *
  * 상한이 없으면 응답하지 않는 서버에서 이 await가 끝나지 않는다 — `google:connect`와
  * `google:disconnect`는 사용자가 버튼을 누르고 기다리는 자리라, 끝나지 않는 요청은
  * 스피너도 오류도 취소도 없이 설정 패널을 잠가 둔다.
  *
- * 값은 본문 동기화(`google/calendar.ts`)·CalDAV(`caldav/client.ts`)와 **같은 30초**다.
- * 사람이 앞에서 기다리니 더 짧게 잡고 싶지만, 여기서 시간이 초과되면
- * `ensureGoogleToken`의 catch가 그것을 다른 실패와 똑같이 취급해 저장된 토큰을
- * 통째로 지운다(`ipc-handlers.ts`). 상한을 조이는 만큼 **느린 회선이 재연결로
- * 내몰린다** — 응답이 늦은 것은 불통이지 구글의 거부가 아닌데 결과만 거부와 같아진다.
- * 한 제품에 상한이 셋이면 드리프트만 생기므로 하나로 맞춘다.
+ * 사람이 앞에서 기다리니 더 짧게 잡고 싶지만, 시간이 초과된 요청은 `network`로 접히고
+ * 그것은 불통이지 구글의 거부가 아니다 — `ensureGoogleToken`(`ipc-handlers.ts`)은 그때
+ * 토큰을 **남긴다**(거절 이름이 있을 때만 버린다). 그래도 상한을 조이는 만큼 느린 회선의
+ * 갱신은 매번 실패로 끝나므로, 따로 줄이지 않고 공용 값을 그대로 쓴다.
  */
-const TOKEN_TIMEOUT_MS = 30_000
+const TOKEN_TIMEOUT_MS = NETWORK_TIMEOUT_MS
+
+/**
+ * 토큰 엔드포인트가 **그랜트를 영구히 거절했다고** 단정할 수 있는 오류 이름(RFC 6749 §5.2).
+ *
+ * - `invalid_grant` — 리프레시 토큰이 취소·만료됐다(사용자가 계정에서 권한을 거뒀다 등).
+ * - `invalid_client` — 클라이언트를 모른다: OAuth 클라이언트가 지워졌다.
+ * - `unauthorized_client` — 이 클라이언트에 발급된 그랜트가 아니다: 릴리스 사이에
+ *   빌드의 클라이언트 ID가 바뀌었다.
+ *
+ * 셋 다 같은 토큰으로 다시 시도해 봐야 영원히 같은 답이다. 이 집합은 `ipc-handlers.ts`가
+ * 저장된 토큰을 버리는 조건으로 **그대로** 쓴다 — 여기서 이름을 보존하는 것과 저기서
+ * 토큰을 버리는 것이 어긋나지 않게 한 곳에 둔다.
+ *
+ * 그 밖의 모든 것(`network`·`bad_response`·5xx·모르는 이름)은 거절이 아니라 불통이거나
+ * 모르는 것이다. CLAUDE.md의 "거부와 불통을 뭉치지 말 것"과 같은 규칙 — 이름이
+ * **있을 때만** 닫는다. 상태 코드만으로는 절대 닫지 않는다.
+ */
+export const OAUTH_REFUSAL_CODES: ReadonlySet<string> = new Set([
+  'invalid_grant',
+  'invalid_client',
+  'unauthorized_client'
+])
 
 async function postToken(
   fetchImpl: FetchLike,
@@ -187,12 +208,14 @@ async function postToken(
   }
 
   if (!response.ok || payload.error) {
-    // invalid_grant는 대개 "리프레시 토큰이 취소됨" — 사용자에게 재연결을 안내해야 한다.
-    const code = payload.error === 'invalid_grant' ? 'invalid_grant' : 'token_failed'
+    // 영구 거절은 구글이 준 **이름 그대로** code로 남긴다 — 호출처가 그 이름으로만
+    // 토큰을 버린다. 나머지(모르는 이름·5xx·이름 없는 응답)는 전부 `token_failed`.
+    const refused = typeof payload.error === 'string' && OAUTH_REFUSAL_CODES.has(payload.error)
+    const code = refused ? (payload.error as string) : 'token_failed'
     throw new OAuthError(
       code,
-      code === 'invalid_grant'
-        ? '구글 연결이 만료되었습니다. 다시 연결해 주세요.'
+      refused
+        ? `구글이 이 연결을 거절했습니다 (${code}). 다시 연결해 주세요.`
         : `토큰 발급에 실패했습니다 (${payload.error ?? response.status}).`
     )
   }

@@ -78,6 +78,13 @@ describe('CalDavClient 생성', () => {
   it('https가 아니면 만들지 않는다 (자격증명이 평문으로 나간다)', () => {
     expect(() => new CalDavClient({ ...CREDS, serverUrl: 'http://caldav.icloud.com' })).toThrow(CalDavError)
   })
+
+  it('https 거부는 전용 code(insecure_url)로 던진다 — protocol로 접으면 화면 문장이 "응답을 이해할 수 없다"가 된다', () => {
+    // ipc-handlers는 `caldavErrors[error.code]`로 문장을 고른다. message는 화면에 나가지 않는다.
+    expect(() => new CalDavClient({ ...CREDS, serverUrl: 'http://caldav.icloud.com' })).toThrow(
+      expect.objectContaining({ name: 'CalDavError', code: 'insecure_url' })
+    )
+  })
 })
 
 describe('discoverCalendars', () => {
