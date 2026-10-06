@@ -651,23 +651,31 @@ function normalizeLegacyWeeklyPattern(t: Record<string, unknown>): void {
 }
 
 /**
- * **살아 있는데 어느 화면에도 없는 행을 되찾는다.** 부팅 때마다 돈다(멱등).
+ * **살아 있는데 어느 화면에도 없는 행을 정리한다.** 부팅 때마다 돈다(멱등).
  *
  * 목록은 parentId 없는 행만 세우고 하위작업은 **살아 있는** 부모 상세 안에서만
  * 그려진다. 그래서 살아 있는 행의 조상 사슬이 휴지통에서 끊기거나(옛 빌드에서
- * 휴지통의 하위작업만 복원한 경우 — `restoreTask` 주석), 없는 id에서 끊기면(그 뒤
- * 휴지통을 비운 경우) 그 행은 DB에만 있다. 앞의 것은 부모를 '영구 삭제'할 때 확인창에
- * 없이 함께 지워지고, 뒤의 것은 보이지도 지우지도 못한다. `restoreTask`가 새로
- * 생기는 것은 막았지만 이미 사용자 파일에 남은 것은 아무도 고치지 않았다.
+ * 휴지통의 하위작업만 복원한 경우 — `restoreTask` 주석, 또는 삭제가 한 단계만
+ * 캐스케이드하던 빌드에서 A→B→C의 A를 지워 C만 살아 남은 경우), 없는 id에서
+ * 끊기면(그 뒤 휴지통을 비운 경우) 그 행은 DB에만 있다. 앞의 것은 조상을 '영구
+ * 삭제'할 때 확인창에 없이 함께 지워지고, 뒤의 것은 보이지도 지우지도 못한다.
  *
- * 규칙은 `restoreTask`와 같다: 휴지통에 있는 **조상만** 올린다 — 그 조상의 다른
- * 하위작업은 휴지통에 둔다. 사슬이 없는 id나 순환에서 끊기면 매달 곳이 없으니 그
- * 자리에서 최상위로 올린다. 행을 지우는 경우는 없다. 휴지통 안의 행은 건드리지
- * 않는다 — 휴지통은 계층 없이 평평하게 그리므로 거기서는 고아도 보인다.
+ * **휴지통에서 아무것도 꺼내지 않는다.** 한때는 휴지통에 있는 조상을 꺼내 사슬을
+ * 이었는데, 한 단계 캐스케이드가 남긴 3단 트리에서 그것은 "사용자가 일부러 지운
+ * A와 B를 재시작마다 되살린다"였다. 부팅 정리는 사용자의 삭제를 되돌릴 권한이 없다.
+ * 그래서 반대 방향으로 잇는다: 살아 있는 행을 **가장 가까운 휴지통 조상 X와 함께**
+ * 휴지통으로 보낸다. 시각은 X의 것(`deleted_at` = "언제 버려졌나"를 새로 지어내지
+ * 않는다), `deleted_with`는 X가 속한 삭제의 뿌리(`X.deleted_with ?? X.id`) — 그
+ * 뿌리를 복원하면 `restoreTask`가 함께 올린다.
+ *
+ * 사슬이 없는 id나 순환에서 끊기면 매달 곳이 없으니 그 자리에서 최상위로 올린다 —
+ * 그것은 삭제를 되돌리는 일이 아니다. 행을 지우는 경우는 없다. 휴지통 안의 행은
+ * 건드리지 않는다 — 휴지통은 계층 없이 평평하게 그리므로 거기서는 고아도 보인다.
+ * 순서와 무관하다: 중간 행이 먼저 휴지통으로 가도 그 행이 같은 뿌리를 물려준다.
  */
 function healUnreachableTasks(tasks: Record<string, unknown>[]): void {
   const byId = new Map(tasks.map((t) => [t.id, t]))
-  let lifted = 0
+  let trashed = 0
   let promoted = 0
   for (const task of tasks) {
     if (task.deleted_at) continue
@@ -680,17 +688,18 @@ function healUnreachableTasks(tasks: Record<string, unknown>[]): void {
         promoted++
         break
       }
-      walked.add(ancestor.id)
       if (ancestor.deleted_at) {
-        ancestor.deleted_at = null
-        ancestor.deleted_with = null
-        lifted++
+        task.deleted_at = ancestor.deleted_at
+        task.deleted_with = ancestor.deleted_with ?? ancestor.id
+        trashed++
+        break
       }
+      walked.add(ancestor.id)
       child = ancestor
     }
   }
-  if (lifted + promoted > 0) {
-    console.info(`[db] 보이지 않던 할일 복구: 휴지통의 조상 ${lifted}개 복원, ${promoted}개 최상위로`)
+  if (trashed + promoted > 0) {
+    console.info(`[db] 보이지 않던 할일 정리: 휴지통으로 보냄 ${trashed}개, 최상위로 ${promoted}개`)
   }
 }
 
@@ -986,36 +995,88 @@ export function updateTask(task: Record<string, unknown>): void {
   if (task.sortOrder !== undefined) existing.sort_order = task.sortOrder
   save()
 }
-export function deleteTask(id: string): void {
-  assertWritable()
-  const now = new Date().toISOString()
-  data.tasks.forEach((t) => {
-    if (t.id !== id && t.parent_id !== id) return
-    // **이미 휴지통에 있는 것은 다시 건드리지 않는다.** `deleted_at`은 "언제
-    // 버려졌나"이고, 부모를 지우면서 먼저 따로 버린 하위작업까지 다시 찍으면
-    // 그 시각이 거짓이 된다.
-    if (t.deleted_at) return
-    t.deleted_at = now
+/**
+ * `parent_id`로 이어진 자손 전부(자기 자신 제외)를 위에서 아래 순서로 돌려준다.
+ *
+ * **한 단계가 아니다.** 상세 패널은 하위작업에도 SubtaskList를 그려서 A→B→C가 실제로
+ * 생긴다. 직계만 걷던 시절에는 A를 지우면 C가 살아 남았고, 부팅 정리가 그 C를 보고
+ * 휴지통의 B·A를 꺼내 일부러 지운 것이 재시작마다 되살아났다.
+ * 손상된 파일의 순환 parent_id에 멈추도록 본 id를 센다.
+ */
+function descendantsOf(tasks: Record<string, unknown>[], id: string): Record<string, unknown>[] {
+  const children = new Map<unknown, Record<string, unknown>[]>()
+  for (const t of tasks) {
+    if (typeof t.parent_id !== 'string') continue
+    const list = children.get(t.parent_id)
+    if (list) list.push(t)
+    else children.set(t.parent_id, [t])
+  }
+  const out: Record<string, unknown>[] = []
+  const seen = new Set<unknown>([id])
+  const queue = [id as unknown]
+  while (queue.length) {
+    for (const child of children.get(queue.shift()) ?? []) {
+      if (seen.has(child.id)) continue
+      seen.add(child.id)
+      out.push(child)
+      queue.push(child.id)
+    }
+  }
+  return out
+}
+
+/**
+ * `root`와 그 자손 전부를 한 조작으로 휴지통에 내린다(`deleteTask`·일괄 삭제가 같이 쓴다).
+ *
+ * 함께 내려간 행의 `deleted_with`는 **이 조작의 뿌리**다 — 바로 위 부모가 아니다.
+ * 부모를 적으면 `restoreTask(뿌리)`가 손자를 놓친다.
+ *
+ * **이미 휴지통에 있는 행은 다시 찍지 않는다.** `deleted_at`은 "언제 버려졌나"이고,
+ * 먼저 따로 버린 하위작업까지 다시 찍으면 그 시각이 거짓이 된다. 그 아래로도
+ * 내려가지 않는다 — 그 아래는 그 행의 삭제에 속한다. `root` 자신이 이미 휴지통에
+ * 있으면 그 아래 살아 있는 행을 **그 삭제에** 합류시킨다(부팅 정리와 같은 규칙).
+ */
+function trashTree(root: Record<string, unknown>, now: string): void {
+  const at = (root.deleted_at as string | null) || now
+  const rootId = root.deleted_at ? ((root.deleted_with ?? root.id) as string) : (root.id as string)
+  if (!root.deleted_at) {
+    root.deleted_at = at
+    root.deleted_with = null
+  }
+  // 따로 버린 행의 서브트리는 건너뛴다. 자손은 위에서 아래 순서라 부모가 먼저 나온다.
+  const skipped = new Set<unknown>()
+  for (const t of descendantsOf(data.tasks, root.id as string)) {
+    if (skipped.has(t.parent_id) || t.deleted_at) {
+      skipped.add(t.id)
+      continue
+    }
+    t.deleted_at = at
     // **함께 내려갔다는 사실을 적어 둔다.** `restoreTask`가 되살릴 집합이 이것이다.
     // 타임스탬프가 같은지로 대신하려 했다가 실패했다: `toISOString()`은 밀리초까지라
     // 연달아 일어난 두 삭제가 같은 값을 갖고, 그러면 사용자가 따로 버린 하위작업이
     // 부모 복원에 끌려 올라온다. 시계는 "무엇이 한 조작이었나"를 답할 수 없다.
-    t.deleted_with = t.id === id ? null : id
-  })
+    t.deleted_with = rootId
+  }
+}
+
+export function deleteTask(id: string): void {
+  assertWritable()
+  const task = data.tasks.find((t) => t.id === id)
+  if (task) trashTree(task, new Date().toISOString())
   save()
 }
 /**
  * 삭제를 되돌린다. **`deleteTask`의 거울이어야 한다.**
  *
- * 그쪽은 `t.id === id || t.parent_id === id`로 하위작업까지 함께 내리는데
- * 이쪽은 그 한 행만 되살렸다. 그래서 Cmd+Z 한 번이 "부모는 살아났는데
- * 하위작업 셋은 휴지통에 남은" 상태를 만들었고, 화면에서는 하위작업이 통째로
- * 사라진 것으로 보였다.
+ * 그쪽은 자손 전부를 함께 내리는데 이쪽은 그 한 행만 되살렸다. 그래서 Cmd+Z
+ * 한 번이 "부모는 살아났는데 하위작업 셋은 휴지통에 남은" 상태를 만들었고,
+ * 화면에서는 하위작업이 통째로 사라진 것으로 보였다.
  *
- * 되살릴 하위작업은 `deleted_with`로 고른다 — `deleteTask`가 부모와 함께 내린
- * 하위작업에만 부모 id를 적어 둔다. 그 전에 따로 지운 하위작업은 사용자가 따로
- * 지운 것이니 휴지통에 그대로 둔다: 부모를 되살렸다고 그것까지 끌고 올라오면
- * 이번엔 반대 방향으로 틀린다.
+ * 되살릴 자손은 `deleted_with`로 고른다 — `trashTree`가 함께 내린 자손에는 깊이와
+ * 상관없이 그 조작의 뿌리 id를 적어 둔다(부팅 정리가 휴지통으로 보낸 행도 같다).
+ * 그 전에 따로 지운 자손은 사용자가 따로 지운 것이니 휴지통에 그대로 두고, **그
+ * 아래로는 내려가지 않는다**: 따로 지운 B 아래의 C를 올리면 C는 휴지통에 남은 부모에
+ * 매달려 어느 화면에도 없게 된다(아래 조상 올리기와 같은 이유).
  */
 export function restoreTask(id: string): void {
   assertWritable()
@@ -1024,11 +1085,19 @@ export function restoreTask(id: string): void {
   if (!parent.deleted_at) return
   parent.deleted_at = null
   parent.deleted_with = null
-  for (const t of data.tasks) {
-    if (t.parent_id === id && t.deleted_at && t.deleted_with === id) {
-      t.deleted_at = null
-      t.deleted_with = null
+  const leftBehind = new Set<unknown>()
+  for (const t of descendantsOf(data.tasks, id)) {
+    if (leftBehind.has(t.parent_id)) {
+      leftBehind.add(t.id)
+      continue
     }
+    if (!t.deleted_at) continue
+    if (t.deleted_with !== id) {
+      leftBehind.add(t.id)
+      continue
+    }
+    t.deleted_at = null
+    t.deleted_with = null
   }
   // **되살아난 행을 휴지통에 남은 부모에 매달아 두지 않는다.**
   // 휴지통은 계층 없이 평평하게 그려서 하위작업 행에도 복원 버튼이 있다(TrashView).
@@ -1036,7 +1105,7 @@ export function restoreTask(id: string): void {
   // 안에서만 그려진다 — 부모를 휴지통에 둔 채 자식만 올리면 그 할일은 DB에는 있는데
   // 어느 화면에도 없다. 사용자에게는 "복원했더니 그냥 사라졌다"이고, 그 뒤 부모 행을
   // '영구 삭제'하면 부모 제목만 적힌 확인창 아래에서 같이 지워진다
-  // (`permanentDeleteTask`가 `parent_id === id`를 함께 걷는다). 휴지통을 비우면
+  // (`permanentDeleteTask`가 자손을 함께 걷는다). 휴지통을 비우면
   // 이번엔 부모 행만 사라져, 보이지도 고치지도 지우지도 못하는 행이 영원히 남는다.
   // 조상**만** 올린다 — 그 조상의 다른 하위작업까지 끌어올리면 restoreTask(부모)와
   // 같아져, 사용자가 고른 한 줄이 가족 전체를 되살린다.
@@ -1058,7 +1127,9 @@ export function restoreTask(id: string): void {
 }
 export function permanentDeleteTask(id: string): void {
   assertWritable()
-  data.tasks = data.tasks.filter((t) => t.id !== id && t.parent_id !== id)
+  // 자손 전부를 함께 걷는다 — 직계만 지우면 손자가 없는 id를 가리키는 고아로 남는다.
+  const gone = new Set<unknown>([id, ...descendantsOf(data.tasks, id).map((t) => t.id)])
+  data.tasks = data.tasks.filter((t) => !gone.has(t.id))
   save()
   // 행이 실제로 사라지는 두 경로 중 하나다 — 첨부를 걷지 않으면 아무도 참조하지
   // 않는 사본이 폴더에 영원히 쌓인다. 다만 **지금 걷지는 않는다**: 삭제가 아직
@@ -1095,11 +1166,6 @@ export function reorderTasks(orderedIds: string[]): void {
 }
 export function batchUpdateTasks(ids: string[], updates: Record<string, unknown>): void {
   assertWritable()
-  // 이 배치 안에 부모도 함께 들어 있는 하위작업은 **한 조작으로 함께 내려간 것**이다.
-  // 그 사실을 `deleted_with`에 적어야 부모 하나만 골라 복원했을 때(휴지통 화면)
-  // 하위작업이 따라 올라온다. 예전에는 전부 null이라 일괄 삭제한 부모를 되살리면
-  // main은 부모만 올리는데 렌더러는 하위작업까지 올려 둘이 갈렸다.
-  const batch = new Set(ids)
   for (const id of ids) {
     const task = data.tasks.find((t) => t.id === id)
     if (!task) continue
@@ -1110,24 +1176,47 @@ export function batchUpdateTasks(ids: string[], updates: Record<string, unknown>
     if (updates.listId !== undefined) task.list_id = updates.listId
     if (updates.priority !== undefined) task.priority = updates.priority
     if (updates.dueDate !== undefined) task.due_date = updates.dueDate
-    // `deleteTask`와 같은 규칙 — 이미 버려진 것의 시각을 다시 찍지 않는다.
-    // 일괄 삭제는 호출처가 하위작업 id까지 전부 실어 보내고 되돌리기도 id마다
-    // 따로 복원하므로, 여기서는 캐스케이드 표시를 남기지 않는다.
-    if (updates.deleted !== undefined) {
-      if (!updates.deleted) {
-        task.deleted_at = null
-        task.deleted_with = null
-      } else if (!task.deleted_at) {
-        task.deleted_at = new Date().toISOString()
-        const parentId = task.parent_id
-        task.deleted_with = typeof parentId === 'string' && batch.has(parentId) ? parentId : null
-      }
+    if (updates.deleted !== undefined && !updates.deleted) {
+      task.deleted_at = null
+      task.deleted_with = null
     }
   }
+  if (updates.deleted) trashBatch(ids)
   save()
 }
 
-// === Habits ===
+/**
+ * 일괄 삭제. `deleteTask`와 같은 `trashTree`로 내린다 — 자손 전부, 이미 버려진 것의
+ * 시각은 다시 찍지 않는다.
+ *
+ * 배치 안에 조상도 함께 들어 있는 행은 **한 조작으로 함께 내려간 것**이다. 그 사실을
+ * `deleted_with`에 적어야 뿌리 하나만 골라 복원했을 때(휴지통 화면) 자손이 따라
+ * 올라온다. 예전에는 전부 null이라 일괄 삭제한 부모를 되살리면 main은 부모만 올리는데
+ * 렌더러는 하위작업까지 올려 둘이 갈렸다. 그래서 배치 안에 조상이 없는 행만 뿌리로
+ * 삼아 먼저 내리고, 그 서브트리가 배치의 나머지를 덮는다. 남은 것(순환으로 서로가
+ * 조상인 행)은 그 자리에서 뿌리가 된다.
+ */
+function trashBatch(ids: string[]): void {
+  const now = new Date().toISOString()
+  const batch = new Set<unknown>(ids)
+  const byId = new Map(data.tasks.map((t) => [t.id, t]))
+  const hasAncestorInBatch = (task: Record<string, unknown>): boolean => {
+    const walked = new Set<unknown>([task.id])
+    let cur = task
+    while (typeof cur.parent_id === 'string') {
+      if (batch.has(cur.parent_id)) return true
+      const next = byId.get(cur.parent_id)
+      if (!next || walked.has(next.id)) return false
+      walked.add(next.id)
+      cur = next
+    }
+    return false
+  }
+  const rows = ids.map((id) => byId.get(id)).filter((t) => t !== undefined)
+  for (const task of rows) if (!hasAncestorInBatch(task)) trashTree(task, now)
+  for (const task of rows) if (!task.deleted_at) trashTree(task, now)
+}
+
 export function getHabits(): unknown[] {
   return [...data.habits].sort(
     (a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime()

@@ -108,6 +108,8 @@ interface Store {
    */
   updateFailed: boolean
   updateDownloadProgress: number | null
+  /** 받다가 실패했다. 확인 실패(`updateFailed`)와 따로 둔다 — 새 버전은 있고 다시 받으면 된다. */
+  updateDownloadFailed: boolean
   updateReady: boolean
 
   // 초기화
@@ -434,6 +436,35 @@ async function resyncFromMain(): Promise<void> {
 }
 
 /**
+ * `parentId`로 이어진 자손 전부의 id(자기 자신 제외). **한 단계가 아니다** — main의
+ * `descendantsOf`와 같은 규칙이어야 화면과 디스크가 재시작 전후로 갈리지 않는다.
+ * 상세 패널은 하위작업에도 SubtaskList를 그려 A→B→C가 생기는데, 직계만 내리면
+ * 손자가 살아 남아 살아 있는 부모가 없는, 어느 화면에도 없는 행이 됐다.
+ * `include`가 false인 행은 넣지도 그 아래로 내려가지도 않는다. 순환 parentId에 멈추도록 본 id를 센다.
+ */
+function descendantIds(rows: Task[], id: string, include: (t: Task) => boolean = () => true): string[] {
+  const children = new Map<string, Task[]>()
+  for (const t of rows) {
+    if (!t.parentId) continue
+    const list = children.get(t.parentId)
+    if (list) list.push(t)
+    else children.set(t.parentId, [t])
+  }
+  const out: string[] = []
+  const seen = new Set<string>([id])
+  const queue = [id]
+  while (queue.length) {
+    for (const child of children.get(queue.shift() as string) ?? []) {
+      if (seen.has(child.id) || !include(child)) continue
+      seen.add(child.id)
+      out.push(child.id)
+      queue.push(child.id)
+    }
+  }
+  return out
+}
+
+/**
  * 단건 삭제의 undo 페이로드.
  *
  * `UndoAction.data`가 `unknown`이라 모양을 여기서 정한다 — 넣는 곳과 꺼내는 곳이
@@ -587,6 +618,7 @@ export const useStore = create<Store>((set, get) => ({
   updateChecked: false,
   updateFailed: false,
   updateDownloadProgress: null as number | null,
+  updateDownloadFailed: false,
   updateReady: false,
 
   loadData: async () => {
@@ -895,37 +927,28 @@ export const useStore = create<Store>((set, get) => ({
   },
   removeTask: async (id) => {
     const task = get().tasks.find((t) => t.id === id)
+    // 살아 있는 자손 전부 — main의 `deleteTask`도 같은 집합을 내린다.
+    const subtaskIds = descendantIds(get().tasks, id)
     if (task) {
       get().pushUndo({
         type: 'deleteTask',
-        // **하위작업 id까지 싣는다.** 아래 `set`이 하위작업도 함께 휴지통으로
+        // **자손 id까지 싣는다.** 아래 `set`이 자손도 함께 휴지통으로
         // 옮기는데(main의 `deleteTask`도 같다), undo 데이터가 부모 하나뿐이면
         // 되돌리기가 부모만 되살려 하위작업이 휴지통에 영영 남았다. 화면에서는
         // 하위작업이 통째로 사라진 것으로 보인다. `batchDelete`는 처음부터
         // id 목록을 싣고 있었다 — 단건 경로만 빠져 있었다.
-        data: {
-          task,
-          subtaskIds: get()
-            .tasks.filter((t) => t.parentId === id)
-            .map((t) => t.id)
-        } satisfies DeletedTaskUndo,
+        data: { task, subtaskIds } satisfies DeletedTaskUndo,
         description: i18n.t('undo.taskDeleted', { title: task.title }),
         timestamp: Date.now()
       })
     }
     const now = new Date().toISOString()
-    set((s) => {
-      const subtasks = s.tasks.filter((t) => t.parentId === id)
-      const deletedItems = [
-        ...(task ? [{ ...task, deletedAt: now }] : []),
-        ...subtasks.map((t) => ({ ...t, deletedAt: now }))
-      ]
-      return {
-        tasks: s.tasks.filter((t) => t.id !== id && t.parentId !== id),
-        trashTasks: [...s.trashTasks, ...deletedItems],
-        selectedTaskId: s.selectedTaskId === id ? null : s.selectedTaskId
-      }
-    })
+    const gone = new Set([id, ...subtaskIds])
+    set((s) => ({
+      tasks: s.tasks.filter((t) => !gone.has(t.id)),
+      trashTasks: [...s.trashTasks, ...s.tasks.filter((t) => gone.has(t.id)).map((t) => ({ ...t, deletedAt: now }))],
+      selectedTaskId: s.selectedTaskId && gone.has(s.selectedTaskId) ? null : s.selectedTaskId
+    }))
     persist('deleteTask', () => window.api.deleteTask(id))
   },
   duplicateTask: async (id) => {
@@ -980,14 +1003,15 @@ export const useStore = create<Store>((set, get) => ({
   restoreTask: async (id) => {
     const task = get().trashTasks.find((t) => t.id === id)
     if (task) {
-      // main의 `restoreTask`는 **같은 삭제로 함께 내려간** 하위작업까지 되살린다
-      // (같은 `deletedAt` 타임스탬프가 그 증거다). 화면도 같은 규칙을 써야
+      // main의 `restoreTask`는 **같은 삭제로 함께 내려간** 자손까지 되살린다
+      // (화면에서는 같은 `deletedAt` 타임스탬프가 그 증거다). 화면도 같은 규칙을 써야
       // 재시작 전후가 다르지 않다 — 따로 지웠던 하위작업은 휴지통에 남긴다.
       set((s) => {
-        const back = s.trashTasks.filter(
-          (t) => t.id === id || (t.parentId === id && t.deletedAt === task.deletedAt)
-        )
-        const backIds = new Set(back.map((t) => t.id))
+        // 깊이와 상관없이 같은 삭제의 자손을 올린다. 같은 삭제가 아닌 자손에서는 멈추고
+        // 그 아래로 내려가지 않는다 — 따로 지운 B 아래의 C를 올리면 C는 휴지통의 부모에
+        // 매달린다(main의 `restoreTask`와 같은 규칙).
+        const backIds = new Set([id, ...descendantIds(s.trashTasks, id, (t) => t.deletedAt === task.deletedAt)])
+        const back = s.trashTasks.filter((t) => backIds.has(t.id))
         // **휴지통에 남은 부모에 매달린 채로 올리지 않는다.** 목록 뷰는 전부
         // isTopLevel로 거르고 하위작업은 살아 있는 부모의 상세 안에서만 그려지므로,
         // 부모를 휴지통에 둔 채 자식만 올리면 그 할일은 어느 화면에도 없다 —
@@ -1012,10 +1036,15 @@ export const useStore = create<Store>((set, get) => ({
     persist('restoreTask', () => window.api.restoreTask(id))
   },
   permanentDeleteTask: async (id) => {
-    set((s) => ({
-      trashTasks: s.trashTasks.filter((t) => t.id !== id),
-      tasks: s.tasks.filter((t) => t.id !== id && t.parentId !== id)
-    }))
+    // main의 `permanentDeleteTask`처럼 자손 전부를 걷는다 — 휴지통에 손자가 남으면
+    // 다음 로드까지 부모 없는 행이 보이다가 사라진다.
+    set((s) => {
+      const gone = new Set([id, ...descendantIds([...s.trashTasks, ...s.tasks], id)])
+      return {
+        trashTasks: s.trashTasks.filter((t) => !gone.has(t.id)),
+        tasks: s.tasks.filter((t) => !gone.has(t.id))
+      }
+    })
     persist('permanentDeleteTask', () => window.api.permanentDeleteTask(id))
   },
   emptyTrash: async () => {
@@ -1085,7 +1114,8 @@ export const useStore = create<Store>((set, get) => ({
     const ids = get().batchSelectedIds
     const now = new Date().toISOString()
     const allTasks = get().tasks
-    const subtaskIds = allTasks.filter((t) => t.parentId && ids.includes(t.parentId)).map((t) => t.id)
+    // 자손 전부 — 직계만 실으면 손자가 살아 남는다(main의 `batchUpdateTasks`도 같은 집합을 내린다).
+    const subtaskIds = ids.flatMap((id) => descendantIds(allTasks, id))
     const allDeletedIds = [...new Set([...ids, ...subtaskIds])]
     const deletedTasks = allTasks.filter((t) => allDeletedIds.includes(t.id))
     // 삭제 전 undo 스택에 ID 목록 저장 (popUndo deleteTasks 핸들러가 trashTasks에서 ID로 복원)
@@ -1172,8 +1202,8 @@ export const useStore = create<Store>((set, get) => ({
     set({ undoStack: stack.slice(0, -1) })
     if (action.type === 'deleteTask') {
       const { task, subtaskIds } = readDeletedTaskUndo(action.data)
-      // 부모와 함께 내려간 하위작업을 같이 올린다. main의 `restoreTask`도 같은
-      // 집합을 되살리므로(같은 삭제 타임스탬프를 가진 하위작업), 화면과 디스크가
+      // 부모와 함께 내려간 자손을 같이 올린다. main의 `restoreTask`도 같은
+      // 집합을 되살리므로(같은 삭제로 `deleted_with`가 이 부모인 자손), 화면과 디스크가
       // 어긋나지 않는다 — IPC는 부모 id 하나면 된다.
       const ids = new Set<string>([task.id, ...subtaskIds])
       set((s) => {

@@ -49,6 +49,7 @@ beforeEach(() => {
       toggleHabitLog: vi.fn(),
       deleteTask: vi.fn(),
       restoreTask: vi.fn(),
+      permanentDeleteTask: vi.fn(),
       // AI 액션 경로가 대화를 디스크에 적는지 보는 테스트가 쓴다.
       aiSaveHistory: vi.fn(),
       aiInterpretAction: vi.fn()
@@ -994,6 +995,72 @@ describe('삭제 되돌리기와 하위작업', () => {
     )
     expect(ids(invisible), '살아났는데 부모가 휴지통이라 어느 화면에도 없다').toEqual([])
     expect(ids(live)).toContain('c1')
+  })
+})
+
+/**
+ * 삭제는 **자손 전부**에 캐스케이드한다 — main의 `deleteTask`/`batchUpdateTasks`와 같은 규칙.
+ *
+ * 상세 패널은 하위작업에도 SubtaskList를 그리므로 A→B→C 3단 트리가 생긴다. 예전에는
+ * 직계 하위작업만 내려 손자가 살아 남았고, 화면에서는 살아 있는 부모가 없어 보이지
+ * 않는 행이 됐다(main은 그 상태를 다음 부팅에서 정리한다 — databaseCascade.test.ts).
+ */
+describe('삭제 캐스케이드 — 손자까지', () => {
+  const tree = (): Task[] => [
+    task({ id: 'a', title: 'A' }),
+    task({ id: 'b', title: 'B', parentId: 'a' }),
+    task({ id: 'c', title: 'C', parentId: 'b' }),
+    task({ id: 'z', title: '무관' })
+  ]
+  const ids = (list: Task[]): string[] => list.map((t) => t.id).sort()
+
+  it('removeTask가 손자까지 휴지통으로 내리고, 되돌리기가 모두 올린다', async () => {
+    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('a')
+    expect(ids(useStore.getState().tasks), '손자가 살아 남았다').toEqual(['z'])
+    expect(ids(useStore.getState().trashTasks)).toEqual(['a', 'b', 'c'])
+
+    await useStore.getState().popUndo()
+    expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
+    expect(useStore.getState().trashTasks).toEqual([])
+  })
+
+  it('휴지통의 뿌리 복원이 손자까지 데려온다', async () => {
+    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('a')
+    await useStore.getState().restoreTask('a')
+    expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
+    expect(useStore.getState().trashTasks).toEqual([])
+  })
+
+  it('batchDelete가 손자까지 내리고 main에도 그 id를 모두 보낸다', async () => {
+    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [], batchMode: true, batchSelectedIds: ['a'] })
+    await useStore.getState().batchDelete()
+    expect(ids(useStore.getState().tasks)).toEqual(['z'])
+    expect(ids(useStore.getState().trashTasks)).toEqual(['a', 'b', 'c'])
+    const sent = vi.mocked(window.api.batchUpdateTasks).mock.calls.at(-1)?.[0] as string[]
+    expect([...sent].sort()).toEqual(['a', 'b', 'c'])
+
+    await useStore.getState().popUndo()
+    expect(ids(useStore.getState().tasks)).toEqual(['a', 'b', 'c', 'z'])
+  })
+
+  it('영구 삭제가 휴지통의 손자까지 지운다', async () => {
+    useStore.setState({ tasks: tree(), trashTasks: [], undoStack: [] })
+    await useStore.getState().removeTask('a')
+    await useStore.getState().permanentDeleteTask('a')
+    expect(useStore.getState().trashTasks, '휴지통에 자손이 고아로 남았다').toEqual([])
+    expect(ids(useStore.getState().tasks)).toEqual(['z'])
+  })
+
+  it('손상된 순환 parentId에서 멈춘다', async () => {
+    useStore.setState({
+      tasks: [task({ id: 'p', parentId: 'q' }), task({ id: 'q', parentId: 'p' })],
+      trashTasks: [],
+      undoStack: []
+    })
+    await useStore.getState().removeTask('p')
+    expect(ids(useStore.getState().trashTasks)).toEqual(['p', 'q'])
   })
 })
 
