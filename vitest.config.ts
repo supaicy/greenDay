@@ -24,7 +24,9 @@ const TZ_SENSITIVE = [
   // 빠른 알림이 마감일을 어떻게 읽는지 — Seoul에서는 우연히 맞아떨어진다.
   'src/renderer/src/components/tasks/overlays.test.tsx',
   // 습관 완료율은 창의 경계와 습관 생성일(UTC ISO)을 로컬 날짜로 센다.
-  'src/renderer/src/components/stats/StatsView.test.tsx'
+  'src/renderer/src/components/stats/StatsView.test.tsx',
+  // 같은 계산의 요일·생성일 경계 — 요일은 로컬 날짜에서 나온다.
+  'src/renderer/src/utils/habitStats.test.ts'
 ]
 
 export default defineConfig({

@@ -471,6 +471,28 @@ describe('H16b — 지문이 반복 변화를 잡는다', () => {
     }
     expect(planSync([moved], state, 'https://c/').updates).toHaveLength(1)
   })
+
+  // Value: protects=already-uploaded UTC recurring series are re-sent once in the wall-clock frame;
+  //   fails_when=the 'wallclock' fingerprint marker is removed or applied to one-off events;
+  //   why_new=reanchor can leave start/end untouched, so only this marker differs and no test pinned it; seam=none
+  // 옛 빌드가 남긴 상태의 지문은 마커가 없다. 필드가 하나도 안 바뀐 시리즈도 그 차이 하나로
+  // 갱신 대상이 돼야 서머타임 뒤 한 시간 밀린 일정이 서버에서 고쳐진다.
+  it('UTC 시절 지문으로 올라간 반복 시리즈는 프레임 마커 하나로도 다시 올린다', () => {
+    const event = eventOf(base)
+    const legacy = JSON.stringify((JSON.parse(fingerprint(event)) as unknown[]).slice(0, 10))
+    expect(legacy).not.toBe(fingerprint(event))
+    const state: SyncState = {
+      t1: { href: eventHref('https://c/', 't1'), etag: '"v1"', fingerprint: legacy, sequence: 0 }
+    }
+    expect(planSync([base], state, 'https://c/').updates).toHaveLength(1)
+  })
+
+  it('반복 없는 일정의 지문은 마커 없이 그대로다 — 업그레이드로 재업로드되지 않는다', () => {
+    const oneOff: TaskRow = { ...base, is_recurring: 0, recurring_pattern: null }
+    const fields = JSON.parse(fingerprint(eventOf(oneOff))) as unknown[]
+    expect(fields).toHaveLength(10)
+    expect(fields).not.toContain('wallclock')
+  })
 })
 
 /**

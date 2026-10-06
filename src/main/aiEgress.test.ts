@@ -240,6 +240,19 @@ describe('localOnly는 요청을 보내는 자리 전부에서 강제된다', ()
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  // Value: protects=localOnly blocks a non-ollama provider even at a loopback URL;
+  //   fails_when=the per-hop check stops passing the configured provider (or uses 'ollama');
+  //   why_new=every other localOnly case is ollama, or an external URL that fails on the URL alone; seam=none
+  // 주소가 로컬이어도 ollama가 아니면 온디바이스가 아니다 — LM Studio 같은 OpenAI 호환
+  // 서버는 그 뒤에서 무엇을 부르는지 앱이 알 수 없다. 자물쇠 배지는 "기기 밖으로 안 나간다"는 약속이다.
+  it('잠금이 켜져 있으면 로컬 주소라도 ollama가 아닌 제공자는 막는다', async () => {
+    const ai = await withStoredConfig({ provider: 'openai', baseUrl: 'http://localhost:1234', localOnly: true })
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+    await expect(ai.createTaskFromNL('내일 회의', [])).rejects.toThrow('로컬 전용')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it('잠금이 켜져 있어도 로컬은 나간다', async () => {
     const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ models: [] }) })
