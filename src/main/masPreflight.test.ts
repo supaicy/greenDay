@@ -15,9 +15,9 @@
  * 영원히(그리고 엉뚱한 이유로) 통과한다.
  */
 
-import { describe, it, expect } from 'vitest'
+import { afterAll, describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, chmodSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -26,6 +26,11 @@ const SCRIPT = join(REPO, 'scripts', 'mas-preflight.sh')
 
 const APP_CERT = '  1) AAAA "Apple Distribution: BeGreen (TEAM12345)"'
 const INSTALLER_CERT = '  2) BBBB "3rd Party Mac Developer Installer: BeGreen (TEAM12345)"'
+
+const made: string[] = []
+afterAll(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true })
+})
 
 /**
  * `security` 흉내. `-p codesigning` 은 서명 정책 신원만, 옵션 없는 `-v` 는 설치용까지
@@ -38,6 +43,7 @@ const INSTALLER_CERT = '  2) BBBB "3rd Party Mac Developer Installer: BeGreen (T
  */
 function stubSecurity(have: { app: boolean; installer: boolean }): string {
   const dir = mkdtempSync(join(tmpdir(), 'greenday-preflight-'))
+  made.push(dir)
   const bin = join(dir, 'security')
   const all = [have.app ? APP_CERT : '', have.installer ? INSTALLER_CERT : ''].filter((row) => row !== '')
   const codesigning = have.app ? [APP_CERT] : []

@@ -41,9 +41,19 @@ echo "  $PKG ($(du -h "$PKG" | cut -f1))"
 # **같은 버전의 지난 pkg를 걸러 낸다.** `mas:build`는 dist/를 비우지 않고 pkg 이름에는
 # 버전만 들어가므로, 버전을 안 올린 채 소스를 고치고 빌드를 잊으면 예전 pkg가 위
 # 검사를 그대로 통과했다. pkg가 마지막 커밋보다 오래됐으면 그 커밋은 들어 있지 않다.
-LAST_COMMIT="$(git log -1 --format=%ct 2>/dev/null || true)"
+#
+# git을 못 돌리면 **멈춘다.** Xcode를 새로 깔고 라이선스에 동의하지 않은 맥에서는
+# /usr/bin/git이 실패하는데, 처음 이 검사를 넣었을 때는 그때 조용히 건너뛰었다 —
+# 위 유니버설 검사가 고쳐진 바로 그 "확인 못 했으니 통과" 구멍이다. Command Line
+# Tools의 git은 Xcode 라이선스와 따로라 한 번 더 시도한다.
+LAST_COMMIT="$(git log -1 --format=%ct 2>/dev/null || DEVELOPER_DIR=/Library/Developer/CommandLineTools git log -1 --format=%ct 2>/dev/null || true)"
+if [ -z "$LAST_COMMIT" ]; then
+  echo "ERROR: 마지막 커밋 시각을 알 수 없습니다 — pkg가 최신 소스로 만들어졌는지 확인하지 못했습니다." >&2
+  echo "    git이 동작하는지 확인하세요 (Xcode를 새로 깔았다면: sudo xcodebuild -license accept)" >&2
+  exit 1
+fi
 PKG_MTIME="$(stat -f %m "$PKG")"
-if [ -n "$LAST_COMMIT" ] && [ "$PKG_MTIME" -lt "$LAST_COMMIT" ]; then
+if [ "$PKG_MTIME" -lt "$LAST_COMMIT" ]; then
   echo "ERROR: pkg가 마지막 커밋보다 오래됐습니다 — 최신 소스가 들어 있지 않습니다." >&2
   echo "    rm -rf dist/mas* && npm run mas:build" >&2
   exit 1

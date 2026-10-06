@@ -13,9 +13,9 @@
  * 업로드(xcrun)까지는 절대 가지 않는다.
  */
 
-import { describe, it, expect } from 'vitest'
+import { afterAll, describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -27,8 +27,8 @@ interface Setup {
   app: boolean
   /** 가짜 lipo -archs 가 내놓을 값 */
   archs: string
-  /** 가짜 git log -1 --format=%ct 가 내놓을 마지막 커밋 시각 */
-  lastCommit: number
+  /** 가짜 git log -1 --format=%ct 가 내놓을 마지막 커밋 시각. null이면 git이 실패한다 */
+  lastCommit: number | null
 }
 
 function stub(dir: string, name: string, body: string): void {
@@ -37,8 +37,14 @@ function stub(dir: string, name: string, body: string): void {
   chmodSync(file, 0o755)
 }
 
+const made: string[] = []
+afterAll(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true })
+})
+
 function upload(s: Setup): { code: number | null; out: string } {
   const root = mkdtempSync(join(tmpdir(), 'greenday-mas-upload-'))
+  made.push(root)
   writeFileSync(join(root, 'electron-builder.yml'), 'appId: com.example.test\nproductName: Greenday\n')
   writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '9.9.9' }))
   const outDir = join(root, 'dist', 'mas-universal')
@@ -53,8 +59,10 @@ function upload(s: Setup): { code: number | null; out: string } {
   }
 
   const bin = mkdtempSync(join(tmpdir(), 'greenday-mas-upload-bin-'))
+  made.push(bin)
   stub(bin, 'lipo', `echo "${s.archs}"`)
-  stub(bin, 'git', `echo ${s.lastCommit}`)
+  // null은 git 자체가 실패하는 맥 — Xcode 라이선스에 동의하지 않으면 /usr/bin/git이 이렇게 된다.
+  stub(bin, 'git', s.lastCommit === null ? 'echo "Xcode license" >&2; exit 69' : `echo ${s.lastCommit}`)
   stub(bin, 'security', 'exit 1')
   stub(bin, 'xcrun', 'echo "XCRUN-CALLED"; exit 1')
 
@@ -90,6 +98,16 @@ describe('mas-upload 산출물 검사', () => {
     const r = upload({ app: true, archs: UNIVERSAL, lastCommit: PKG_TIME + 60 })
     expect(r.code).toBe(1)
     expect(r.out).toContain('마지막 커밋보다 오래됐습니다')
+    expect(r.out).not.toContain('2/3')
+  })
+
+  it('git을 못 돌려 마지막 커밋을 모르면 통과시키지 않고 멈춘다', () => {
+    // 확인하지 못한 것을 확인한 것처럼 올리지 않는다 — 유니버설 검사와 같은 원칙.
+    // 이 검사가 처음 들어갔을 때는 git이 실패하면 조용히 건너뛰었고, 그걸 만든 맥이
+    // 바로 git이 막힌 상태였다(2026-10-06 레드팀).
+    const r = upload({ app: true, archs: UNIVERSAL, lastCommit: null })
+    expect(r.code).toBe(1)
+    expect(r.out).toContain('마지막 커밋 시각을 알 수 없습니다')
     expect(r.out).not.toContain('2/3')
   })
 

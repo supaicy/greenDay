@@ -117,7 +117,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </div>
 
           <details className="mt-6">
-            <summary className="cursor-pointer text-xs text-gray-500 dark:text-gray-500">
+            <summary className="cursor-pointer text-xs text-gray-500 dark:text-gray-400">
               {t('crash.details', '오류 자세히 보기')}
             </summary>
             <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-gray-100 p-3 text-[11px] leading-relaxed text-gray-700 dark:bg-gray-900 dark:text-gray-300">

@@ -1,6 +1,7 @@
 import { isMainLanguage, mainStrings, type MainLanguage } from '../shared/main-strings'
 
-// 렌더러가 알려 주는 UI 언어. 메인이 직접 띄우는 문구(리마인더 알림, 앱 메뉴)에만 쓴다.
+// 렌더러가 알려 주는 UI 언어. 메인이 사용자에게 직접 보이거나 렌더러로 돌려주는 문구 전부
+// (리마인더 알림, 앱 메뉴, 시작·종료 대화상자, 파일 선택 필터 이름, 동기화·OAuth 오류)가 이걸 따른다.
 // index.ts의 모듈 지역 변수였을 때는 ipc-handlers가 읽을 수 없어 문구가 갈렸다.
 //
 // **렌더러가 말하기 전의 기본값은 `seedUiLanguage()`가 OS 로케일로 정한다.** 창보다
