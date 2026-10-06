@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   GoogleCalendarClient,
   type GoogleApiError,
@@ -430,5 +430,46 @@ describe('403 — 거부와 할당량을 가른다', () => {
     await expect(new GoogleCalendarClient('tok', fetchImpl).getCalendar('c')).rejects.toMatchObject({
       code: 'rate_limit'
     })
+  })
+})
+
+/**
+ * Value: protects=GoogleCalendarClient의 요청 하나당 상한(30초) — 응답하지 않는 네트워크에서
+ *   `google:sync-now`가 끝나고 network로 접힌다; fails_when=calendar.ts의 `request()`에서
+ *   `signal: AbortSignal.timeout(...)`을 빼면(undici 기본 5분까지 매달려 설정의 버튼이 busy로
+ *   잠기고, 일정 수만큼 곱해진다); why_new=같은 커밋의 상한은 CalDAV(client.test.ts)와 OAuth
+ *   토큰(oauth.test.ts)에만 시험이 있고 구글 캘린더 클라이언트에는 없다; seam=none
+ */
+describe('요청 상한', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('응답하지 않는 서버에 매달리지 않는다 — 상한 뒤 network로 접는다(null로 삼키지 않는다)', async () => {
+    // 30초를 실제로 기다릴 수는 없다. 요청한 값만 확인하고 타이머는 20ms로 줄인다.
+    const real = AbortSignal.timeout.bind(AbortSignal)
+    const asked: number[] = []
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      asked.push(ms)
+      return real(20)
+    })
+    // 연결은 받아 주고 응답은 하지 않는 서버. signal이 없으면 이 promise는 영영 끝나지 않는다.
+    const stalling: FetchLike = (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init.signal
+        if (!signal) return
+        if (signal.aborted) return reject(signal.reason)
+        signal.addEventListener('abort', () => reject(signal.reason))
+      })
+
+    const settled = await Promise.race([
+      new GoogleCalendarClient('tok', stalling).getCalendar('ours').then(
+        () => 'resolved',
+        (error: unknown) => error
+      ),
+      new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+    ])
+
+    expect(settled, '상한이 없어 요청이 끝나지 않았다').not.toBe('hung')
+    expect(settled).toMatchObject({ name: 'GoogleApiError', code: 'network' })
+    expect(asked).toEqual([30_000])
   })
 })

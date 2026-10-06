@@ -116,4 +116,24 @@ describe('깨진 license.json 을 옆으로 치웠으면 사용자에게 말한�
     await boot(false)
     expect(showErrorBox).not.toHaveBeenCalled()
   })
+
+  /**
+   * Value: protects=스토어(MAS) 빌드에서는 라이선스 안내를 띄우지 않는 `needsLicenseKey` 조건;
+   *   fails_when=index.ts의 `licenseStoreSalvaged() && currentCapabilities().needsLicenseKey`에서
+   *   뒤 조건이 빠지면(스토어 빌드가 "라이선스 키" 대화상자를 띄워 Apple 3.1.1 외부 결제 유도로
+   *   심사에서 거절된다 — CLAUDE.md 라이선스 절); why_new=위 두 경우는 직접 배포 빌드만 돌려
+   *   그 조건이 참인 쪽만 본다; seam=none (`process.mas`는 Electron이 MAS 빌드에서 세우는 그 값이다)
+   */
+  it('스토어 빌드에서는 깨진 파일이 있어도 띄우지 않는다 — 키를 말하는 화면이 심사에서 거절된다', async () => {
+    const proc = process as unknown as { mas?: boolean }
+    const before = proc.mas
+    proc.mas = true
+    try {
+      await boot(true)
+      expect(showErrorBox).not.toHaveBeenCalled()
+    } finally {
+      if (before === undefined) delete proc.mas
+      else proc.mas = before
+    }
+  })
 })

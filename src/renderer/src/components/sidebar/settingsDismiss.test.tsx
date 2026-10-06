@@ -14,10 +14,11 @@
  * `onOpenChange`를 직접 잡고, "닫힌 상태에서 받은 닫힘 신호"라는 계약을 본다.
  */
 
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStore } from '../../store/useStore'
+import en from '../../i18n/locales/en.json'
 
 let lastOnOpenChange: ((open: boolean) => void) | undefined
 
@@ -72,5 +73,28 @@ describe('설정 다이얼로그 닫힘 신호', () => {
     render(<Settings />)
     lastOnOpenChange?.(false)
     expect(useStore.getState().showSettings).toBe(false)
+  })
+})
+
+/**
+ * Value: protects=업데이트 확인이 실패한 상태(`updateFailed`)를 설정이 실패로 말하는 것 — 실패
+ *   가지가 '최신' 가지보다 먼저 온다; fails_when=Settings.tsx에서 `updateFailed` 가지를 빼거나
+ *   `updateChecked && !updateAvailable` 뒤로 옮기면(App.tsx가 실패에도 `updateChecked: true`를
+ *   세우므로 한 번도 못 물어본 채 "최신 버전입니다"라고 거짓말한다); why_new=updaterError.test.ts는
+ *   main이 'update-error'를 보내는 데서 멈추고, 그 상태를 그리는 렌더러 가지는 어느 테스트도
+ *   그리지 않는다; seam=none (같은 다이얼로그 대역을 재사용한다. Settings가 i18n을 영어로 띄우므로
+ *   문구는 en.json에서 읽는다)
+ */
+describe('업데이트 확인 실패 표시', () => {
+  it('확인이 실패하면 "최신 버전" 대신 실패를 말한다', () => {
+    useStore.setState({
+      showSettings: true,
+      updateChecked: true,
+      updateFailed: true,
+      updateAvailable: null
+    })
+    render(<Settings />)
+    expect(screen.getByText(en.settings.updateCheckFailed)).toBeTruthy()
+    expect(screen.queryByText(en.settings.upToDate)).toBeNull()
   })
 })
