@@ -93,6 +93,10 @@ export function WeeklyCalendar(): React.ReactElement {
 
   // 마운트 때 한 번만 업무시간으로 스크롤한다. 주를 넘길 때마다 되감으면
   // 새벽 일정을 보던 사용자를 08:00으로 끌어다 놓는다 — 그래서 의존성은 빈 배열이다.
+  // 요일 헤더와 종일 행은 한 sticky 래퍼로 같이 고정한다. 헤더만 고정하면 이 스크롤이
+  // 종일 할일을 화면 밖으로 밀어내고, 목표값도 그 행 높이만큼 어긋난다. 래퍼가 격자
+  // 바로 위 흐름 안에 있으므로 scrollTop = 초점시각 높이가 그 시각을 래퍼 바로 아래에
+  // 정확히 놓는다 — 둘 사이에 다른 요소를 끼우지 말 것.
   const gridRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = gridRef.current
@@ -268,80 +272,85 @@ export function WeeklyCalendar(): React.ReactElement {
         <UnscheduledRail isDark={isDark} />
         <div ref={gridRef} className="flex-1 overflow-auto">
           <div className="min-w-[700px]">
-            {/* 요일 헤더 */}
-            <div
-              className={`flex border-b sticky top-0 z-10 ${
-                isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'
-              }`}
-            >
-              {/* 시간 칼럼 빈칸 */}
-              <div className="w-16 flex-shrink-0" />
-              {weekDays.map((day) => {
-                const dateStr = dateToStr(day)
-                const isToday = dateStr === todayStr
-                return (
-                  <div
-                    key={dateStr}
-                    className={`flex-1 text-center py-2 border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
-                  >
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {tList('date.weekdaysShort')[day.getDay()]}
-                    </div>
-                    <div
-                      className={`text-sm font-medium mt-0.5 ${
-                        isToday
-                          ? 'bg-blue-500 text-white w-7 h-7 rounded-full flex items-center justify-center mx-auto'
-                          : isDark
-                            ? 'text-gray-200'
-                            : 'text-gray-800'
-                      }`}
-                    >
-                      {day.getDate()}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* 종일 이벤트 행 */}
-            {weekDays.some((day) => {
-              const dateStr = dateToStr(day)
-              return (tasksByDate[dateStr]?.allDay.length ?? 0) > 0
-            }) && (
-              <div className={`flex border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                <div
-                  className={`w-16 flex-shrink-0 text-[10px] text-right pr-2 py-1 ${
-                    isDark ? 'text-gray-500' : 'text-gray-400'
-                  }`}
-                >
-                  {t('date.allDay')}
-                </div>
+            {/* 고정 층: 요일 헤더 + 종일 행. min-w 래퍼 안에 있어 가로 스크롤 때 격자 칼럼과
+              함께 움직인다. z-10은 오버레이(110/111)·토스트(90) 아래다. */}
+            <div className="sticky top-0 z-10">
+              {/* 요일 헤더 */}
+              <div className={`flex border-b ${isDark ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+                {/* 시간 칼럼 빈칸 */}
+                <div className="w-16 flex-shrink-0" />
                 {weekDays.map((day) => {
                   const dateStr = dateToStr(day)
-                  const allDayTasks = tasksByDate[dateStr]?.allDay ?? []
+                  const isToday = dateStr === todayStr
                   return (
                     <div
-                      key={`allday-${dateStr}`}
-                      className={`flex-1 border-l p-1 space-y-0.5 min-h-[28px] ${
-                        isDark ? 'border-gray-700' : 'border-gray-200'
-                      }`}
+                      key={dateStr}
+                      className={`flex-1 text-center py-2 border-l ${isDark ? 'border-gray-700' : 'border-gray-200'}`}
                     >
-                      {allDayTasks.map((task) => (
-                        // 종일 태스크: 단순 클릭 → Pattern A (button)
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => selectTask(task.id)}
-                          className={`${taskCardClass(task)} w-full text-left`}
-                        >
-                          {task.title}
-                        </button>
-                      ))}
+                      <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {tList('date.weekdaysShort')[day.getDay()]}
+                      </div>
+                      <div
+                        className={`text-sm font-medium mt-0.5 ${
+                          isToday
+                            ? 'bg-blue-500 text-white w-7 h-7 rounded-full flex items-center justify-center mx-auto'
+                            : isDark
+                              ? 'text-gray-200'
+                              : 'text-gray-800'
+                        }`}
+                      >
+                        {day.getDate()}
+                      </div>
                     </div>
                   )
                 })}
               </div>
-            )}
+
+              {/* 종일 이벤트 행 */}
+              {weekDays.some((day) => {
+                const dateStr = dateToStr(day)
+                return (tasksByDate[dateStr]?.allDay.length ?? 0) > 0
+              }) && (
+                // 불투명 배경 — 고정된 채 아래 시간 셀이 비쳐 보이지 않게.
+                <div
+                  className={`flex border-b ${isDark ? 'border-gray-700 bg-[#1C1C1E]' : 'border-gray-200 bg-white'}`}
+                >
+                  <div
+                    className={`w-16 flex-shrink-0 text-[10px] text-right pr-2 py-1 ${
+                      isDark ? 'text-gray-500' : 'text-gray-400'
+                    }`}
+                  >
+                    {t('date.allDay')}
+                  </div>
+                  {weekDays.map((day) => {
+                    const dateStr = dateToStr(day)
+                    const allDayTasks = tasksByDate[dateStr]?.allDay ?? []
+                    return (
+                      // 높이 상한은 칸마다 건다 — 행 전체에 스크롤을 걸면 세로 스크롤바 폭만큼
+                      // 칼럼이 아래 격자와 어긋난다. 칸 안 스크롤바는 그 칸만 좁힌다.
+                      <div
+                        key={`allday-${dateStr}`}
+                        className={`flex-1 border-l p-1 space-y-0.5 min-h-[28px] max-h-[96px] overflow-y-auto ${
+                          isDark ? 'border-gray-700' : 'border-gray-200'
+                        }`}
+                      >
+                        {allDayTasks.map((task) => (
+                          // 종일 태스크: 단순 클릭 → Pattern A (button)
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => selectTask(task.id)}
+                            className={`${taskCardClass(task)} w-full text-left`}
+                          >
+                            {task.title}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
 
             {/* 시간 슬롯 — day-first layout.
               Left: fixed time-axis column with hour labels.

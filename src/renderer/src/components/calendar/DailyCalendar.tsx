@@ -93,6 +93,10 @@ export function DailyCalendar(): React.ReactElement {
 
   // 마운트 때 한 번만 업무시간으로 스크롤한다. 날짜를 넘길 때마다 되감으면
   // 새벽 일정을 보던 사용자를 06:00으로 끌어다 놓는다 — 그래서 의존성은 빈 배열이다.
+  // 종일 블록은 같은 스크롤 컨테이너 맨 위에 sticky로 고정한다. 고정하지 않으면 이
+  // 스크롤이 종일 할일을 화면 밖으로 밀어내고, 목표값도 그 블록 높이만큼 어긋난다.
+  // 고정 블록이 격자 바로 위 흐름 안에 있으므로 scrollTop = 초점시각 높이가 그 시각을
+  // 고정 블록 바로 아래에 정확히 놓는다 — 둘 사이에 다른 요소를 끼우지 말 것.
   const gridRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = gridRef.current
@@ -244,9 +248,14 @@ export function DailyCalendar(): React.ReactElement {
       <div className="flex-1 flex min-h-0">
         <UnscheduledRail isDark={isDark} />
         <div ref={gridRef} className="flex-1 overflow-y-auto">
-          {/* 종일 태스크 */}
+          {/* 종일 태스크 — 스크롤해도 위에 고정. 불투명 배경이라 아래 슬롯이 비치지 않고,
+            z-10은 오버레이(110/111)·토스트(90) 아래다. 길어지면 자체 스크롤로 격자를 못 먹게 한다. */}
           {allDayTasks.length > 0 && (
-            <div className={`px-6 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div
+              className={`sticky top-0 z-10 max-h-[30vh] overflow-y-auto px-6 py-3 border-b ${
+                isDark ? 'border-gray-700 bg-[#1C1C1E]' : 'border-gray-200 bg-white'
+              }`}
+            >
               <div className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 {t('date.allDay')}
               </div>
