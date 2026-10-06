@@ -650,6 +650,50 @@ function normalizeLegacyWeeklyPattern(t: Record<string, unknown>): void {
   }
 }
 
+/**
+ * **살아 있는데 어느 화면에도 없는 행을 되찾는다.** 부팅 때마다 돈다(멱등).
+ *
+ * 목록은 parentId 없는 행만 세우고 하위작업은 **살아 있는** 부모 상세 안에서만
+ * 그려진다. 그래서 살아 있는 행의 조상 사슬이 휴지통에서 끊기거나(옛 빌드에서
+ * 휴지통의 하위작업만 복원한 경우 — `restoreTask` 주석), 없는 id에서 끊기면(그 뒤
+ * 휴지통을 비운 경우) 그 행은 DB에만 있다. 앞의 것은 부모를 '영구 삭제'할 때 확인창에
+ * 없이 함께 지워지고, 뒤의 것은 보이지도 지우지도 못한다. `restoreTask`가 새로
+ * 생기는 것은 막았지만 이미 사용자 파일에 남은 것은 아무도 고치지 않았다.
+ *
+ * 규칙은 `restoreTask`와 같다: 휴지통에 있는 **조상만** 올린다 — 그 조상의 다른
+ * 하위작업은 휴지통에 둔다. 사슬이 없는 id나 순환에서 끊기면 매달 곳이 없으니 그
+ * 자리에서 최상위로 올린다. 행을 지우는 경우는 없다. 휴지통 안의 행은 건드리지
+ * 않는다 — 휴지통은 계층 없이 평평하게 그리므로 거기서는 고아도 보인다.
+ */
+function healUnreachableTasks(tasks: Record<string, unknown>[]): void {
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  let lifted = 0
+  let promoted = 0
+  for (const task of tasks) {
+    if (task.deleted_at) continue
+    let child = task
+    const walked = new Set<unknown>([task.id])
+    while (typeof child.parent_id === 'string') {
+      const ancestor = byId.get(child.parent_id)
+      if (!ancestor || walked.has(ancestor.id)) {
+        child.parent_id = null
+        promoted++
+        break
+      }
+      walked.add(ancestor.id)
+      if (ancestor.deleted_at) {
+        ancestor.deleted_at = null
+        ancestor.deleted_with = null
+        lifted++
+      }
+      child = ancestor
+    }
+  }
+  if (lifted + promoted > 0) {
+    console.info(`[db] 보이지 않던 할일 복구: 휴지통의 조상 ${lifted}개 복원, ${promoted}개 최상위로`)
+  }
+}
+
 export function initDatabase(): void {
   const userDataPath = app.getPath('userData')
   if (!existsSync(userDataPath)) mkdirSync(userDataPath, { recursive: true })
@@ -742,6 +786,7 @@ export function initDatabase(): void {
     }
     normalizeLegacyWeeklyPattern(t)
   })
+  healUnreachableTasks(data.tasks)
   data.lists.forEach((l) => {
     if (l.folder_id === undefined) l.folder_id = null
   })
