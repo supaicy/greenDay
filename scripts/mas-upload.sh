@@ -129,9 +129,18 @@ fi
 
 echo "── 3/3  검증 후 업로드"
 
+# **암호는 argv에 싣지 않는다.** `-p "$APPLE_APP_PASSWORD"`로 넘기면 검증·업로드가 도는
+# 몇 분 동안 같은 맥의 어떤 프로세스든 `ps`로 읽는다 — 위 머리말의 "어디에도 저장하지
+# 않는다"와 어긋났다. altool은 `@env:변수명`으로 환경변수에서 읽는다.
+export APPLE_APP_PASSWORD
+# 로그도 정해진 /tmp 경로가 아니라 이 실행만의 임시 파일에 — 누구나 쓰는 /tmp의 고정
+# 이름은 미리 심어 둔 심볼릭 링크로 다른 파일을 덮게 만들 수 있다.
+VALIDATE_LOG="$(mktemp -t greenday-mas-validate)"
+trap 'rm -f "$VALIDATE_LOG"' EXIT
+
 echo "  검증 중…"
 if ! xcrun altool --validate-app -f "$PKG" -t macos \
-       -u "$APPLE_ID" -p "$APPLE_APP_PASSWORD" 2>&1 | tee /tmp/mas-validate.log; then
+       -u "$APPLE_ID" -p @env:APPLE_APP_PASSWORD 2>&1 | tee "$VALIDATE_LOG"; then
   echo >&2
   echo "검증 실패. 위 메시지를 확인하세요. 업로드는 시도하지 않았습니다." >&2
   exit 1
@@ -140,13 +149,13 @@ fi
 # altool은 성공 시 "VERIFY SUCCEEDED" 와 "No errors validating" 을 출력한다.
 # 단순히 'error' 를 찾으면 그 성공 문구의 "no errors" 에 걸려 성공을 실패로 읽는다.
 # 실제 실패 표식만 본다.
-if grep -qE "ERROR ITMS-|\*\*\* Error|error:|VERIFY FAILED" /tmp/mas-validate.log; then
+if grep -qE "ERROR ITMS-|\*\*\* Error|error:|VERIFY FAILED" "$VALIDATE_LOG"; then
   echo >&2
   echo "검증에서 오류가 보고됐습니다. 업로드는 시도하지 않았습니다." >&2
   exit 1
 fi
 
-if ! grep -q "VERIFY SUCCEEDED" /tmp/mas-validate.log; then
+if ! grep -q "VERIFY SUCCEEDED" "$VALIDATE_LOG"; then
   echo >&2
   echo "검증 성공 표식을 찾지 못했습니다. 위 출력을 확인하세요." >&2
   exit 1
@@ -155,7 +164,7 @@ echo "  검증 통과"
 
 echo "  업로드 중… (파일이 커서 몇 분 걸립니다)"
 if xcrun altool --upload-app -f "$PKG" -t macos \
-     -u "$APPLE_ID" -p "$APPLE_APP_PASSWORD"; then
+     -u "$APPLE_ID" -p @env:APPLE_APP_PASSWORD; then
   echo
   echo "업로드 완료."
   echo "App Store Connect에서 처리에 5~30분 걸립니다. 처리가 끝나면"

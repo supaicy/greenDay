@@ -15,7 +15,7 @@
 
 import { afterAll, describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -29,7 +29,13 @@ interface Setup {
   archs: string
   /** 가짜 git log -1 --format=%ct 가 내놓을 마지막 커밋 시각. null이면 git이 실패한다 */
   lastCommit: number | null
+  /** 'clt-only'면 기본 git은 실패하고 Command Line Tools(DEVELOPER_DIR)로만 돈다 */
+  git?: 'clt-only'
+  /** 자격증명을 환경변수로 준다 — 그러면 검증·업로드(xcrun 가짜)까지 간다 */
+  creds?: boolean
 }
+
+const PASSWORD = 'abcd-efgh-ijkl-mnop'
 
 function stub(dir: string, name: string, body: string): void {
   const file = join(dir, name)
@@ -42,7 +48,7 @@ afterAll(() => {
   for (const dir of made) rmSync(dir, { recursive: true, force: true })
 })
 
-function upload(s: Setup): { code: number | null; out: string } {
+function upload(s: Setup): { code: number | null; out: string; args: string } {
   const root = mkdtempSync(join(tmpdir(), 'greenday-mas-upload-'))
   made.push(root)
   writeFileSync(join(root, 'electron-builder.yml'), 'appId: com.example.test\nproductName: Greenday\n')
@@ -62,18 +68,39 @@ function upload(s: Setup): { code: number | null; out: string } {
   made.push(bin)
   stub(bin, 'lipo', `echo "${s.archs}"`)
   // null은 git 자체가 실패하는 맥 — Xcode 라이선스에 동의하지 않으면 /usr/bin/git이 이렇게 된다.
-  stub(bin, 'git', s.lastCommit === null ? 'echo "Xcode license" >&2; exit 69' : `echo ${s.lastCommit}`)
+  const gitBody =
+    s.lastCommit === null
+      ? 'echo "Xcode license" >&2; exit 69'
+      : s.git === 'clt-only'
+        ? `[ "$DEVELOPER_DIR" = /Library/Developer/CommandLineTools ] || { echo "Xcode license" >&2; exit 69; }; echo ${s.lastCommit}`
+        : `echo ${s.lastCommit}`
+  stub(bin, 'git', gitBody)
   stub(bin, 'security', 'exit 1')
-  stub(bin, 'xcrun', 'echo "XCRUN-CALLED"; exit 1')
+  // 받은 인자를 그대로 적어 둔다 — 암호가 프로세스 목록(argv)에 실렸는지 본다.
+  const argsLog = join(root, 'xcrun-args')
+  stub(
+    bin,
+    'xcrun',
+    s.creds
+      ? `echo "$*" >> "${argsLog}"; echo "XCRUN-CALLED"; case "$*" in *--validate-app*) echo "VERIFY SUCCEEDED";; esac; exit 0`
+      : 'echo "XCRUN-CALLED"; exit 1'
+  )
 
   const { APPLE_ID: _id, APPLE_APP_PASSWORD: _pw, ...env } = process.env
+  const creds = s.creds ? { APPLE_ID: 'dev@example.com', APPLE_APP_PASSWORD: PASSWORD } : {}
   const r = spawnSync('bash', [SCRIPT], {
     cwd: root,
     encoding: 'utf-8',
-    env: { ...env, PATH: `${bin}:${process.env.PATH}` },
+    env: { ...env, ...creds, PATH: `${bin}:${process.env.PATH}` },
     stdio: ['ignore', 'pipe', 'pipe']
   })
-  return { code: r.status, out: `${r.stdout}${r.stderr}` }
+  let args = ''
+  try {
+    args = readFileSync(argsLog, 'utf-8')
+  } catch {
+    // xcrun까지 가지 않았다
+  }
+  return { code: r.status, out: `${r.stdout}${r.stderr}`, args }
 }
 
 const FRESH = PKG_TIME - 60
@@ -109,6 +136,25 @@ describe('mas-upload 산출물 검사', () => {
     expect(r.code).toBe(1)
     expect(r.out).toContain('마지막 커밋 시각을 알 수 없습니다')
     expect(r.out).not.toContain('2/3')
+  })
+
+  it('Xcode git이 막혀도 Command Line Tools git으로 커밋 시각을 읽어 계속한다', () => {
+    const r = upload({ app: true, archs: UNIVERSAL, lastCommit: FRESH, git: 'clt-only' })
+    expect(r.out).toContain('2/3')
+    expect(r.out).not.toContain('마지막 커밋 시각을 알 수 없습니다')
+  })
+
+  // Value: protects=the app-specific password never appears in altool's argv;
+  //   fails_when=the script goes back to -p "$APPLE_APP_PASSWORD";
+  //   why_new=no test reached the altool calls with credentials before; seam=none
+  // argv는 같은 맥의 어떤 프로세스든 `ps`로 읽는다. 검증·업로드는 몇 분 걸린다.
+  it('앱 암호를 명령줄 인자로 넘기지 않는다 — 환경변수 참조로만', () => {
+    const r = upload({ app: true, archs: UNIVERSAL, lastCommit: FRESH, creds: true })
+    expect(r.out).toContain('업로드 완료')
+    expect(r.args).toContain('--validate-app')
+    expect(r.args).toContain('--upload-app')
+    expect(r.args).toContain('@env:APPLE_APP_PASSWORD')
+    expect(r.args).not.toContain(PASSWORD)
   })
 
   it('최신 유니버설 pkg 면 검사를 통과해 계정 단계로 간다', () => {
