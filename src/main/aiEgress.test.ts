@@ -240,6 +240,19 @@ describe('localOnly는 요청을 보내는 자리 전부에서 강제된다', ()
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  // Value: protects=localOnly blocks a non-ollama provider even at a loopback URL;
+  //   fails_when=the per-hop check stops passing the configured provider (or uses 'ollama');
+  //   why_new=every other localOnly case is ollama, or an external URL that fails on the URL alone; seam=none
+  // 주소가 로컬이어도 ollama가 아니면 온디바이스가 아니다 — LM Studio 같은 OpenAI 호환
+  // 서버는 그 뒤에서 무엇을 부르는지 앱이 알 수 없다. 자물쇠 배지는 "기기 밖으로 안 나간다"는 약속이다.
+  it('잠금이 켜져 있으면 로컬 주소라도 ollama가 아닌 제공자는 막는다', async () => {
+    const ai = await withStoredConfig({ provider: 'openai', baseUrl: 'http://localhost:1234', localOnly: true })
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+    await expect(ai.createTaskFromNL('내일 회의', [])).rejects.toThrow('로컬 전용')
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
   it('잠금이 켜져 있어도 로컬은 나간다', async () => {
     const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ models: [] }) })
@@ -353,6 +366,35 @@ describe('리다이렉트 — 홉마다 다시 검사한다', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('302'))
+  })
+
+  /**
+   * 자물쇠(`localOnly`)도 **홉마다** 다시 판정해야 한다. 판정을 저장된 `cfg.baseUrl`로
+   * 하면 리다이렉트가 통째로 빠져나간다 — 실측: `localhost:11434`가
+   * `302 Location: http://mirror.example/api/tags` 하나만 줘도, 잠금이 켜진 채 두 번째
+   * 요청이 외부 호스트로 나갔고(93.184.216.34) 그 호스트가 준 모델 목록이 드롭다운에
+   * 들어왔다. 그동안 설정 화면은 "외부 AI 제공자를 차단해 데이터가 기기를 벗어나지
+   * 않습니다"라고 말하고 온디바이스 배지를 켜 두고 있었다.
+   */
+  it('잠금이 켜져 있으면 외부로 가는 302는 따라가지 않는다', async () => {
+    dns.set('mirror.example', ['93.184.216.34'])
+    const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
+    mockFetch.mockResolvedValueOnce(redirect('http://mirror.example/api/tags'))
+    mockFetch.mockResolvedValueOnce(ok({ models: [{ name: 'evil:latest' }] }))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: false })
+    // http는 검증된 IP로 고정돼 나가므로 URL에 이름이 안 보인다 — 첫 홉 하나뿐이어야 한다.
+    expect(mockFetch.mock.calls.map((c) => c[0])).toEqual(['http://localhost:11434/api/tags'])
+  })
+
+  /** 과잉 수정 방지 — 잠금은 로컬끼리의 홉까지 막으면 안 된다. */
+  it('잠금이 켜져 있어도 로컬끼리의 302는 따라간다', async () => {
+    const ai = await withStoredConfig({ provider: 'ollama', baseUrl: 'http://localhost:11434', localOnly: true })
+    mockFetch.mockResolvedValueOnce(redirect('http://127.0.0.1:8080/api/tags'))
+    mockFetch.mockResolvedValueOnce(ok({ models: [{ name: 'llama3.2:latest' }] }))
+
+    await expect(ai.checkConnection()).resolves.toEqual({ connected: true, models: ['llama3.2:latest'] })
+    expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
   it('리다이렉트 고리는 상한에서 끊는다', async () => {

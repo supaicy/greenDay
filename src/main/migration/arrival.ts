@@ -21,6 +21,7 @@ import {
   SENTINEL_FILE,
   backupExists,
   backupUserData,
+  checkIntegrity,
   checkSentinel,
   emptyState,
   hasStoredCiphertexts,
@@ -48,7 +49,11 @@ export interface ArrivalDeps {
    * 사용자가 "거부"를 누르지 않는다. 동기다 — 안내가 닫힌 뒤에 복호화가 시작된다.
    */
   notifyKeychain: () => void
-  /** `/Applications/haru.app` 같은 옛 앱이 아직 있는가. */
+  /**
+   * `/Applications/haru.app` 같은 옛 앱이 아직 있는가.
+   * 옛 데이터를 **이어받지 못하는** 빌드(MAS 샌드박스)에서는 호출처가 항상 false 를 준다 —
+   * `boot.ts` 의 `oldAppVisible()` 과 `capabilities.inheritsLegacyData` 참고.
+   */
   oldAppPresent: () => boolean
   /** Google 토큰이 실제로 읽히는가 — sentinel이 ok일 때만 부른다. */
   googleTokensReadable: () => boolean
@@ -59,7 +64,10 @@ export interface ArrivalOutcome {
   state: MigrationState
 }
 
-/** 잠기는 sentinel 결과. `ok`와 `skipped`만 연다. */
+/**
+ * 잠길 **수 있는** sentinel 결과. `ok`와 `skipped`는 애초에 여기 없고, 여기 있어도
+ * 실제로 잠그는지는 `applyGate`가 "지킬 암호문이 있는가"까지 보고 정한다.
+ */
 const LOCKING: ReadonlySet<SentinelCheck> = new Set(['missing', 'unavailable', 'denied', 'mismatch', 'corrupt'])
 
 export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
@@ -85,6 +93,7 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
       // 나중에 허용하면 여기서 열린다. 백업도 안내도 다시 하지 않는다.
       const sentinel = checkSentinel(sentinelPath, deps.crypto)
       const locked = applyGate(sentinel, hasStoredCiphertexts(deps.userData))
+      refreshSentinelIfOpen(sentinelPath, deps.crypto, sentinel, locked)
       return {
         status: {
           mode: 'arrival',
@@ -93,8 +102,10 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
           sentinel,
           secretsLocked: locked,
           lockReason: locked ? sentinel : null,
-          googleReconnect: locked ? googleHasTokens(deps.userData) : false,
-          oldAppRemovable: !locked && deps.oldAppPresent() && !existing.arrival?.oldAppHintDismissed,
+          googleReconnect: needsGoogleReconnect(deps, locked),
+          // 닫은 안내가 먼저다 — 다시 뜨지 않을 안내를 위해 매 실행 데이터 파일과 `.bak`을
+          // 통째로 파싱하지 않는다.
+          oldAppRemovable: !existing.arrival?.oldAppHintDismissed && canRemoveOldApp(deps, locked),
           oldAppHintDismissed: existing.arrival?.oldAppHintDismissed ?? false
         },
         state: existing
@@ -121,17 +132,16 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
     }
     const locked = applyGate(sentinel, ciphertexts)
 
-    // 재 볼 것이 없었고 암호화가 되는 환경이면 지금 sentinel을 심는다 — 다음 실행부터는
-    // "같은 키인가"를 잴 수 있다. 잠긴 상태에서는 심지 않는다: 새 키로 만든 sentinel이
-    // 옛 암호문을 "검증"하는 척하게 된다.
-    if (sentinel === 'skipped' && !locked) writeSentinel(sentinelPath, deps.crypto)
+    // 재 볼 것이 없었거나(skipped) 지킬 것이 없어 면제로 열렸으면 지금 sentinel을 심는다 —
+    // 다음 실행부터는 "같은 키인가"를 잴 수 있다. 잠긴 상태에서는 심지 않는다.
+    refreshSentinelIfOpen(sentinelPath, deps.crypto, sentinel, locked)
 
     // 8. OAuth. 잠겼으면 토큰을 읽을 수 없으니 재로그인이다. 열렸어도 실제로 읽히는지
     //    한 번 본다(봉투 형식·계정 결속은 그쪽 모듈의 규칙이다).
-    const googleReconnect = googleHasTokens(deps.userData) && (locked || !deps.googleTokensReadable())
+    const googleReconnect = needsGoogleReconnect(deps, locked)
 
     // 9. 정상 확인 후에만 옛 앱 제거 안내.
-    const oldAppRemovable = !locked && deps.oldAppPresent()
+    const oldAppRemovable = canRemoveOldApp(deps, locked)
 
     const state: MigrationState = {
       ...existing,
@@ -168,14 +178,51 @@ export function runArrival(deps: ArrivalDeps): ArrivalOutcome {
   }
 }
 
+/**
+ * "옛 haru.app 은 지워도 됩니다" 안내를 띄워도 되는가 — **두 분기가 같은 답을 쓴다.**
+ *
+ * 배너 문구(`migration.arrival.oldAppBody`)는 "새 Greenday가 데이터를 정상적으로
+ * 읽었습니다"라고 **단언한다.** 그런데 판정은 `!locked && oldAppPresent()` 뿐이어서,
+ * 한 건도 이어받지 못한 설치에서도 같은 말을 했다: userData 가 통째로 비었을 때(MAS
+ * 샌드박스 컨테이너가 늘 그렇다), `ticktick-data.json` 이 깨져 `initDatabase()` 가 던지고
+ * `dbFailedTitle` 대화상자가 뜬 **직후**에도. 그 말을 믿고 haru.app 을 지우면 그 데이터를
+ * 열 수 있던 유일한 앱을 방금 지운 것이 된다 — 되돌릴 길은 백업 아카이브뿐이다.
+ * 그래서 "실제로 읽히는가"가 판정에 들어간다.
+ *
+ * `completedBefore` 분기에도 **같은 함수**를 쓴다. 첫 실행만 고치면 MAS 는 고쳐지지 않는다:
+ * 컨테이너는 첫 실행 때 비어 있어 닫히지만, 사용자가 할일을 만든 다음 실행부터 그 분기가
+ * 'ok' 를 보고 다시 연다.
+ */
+function canRemoveOldApp(deps: ArrivalDeps, locked: boolean): boolean {
+  if (locked || !deps.oldAppPresent()) return false
+  // primary 가 없어도 `.bak` 이 읽히면 'ok' 다 — database.ts 가 실제로 그쪽에서 복구한다.
+  return checkIntegrity(deps.userData).status === 'ok'
+}
+
 /** 게이트를 sentinel 결과에 맞춘다. 잠겼는가를 돌려준다. */
 function applyGate(sentinel: SentinelCheck | 'skipped', ciphertexts: boolean): boolean {
   if (sentinel === 'skipped' || sentinel === 'ok') {
     unlockSecrets()
     return false
   }
-  if (sentinel === 'missing' && !ciphertexts) {
-    // 잴 것도, 지킬 것도 없다.
+  // 지킬 것이 없으면 sentinel 결과가 무엇이든 잠그지 않는다.
+  //
+  // 보호 모드가 실제로 하는 일은 `preserveCiphertext`가 저장 직전에 **파일에 있던
+  // 암호문을 되살리는 것** 하나다(호출처 셋 — ai `apiKey_enc`, caldav `password_enc`,
+  // google `tokens_enc`, 그리고 그 셋이 `hasStoredCiphertexts`가 재는 바로 그 칸들이다).
+  // 셋 중 아무것도 없으면 되살릴 것이 없으니 잠금은 아무것도 지키지 못하고, 대신 닫는
+  // 버튼 없는 보호 모드 배너를 매 실행 띄우고 9단계의 `oldAppRemovable`을 영원히 false로
+  // 만든다 — "옛 haru 앱은 지워도 됩니다" 안내가 영영 안 뜨면 두 앱이 같은 userData를
+  // 보며 나란히 남는다. 마이그레이션이 없애려던 바로 그 상태다.
+  //
+  // 전에는 이 면제가 `missing`에만 걸려 있었다. 그래서 연동을 하나도 안 쓴 v1.4.1
+  // 사용자가 브리지가 심어 둔 sentinel 앞에서 Keychain을 거부하면(`denied`, 혹은
+  // `unavailable`·`mismatch`·`corrupt`) 지킬 것이 없는데도 영구히 잠겼다. 판정은
+  // sentinel 결과가 아니라 "지킬 것이 있는가"에 걸려야 한다.
+  //
+  // 여기서 열면 낡은 sentinel을 지금 키로 바꿔 심어야 한다 — 호출처의
+  // `refreshSentinelIfOpen`이 한다. 안 그러면 사용자가 다음에 넣은 비밀값이 잠긴다.
+  if (!ciphertexts) {
     unlockSecrets()
     return false
   }
@@ -185,6 +232,55 @@ function applyGate(sentinel: SentinelCheck | 'skipped', ciphertexts: boolean): b
   }
   unlockSecrets()
   return false
+}
+
+/**
+ * 게이트가 열렸는데 sentinel이 `ok`가 아니면 지금 키로 새로 심는다 — **두 분기가 같이 쓴다.**
+ * `releaseSecretsLock`이 하는 일과 같고, 다른 점은 "사용자가 눌렀는가" 대신 "지킬 것이
+ * 없었는가"가 근거라는 것뿐이다.
+ *
+ * 열렸는데 `ok`가 아닌 경우는 둘이다: 재 볼 것이 없었다(`skipped`, 첫 실행), 혹은
+ * `applyGate`의 "지킬 암호문이 없다" 면제로 열렸다(`missing`·`denied`·`unavailable`·
+ * `mismatch`·`corrupt`). 뒤쪽에서 낡은 sentinel을 그대로 두면 안 된다. 면제가 열어 주는
+ * 사람은 연동을 하나도 안 쓴 v1.4.1 사용자이고, 그 사람이 다음에 하는 일이 바로 AI 키·
+ * CalDAV 암호·Google 연결을 **지금 키로** 넣는 것이다. 그러면 다음 실행(`completedBefore`)이
+ * `ciphertexts=true`와 같은 낡은 결과를 보고 잠근다 — 방금 올바르게 넣은 비밀값 앞에서
+ * 닫을 수 없는 보호 모드 배너, 거짓 "Google 다시 연결", `oldAppRemovable=false`.
+ *
+ * 잠겼으면 절대 심지 않는다: 지킬 옛 암호문이 있는데 새 키로 sentinel을 만들면 그것을
+ * "검증"하는 척하게 된다. 반대로 열린 경우는 정의상 지킬 암호문이 없으니(`applyGate`)
+ * 새 sentinel이 거짓으로 보증할 대상이 없다.
+ *
+ * 최선 노력이다. `writeSentinel`은 실패를 로그로 남기고 `'failed'`/`'unavailable'`을
+ * 돌려줄 뿐이며, 그래도 게이트는 이미 열린 채다 — 다음 실행이 같은 면제로 다시 시도한다.
+ */
+function refreshSentinelIfOpen(
+  sentinelPath: string,
+  crypto: KeyCrypto,
+  sentinel: SentinelCheck | 'skipped',
+  locked: boolean
+): void {
+  if (locked || sentinel === 'ok') return
+  writeSentinel(sentinelPath, crypto)
+}
+
+/**
+ * "Google 을 다시 연결해 주세요" 안내를 띄울 것인가 — **두 분기가 같은 답을 쓴다.**
+ *
+ * `completedBefore` 분기만 `locked ? googleHasTokens(...) : false` 였다. 잠기지 않았으면
+ * 무조건 false 라, 잠금과 **무관한** 이유로 토큰을 못 읽는 경우가 통째로 빠졌다 —
+ * sentinel 은 ok 인데 봉투(`v`·`purpose`·`account`)나 토큰 모양 검사에서 거절되는 경우다
+ * (`secret-envelope.ts` 의 `openSecret` 은 복호화가 성공해도 거기서 null 을 돌려준다).
+ * 그래서 안내가 첫 실행에 딱 한 번 뜨고, 닫거나 앱을 껐다 켜면 영영 사라졌다 —
+ * `MigrationBanner` 의 dismiss 는 실행마다 초기화되는 useState 라 원래 매 실행 다시
+ * 조르라는 뜻이었다. Google 동기화는 조용히 죽은 채 남고 사용자는 이유를 모른다.
+ *
+ * 순서가 곧 안전장치다: `googleHasTokens` 가 먼저라 `tokens_enc` 가 없으면 복호화를
+ * 시도하지 않고, 잠겼으면 `||` 가 단락되어 `googleTokensReadable()` 을 아예 부르지 않는다 —
+ * "sentinel 이 ok 일 때만 부른다"(`ArrivalDeps`)가 그대로 지켜진다.
+ */
+function needsGoogleReconnect(deps: ArrivalDeps, locked: boolean): boolean {
+  return googleHasTokens(deps.userData) && (locked || !deps.googleTokensReadable())
 }
 
 function googleHasTokens(userData: string): boolean {

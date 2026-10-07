@@ -5,7 +5,7 @@
  * 계획(plan)을 보고 수행한다. 그래야 "무엇을 올릴지"를 서버 없이 검증할 수 있다.
  */
 
-import type { CalendarEvent, EventOverride } from './ical'
+import { usesWallClock, type CalendarEvent, type EventOverride } from './ical'
 import { occursOn, toRRule } from '../../shared/recurrence'
 
 /** 회차별로 다르게 잡은 시간 블록. null이면 그 회차를 없앤 것이다. */
@@ -88,6 +88,35 @@ function addDays(yyyyMmDd: string, days: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/**
+ * 날짜로 못 읽는 값을 UTC ISO로 바꾸려다 **동기화 전체가 멈추는** 것을 막는 변환기.
+ * 읽히면 ISO, 아니면 null — 절대 던지지 않는다.
+ *
+ * `new Date('nope').toISOString()`은 `RangeError: Invalid time value`를 던진다.
+ * 여기서 던지면 `planSync`가 통째로 죽어 **망가진 행 하나 때문에 멀쩡한 할일까지
+ * 하나도 안 올라가고**(CalDAV·Google 둘 다 이 계획을 쓴다), `calendar:sync-now`의
+ * catch는 CalDavError가 아닌 예외를 "알 수 없는 오류"로 뭉개므로 어느 할일이
+ * 문제인지도 안 나온다. `parseOverrides`가 이미 같은 이유로 모양 아닌 값을 조용히
+ * 버리는데("여기서 던지면 동기화 전체가 멈춘다"), 정작 날짜 변환만 그 규칙 밖이었다.
+ *
+ * 검사는 IPC가 아니라 여기여야 한다. `validate.ts`는 오버라이드의 start/end가
+ * **문자열인지만** 보고 scheduled_start/due_time은 아예 안 보며(due_date/start_date와
+ * 달리 `database.ts`의 부팅 복구도 이 세 열은 건드리지 않는다), 이미 디스크에 남은
+ * 행은 어차피 그 경계를 다시 지나지 않는다. 호출처가 전부 여기를 지난다.
+ */
+function toIsoOrNull(value: string | null | undefined): string | null {
+  if (!value) return null
+  const ms = new Date(value).getTime()
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null
+}
+
+/**
+ * `localToIso`에 넣어도 안전한 로컬 시각의 모양. 'nope'나 ''를 넘기면
+ * `Number('')`=0, `Number('nope')`=NaN이라 Invalid Date가 만들어지고,
+ * 그 `.toISOString()`이 다시 동기화 전체를 멈춘다.
+ */
+const TIME_OF_DAY = /^([01]\d|2[0-3]):[0-5]\d$/
+
 /** 로컬 날짜+시각을 UTC ISO로. 'YYYY-MM-DD' + 'HH:MM' */
 export function localToIso(date: string, time: string): string {
   const [y, m, d] = date.split('-').map(Number)
@@ -119,16 +148,17 @@ export function taskToEvent(task: TaskRow, sequence = 0): CalendarEvent | null {
   }
 
   const single = ((): CalendarEvent | null => {
-    if (task.scheduled_start && task.scheduled_end) {
-      return {
-        ...base,
-        start: new Date(task.scheduled_start).toISOString(),
-        end: new Date(task.scheduled_end).toISOString(),
-        allDay: false
-      }
+    // 읽히는 블록일 때만 블록으로 낸다. 못 읽으면 아래 마감일 규칙으로 흘려보낸다 —
+    // 예전에는 여기서 바로 던져 그 할일만이 아니라 동기화 전체가 죽었다.
+    const blockStart = toIsoOrNull(task.scheduled_start)
+    const blockEnd = toIsoOrNull(task.scheduled_end)
+    if (blockStart && blockEnd) {
+      return { ...base, start: blockStart, end: blockEnd, allDay: false }
     }
 
-    if (task.due_date && task.due_time) {
+    // 시각 모양이 아닌 due_time은 시각이 없는 것으로 본다(= 종일). 그대로 넘기면
+    // `localToIso`가 Invalid Date를 만들어 `.toISOString()`에서 던진다.
+    if (task.due_date && task.due_time && TIME_OF_DAY.test(task.due_time)) {
       // 기간이 붙어 있으면 그 기간을 시각으로 잇는다. 여기서 마감일 하나만 보면
       // 8/18~8/20 할일이 8/20의 60분짜리로 쪼그라들어, 기간을 넣은 의미가 사라진다.
       const ranged = task.start_date && task.start_date < task.due_date ? task.start_date : null
@@ -156,7 +186,53 @@ export function taskToEvent(task: TaskRow, sequence = 0): CalendarEvent | null {
 
   if (!single) return null
   if (!task.is_recurring || !task.recurring_pattern) return single
+  // 완료한 회차는 시리즈가 아니다 — 자기 회차 하루짜리로 내보낸다.
+  if (completed) return completedOccurrence(single, task)
   return withRecurrence(single, task)
+}
+
+/**
+ * 완료한 반복 회차를 **자기 회차 하루짜리 일정**으로 만든다.
+ *
+ * 왜 필요한가. `toggleTask`는 완료한 행의 `is_recurring`/`recurring_pattern`을 그대로
+ * 두고 다음 회차를 **새 행**으로 스폰한다. 완료본은 영영 남는다(`database.ts`에
+ * 정리 경로가 없다). 그래서 완료할 때마다 **끝이 없는 RRULE을 가진 행이 하나씩**
+ * 늘었고, 한 달 쓴 매일 습관은 캘린더의 모든 날에 같은 일정 서른 개를 그렸다.
+ * `toRRule`이 내는 규칙에는 UNTIL도 COUNT도 없으니 과거로도 미래로도 끝없이 이어진다.
+ *
+ * 화면은 이미 반대로 그린다 — `getScheduledForOccurrence`가 완료한 반복 인스턴스를
+ * 자기 회차에만 남긴다. 내보내기가 화면과 갈리면 사용자는 앱에서 본 적 없는 일정을
+ * 자기 캘린더에서 본다.
+ *
+ * 자리도 화면과 같은 규칙으로 고른다: 그 날짜의 오버라이드가 있으면 그 블록,
+ * 없으면 템플릿의 **로컬 시각**을 자기 회차 날짜에 얹는다. 템플릿의 날짜를 그대로
+ * 쓰면 안 된다 — `nextRecurrenceSpawn`이 `scheduledStart`를 그대로 복사하므로 그
+ * 날짜는 시리즈가 처음 시작한 날에 멈춰 있고, 규칙만 떼면 완료본 전부가 그 하루에
+ * 쌓인다. 쌓이는 자리만 바뀔 뿐 고친 게 아니다.
+ */
+function completedOccurrence(event: CalendarEvent, task: TaskRow): CalendarEvent {
+  const date = task.due_date
+  // 기한이 없으면 어느 회차인지 지목할 수 없다. 규칙만 떼고 자리는 그대로 둔다 —
+  // 시리즈로 내보내는 것보다는 자리가 어긋난 한 건이 낫다.
+  if (!date) return event
+
+  const override = parseOverrides(task.scheduled_overrides)[date]
+  if (override) {
+    const start = new Date(override.start)
+    const end = new Date(override.end)
+    if (Number.isFinite(start.getTime()) && Number.isFinite(end.getTime())) {
+      return { ...event, start: start.toISOString(), end: end.toISOString(), allDay: false }
+    }
+  }
+
+  // 시간블록이 없으면 `single`은 이미 마감일(+기간) 위에 있다 — 옮길 것이 없다.
+  if (!task.scheduled_start || !task.scheduled_end) return event
+
+  const timeOfDay = localTimeOfDay(task)
+  if (timeOfDay === null) return event
+  const start = localToIso(date, timeOfDay)
+  const durationMs = new Date(event.end).getTime() - new Date(event.start).getTime()
+  return { ...event, start, end: new Date(new Date(start).getTime() + durationMs).toISOString(), allDay: false }
 }
 
 /**
@@ -167,9 +243,24 @@ export function taskToEvent(task: TaskRow, sequence = 0): CalendarEvent | null {
  * 회차는 UTC로 전날이다). 원본 열에서 로컬 시각을 그대로 가져온다.
  */
 function localTimeOfDay(task: TaskRow): string | null {
-  if (task.scheduled_start) return task.scheduled_start.slice(11, 16)
-  if (task.due_time) return task.due_time
+  // 모양을 확인하고 돌려준다. 날짜로 안 읽히는 scheduled_start를 자르면 ''가 나오고,
+  // 그 ''가 stampFor → localToIso로 흘러 Invalid Date가 된다 — 종일도 아닌데 시각이
+  // 없는 셈이라, 검사 없이 넘기면 회차 하나가 동기화 전체를 멈춘다. 예전에는
+  // scheduled_start가 있기만 하면 거기서 끝나 due_time으로 내려오지도 못했다.
+  const fromBlock = task.scheduled_start ? timeAt(task.scheduled_start) : null
+  if (fromBlock) return fromBlock
+  if (task.due_time && TIME_OF_DAY.test(task.due_time)) return task.due_time
   return null
+}
+
+/**
+ * 로컬 ISO('YYYY-MM-DDTHH:mm:ss')에서 'HH:MM'만. UTC ISO를 넣으면 프레임이 섞인다.
+ * 'HH:MM' 모양이 아니면 null — 자른 값을 그대로 믿으면 'nope'는 ''가, 날짜만 있는
+ * 값도 ''가 되어 `localToIso`에서 Invalid Date로 되살아난다.
+ */
+function timeAt(localIso: string): string | null {
+  const time = localIso.slice(11, 16)
+  return TIME_OF_DAY.test(time) ? time : null
 }
 
 /**
@@ -189,6 +280,29 @@ function withRecurrence(event: CalendarEvent, task: TaskRow): CalendarEvent {
   const stampFor = (date: string): string =>
     event.allDay || timeOfDay === null ? date : localToIso(date, timeOfDay)
 
+  // 시간 블록은 **시각 템플릿**이다 — 화면은 회차마다 날짜만 갈아 끼워 그린다
+  // (`scheduledTime.ts`의 `getScheduledForOccurrence`). 그런데 `scheduled_start`에
+  // 적힌 날짜는 블록을 처음 잡은 날에 얼어붙어 있고, `nextRecurrenceSpawn`이 그 값을
+  // 손대지 않은 채 다음 회차에 물려준다(의도한 동작이다 — 시각만 템플릿이니까).
+  //
+  // 그 얼어붙은 날짜를 DTSTART로 내보내면 RRULE이 **거기서부터** 펼쳐지는데,
+  // 화면은 앵커 이전을 통째로 숨긴다(`occursOn`: `dateStr < anchorDueDate`면 false).
+  // 8/1에 블록을 잡고 기한이 9/1까지 전진한 매일 반복이 iCloud에는 8/1부터 나가
+  // **앱에 없는 한 달치 유령 회차**가 됐다. 반대로 미래 회차에 블록을 떨어뜨리면
+  // 캘린더 쪽에 구멍이 생긴다. DTSTART를 앵커 회차로 되돌려 둘을 다시 물린다.
+  //
+  // 끝시각도 앵커 날짜에 붙인다 — 화면이 하는 것과 같은 계산이다. 블록은 잡을 때
+  // 그 날 23:59로 잘리므로(`resolveTimeBlockDrop`) 보통은 자정을 넘지 않지만,
+  // 넘은 값이 들어오면 날짜만 갈아 끼울 때 DTEND가 DTSTART보다 앞서 **서버가 일정
+  // 전체를 거부한다**. 그때는 길이를 지켜 옮긴다 — 어긋난 날짜보다 못 올라가는
+  // 일정이 나쁘다. `due_date`가 없으면 앵커 자체가 이 블록에서 나온 값이라
+  // 어긋날 일이 없다. 종일·기간 일정은 건드리지 않는다 — 거기서 `start`는 시각
+  // 템플릿이 아니라 기간의 시작일이라, 앵커로 당기면 기간이 통째로 밀린다.
+  const anchored =
+    task.due_date && task.scheduled_start && task.scheduled_end && !event.allDay && timeOfDay !== null
+      ? reanchor(event, anchor, timeOfDay, timeAt(task.scheduled_end))
+      : { start: event.start, end: event.end }
+
   const rdates = extraDates.map(stampFor)
   const exdates: string[] = []
   const overrides: EventOverride[] = []
@@ -200,9 +314,11 @@ function withRecurrence(event: CalendarEvent, task: TaskRow): CalendarEvent {
       if (isOccurrence) exdates.push(stampFor(date))
       continue
     }
-    const start = new Date(block.start).toISOString()
-    const end = new Date(block.end).toISOString()
-    if (!Number.isFinite(new Date(start).getTime()) || !Number.isFinite(new Date(end).getTime())) continue
+    // **변환 전에** 검사한다. 순서가 반대면 `new Date('nope').toISOString()`이
+    // 먼저 던져 바로 아래 가드가 영영 실행되지 않는 죽은 코드였다.
+    const start = toIsoOrNull(block.start)
+    const end = toIsoOrNull(block.end)
+    if (!start || !end) continue
     if (isOccurrence) {
       // 원래 있던 회차를 옮기거나 늘렸다 — RECURRENCE-ID로 그 회차를 지목한다.
       overrides.push({ recurrenceId: stampFor(date), start, end })
@@ -216,11 +332,33 @@ function withRecurrence(event: CalendarEvent, task: TaskRow): CalendarEvent {
 
   return {
     ...event,
+    ...anchored,
     rrule,
     rdates: [...new Set(rdates)].sort(),
     exdates: [...new Set(exdates)].sort(),
     overrides: overrides.sort((a, b) => a.recurrenceId.localeCompare(b.recurrenceId))
   }
+}
+
+/**
+ * 시간 블록을 앵커 회차 날짜 위로 옮긴다. 시각은 그대로, 날짜만 간다.
+ *
+ * 끝이 시작보다 앞서면(자정을 넘는 블록) 날짜만 갈아 끼우는 순간 DTEND < DTSTART가
+ * 되고, 그런 VEVENT는 서버가 통째로 거부한다. 그 한 경우만 길이를 지켜 옮긴다.
+ */
+function reanchor(
+  event: CalendarEvent,
+  anchorDate: string,
+  startTime: string,
+  endTime: string | null
+): { start: string; end: string } {
+  const start = localToIso(anchorDate, startTime)
+  // endTime이 null = scheduled_end가 시각으로 안 읽힌다(시작만 멀쩡한 행이면 여기까지
+  // 온다). 자정을 넘는 블록과 같이 길이를 지켜 옮긴다 — localToIso에 넣으면 Invalid
+  // Date가 되어 동기화 전체가 멈춘다.
+  if (endTime !== null && endTime > startTime) return { start, end: localToIso(anchorDate, endTime) }
+  const durationMs = new Date(event.end).getTime() - new Date(event.start).getTime()
+  return { start, end: new Date(new Date(start).getTime() + durationMs).toISOString() }
 }
 
 /**
@@ -270,7 +408,12 @@ export function fingerprint(event: CalendarEvent): string {
     event.rrule,
     event.rdates,
     event.exdates,
-    event.overrides
+    event.overrides,
+    // **프레임도 지문에 넣는다.** 반복 시리즈를 UTC로 내보내던 시절의 항목은 필드
+    // 값이 하나도 안 바뀌어 지문이 같고, 그러면 고친 직렬화가 영영 서버에 닿지
+    // 않는다(= 이미 올라간 스탠드업은 계속 한 시간 밀린 채로 남는다). 참일 때만
+    // 덧붙여, 반복 없는 항목의 지문은 한 글자도 바뀌지 않게 한다.
+    ...(usesWallClock(event) ? ['wallclock'] : [])
   ])
 }
 

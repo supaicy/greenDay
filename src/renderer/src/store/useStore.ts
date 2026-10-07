@@ -3,6 +3,9 @@ import { v4 as uuid } from 'uuid'
 import { clampDetailWidth } from './detailWidth'
 import { isVirtualSmartList, tagFromListId } from '../utils/smartLists'
 import { getFilteredTaskIds } from '../utils/filteredTaskIds'
+// 뷰(TaskList)·'전체 선택'과 같은 검색 판별식. setSearchQuery가 일괄 선택을 줄일 때도
+// 같은 식을 써야 BatchBar의 개수와 화면에 보이는 줄 수가 어긋나지 않는다.
+import { matchesSearch } from '../utils/search'
 import { todayString, tomorrowString } from '../utils/date'
 import { pointsForTask, POINTS_PER_HABIT, POINTS_PER_POMODORO } from '../utils/score'
 import { refreshLicense } from '../licensing/useLicense'
@@ -28,7 +31,13 @@ import type {
   AiConfig
 } from '../types'
 import { isValidSchedulePair } from '../utils/scheduledTime'
-import { nextRecurrenceSpawn, collectRecurrenceSpawns, shiftIsoByDays, daysBetween } from '../utils/recurrence'
+import {
+  nextRecurrenceSpawn,
+  collectRecurrenceSpawns,
+  overridesAfterHandover,
+  shiftIsoByDays,
+  daysBetween
+} from '../utils/recurrence'
 import { trimHistory } from './trim'
 import { normalizeChatHistory } from '../../../shared/ai-history'
 import { buildAiTaskContext } from '../utils/aiContext'
@@ -93,7 +102,14 @@ interface Store {
   dragTaskId: string | null
   updateAvailable: { version: string; downloadUrl: string } | null
   updateChecked: boolean
+  /**
+   * 확인을 **못 했다**. `updateChecked`만으로는 이 상태를 표현할 수 없다 —
+   * `updateChecked && !updateAvailable`은 "최신 버전입니다"로 읽히기 때문이다.
+   */
+  updateFailed: boolean
   updateDownloadProgress: number | null
+  /** 받다가 실패했다. 확인 실패(`updateFailed`)와 따로 둔다 — 새 버전은 있고 다시 받으면 된다. */
+  updateDownloadFailed: boolean
   updateReady: boolean
 
   // 초기화
@@ -189,6 +205,8 @@ interface Store {
   // 실행 대기 중인 '기존 할일' 액션. 사용자가 확인 카드에서 승인해야 실행된다.
   aiPendingAction: { op: ActionOp; taskId: string; taskTitle: string; dueDate: string | null } | null
   _aiStreamCleanup: (() => void) | null
+  /** 지금 화면의 대화를 잘라서 디스크에 적는다. 대화를 늘린 쪽이 누구든 이걸 부른다. */
+  _aiPersistHistory: () => void
   setShowAiChat: (show: boolean) => void
   aiCheckConnection: () => Promise<void>
   aiPullModel: (model: string) => void
@@ -229,8 +247,8 @@ function mapTask(row: Record<string, unknown>): Task {
     pinned: Boolean(row.pinned),
     listId: (row.list_id as string) || 'inbox',
     parentId: (row.parent_id as string) || null,
-    tags: safeParseJson<string[]>(row.tags as string, []),
-    attachments: safeParseJson<string[]>(row.attachments as string, []),
+    tags: parseStringArray(row.tags as string),
+    attachments: parseStringArray(row.attachments as string),
     createdAt: row.created_at as string,
     completedAt: (row.completed_at as string) || null,
     deletedAt: (row.deleted_at as string) || null,
@@ -239,7 +257,7 @@ function mapTask(row: Record<string, unknown>): Task {
     recurringPattern: (row.recurring_pattern as string) || null,
     scheduledStart: (row.scheduled_start as string) || null,
     scheduledEnd: (row.scheduled_end as string) || null,
-    scheduledOverrides: safeParseJson<Task['scheduledOverrides']>(row.scheduled_overrides as string, null)
+    scheduledOverrides: parsePlainObject<NonNullable<Task['scheduledOverrides']>>(row.scheduled_overrides as string)
   }
 }
 
@@ -269,7 +287,7 @@ function mapHabit(row: Record<string, unknown>): Habit {
     name: row.name as string,
     color: row.color as string,
     frequency: row.frequency as 'daily' | 'weekly',
-    targetDays: safeParseJson<number[]>(row.target_days as string, []),
+    targetDays: parseNumberArray(row.target_days as string),
     createdAt: row.created_at as string
   }
 }
@@ -304,6 +322,16 @@ export function applyReorder(tasks: Task[], ids: string[]): Task[] {
   const moving = ids.map((id) => tasks.find((t) => t.id === id)).filter((t): t is Task => Boolean(t))
   if (moving.length === 0) return tasks
   const slots = moving.map((t) => t.sortOrder).sort((a, b) => a - b)
+  // 슬롯은 **엄격히 증가**해야 한다. sortOrder는 위 주석대로 리스트별 카운터라
+  // 리스트마다 1부터 세고, '전체'·'오늘'·'다음 7일'·태그처럼 리스트를 가로지르는
+  // 뷰는 같은 값을 쥔 행을 한 묶음으로 넘긴다. 동점을 그대로 나눠 주면 아래
+  // 안정 정렬이 동점끼리는 이전 배열 순서를 지켜 드롭이 통째로 버려진다 —
+  // 항목이 제자리로 튕겨 나오고, 몇 번을 다시 끌어도 결과가 한 글자도 안 바뀌던
+  // 그 버그다. 올려 주는 것은 이미 동점이거나 뒤집힌 값뿐이고, 한 번 끌고 나면
+  // 그 묶음은 엄격히 증가하므로 다음 드래그는 아무것도 밀지 않는다.
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i] <= slots[i - 1]) slots[i] = slots[i - 1] + 1
+  }
   const nextOrder = new Map(moving.map((t, i) => [t.id, slots[i]]))
   return tasks
     .map((t) => (nextOrder.has(t.id) ? { ...t, sortOrder: nextOrder.get(t.id) as number } : t))
@@ -408,6 +436,86 @@ async function resyncFromMain(): Promise<void> {
 }
 
 /**
+ * 휴지통 복원을 main에 맡기고, **main이 되살렸다고 답한 id만** 화면에서 옮긴다.
+ *
+ * 무엇이 함께 올라오는지(같은 삭제로 내려간 자손, 매달린 조상, 되돌리기의 남은 자손)는
+ * main의 `restoreTask`만 안다 — 판정 재료인 `deleted_with`가 렌더러의 `Task`에는 없다.
+ * 화면이 "같은 `deletedAt`의 자손"으로 따로 짐작하던 시절에는 중간 행 복원·낡은
+ * 연결·휴지통 복원 뒤의 되돌리기에서 둘이 갈렸고, 그 상태로 '휴지통 비우기'를 누르면
+ * 화면에 살아 있는 행이 디스크에서 영구 삭제됐다. 그래서 낙관적으로 먼저 옮기지 않는다:
+ * 로컬 IPC 한 번이라 기다려도 눈에 띄지 않고, 거절되면 화면은 처음부터 그대로다.
+ */
+async function restoreOnMain(id: string): Promise<void> {
+  let answer: unknown
+  try {
+    answer = await window.api.restoreTask(id)
+  } catch (error) {
+    report('restoreTask', error)
+    return
+  }
+  applyRestored(answer)
+}
+
+/**
+ * main의 답을 화면에 옮긴다. 휴지통에서 꺼내 `deletedAt`을 지우는 것뿐이다.
+ *
+ * 답이 배열이 아니거나(모양을 모르는 main), 답의 id가 화면 어디에도 없으면(답이 오기
+ * 전에 '휴지통 비우기'가 화면의 휴지통을 비웠다 — main은 복원을 먼저 처리했으니 그
+ * 행은 디스크에 살아 있다) 짐작하지 않고 main에서 다시 읽는다.
+ */
+function applyRestored(answer: unknown): void {
+  if (!Array.isArray(answer)) {
+    console.error('[restoreTask] main의 답이 id 목록이 아니다', answer)
+    void resyncFromMain()
+    return
+  }
+  const ids = new Set(answer.filter((x): x is string => typeof x === 'string'))
+  if (ids.size === 0) return
+  let unseen = false
+  useStore.setState((s) => {
+    const live = new Set(s.tasks.map((t) => t.id))
+    const back = s.trashTasks.filter((t) => ids.has(t.id) && !live.has(t.id))
+    const placed = new Set([...live, ...back.map((t) => t.id)])
+    unseen = [...ids].some((x) => !placed.has(x))
+    if (back.length === 0) return {}
+    return {
+      trashTasks: s.trashTasks.filter((t) => !ids.has(t.id)),
+      tasks: [...s.tasks, ...back.map((t) => ({ ...t, deletedAt: null }))]
+    }
+  })
+  if (unseen) void resyncFromMain()
+}
+
+/**
+ * `parentId`로 이어진 자손 전부의 id(자기 자신 제외). **한 단계가 아니다** — main의
+ * `descendantsOf`와 같은 규칙이어야 화면과 디스크가 재시작 전후로 갈리지 않는다.
+ * 상세 패널은 하위작업에도 SubtaskList를 그려 A→B→C가 생기는데, 직계만 내리면
+ * 손자가 살아 남아 살아 있는 부모가 없는, 어느 화면에도 없는 행이 됐다.
+ * 순환 parentId에 멈추도록 본 id를 센다. (복원 집합은 여기서 고르지 않는다 — `restoreOnMain`.)
+ */
+function descendantIds(rows: Task[], id: string): string[] {
+  const children = new Map<string, Task[]>()
+  for (const t of rows) {
+    if (!t.parentId) continue
+    const list = children.get(t.parentId)
+    if (list) list.push(t)
+    else children.set(t.parentId, [t])
+  }
+  const out: string[] = []
+  const seen = new Set<string>([id])
+  const queue = [id]
+  while (queue.length) {
+    for (const child of children.get(queue.shift() as string) ?? []) {
+      if (seen.has(child.id)) continue
+      seen.add(child.id)
+      out.push(child.id)
+      queue.push(child.id)
+    }
+  }
+  return out
+}
+
+/**
  * 단건 삭제의 undo 페이로드.
  *
  * `UndoAction.data`가 `unknown`이라 모양을 여기서 정한다 — 넣는 곳과 꺼내는 곳이
@@ -415,7 +523,12 @@ async function resyncFromMain(): Promise<void> {
  */
 interface DeletedTaskUndo {
   task: Task
-  /** 부모와 **같은 조작으로** 함께 내려간 하위작업. 되돌릴 때 같이 올라온다. */
+  /**
+   * 부모와 **같은 조작으로** 함께 내려간 자손(하위작업만이 아니라 깊이와 상관없이)의 id.
+   * 되돌릴 때 무엇을 올릴지는 이 목록이 아니라 main의 `restoreTask` 답이 정한다 — 그
+   * 사이 휴지통에서 일부를 복원했을 수 있다. 지금은 기록용이고 읽는 곳이 없다(undo 스택은
+   * 메모리에만 있어 맞출 옛 페이로드도 없다 — 정리는 TODOS).
+   */
   subtaskIds: string[]
 }
 
@@ -455,13 +568,47 @@ function normalizeScoreSlice(raw: unknown): ScoreSlice {
   }
 }
 
-/** JSON 문자열을 파싱하되 깨진 값이면 fallback. DB 행 디코딩 경로의 유일한 가드. */
-function safeParseJson<T>(s: string | undefined | null, fallback: T): T {
-  if (!s) return fallback
+/**
+ * JSON 문자열 → 배열. **모양까지 확인한다.** DB 행 디코딩 경로의 유일한 가드다.
+ *
+ * 전에 있던 `safeParseJson`은 파싱만 하고 `as T`로 캐스팅할 뿐이라, 파싱 결과가 배열이
+ * 아니어도 그대로 `Task.tags`에 앉았다. 그러면 화면이 `task.tags.map(...)`에서
+ * 던지고, ErrorBoundary가 없던 동안에는 앱 전체가 백지가 됐다 — 게다가 그 값은
+ * 디스크에 있으므로 **재시작해도 같은 자리에서 다시 죽었다.**
+ *
+ * 2026-09-25 진단 실측: `tags`가 `"\"[]\""`(이중 인코딩)인 행 하나로
+ * `a.tags.map is not a function`이 나면서 창이 완전히 비었다.
+ *
+ * 파싱은 실패할 수 있는 입력이다 — 마이그레이션으로 넘어온 옛 스키마, 손으로
+ * 고친 JSON, 형태가 다른 미래 버전의 파일. 여기서 한 번 거르면 그 전부가
+ * "태그 없음"으로 안전하게 내려앉는다.
+ */
+function parseArrayOf<T>(s: string | undefined | null, isItem: (v: unknown) => v is T): T[] {
+  if (!s) return []
   try {
-    return (JSON.parse(s) as T) ?? fallback
+    const parsed: unknown = JSON.parse(s)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isItem)
   } catch {
-    return fallback
+    return []
+  }
+}
+
+const parseStringArray = (s: string | undefined | null): string[] =>
+  parseArrayOf(s, (v): v is string => typeof v === 'string')
+
+const parseNumberArray = (s: string | undefined | null): number[] =>
+  parseArrayOf(s, (v): v is number => typeof v === 'number' && Number.isFinite(v))
+
+/** JSON 문자열 → 평범한 객체. 배열·문자열·숫자가 오면 없는 것으로 친다. */
+function parsePlainObject<T>(s: string | undefined | null): T | null {
+  if (!s) return null
+  try {
+    const parsed: unknown = JSON.parse(s)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    return parsed as T
+  } catch {
+    return null
   }
 }
 
@@ -525,7 +672,9 @@ export const useStore = create<Store>((set, get) => ({
   dragTaskId: null,
   updateAvailable: null as { version: string; downloadUrl: string } | null,
   updateChecked: false,
+  updateFailed: false,
   updateDownloadProgress: null as number | null,
+  updateDownloadFailed: false,
   updateReady: false,
 
   loadData: async () => {
@@ -632,13 +781,19 @@ export const useStore = create<Store>((set, get) => ({
       maxOrderByList.set(t.listId, Math.max(maxOrderByList.get(t.listId) ?? 0, t.sortOrder || 0))
     }
 
-    const newTasks: Task[] = drafts.map(({ title, opts = {} }) => {
+    // 한 건을 Task로 굽는다. 하위작업도 같은 절차를 거쳐야 해서 밖으로 뺐다 —
+    // 두 벌로 적어 두면 Task에 필드가 늘 때 한쪽만 늘고, 그 필드는 하위작업에서만
+    // 조용히 빈다(바로 이 함수의 `description: ''`이 그렇게 굳은 자리다).
+    const build = (title: string, opts: AddTaskOptions): Task => {
       const targetList =
         opts.listId || (typeof currentList === 'string' && !isVirtualSmartList(currentList) ? currentList : 'inbox')
       // 오늘/내일 뷰에서 날짜 없이 추가하면, 방금 추가한 그 리스트에 보이도록 마감일을 채운다.
+      // 하위작업(parentId)은 제외한다 — 목록에 홀로 서지 않으니(smartLists.isTopLevel)
+      // 뷰의 날짜를 물려받을 이유가 없고, 반복 스폰이 만든 다음 주 체크리스트에
+      // '오늘'이 찍히면 부모와 날짜가 어긋난다. 아래 태그 규칙과 같은 기준이다.
       let finalDueDate = opts.dueDate || null
-      if (!finalDueDate && currentList === 'today') finalDueDate = todayString()
-      else if (!finalDueDate && currentList === 'tomorrow') finalDueDate = tomorrowString()
+      if (!finalDueDate && !opts.parentId && currentList === 'today') finalDueDate = todayString()
+      else if (!finalDueDate && !opts.parentId && currentList === 'tomorrow') finalDueDate = tomorrowString()
 
       // 태그 뷰에서 (최상위 태스크를) 추가하면 그 태그가 자동으로 붙어 방금 추가한 뷰에 보인다.
       // 하위작업(parentId)은 뷰의 태그를 상속하지 않는다.
@@ -653,7 +808,7 @@ export const useStore = create<Store>((set, get) => ({
       return {
         id: uuid(),
         title,
-        description: '',
+        description: opts.description ?? '',
         completed: false,
         priority: opts.priority || 'none',
         dueDate: finalDueDate,
@@ -664,7 +819,7 @@ export const useStore = create<Store>((set, get) => ({
         listId: targetList,
         parentId: opts.parentId || null,
         tags: finalTags,
-        attachments: [],
+        attachments: opts.attachments ?? [],
         createdAt: now,
         completedAt: null,
         deletedAt: null,
@@ -675,7 +830,25 @@ export const useStore = create<Store>((set, get) => ({
         scheduledEnd: opts.scheduledEnd || null,
         scheduledOverrides: opts.scheduledOverrides || null
       }
-    })
+    }
+
+    const newTasks: Task[] = []
+    for (const { title, opts = {} } of drafts) {
+      const parent = build(title, opts)
+      newTasks.push(parent)
+      // 하위작업은 부모 id가 나온 뒤에야 만들 수 있다. 같은 set/persist 묶음에
+      // 태워 보내면 부모만 저장되고 체크리스트가 없는 중간 상태가 생기지 않는다.
+      for (const sub of opts.subtasks ?? []) {
+        newTasks.push(
+          build(sub.title, {
+            parentId: parent.id,
+            listId: parent.listId,
+            description: sub.description,
+            priority: sub.priority
+          })
+        )
+      }
+    }
 
     // 스토어 쓰기는 한 번. 건당 set()은 선택 수만큼 전체 재렌더를 만든다.
     set((s) => ({ tasks: [...s.tasks, ...newTasks] }))
@@ -790,52 +963,45 @@ export const useStore = create<Store>((set, get) => ({
 
     if (newCompleted) {
       // 반복 task: 완료 시 다음 인스턴스 생성 (중복 방지·알림 오프셋은 헬퍼가 처리)
-      const spawn = nextRecurrenceSpawn(task, get().tasks, todayString())
+      const spawn = nextRecurrenceSpawn(
+        task,
+        get().tasks,
+        todayString(),
+        get().tasks.filter((t) => t.parentId === id)
+      )
       if (spawn) {
         // 넘긴 미래 회차는 완료본에서 뺀다 — 양쪽에 남으면 같은 날짜를 두 인스턴스가
         // 주장한다(완료본은 오버라이드가 있는 날을 자기 회차로 인정하므로 실제로 겹친다).
-        if (spawn.scheduledOverrides) {
-          const handed = new Set(Object.keys(spawn.scheduledOverrides))
-          const left = Object.entries(task.scheduledOverrides ?? {}).filter(([d]) => !handed.has(d))
-          get().updateTask({ id, scheduledOverrides: left.length > 0 ? Object.fromEntries(left) : null })
-        }
+        // 규칙은 recurrence.ts의 overridesAfterHandover 한 곳에 있다 — 일괄 완료도
+        // 같은 것을 부른다. 예전에는 이 세 줄이 여기에만 있어서 일괄 완료가 같은
+        // 날짜의 블록을 하나씩 복제했다.
+        const left = overridesAfterHandover(task, spawn)
+        if (left !== undefined) get().updateTask({ id, scheduledOverrides: left })
         get().addTask(spawn.title, spawn)
       }
     }
   },
   removeTask: async (id) => {
     const task = get().tasks.find((t) => t.id === id)
+    // 살아 있는 자손 전부 — main의 `deleteTask`도 같은 집합을 내린다.
+    const subtaskIds = descendantIds(get().tasks, id)
     if (task) {
       get().pushUndo({
         type: 'deleteTask',
-        // **하위작업 id까지 싣는다.** 아래 `set`이 하위작업도 함께 휴지통으로
-        // 옮기는데(main의 `deleteTask`도 같다), undo 데이터가 부모 하나뿐이면
-        // 되돌리기가 부모만 되살려 하위작업이 휴지통에 영영 남았다. 화면에서는
-        // 하위작업이 통째로 사라진 것으로 보인다. `batchDelete`는 처음부터
-        // id 목록을 싣고 있었다 — 단건 경로만 빠져 있었다.
-        data: {
-          task,
-          subtaskIds: get()
-            .tasks.filter((t) => t.parentId === id)
-            .map((t) => t.id)
-        } satisfies DeletedTaskUndo,
+        // 되돌리기는 부모 id 하나로 main의 `restoreTask`에 묻고, main이 실제로 되살린
+        // id만 화면에 옮긴다(`restoreOnMain`). 자손 목록은 기록으로만 싣는다.
+        data: { task, subtaskIds } satisfies DeletedTaskUndo,
         description: i18n.t('undo.taskDeleted', { title: task.title }),
         timestamp: Date.now()
       })
     }
     const now = new Date().toISOString()
-    set((s) => {
-      const subtasks = s.tasks.filter((t) => t.parentId === id)
-      const deletedItems = [
-        ...(task ? [{ ...task, deletedAt: now }] : []),
-        ...subtasks.map((t) => ({ ...t, deletedAt: now }))
-      ]
-      return {
-        tasks: s.tasks.filter((t) => t.id !== id && t.parentId !== id),
-        trashTasks: [...s.trashTasks, ...deletedItems],
-        selectedTaskId: s.selectedTaskId === id ? null : s.selectedTaskId
-      }
-    })
+    const gone = new Set([id, ...subtaskIds])
+    set((s) => ({
+      tasks: s.tasks.filter((t) => !gone.has(t.id)),
+      trashTasks: [...s.trashTasks, ...s.tasks.filter((t) => gone.has(t.id)).map((t) => ({ ...t, deletedAt: now }))],
+      selectedTaskId: s.selectedTaskId && gone.has(s.selectedTaskId) ? null : s.selectedTaskId
+    }))
     persist('deleteTask', () => window.api.deleteTask(id))
   },
   duplicateTask: async (id) => {
@@ -888,29 +1054,19 @@ export const useStore = create<Store>((set, get) => ({
     for (const t of [copy, ...subtasks]) persist('createTask', () => window.api.createTask(t))
   },
   restoreTask: async (id) => {
-    const task = get().trashTasks.find((t) => t.id === id)
-    if (task) {
-      // main의 `restoreTask`는 **같은 삭제로 함께 내려간** 하위작업까지 되살린다
-      // (같은 `deletedAt` 타임스탬프가 그 증거다). 화면도 같은 규칙을 써야
-      // 재시작 전후가 다르지 않다 — 따로 지웠던 하위작업은 휴지통에 남긴다.
-      set((s) => {
-        const back = s.trashTasks.filter(
-          (t) => t.id === id || (t.parentId === id && t.deletedAt === task.deletedAt)
-        )
-        const backIds = new Set(back.map((t) => t.id))
-        return {
-          trashTasks: s.trashTasks.filter((t) => !backIds.has(t.id)),
-          tasks: [...s.tasks, ...back.map((t) => ({ ...t, deletedAt: null }))]
-        }
-      })
-    }
-    persist('restoreTask', () => window.api.restoreTask(id))
+    // 무엇이 함께 올라오는지는 main이 답한다(`restoreOnMain`). 화면은 그 목록을 옮길 뿐이다.
+    await restoreOnMain(id)
   },
   permanentDeleteTask: async (id) => {
-    set((s) => ({
-      trashTasks: s.trashTasks.filter((t) => t.id !== id),
-      tasks: s.tasks.filter((t) => t.id !== id && t.parentId !== id)
-    }))
+    // main의 `permanentDeleteTask`처럼 자손 전부를 걷는다 — 휴지통에 손자가 남으면
+    // 다음 로드까지 부모 없는 행이 보이다가 사라진다.
+    set((s) => {
+      const gone = new Set([id, ...descendantIds([...s.trashTasks, ...s.tasks], id)])
+      return {
+        trashTasks: s.trashTasks.filter((t) => !gone.has(t.id)),
+        tasks: s.tasks.filter((t) => !gone.has(t.id))
+      }
+    })
     persist('permanentDeleteTask', () => window.api.permanentDeleteTask(id))
   },
   emptyTrash: async () => {
@@ -953,7 +1109,7 @@ export const useStore = create<Store>((set, get) => ({
     const newlyCompletedIds = newlyCompleted.map((t) => t.id)
     // 반복 task의 다음 인스턴스 — 완료 반영 전 스냅샷으로 계산해야 하나씩 완료한
     // 것과 같은 결과가 된다(안 그러면 일괄 완료가 반복 시리즈를 조용히 끝냈다).
-    const spawns = collectRecurrenceSpawns(newlyCompleted, get().tasks, todayString())
+    const plans = collectRecurrenceSpawns(newlyCompleted, get().tasks, todayString())
     set((s) => ({
       // 이미 완료였던 항목의 completedAt은 건드리지 않는다 — 덮어쓰면 완료 이력이
       // 오늘로 밀려 통계의 '오늘 완료'와 14일 추이가 조용히 바뀐다.
@@ -962,7 +1118,16 @@ export const useStore = create<Store>((set, get) => ({
       batchMode: false
     }))
     persist('batchUpdateTasks', () => window.api.batchUpdateTasks(newlyCompletedIds, { completed: true }))
-    await get().addTasks(spawns.map((spawn) => ({ title: spawn.title, opts: spawn })))
+    // 스폰에 넘긴 미래 회차를 완료본에서 뺀다. 단건 완료가 하던 정리인데 여기만
+    // 빠져 있어서, 옮겨둔 회차가 있는 시리즈를 일괄 완료하면 그 날짜에 같은 블록이
+    // 둘 겹쳤다(완료본 하나 + 새 인스턴스 하나). 일괄 완료를 되풀이할수록 늘어났다.
+    // 넘긴 키가 없으면 overridesAfterHandover가 undefined를 주고 쓰기도 건너뛴다 —
+    // 평범한 일괄 완료의 스토어 쓰기 횟수는 그대로다.
+    for (const { source, spawn } of plans) {
+      const left = overridesAfterHandover(source, spawn)
+      if (left !== undefined) get().updateTask({ id: source.id, scheduledOverrides: left })
+    }
+    await get().addTasks(plans.map(({ spawn }) => ({ title: spawn.title, opts: spawn })))
     await get().addScores(
       newlyCompleted.map((t) => ({ type: 'taskComplete', points: pointsForTask(t.priority), taskId: t.id }))
     )
@@ -971,10 +1136,12 @@ export const useStore = create<Store>((set, get) => ({
     const ids = get().batchSelectedIds
     const now = new Date().toISOString()
     const allTasks = get().tasks
-    const subtaskIds = allTasks.filter((t) => t.parentId && ids.includes(t.parentId)).map((t) => t.id)
+    // 자손 전부 — 직계만 실으면 손자가 살아 남는다(main의 `batchUpdateTasks`도 같은 집합을 내린다).
+    const subtaskIds = ids.flatMap((id) => descendantIds(allTasks, id))
     const allDeletedIds = [...new Set([...ids, ...subtaskIds])]
     const deletedTasks = allTasks.filter((t) => allDeletedIds.includes(t.id))
-    // 삭제 전 undo 스택에 ID 목록 저장 (popUndo deleteTasks 핸들러가 trashTasks에서 ID로 복원)
+    // 삭제 전 undo 스택에 ID 목록 저장 — 되돌릴 때 id마다 main에 묻고, main이 되살렸다고
+    // 답한 것만 휴지통에서 옮긴다.
     get().pushUndo({
       type: 'deleteTasks',
       description: i18n.t('undo.tasksDeleted', { count: allDeletedIds.length }),
@@ -1013,7 +1180,25 @@ export const useStore = create<Store>((set, get) => ({
 
   // === 뷰 ===
   setViewType: (type) => set({ viewType: type, selectedTaskId: null }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  // 검색은 화면을 좁히는데 일괄 선택은 그대로 남아 있었다. '전체 선택' 뒤에 검색어를
+  // 치면 BatchBar는 가려진 것까지 그대로 들고 있어서, 그 상태의 일괄 삭제/완료/이동이
+  // 화면에 없는 할일을 통째로 처리했다(보이는 건 한 줄인데 스물한 개가 휴지통으로 갔다).
+  // 좁힐 때마다 선택도 같이 줄여, BatchBar의 개수가 언제나 화면에 보이는 것과 같게 만든다.
+  // 리스트를 바꿀 때 setSelectedList가 일괄 상태를 통째로 비우는 것과 같은 이유다.
+  // getFilteredTaskIds의 검색 필터는 '검색 → 전체 선택' 한쪽 순서만 막는다 — 반대 순서는
+  // 여기서만 막을 수 있다.
+  // 거르는 잣대는 getFilteredTaskIds가 아니라 matchesSearch다. 전자는 '전체 선택' 대상
+  // (= 미완료)만 돌려주는데 뷰는 완료한 것도 '완료 N' 묶음으로 계속 그리고 거기서도
+  // 체크가 된다 — 그걸로 거르면 검색어와 무관하게, 화면에 멀쩡히 보이는 완료 항목의
+  // 체크가 타이핑 한 번에 조용히 풀린다. 여기서 바뀌는 건 검색어뿐이니 검색어로만 판단한다.
+  // 일괄 모드가 아닐 때는 걸러내지 않는다 — 선택이 비어 있는 게 불변식이고, 타이핑마다
+  // 전체 태스크를 훑을 이유도 없다.
+  setSearchQuery: (query) =>
+    set((s) => {
+      if (!s.batchMode || s.batchSelectedIds.length === 0) return { searchQuery: query }
+      const visible = new Set(s.tasks.filter((t) => matchesSearch(t, query)).map((t) => t.id))
+      return { searchQuery: query, batchSelectedIds: s.batchSelectedIds.filter((id) => visible.has(id)) }
+    }),
   setTheme: (theme) => {
     writeLocal('ticktick-theme', theme)
     set({ theme })
@@ -1039,29 +1224,16 @@ export const useStore = create<Store>((set, get) => ({
     const action = stack[stack.length - 1]
     set({ undoStack: stack.slice(0, -1) })
     if (action.type === 'deleteTask') {
-      const { task, subtaskIds } = readDeletedTaskUndo(action.data)
-      // 부모와 함께 내려간 하위작업을 같이 올린다. main의 `restoreTask`도 같은
-      // 집합을 되살리므로(같은 삭제 타임스탬프를 가진 하위작업), 화면과 디스크가
-      // 어긋나지 않는다 — IPC는 부모 id 하나면 된다.
-      const ids = new Set<string>([task.id, ...subtaskIds])
-      set((s) => {
-        const restored = s.trashTasks.filter((t) => ids.has(t.id))
-        return {
-          trashTasks: s.trashTasks.filter((t) => !ids.has(t.id)),
-          tasks: [...s.tasks, ...restored.map((t) => ({ ...t, deletedAt: null }))]
-        }
-      })
-      persist('restoreTask', () => window.api.restoreTask(task.id))
+      const { task } = readDeletedTaskUndo(action.data)
+      // IPC는 부모 id 하나이고, 무엇이 올라왔는지는 main의 답을 그대로 옮긴다.
+      // 페이로드의 자손 목록으로 옮기면 안 된다: 그 사이 휴지통에서 자손 하나를 복원해
+      // 부모가 이미 살아 있으면, 남은 자손을 main이 올리는지는 main만 안다.
+      await restoreOnMain(task.id)
     } else if (action.type === 'deleteTasks') {
       const ids = action.data as string[]
-      set((s) => {
-        const restored = s.trashTasks.filter((t) => ids.includes(t.id))
-        return {
-          trashTasks: s.trashTasks.filter((t) => !ids.includes(t.id)),
-          tasks: [...s.tasks, ...restored.map((t) => ({ ...t, deletedAt: null }))]
-        }
-      })
-      for (const id of ids) persist('restoreTask', () => window.api.restoreTask(id))
+      // 하나씩 main에 묻는다. 뿌리가 먼저 올라오면 그 아래 행의 답은 빈 목록이고,
+      // 자식이 먼저 실려 조상을 끌어올렸으면 뿌리의 답이 남은 자손이다 — 합이 전부다.
+      await Promise.all(ids.map((id) => restoreOnMain(id)))
     }
   },
 
@@ -1264,6 +1436,23 @@ export const useStore = create<Store>((set, get) => ({
     const messages = (await window.api.aiGetHistory()) as AiMessage[]
     set({ aiMessages: messages })
   },
+
+  // **대화가 디스크로 가는 단 하나의 경로.** 예전에는 이 잘라-저장하기가
+  // `aiSendMessage`의 done/error 핸들러 안에만 복사돼 있어서, 액션 카드로만 오간
+  // 대화(요청·확인·취소·"못 찾았다")는 통째로 저장되지 않았다. 앱을 끄면
+  // `aiLoadHistory()`가 그 이전 대화를 되살려, 사용자에게는 완료·삭제된 할일만
+  // 남고 시켰다는 기록은 사라진 화면이 남는다 — 할일 변경은 `toggleTask`/`removeTask`가
+  // 따로 저장하므로, 왜 그렇게 됐는지 되짚을 근거만 없어진다.
+  //
+  // 자르기(cap)도 여기 한 곳에만 둔다. 저장본과 화면의 길이가 갈리면 재시작할 때
+  // 화면이 소리 없이 짧아진다. `trimHistory`는 cap 이하면 같은 배열을 돌려주므로,
+  // 참조가 그대로면 set을 건너뛴다(구독자 헛재렌더 방지).
+  _aiPersistHistory: () => {
+    const { aiMessages, aiConfig } = get()
+    const trimmed = trimHistory(aiMessages, aiConfig?.maxHistoryMessages ?? 200)
+    if (trimmed !== aiMessages) set({ aiMessages: trimmed })
+    persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
+  },
   aiSaveConfig: async (updates) => {
     try {
       await window.api.aiSetConfig(updates)
@@ -1277,6 +1466,19 @@ export const useStore = create<Store>((set, get) => ({
     // 이전 스트리밍 리스너 정리 (리스너 누적 방지)
     const prevCleanup = get()._aiStreamCleanup
     if (prevCleanup) prevCleanup()
+
+    // **이 요청의 id — '버려진 스트림 섞임'을 막는 가드다.**
+    // 리스너를 떼는 것만으로는 스트림이 멈추지 않는다. main의 `streamChat`은 끝까지
+    // 돌고, `ai:stream-*`는 창에 채널이 하나뿐인 브로드캐스트다. 그리고 그 겹침을
+    // 여는 문은 정확히 하나다 — `setShowAiChat(false)`가 답변 도중 리스너를 걷으면서
+    // `aiLoading:false`로 되돌려 입력칸을 다시 열어 준다(패널이 열려 있는 동안에는
+    // AiChatPanel이 `aiLoading`으로 전송을 막는다). 그래서 답변 중에 패널을 닫았다
+    // 열고 다시 물으면, 버려진 스트림 A와 새 스트림 B가 같은 채널에 함께 쏟아졌다:
+    // A의 잔여 토큰이 B의 답변 말머리에 붙고, A의 done이 B의 리스너를 통째로 걷어
+    // 가 B의 진짜 답변이 문장 중간에서 끊긴 채 히스토리에 저장됐다.
+    // id가 다르면 남의 스트림이니 무시한다. 모르는 id도 '내 것이 아님'이 맞는
+    // 판정이다 — main·preload는 같은 빌드로 나가므로 id 없는 이벤트는 없다.
+    const requestId = uuid()
 
     // 현재 메시지 추가 전의 대화를 컨텍스트로 캡처 (멀티턴). 최근 N개만.
     const history = normalizeChatHistory(get().aiMessages)
@@ -1308,34 +1510,32 @@ export const useStore = create<Store>((set, get) => ({
       set({ _aiStreamCleanup: null })
     }
 
-    const cleanupToken = window.api.onAiStreamToken?.((token: string) => {
+    const cleanupToken = window.api.onAiStreamToken?.((token: string, id: string) => {
+      if (id !== requestId) return
       set((s) => ({
         aiMessages: s.aiMessages.map((m) => (m.id === assistantMsg.id ? { ...m, content: m.content + token } : m))
       }))
     })
-    const cleanupDone = window.api.onAiStreamDone?.(() => {
-      const { aiMessages, aiConfig } = get()
-      const cap = aiConfig?.maxHistoryMessages ?? 200
-      const trimmed = trimHistory(aiMessages, cap)
-      set({ aiLoading: false, aiMessages: trimmed })
-      persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
+    const cleanupDone = window.api.onAiStreamDone?.((id: string) => {
+      if (id !== requestId) return
+      set({ aiLoading: false })
+      get()._aiPersistHistory()
       cleanup()
     })
-    const cleanupError = window.api.onAiStreamError?.((error: string) => {
+    const cleanupError = window.api.onAiStreamError?.((error: string, id: string) => {
+      if (id !== requestId) return
       const withError = get().aiMessages.map((m) =>
         m.id === assistantMsg.id ? { ...m, content: i18n.t('ai.error', { message: error }) } : m
       )
-      const cap = get().aiConfig?.maxHistoryMessages ?? 200
-      const trimmed = trimHistory(withError, cap)
-      set({ aiLoading: false, aiMessages: trimmed })
-      persist('aiSaveHistory', () => window.api.aiSaveHistory(trimmed))
+      set({ aiLoading: false, aiMessages: withError })
+      get()._aiPersistHistory()
       cleanup()
     })
 
     set({ _aiStreamCleanup: cleanup })
 
     try {
-      await window.api.aiStreamChat(message, tasks, history)
+      await window.api.aiStreamChat(message, tasks, history, requestId)
     } catch {
       set((s) => ({
         aiLoading: false,
@@ -1364,12 +1564,17 @@ export const useStore = create<Store>((set, get) => ({
     }
   },
   aiRequestTaskAction: async (message) => {
-    const pushAssistant = (content: string): void =>
+    const pushAssistant = (content: string): void => {
       set((s) => ({
         aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content, timestamp: new Date().toISOString() }]
       }))
+      get()._aiPersistHistory()
+    }
     const userMsg: AiMessage = { id: uuid(), role: 'user', content: message, timestamp: new Date().toISOString() }
     set((s) => ({ aiMessages: [...s.aiMessages, userMsg], aiLoading: true, aiPendingAction: null }))
+    // 해석이 성공하면 답이 아니라 확인 카드가 뜬다 — assistant 메시지가 없으므로
+    // 카드를 띄운 채 앱을 끄면 이 발화만 사라진다. 여기서 한 번 적어 둔다.
+    get()._aiPersistHistory()
     try {
       const tasks = buildAiTaskContext(get().tasks)
       const res = (await window.api.aiInterpretAction(message, tasks)) as TaskActionInterpretation
@@ -1404,10 +1609,12 @@ export const useStore = create<Store>((set, get) => ({
     const pending = get().aiPendingAction
     if (!pending) return
     set({ aiPendingAction: null })
-    const pushAssistant = (content: string): void =>
+    const pushAssistant = (content: string): void => {
       set((s) => ({
         aiMessages: [...s.aiMessages, { id: uuid(), role: 'assistant', content, timestamp: new Date().toISOString() }]
       }))
+      get()._aiPersistHistory()
+    }
     // TOCTOU 방지: 확인 카드가 떠 있는 동안 사용자가 손으로 그 태스크를 완료/삭제/변경했을
     // 수 있다. 실행 직전 현재 상태를 다시 확인해, 없거나 이미 처리된 경우 blind 실행 대신
     // 정직하게 알린다(예전 코드는 toggleTask가 이미 완료된 태스크를 도로 미완료로 되돌렸음).
@@ -1442,6 +1649,7 @@ export const useStore = create<Store>((set, get) => ({
         { id: uuid(), role: 'assistant', content: i18n.t('ai.actionCancelled'), timestamp: new Date().toISOString() }
       ]
     }))
+    get()._aiPersistHistory()
   },
   aiCreateTaskFromNL: async (input) => {
     const tasks = buildAiTaskContext(get().tasks)

@@ -1,6 +1,6 @@
 # 레퍼런스 — npm 스크립트, 빌드 플래그, electron-builder 설정, 워크플로 시크릿
 
-2026-09-08 `ebf40d6` 기준. 출처는 `package.json`, `electron.vite.config.ts`, `electron-builder.yml`, `electron-builder.bridge.cjs`, `dev-app-update.yml`, `.github/workflows/release.yml`, `scripts/*.sh`.
+2026-09-08 `ebf40d6` 기준(2026-10-07 `5894ea5` 에서 `verify`·`mas:build`·`mas:upload`·`test` 프로젝트·`mas.artifactName`·`updaterCacheDirName`·워크플로 Node 를 다시 맞췄다). 출처는 `package.json`, `electron.vite.config.ts`, `electron-builder.yml`, `electron-builder.bridge.cjs`, `dev-app-update.yml`, `.github/workflows/release.yml`, `scripts/*.sh`.
 
 ## npm 스크립트
 
@@ -12,16 +12,17 @@
 | `package` | `electron-vite build && electron-builder --mac --config` | 직접 배포용 dmg·zip (`electron-builder.yml`). 서명은 Keychain 인증서가 있을 때만 |
 | `package:mas` | `electron-vite build && electron-builder --mac mas --config` | **쓰지 말 것** — `--config` 뒤에 값이 없고 preflight·universal 이 없다. `mas:build` 를 쓴다 |
 | `package:bridge` | `BRIDGE_BUILD=1 GREENDAY_RELEASE=1 electron-vite build && electron-builder --mac --arm64 --x64 --config electron-builder.bridge.cjs` | 옛 번들 ID v1.5.0. 게시 안 함 |
-| `test` | `vitest run` | `src/**/*.test.{ts,tsx}`, TZ `Asia/Seoul` |
+| `test` | `vitest run` | `src/**/*.test.{ts,tsx}`. 프로젝트 둘 — `seoul`(전부, TZ `Asia/Seoul`)과 `west`(시간대에 민감한 파일 목록 `TZ_SENSITIVE` 만, TZ `America/New_York`) (`vitest.config.ts`) |
 | `test:watch` | `vitest` | |
 | `lint` | `biome lint src electron.vite.config.ts` | |
 | `lint:fix` | `biome check --write src electron.vite.config.ts` | 린트+포맷 자동 수정 |
 | `format` | `biome format --write src electron.vite.config.ts` | |
 | `typecheck` | `tsc --build` | `tsconfig.node.json`(main·preload·shared) + `tsconfig.web.json`(renderer·shared). 산출물은 `out/src/**` 로 가며 asar 에 들어가지 않는다 |
-| `release` | `bash scripts/release.sh` | 로컬 서명·공증·draft 게시. 요구: Developer ID 인증서, `notarytool` 프로파일, `gh` 토큰, `GOOGLE_OAUTH_CLIENT_ID` |
+| `verify` | `npm run typecheck && npm run lint && npm test` | 헬스 스택 한 번에. `release.sh`·`mas:build`·`release.yml` 이 빌드 **앞에서** 이것을 부른다 — 정의는 여기 한 곳 |
+| `release` | `bash scripts/release.sh` | 로컬 서명·공증·draft 게시. 2/5 단계에서 `npm run verify` 를 빌드보다 먼저 돈다. 요구: Developer ID 인증서, `notarytool` 프로파일, `gh` 토큰, `GOOGLE_OAUTH_CLIENT_ID` |
 | `mas:preflight` | `bash scripts/mas-preflight.sh` | 6항목 점검 |
-| `mas:build` | `bash scripts/mas-preflight.sh && GREENDAY_RELEASE=1 electron-vite build && electron-builder --mac mas --universal` | |
-| `mas:upload` | `bash scripts/mas-upload.sh` | `altool --validate-app` 뒤 `--upload-app` |
+| `mas:build` | `bash scripts/mas-preflight.sh && npm run verify && GREENDAY_RELEASE=1 electron-vite build && electron-builder --mac mas --universal` | 결과 `dist/mas-universal/Greenday-<version>-universal.pkg` (`mas.artifactName`) |
+| `mas:upload` | `bash scripts/mas-upload.sh` | `altool --validate-app` 뒤 `--upload-app`. 그 전에 멈추는 경우: pkg 가 0개·2개 이상, pkg 가 마지막 커밋보다 오래됨(git 을 못 돌려도 멈춘다), pkg 옆 실행 파일이 없거나 유니버설이 아님. 암호는 `-p @env:APPLE_APP_PASSWORD` 로 넘긴다(argv 에 싣지 않는다) |
 
 ## 빌드 시점 define (`electron.vite.config.ts`)
 
@@ -64,15 +65,16 @@
 | `mac.artifactName` / `dmg.artifactName` | `${productName}-${arch}.${ext}` | **버전 없음** — `releases/latest/download/Greenday-arm64.dmg` 고정 주소 |
 | `mac.hardenedRuntime` | `true` | 공증 요건 |
 | `mac.entitlements` / `entitlementsInherit` | `resources/entitlements.mac.plist` | JIT·unsigned-executable-memory·disable-library-validation·network.client |
-| `mac.minimumSystemVersion` | `'12.0'` | Electron 40 바이너리의 값과 같다. README·사이트·cask(`>= :monterey`)가 같은 값을 본다 |
+| `mac.minimumSystemVersion` | `'12.0'` | Electron 41 바이너리(`41.10.7`)의 값과 같다. README·사이트·cask(`>= :monterey`)가 같은 값을 본다 |
 | `mac.extendInfo.ITSAppUsesNonExemptEncryption` | `false` | App Store Connect 수출 규정 설문 생략 |
 | `mac.protocols[].schemes` | `[com.begreen.greenday]` | 커스텀 URL 스킴. OAuth 는 더 이상 안 쓰지만 `open-url`·`second-instance` 배선이 기댄다 |
 | `mas.entitlements` / `entitlementsInherit` | `entitlements.mas.plist` / `entitlements.mas.inherit.plist` | app-sandbox, network.client, network.server, files.user-selected.read-write |
 | `mas.hardenedRuntime` | `false` | MAS 는 샌드박스 |
-| `mas.provisioningProfile` | `resources/embedded.provisionprofile` | gitignored. **현재 옛 ID 용** |
+| `mas.provisioningProfile` | `resources/embedded.provisionprofile` | gitignored. 옛 ID 용 파일은 치웠고 2026-10-06 현재 이 경로에 파일이 없다 — 새 ID 로 발급해 넣을 때까지 preflight 2/6 실패가 정상 |
+| `mas.artifactName` | `${productName}-${version}-${arch}.${ext}` | MAS pkg 에만 버전을 넣는다. 안 적으면 `mac.artifactName`(버전 없음)을 물려받아 `mas-upload.sh` 가 찾는 `<productName>-<version>*.pkg` 와 어긋난다. `src/shared/masArtifactName.test.ts` |
 | `publish.provider/owner/repo` | `github` / `supaicy` / `greenDay` | 정식 저장소 이름 |
 | `publish.channel` | `greenday` | feed 파일 `greenday-mac.yml`. 옛 앱이 읽는 `latest-mac.yml` 과 분리 |
-| `publish.updaterCacheDirName` | `greenday-updater` | `~/Library/Caches/greenday-updater`. 옛 앱의 `ticktick-updater` 와 분리 |
+| `publish.updaterCacheDirName` | (적지 않는다) | electron-builder 가 적힌 값을 버리고 `package.json` `name` 에서 유도한다 → `~/Library/Caches/ticktick-updater`. 옛 앱과 나눌 수 없고, Homebrew cask `zap` 이 그 경로를 지운다. `src/shared/updaterCacheDir.test.ts` |
 | `npmRebuild` | `true` | |
 
 `dev-app-update.yml` 은 개발 중 electron-updater 가 읽는 같은 값(`provider/owner/repo/channel`)이다. 개발 빌드는 `canSelfUpdate: false` 라 실제로 확인하지는 않는다.
@@ -88,7 +90,7 @@
 | `mac.artifactName`, `dmg.artifactName` | `Greenday-1.5.0-bridge-${arch}.${ext}` |
 | `mac.protocols` | `[{ name: 'Greenday', schemes: ['com.haru.app'] }]` |
 | `publish.channel` | `latest` → `latest-mac.yml` |
-| `publish.updaterCacheDirName` | `ticktick-updater` |
+| `publish.updaterCacheDirName` | 적지 않는다 — 어차피 `ticktick-updater` 로 유도된다(위 표) |
 
 같은 상수가 사는 다른 자리: `src/shared/app-id.ts`(`LEGACY_BUNDLE_ID`, `BRIDGE_VERSION`), `electron.vite.config.ts`(`BRIDGE_VERSION`).
 
@@ -108,7 +110,7 @@
 
 **2026-09-08 `gh secret list -R supaicy/greenDay`: `HOMEBREW_TAP_TOKEN` 만 등록돼 있다.** 나머지 7종은 없다.
 
-트리거: `push.tags: ['v[2-9]*', 'v[1-9][0-9]*']` — v2 이상만. `v1.*`(브리지 v1.5.0)는 무시된다. 러너 `macos-latest`, Node 20. 단계 순서와 각 단계의 실패 조건은 [howto-태그-릴리스.md](howto-태그-릴리스.md) 5절.
+트리거: `push.tags: ['v[2-9]*', 'v[1-9][0-9]*']` — v2 이상만. `v1.*`(브리지 v1.5.0)는 무시된다. 러너 `macos-latest`, Node 24(electron 41 이 Node 22.12 이상을 요구한다 — `src/shared/releaseGate.test.ts`). `npm ci` 바로 뒤 시크릿 확인보다 먼저 `npm run verify` 를 돈다. 단계 순서와 각 단계의 실패 조건은 [howto-태그-릴리스.md](howto-태그-릴리스.md) 5절.
 
 ## 스크립트가 읽는 파일
 
@@ -116,5 +118,5 @@
 |---|---|
 | `release.sh` | `electron-builder.yml` `productName`(awk), `package.json` `version`(node), `dist/<productName>-*.dmg` |
 | `mas-preflight.sh` | `electron-builder.yml` `appId`·`mac.protocols`, `src/shared/app-id.ts`, `resources/entitlements.mas.plist`, 프로파일, `src/main/{capabilities,index,ipc-handlers}.ts`, `src/shared/capabilities.ts` |
-| `mas-upload.sh` | `electron-builder.yml` `productName`, `package.json` `version`, `dist/**/<productName>-<version>*.pkg` |
+| `mas-upload.sh` | `electron-builder.yml` `productName`, `package.json` `version`, `dist/**/<productName>-<version>*.pkg`, 그 옆 `<productName>.app/Contents/MacOS/<productName>`(`lipo -archs`), `git log -1 --format=%ct`(실패하면 Command Line Tools 의 git 으로 한 번 더) |
 | `bump-haru-cask.sh` | 릴리스 자산 `Greenday-1.5.0-bridge-{arm64,x64}.dmg` (또는 `--local` 로 `dist/`), 버전은 스크립트 안 리터럴 `1.5.0` |

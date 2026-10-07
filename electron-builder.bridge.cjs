@@ -36,7 +36,10 @@ module.exports = {
   publish: {
     ...base.publish,
     // 옛 앱이 읽는 파일 이름은 `latest-mac.yml` — 기본 설정의 `channel: greenday` 를 되돌린다.
-    channel: 'latest',
-    updaterCacheDirName: 'ticktick-updater'
+    // updaterCacheDirName 은 적지 않는다 — 값이 맞든 틀리든 electron-builder 가 버리고
+    // package.json 의 `name` 에서 다시 유도한다(electron-builder.yml 의 publish 주석 참고).
+    // 여기 있던 'ticktick-updater' 는 우연히 맞는 값이었을 뿐이라, 읽는 사람에게
+    // "이 키가 먹는다"고 가르치는 해만 있었다.
+    channel: 'latest'
   }
 }

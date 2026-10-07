@@ -2,7 +2,7 @@
 
 처음 이 저장소를 받은 사람이 **창을 띄우고, 데이터가 어디 있는지 보고, 라이선스 흐름이 개발 환경에서 어디까지 보이는지 확인하고, 테스트를 돌리는** 데까지 간다. 30분 안팎.
 
-아래 명령은 전부 2026-09-08 에 macOS 에서 실제로 돌려 본 것이다(Node 20 기준 — 릴리스 워크플로가 `node-version: 20` 을 쓴다).
+아래 명령은 전부 2026-09-08 에 macOS 에서 실제로 돌려 본 것이다(그때는 Node 20 기준). 지금은 **Node 22.12 이상**이 필요하다 — electron 41 의 `engines` 가 그렇고, 릴리스 워크플로는 `node-version: 24` 를 쓴다.
 
 ## 1. 받고 설치하기
 
@@ -22,7 +22,7 @@ npm ci          # package-lock.json 그대로. npm install 도 된다
 npm run dev
 ```
 
-`electron-vite dev` 가 main·preload 를 빌드하고 렌더러 dev 서버(`http://localhost:5173`)를 띄운 뒤 Electron 을 실행한다. 20~30초 안에 **"Greenday" 제목의 1200×800 창**이 뜬다(`src/main/index.ts` 의 `createWindow`).
+`electron-vite dev` 가 main·preload 를 빌드하고 렌더러 dev 서버(`http://localhost:5173`)를 띄운 뒤 Electron 을 실행한다. 20~30초 안에 **"Greenday" 제목의 1200×800 창**이 뜬다(`src/main/main-window.ts` 의 `createWindow`).
 
 실제 데이터 폴더를 건드리고 싶지 않으면 — 처음이라면 이쪽을 권한다 — Electron 에 격리된 데이터 폴더를 준다:
 
@@ -62,7 +62,7 @@ npm run dev -- --user-data-dir=/tmp/greenday-dev
  "tasks":[],"habits":[],"habitLogs":[],"folders":[],"pomodoroSessions":[],"score":{"total":0,"events":[],"taskNet":{}}}
 ```
 
-설정 파일은 따로다 — `ai-config.json`(AI 키는 `apiKey_enc` 로 암호화), `calendar-config.json`(`password_enc`), `google-config.json`(`tokens_enc`), `license.json`, `device-id`. 이들은 해당 기능을 처음 쓸 때 생긴다. 비밀값은 전부 `safeStorage` 로 암호화된 채 저장된다(→ [explanation-로컬-데이터와-safeStorage.md](explanation-로컬-데이터와-safeStorage.md)). 각 파일의 형식은 [reference-마이그레이션-파일.md](reference-마이그레이션-파일.md) 에 있다.
+설정 파일은 따로다 — `ai-config.json`(AI 키는 `apiKey_enc` 로 암호화), `calendar-config.json`(`password_enc`), `google-config.json`(`tokens_enc`), `license.json`, `device-id`. 이들은 해당 기능을 처음 쓸 때 생긴다. 참조가 사라진 첨부가 생기면 `attachments-quarantine/` 도 생긴다 — 첨부를 지우지 않고 여기 옮겨 두었다가 30일 뒤 다음 정리가 지운다. 그 안의 파일을 원래 이름 그대로 `attachments/` 로 옮기면 되살아난다(`database.ts` `gcAttachments`). 비밀값은 전부 `safeStorage` 로 암호화된 채 저장된다(→ [explanation-로컬-데이터와-safeStorage.md](explanation-로컬-데이터와-safeStorage.md)). 각 파일의 형식은 [reference-마이그레이션-파일.md](reference-마이그레이션-파일.md) 에 있다.
 
 할일을 하나 만들어 보고 `ticktick-data.json` 을 다시 열면 300ms 디바운스 뒤에 반영돼 있다(`SAVE_DEBOUNCE_MS`).
 
@@ -91,6 +91,7 @@ npx vitest run src/main/licensing src/renderer/src/licensing
 npx vitest run        # = npm test
 npm run typecheck     # tsc --build (tsconfig.node.json + tsconfig.web.json)
 npm run lint          # biome lint src electron.vite.config.ts
+npm run verify        # 위 셋을 한 번에 — 릴리스 경로(release.sh·release.yml·mas:build)가 부르는 것
 ```
 
 2026-09-08 `ebf40d6` 에서의 결과:
@@ -103,7 +104,7 @@ Test Files  78 passed (78)
 
 `typecheck` 는 출력 없이 종료 코드 0. `lint` 는 `Checked 209 files … Found 8 warnings. Found 4 infos.` — 에러 0. 경고는 전부 테스트 파일의 `useTemplate`·`noNonNullAssertion` 과 `useImportType` 둘이다.
 
-테스트는 `src/**/*.test.{ts,tsx}` 만 본다(`vitest.config.ts`). `tsc --build` 가 `out/` 에 뱉는 `.test.js` 는 제외돼 있고, 시간대는 `Asia/Seoul` 로 고정된다 — 날짜 테스트가 UTC 머신에서 거짓 통과하지 않게.
+테스트는 `src/**/*.test.{ts,tsx}` 만 본다(`vitest.config.ts`). `tsc --build` 가 `out/` 에 뱉는 `.test.js` 는 제외돼 있고, 시간대는 `Asia/Seoul` 로 고정된다 — 날짜 테스트가 UTC 머신에서 거짓 통과하지 않게. 시간대에 민감한 파일(`TZ_SENSITIVE`)은 `west` 프로젝트가 `America/New_York` 에서 한 번 더 돌린다 — 양수 오프셋만으로는 "쓸 때 로컬 / 읽을 때 UTC" 비대칭이 가려진다.
 
 메인 프로세스 모듈 대부분은 electron 을 import 하지 않는 순수 모듈이라(`licensing/*`, `migration/{bridge,arrival,handoff,secrets-gate}`, `shared/*`) 그냥 node 에서 돈다. electron 이 필요한 건 `service.ts`·`ipc-gate.test.ts` 정도이고 그쪽은 `vi.mock('electron')` 을 쓴다.
 

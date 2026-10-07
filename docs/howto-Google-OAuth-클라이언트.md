@@ -59,7 +59,9 @@ npm run dev -- --user-data-dir=/tmp/greenday-oauth
 
 `google:get-config` IPC 가 돌려주는 `clientIdConfigured` 가 `false` 면 값이 어디에도 없는 것이다.
 
-실패 코드는 `OAuthError.code` 로 온다: `listen_failed`(루프백을 못 열었다 — MAS 에서 `network.server` 가 없으면 여기), `open_failed`(브라우저), `timeout`(5분), `cancelled`, `invalid_callback`/`state` 불일치.
+실패 코드는 `OAuthError.code` 로 온다: `listen_failed`(루프백을 못 열었다 — MAS 에서 `network.server` 가 없으면 여기), `open_failed`(브라우저), `timeout`(5분), `cancelled`, `access_denied`(사용자가 동의 화면에서 거절)·`auth_failed`, `invalid_callback`·`state_mismatch`·`no_code`. 화면 문장은 이 code 로 `main-strings.ts` 의 `googleErrors` 에서 고른다.
+
+토큰 엔드포인트의 실패는 둘로 갈린다(`src/main/google/oauth.ts` `OAUTH_REFUSAL_CODES`). **거절** — `invalid_grant`(사용자가 권한을 거뒀다 등), `invalid_client`(콘솔에서 클라이언트를 지웠다), `unauthorized_client`(릴리스 사이에 빌드의 클라이언트 ID 가 바뀌었다) — 이면 저장된 토큰을 버리고 재연결을 요구한다. 그래서 이미 나간 빌드의 클라이언트를 지우거나 다음 릴리스에서 ID 를 바꾸면, 연결해 둔 사용자는 다시 연결해야 한다. 그 밖(`network`·`bad_response`·`token_failed`·`no_token`)은 불통으로 보고 토큰을 남긴다.
 
 ## 5. MAS 빌드에서 — `network.server`
 

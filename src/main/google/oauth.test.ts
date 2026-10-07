@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import {
   createPkcePair,
@@ -10,10 +10,12 @@ import {
   needsRefresh,
   revokeToken,
   OAuthError,
+  OAUTH_REFUSAL_CODES,
   SCOPES,
   type FetchLike,
   type TokenSet
 } from './oauth'
+import { mainStrings } from '../../shared/main-strings'
 
 const CLIENT_ID = '123-abc.apps.googleusercontent.com'
 const REDIRECT = 'com.supaicy.haru:/oauth2redirect'
@@ -193,6 +195,49 @@ describe('refreshTokens', () => {
       expect((error as OAuthError).message).toContain('다시 연결')
     }
   })
+
+  /**
+   * 그랜트를 영구히 거절하는 이름은 `invalid_grant`만이 아니다. 릴리스 사이에 빌드의
+   * 클라이언트 ID가 바뀌었거나 OAuth 클라이언트가 지워졌으면 구글은 `invalid_client`·
+   * `unauthorized_client`로 답한다. 이것을 `token_failed`(일시 장애와 같은 칸)로 접으면
+   * 호출처가 죽은 토큰을 영원히 들고 "연결됨"이라고 말한다.
+   */
+  it.each([
+    ['invalid_client', 401],
+    ['unauthorized_client', 400]
+  ])('영구 거절(%s)은 이름을 그대로 code로 남긴다', async (name, status) => {
+    const { fetchImpl } = jsonFetch({ error: name, error_description: 'The OAuth client was deleted.' }, status)
+    await expect(
+      refreshTokens({ clientId: CLIENT_ID, refreshToken: 'rt', now: NOW }, fetchImpl)
+    ).rejects.toMatchObject({ name: 'OAuthError', code: name })
+  })
+
+  it('모르는 이름과 5xx는 여전히 token_failed다 — 거절 목록을 이름 없이 넓히지 않는다', async () => {
+    for (const [payload, status] of [
+      [{ error: 'server_error' }, 503],
+      [{ error: 'temporarily_unavailable' }, 400],
+      [{}, 500]
+    ] as const) {
+      const { fetchImpl } = jsonFetch(payload, status)
+      await expect(
+        refreshTokens({ clientId: CLIENT_ID, refreshToken: 'rt', now: NOW }, fetchImpl)
+      ).rejects.toMatchObject({ name: 'OAuthError', code: 'token_failed' })
+    }
+  })
+})
+
+/**
+ * 거절 이름은 그대로 `OAuthError.code`가 되고, 화면 문장은 그 code로 고른다. 번역이 없는
+ * 이름은 "알 수 없는 오류"로 접혀 사용자가 다시 연결해야 한다는 것을 모른다. 타입
+ * (`satisfies readonly GoogleErrorKey[]`)이 먼저 막고, 이것은 두 언어 모두 빈 문장이
+ * 아닌지까지 본다.
+ */
+describe('OAUTH_REFUSAL_CODES', () => {
+  it.each(['ko', 'en'] as const)('모든 거절 이름에 %s 문장이 있다', (lang) => {
+    const sentences = mainStrings(lang).googleErrors as Record<string, string | undefined>
+    expect(OAUTH_REFUSAL_CODES.size).toBeGreaterThan(0)
+    for (const code of OAUTH_REFUSAL_CODES) expect(sentences[code], code).toBeTruthy()
+  })
 })
 
 describe('needsRefresh', () => {
@@ -231,5 +276,73 @@ describe('revokeToken', () => {
 describe('createState', () => {
   it('매번 다른 값을 만든다', () => {
     expect(new Set(Array.from({ length: 20 }, createState)).size).toBe(20)
+  })
+})
+
+describe('토큰 요청 상한', () => {
+  /** 연결만 받고 응답하지 않는 서버. 상한이 없으면 이 promise는 끝나지 않는다. */
+  const stallingFetch =
+    (seen: (AbortSignal | null | undefined)[]): FetchLike =>
+    (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        seen.push(init.signal)
+        const signal = init.signal
+        if (!signal) return
+        if (signal.aborted) return reject(signal.reason)
+        signal.addEventListener('abort', () => reject(signal.reason))
+      })
+
+  /** 30초를 실제로 기다릴 수는 없다. 요청한 값만 받아 두고 타이머는 20ms로 줄인다. */
+  const shrink = (): number[] => {
+    const real = AbortSignal.timeout.bind(AbortSignal)
+    const asked: number[] = []
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      asked.push(ms)
+      return real(20)
+    })
+    return asked
+  }
+
+  const settleWithin = (work: Promise<unknown>): Promise<unknown> => {
+    work.catch(() => {})
+    return Promise.race([
+      work.then(
+        (value) => ({ resolved: value }),
+        (error: unknown) => error
+      ),
+      new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+    ])
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('refreshTokens: 응답하지 않는 서버에서도 끝난다', async () => {
+    const asked = shrink()
+    const seen: (AbortSignal | null | undefined)[] = []
+
+    const settled = await settleWithin(
+      refreshTokens({ clientId: CLIENT_ID, refreshToken: 'rt', now: NOW }, stallingFetch(seen))
+    )
+
+    // 여기가 끝나지 않으면 `google:sync-now`가 갱신 단계에서 통째로 멈춘다.
+    expect(settled, '상한이 없어 토큰 갱신이 끝나지 않았다').not.toBe('hung')
+    // 타입만 보면 `token_failed`(거부 쪽으로 읽힐 수 있는 값)로 바뀌어도 통과한다.
+    // 응답하지 않은 것은 **불통**이다 — 호출처가 토큰을 남기는 근거가 이 code다.
+    expect(settled).toMatchObject({ name: 'OAuthError', code: 'network' })
+    expect(seen[0]).toBeInstanceOf(AbortSignal)
+    expect(asked).toEqual([30_000])
+  })
+
+  it('revokeToken: 응답하지 않는 서버에서도 끝나고 false를 준다', async () => {
+    shrink()
+    const seen: (AbortSignal | null | undefined)[] = []
+
+    // `google:disconnect`는 이 await **뒤에** 로컬 토큰을 지운다. 여기가 안 끝나면
+    // 사용자가 해제를 눌러도 리프레시 토큰이 디스크에 그대로 남는다.
+    const settled = await settleWithin(revokeToken('rt', stallingFetch(seen)))
+
+    expect(settled, '상한이 없어 토큰 회수가 끝나지 않았다').not.toBe('hung')
+    expect(settled).toEqual({ resolved: false })
+    expect(seen[0]).toBeInstanceOf(AbortSignal)
   })
 })

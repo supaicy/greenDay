@@ -114,7 +114,10 @@ export function KanbanView(): React.ReactElement {
         }
         await updateTask(updates)
       } else if (columnId === 'todo') {
-        // 할 일: 마감일 제거 (오늘 이후거나 없음) + 미완료
+        // 할 일: '진행 중'으로 보내는 날짜를 전부 되돌린다 + 미완료.
+        // 위 분류기(columnTasks)가 참으로 보는 조건이 하나라도 남으면 이 패치는
+        // 아무것도 바꾸지 못하고 카드가 그 자리로 되튄다 — 아래 두 가지는 그
+        // 술어와 짝이다. 한쪽만 늘리면 드롭이 조용히 죽는다.
         const updates: Partial<Task> & { id: string } = { id: taskId }
         if (task.completed) {
           updates.completed = false
@@ -123,6 +126,15 @@ export function KanbanView(): React.ReactElement {
         // 오늘 이하 마감일이면 제거
         if (task.dueDate && task.dueDate <= todayStr) {
           updates.dueDate = null
+        }
+        // 이미 시작된 기간도 함께 지운다. 이 줄이 없던 동안, 기간을 쓰는 할일은
+        // 마감이 아직 남아 위 dueDate 가지에 걸리지 않아 패치가 `{ id }` 하나로
+        // 나갔다 — updateTask가 그걸 그대로 펼쳐 아무 일도 일어나지 않았고,
+        // 칸반 드롭이 그 할일들에 대해 통째로 죽어 있었다(에러도 토스트도 없이).
+        // 미래 시작일은 건드리지 않는다: 분류기가 이미 '할 일'로 보고 있어 지울
+        // 이유가 없고, 지우면 드롭 한 번에 사용자가 정한 기간이 사라진다.
+        if (task.startDate && task.startDate <= todayStr) {
+          updates.startDate = null
         }
         await updateTask(updates)
       }

@@ -444,6 +444,25 @@ describe('결함 5 — 미래로 적힌 시작일은 보정하되, 시계가 뒤
     expect(h.record.trialStartMs).toBe(NOW)
   })
 
+  it('시계가 뒤로 간 기기가 잠기지도 않는다 — 파일만 지키고 사람을 잠갔었다', () => {
+    // 위 시험은 **디스크만** 봤고, 그래서 이게 새 나갔다. 되쓰기는 막았는데
+    // 프로세스 메모(`trialStartedAt`)는 고장 난 시계로 박아, 창이
+    // `[2001년, 2001년+30일]`로 평가됐다. 비교 대상은 래칫이 든 진짜 시각이라
+    // 20일 남은 트라이얼이 그 자리에서 "체험 기간이 끝났습니다"가 됐다 —
+    // 배터리가 죽은 기기를 벽돌로 만들지 않겠다는 갈래가 파일만 살리고
+    // 사람을 잠갔던 것이다. 도출은 프로세스당 한 번이라 NTP가 30초 뒤에
+    // 시계를 고쳐도 재시작 전에는 안 풀렸다.
+    const started = NOW - 10 * DAY
+    const h = harness({ record: { trialStartMs: started, lastSeenMs: NOW }, now: NOW - 25 * 365 * DAY })
+    const state = h.manager.getState()
+    expect(state.status).toBe('trial')
+    // 남은 창도 진짜 시작일에서 잰다 — 고장 난 시계에서 새로 30일을 주지도 않는다.
+    expect(state.status === 'trial' && state.untilMs).toBe(started + TRIAL_DURATION_MS)
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+    // 디스크는 여전히 안 건드린다. 위 시험의 보장이 함께 서 있어야 한다.
+    expect(h.record.trialStartMs).toBe(started)
+  })
+
   it('작은 오차는 보정하고 기록한다', () => {
     // NTP 흔들림, 타임존 없는 첫 부팅, 서머타임 계산. 이건 이 Mac이 계속 쓸
     // 시계라, 처음 본 거짓말에 창을 고정해 두는 것이 맞다.
@@ -1066,8 +1085,19 @@ describe('시작 비용', () => {
 
   it('라이선스 상태로 시작하면 아예 안 쓴다', () => {
     // 바뀐 것이 없다. 실행할 때마다 쓰면 SSD에 이유 없는 쓰기가 쌓인다.
-    const h = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW } })
+    // 시작일이 이미 배정된 설치다 — 배정하는 첫 실행 한 번은 아래에서 본다.
+    const h = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW, trialStartMs: NOW - 5 * DAY } })
     expect(h.writes()).toBe(0)
+  })
+
+  it('라이선스 설치의 시작일 배정은 딱 한 번 쓰고 만다', () => {
+    // 첫 enforced 실행에서 한 번(H12). 그 뒤로는 다시 만들어도 조용하다 —
+    // 안 그러면 실행마다 쓰는 것이 되어 위 테스트가 지키던 것이 사라진다.
+    const first = harness({ record: { key: KEY, token: token(), lastSeenMs: NOW } })
+    expect(first.writes()).toBe(1)
+    expect(first.record.trialStartMs).toBe(NOW)
+    const again = harness({ record: first.record })
+    expect(again.writes()).toBe(0)
   })
 
   it('키나 토큰이 실려 있으면 래칫 쓰기도 fsync한다', () => {
@@ -1432,6 +1462,33 @@ describe('H9 — 왜 막혔는지를 잃지 않는다', () => {
     expect(h.manager.getBlockedReason()).toBeNull()
   })
 
+  it('해제에 성공하면 그 사유도 끝난다 — 사용자가 방금 한 일을 다시 하라고 하지 않는다', async () => {
+    // `deviceLimit`은 라이선스가 살아 있는 채로 붙고, 화면은 "쓰지 않는 기기에서
+    // 먼저 해제해 주세요"라고 안내한다. 그 안내대로 이 기기를 놓았는데 사유가
+    // 남으면, 키도 토큰도 없어진 기기가 같은 문장을 계속 띄운다 — 게다가
+    // 커밋됐으니 재시작해도 살아남고, 키가 사라진 뒤로는 재검증이 서버를 아예
+    // 안 부르므로(`runRevalidation`) 스스로 지워질 기회가 없다.
+    const h = harness({
+      record: { ...licensed, trialStartMs: NOW - 40 * DAY, blockedReason: 'deviceLimit' },
+      client: { deactivate: async () => ({ ok: true, value: undefined }) }
+    })
+    expect(await h.manager.deactivate()).toBeNull()
+    expect(h.manager.getBlockedReason()).toBeNull()
+    expect(h.record.blockedReason).toBeNull()
+  })
+
+  it('해제가 디스크에서 실패하면 사유도 원래대로 선다', async () => {
+    // 되돌리기가 사유를 빠뜨리면, "해제 실패"를 사용자에게 보여 주면서 경고만
+    // 조용히 지운 상태가 된다 — 슬롯은 여전히 차 있는데 그 말을 아무도 안 한다.
+    const h = harness({
+      storeWritable: false,
+      record: { ...licensed, blockedReason: 'deviceLimit' },
+      client: { deactivate: async () => ({ ok: true, value: undefined }) }
+    })
+    expect(await h.manager.deactivate()).toBe('saveFailed')
+    expect(h.manager.getBlockedReason()).toBe('deviceLimit')
+  })
+
   it('못 닿은 것은 이유가 아니다', async () => {
     // 기차 터널 한 번이 "환불된 키입니다"가 되면 안 된다.
     const h = harness({ record: licensed, client: { validate: async () => ({ ok: false, error: 'network' }) } })
@@ -1546,5 +1603,79 @@ describe('H10 — 원격 해제가 이 기기에도 도착한다', () => {
     expect(await h.manager.deactivate()).toBeNull()
     expect(h.record.key).toBeNull()
     expect(h.record.token).toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H12 — 라이선스를 잃는 것으로는 새 트라이얼 창이 열리지 않는다
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H12 — 취소·해제가 서명 없는 30일을 찍어내지 않는다', () => {
+  it('enforcement가 꺼진 채 활성화하면 시작일이 비어 있다 — 아래 둘의 전제다', async () => {
+    // `IS_ENFORCED = false`로 출하하는 동안 산 사람들, 즉 **지금의 구매자 전원**이
+    // 이 모양이다. 켠 뒤에도 라이선스가 선 실행은 `evaluateTrial`에 닿지 않아
+    // 시작일이 영영 비어 있었다.
+    const h = harness({
+      enforced: false,
+      client: { activate: async () => ({ ok: true, value: { token: token(), expiresAtMs: NOW + TOKEN_TTL_MS } }) }
+    })
+    expect(await h.manager.activate(KEY)).toBeNull()
+    expect(h.record.trialStartMs).toBeNull()
+  })
+
+  it('취소는 잠근다 — 환불된 사람에게 30일을 더 주지 않는다', async () => {
+    // 켜는 날. 구매자는 licensed지만 창은 여기서 배정된다 — 배정하지 않으면
+    // 60일 뒤 환불이 `evaluateTrial`에 닿는 순간 `resolveTrialStart`가 "지금"을
+    // 새 시작으로 도출해 서명 없는 30일을 발행한다.
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 10 * DAY, expMs: NOW + 50 * DAY }), lastSeenMs: NOW }
+    })
+    expect(h.manager.getState().status).toBe('licensed')
+    h.manager.dispose()
+
+    // 60일 뒤 재시작. 그 사이 환불이 들어와 서버가 revoked를 돌려준다.
+    const back = harness({
+      now: NOW + 60 * DAY,
+      record: h.record,
+      client: { validate: async () => ({ ok: false, error: 'revoked' }) }
+    })
+    await back.manager.revalidateIfNeeded()
+    expect(back.record.token).toBeNull()
+    expect(back.manager.getState()).toEqual({ status: 'trialExpired' })
+    expect(back.manager.allowsPaidFeatures()).toBe(false)
+    // 켜는 날 배정된 그 값 그대로다 — 취소가 새로 찍지 않았다.
+    expect(back.record.trialStartMs).toBe(NOW)
+  })
+
+  it('"이 기기 해제"도 마찬가지다 — 눌러서 창을 찍어낼 수 없다', async () => {
+    // 이쪽은 서버도 앱도 아무 문제가 없는 정상 경로라, 키 하나로 기기마다
+    // 창을 하나씩 발행하는 데 쓸 수 있었다.
+    const h = harness({
+      record: { key: KEY, token: token({ iatMs: NOW - 10 * DAY, expMs: NOW + 50 * DAY }), lastSeenMs: NOW }
+    })
+    expect(h.manager.getState().status).toBe('licensed')
+    h.manager.dispose()
+
+    const back = harness({
+      now: NOW + 60 * DAY,
+      record: h.record,
+      client: { deactivate: async () => ({ ok: true, value: undefined }) }
+    })
+    expect(await back.manager.deactivate()).toBeNull()
+    expect(back.manager.getState()).toEqual({ status: 'trialExpired' })
+    expect(back.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('유예 중에 첫 실행을 맞아도 창은 배정된다', () => {
+    // 같은 구멍이 유예에도 있다. 첫 enforced 실행이 이미 유예 중이면
+    // `evaluateTrial`에 닿지 않은 채 유예가 끝나고, 그 순간 30일이 새로 열려
+    // 유예 30일 + 트라이얼 30일이 된다.
+    const h = harness({ record: { key: KEY, token: token({ iatMs: NOW - 40 * DAY, expMs: NOW - DAY }) } })
+    expect(h.manager.getState().status).toBe('grace')
+    expect(h.record.trialStartMs).toBe(NOW)
+    // 유예가 끝나면 트라이얼도 이미 끝나 있다.
+    h.setNow(NOW + 31 * DAY)
+    h.fireDueTimers()
+    expect(h.manager.getState()).toEqual({ status: 'trialExpired' })
   })
 })

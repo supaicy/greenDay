@@ -7,11 +7,13 @@ import {
   fsyncSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   unlinkSync,
   writeFileSync
@@ -147,6 +149,52 @@ let primaryTrusted = true
 /** 이 세대가 커밋되면 첨부를 걷는다. 0이면 예약 없음. */
 let gcAfterRevision = 0
 
+/**
+ * **예약된 스윕이 볼 수 있는 이름들 — 예약 시점에 첨부 폴더에 있던 것만이다.**
+ * null이면 제한 없음(부팅 스윕이 그렇다).
+ *
+ * 없으면: 예약과 커밋 사이에 `copyAttachment`가 넣은 파일이 고아로 보인다.
+ * `pick-attachment`는 파일을 **먼저** 복사하고, 그 참조를 적는 `update-task`는
+ * 렌더러를 한 바퀴 돌아 나중에 온다. 그 왕복 안에 커밋이 착륙하면 방금 고른
+ * 첨부가 아무도 참조하지 않는 것으로 보여 쓸려 나간다 — 목록에는 남았는데 파일은
+ * 없어서 눌러도 아무 일도 일어나지 않는 첨부가 된다(`open-attachment`는
+ * `isInsideAttachments`가 없는 경로에서 false로 떨어져 조용히 거절한다).
+ * 창은 디바운스 300ms이고, 쓰기가 실패 중이면 재시도 백오프 전체(최대 30초)로
+ * 벌어진다 — 한 번의 영구 삭제가 그동안 고른 첨부를 전부 먹는다.
+ *
+ * 미루는 것이지 새는 것이 아니다: 참조가 끝내 오지 않으면 다음 부팅의 무제한
+ * 스윕이 걷는다. 참조만 떼는 경로가 이미 그 자리에서 정산된다.
+ */
+let gcArmedNames: readonly string[] | null = null
+
+/**
+ * **붙들려 있는 동안 미뤄 둔 파괴적 파일 조작.**
+ *
+ * `holdSaves()`는 "디스크 쓰기를 붙든다"는 약속인데, 격리(rename)와 첨부 GC(당시 unlink,
+ * 지금은 `attachments-quarantine/`으로의 이동과 30일 지난 격리분의 삭제)는
+ * `save()`를 지나지 않는 직접 조작이라 그 가드를 통째로 비껴갔다. 부팅 순서가
+ * `holdSaves() → initDatabase() → runMigrationOnBoot()`(index.ts)이므로, 첫 실행에서
+ * 그 둘이 **전환 전 백업(`backup-before-greenday-2/`)보다 먼저** 돌았다:
+ * 손상된 primary에만 참조가 남아 있던 첨부는 백업이 시작되기 전에 이미 unlink됐고,
+ * 손상본은 `.corrupt-*`라는 이름으로 옮겨져 `DATA_FILES`(migration/handoff.ts)에
+ * 걸리지 않아 백업에서도 빠졌다 — 되돌릴 사본이 어디에도 없는 영구 삭제였다.
+ * 붙들려 있는 동안에는 적어 두기만 하고 `releaseSaves()`(=백업이 끝난 뒤)에 실제로 한다.
+ */
+let quarantineWhenReleased: string | null = null
+let gcAttachmentsWhenReleased = false
+
+/**
+ * 미뤄 둔 격리를 지금 한다. **primary를 덮어쓰기 직전에도 반드시 불러야 한다** —
+ * 그러지 않으면 종료 플러시가 손상본 자리에 새 데이터를 써서 사용자가 잃은 원본이
+ * 통째로 사라진다.
+ */
+function quarantineDeferred(): void {
+  if (quarantineWhenReleased === null) return
+  const file = quarantineWhenReleased
+  quarantineWhenReleased = null
+  quarantine(file)
+}
+
 export interface SaveHealth {
   /** 디스크가 메모리를 따라잡았는가. */
   settled: boolean
@@ -188,6 +236,14 @@ export function holdSaves(): void {
 export function releaseSaves(): void {
   if (!savesHeld) return
   savesHeld = false
+  // **미뤄 둔 파괴적 조작은 여기서 한다.** 붙드는 구간의 끝은 곧 "전환 전 백업이
+  // 끝났다"는 뜻이다(migration/arrival.ts 3단계 → 10단계). 그 뒤에야 지워도
+  // 되돌릴 사본이 있다.
+  quarantineDeferred()
+  if (gcAttachmentsWhenReleased) {
+    gcAttachmentsWhenReleased = false
+    gcAttachments()
+  }
   if (revision > committedRevision && !saveTimer && !dbReadFailed) {
     saveTimer = setTimeout(() => {
       saveTimer = null
@@ -396,7 +452,7 @@ function commitSync(target: number): void {
  *
  * 결과를 **돌려준다.** 예전에는 여기서 오류를 삼켰고, 그러면 마지막 편집을
  * 잃은 종료와 정상 종료가 호출처에서 구별되지 않았다. 종료를 막을지는 셸이
- * 정할 일이라 판정만 내보낸다(`main/index.ts`의 `will-quit` — 이 워크트리 밖).
+ * 정할 일이라 판정만 내보낸다(`main/index.ts`의 `will-quit`).
  */
 function flushSave(): boolean {
   if (saveTimer) {
@@ -405,6 +461,11 @@ function flushSave(): boolean {
   }
   if (dbReadFailed) return true
   if (revision <= committedRevision) return lastSaveError === null
+  // **종료 플러시는 붙들려 있어도 쓴다.** 그러니 미뤄 둔 격리가 남아 있으면 여기서
+  // 반드시 먼저 치운다 — 안 그러면 우리 데이터가 손상본 자리로 rename돼 사용자가
+  // 잃은 원본이 통째로 사라진다. 첨부 GC는 미룬 채로 둔다: 종료 직전에 파일을
+  // 걷어서 얻을 것이 없고, 다음 부팅이 어차피 다시 판정한다.
+  quarantineDeferred()
   try {
     commitSync(revision)
   } catch (error) {
@@ -426,13 +487,20 @@ function flushSave(): boolean {
  * 된다(검증이 실측). 삭제의 내구성이 확보된 뒤에야 그 참조가 진짜로 없는 것이다.
  */
 function scheduleAttachmentGc(): void {
+  // **예약 시점의 폴더를 찍어 둔다.** 이 뒤에 들어온 파일은 방금 지운 행이
+  // 참조했을 리가 없다 — 아직 참조가 안 적혔을 뿐이다(`gcArmedNames` 주석).
+  // 이미 예약돼 있으면 **먼저 찍은 것을 유지한다**: 다시 찍으면 1차 예약 뒤에
+  // `copyAttachment`가 넣은 파일이 후보로 들어와 같은 창이 그대로 다시 열린다.
+  if (gcAfterRevision === 0) gcArmedNames = listAttachmentNames()
   gcAfterRevision = revision
 }
 
 function runPendingAttachmentGc(): void {
   if (gcAfterRevision === 0 || committedRevision < gcAfterRevision) return
   gcAfterRevision = 0
-  gcAttachments()
+  const armed = gcArmedNames
+  gcArmedNames = null
+  gcAttachments(armed)
 }
 
 /** 죽은 프로세스가 남긴 임시 파일. 다음 부팅에서 걷어낸다. */
@@ -585,6 +653,59 @@ function normalizeLegacyWeeklyPattern(t: Record<string, unknown>): void {
   }
 }
 
+/**
+ * **살아 있는데 어느 화면에도 없는 행을 정리한다.** 부팅 때마다 돈다(멱등).
+ *
+ * 목록은 parentId 없는 행만 세우고 하위작업은 **살아 있는** 부모 상세 안에서만
+ * 그려진다. 그래서 살아 있는 행의 조상 사슬이 휴지통에서 끊기거나(옛 빌드에서
+ * 휴지통의 하위작업만 복원한 경우 — `restoreTask` 주석, 또는 삭제가 한 단계만
+ * 캐스케이드하던 빌드에서 A→B→C의 A를 지워 C만 살아 남은 경우), 없는 id에서
+ * 끊기면(그 뒤 휴지통을 비운 경우) 그 행은 DB에만 있다. 앞의 것은 조상을 '영구
+ * 삭제'할 때 확인창에 없이 함께 지워지고, 뒤의 것은 보이지도 지우지도 못한다.
+ *
+ * **휴지통에서 아무것도 꺼내지 않는다.** 한때는 휴지통에 있는 조상을 꺼내 사슬을
+ * 이었는데, 한 단계 캐스케이드가 남긴 3단 트리에서 그것은 "사용자가 일부러 지운
+ * A와 B를 재시작마다 되살린다"였다. 부팅 정리는 사용자의 삭제를 되돌릴 권한이 없다.
+ * 그래서 반대 방향으로 잇는다: 살아 있는 행을 **가장 가까운 휴지통 조상 X와 함께**
+ * 휴지통으로 보낸다. 시각은 X의 것(`deleted_at` = "언제 버려졌나"를 새로 지어내지
+ * 않는다), `deleted_with`는 X가 속한 삭제의 뿌리(`X.deleted_with ?? X.id`) — 그
+ * 뿌리를 복원하면 `restoreTask`가 함께 올린다.
+ *
+ * 사슬이 없는 id나 순환에서 끊기면 매달 곳이 없으니 그 자리에서 최상위로 올린다 —
+ * 그것은 삭제를 되돌리는 일이 아니다. 행을 지우는 경우는 없다. 휴지통 안의 행은
+ * 건드리지 않는다 — 휴지통은 계층 없이 평평하게 그리므로 거기서는 고아도 보인다.
+ * 순서와 무관하다: 중간 행이 먼저 휴지통으로 가도 그 행이 같은 뿌리를 물려준다.
+ */
+function healUnreachableTasks(tasks: Record<string, unknown>[]): void {
+  const byId = new Map(tasks.map((t) => [t.id, t]))
+  let trashed = 0
+  let promoted = 0
+  for (const task of tasks) {
+    if (task.deleted_at) continue
+    let child = task
+    const walked = new Set<unknown>([task.id])
+    while (typeof child.parent_id === 'string') {
+      const ancestor = byId.get(child.parent_id)
+      if (!ancestor || walked.has(ancestor.id)) {
+        child.parent_id = null
+        promoted++
+        break
+      }
+      if (ancestor.deleted_at) {
+        task.deleted_at = ancestor.deleted_at
+        task.deleted_with = ancestor.deleted_with ?? ancestor.id
+        trashed++
+        break
+      }
+      walked.add(ancestor.id)
+      child = ancestor
+    }
+  }
+  if (trashed + promoted > 0) {
+    console.info(`[db] 보이지 않던 할일 정리: 휴지통으로 보냄 ${trashed}개, 최상위로 ${promoted}개`)
+  }
+}
+
 export function initDatabase(): void {
   const userDataPath = app.getPath('userData')
   if (!existsSync(userDataPath)) mkdirSync(userDataPath, { recursive: true })
@@ -601,7 +722,12 @@ export function initDatabase(): void {
   lastSaveError = null
   retryStreak = 0
   gcAfterRevision = 0
+  gcArmedNames = null
   primaryTrusted = true
+  // 한 프로세스에서 initDatabase()를 두 번 부르는 경로(테스트)가 앞선 실행의
+  // 미뤄 둔 격리를 물려받으면 엉뚱한 경로를 치운다.
+  quarantineWhenReleased = null
+  gcAttachmentsWhenReleased = false
   sweepTempFiles()
   try {
     const loaded = load()
@@ -612,7 +738,17 @@ export function initDatabase(): void {
       // `rotateBackup`으로 그것을 `.bak` 위에 밀어, 방금 우리를 구해 준 정상본이
       // 손상본으로 덮인다(검증이 실측). 치우면 `rotateBackup`이 밀 것을 찾지
       // 못해 `.bak`이 그대로 살아남고, 새 primary가 커밋된 뒤부터 정상 회전이다.
-      if (loaded.primaryCorrupt) quarantine(dbPath)
+      //
+      // 다만 **붙들려 있으면 미룬다**(`quarantineWhenReleased` 주석). 첫 실행에서
+      // 여기서 바로 치우면 전환 전 백업이 `DATA_FILES`의 `ticktick-data.json`을
+      // 찾지 못해 사용자가 잃은 원본이 백업에서 빠진다. 미뤄도 안전한 이유는
+      // 바로 아래 `primaryTrusted = false`가 회전을 막고, 붙들린 동안은 저장 자체가
+      // 없으며, 유일하게 쓰는 종료 플러시가 쓰기 직전에 `quarantineDeferred()`를
+      // 부르기 때문이다.
+      if (loaded.primaryCorrupt) {
+        if (savesHeld) quarantineWhenReleased = dbPath
+        else quarantine(dbPath)
+      }
       // 격리가 실패했을 때를 위한 두 번째 겹. 우리 손으로 쓴 primary가
       // 자리에 앉을 때까지 회전을 막는다.
       primaryTrusted = false
@@ -662,6 +798,7 @@ export function initDatabase(): void {
     }
     normalizeLegacyWeeklyPattern(t)
   })
+  healUnreachableTasks(data.tasks)
   data.lists.forEach((l) => {
     if (l.folder_id === undefined) l.folder_id = null
   })
@@ -861,55 +998,167 @@ export function updateTask(task: Record<string, unknown>): void {
   if (task.sortOrder !== undefined) existing.sort_order = task.sortOrder
   save()
 }
-export function deleteTask(id: string): void {
-  assertWritable()
-  const now = new Date().toISOString()
-  data.tasks.forEach((t) => {
-    if (t.id !== id && t.parent_id !== id) return
-    // **이미 휴지통에 있는 것은 다시 건드리지 않는다.** `deleted_at`은 "언제
-    // 버려졌나"이고, 부모를 지우면서 먼저 따로 버린 하위작업까지 다시 찍으면
-    // 그 시각이 거짓이 된다.
-    if (t.deleted_at) return
-    t.deleted_at = now
+/**
+ * `parent_id`로 이어진 자손 전부(자기 자신 제외)를 위에서 아래 순서로 돌려준다.
+ *
+ * **한 단계가 아니다.** 상세 패널은 하위작업에도 SubtaskList를 그려서 A→B→C가 실제로
+ * 생긴다. 직계만 걷던 시절에는 A를 지우면 C가 살아 남았고, 부팅 정리가 그 C를 보고
+ * 휴지통의 B·A를 꺼내 일부러 지운 것이 재시작마다 되살아났다.
+ * 손상된 파일의 순환 parent_id에 멈추도록 본 id를 센다.
+ */
+function descendantsOf(tasks: Record<string, unknown>[], id: string): Record<string, unknown>[] {
+  const children = new Map<unknown, Record<string, unknown>[]>()
+  for (const t of tasks) {
+    if (typeof t.parent_id !== 'string') continue
+    const list = children.get(t.parent_id)
+    if (list) list.push(t)
+    else children.set(t.parent_id, [t])
+  }
+  const out: Record<string, unknown>[] = []
+  const seen = new Set<unknown>([id])
+  const queue = [id as unknown]
+  while (queue.length) {
+    for (const child of children.get(queue.shift()) ?? []) {
+      if (seen.has(child.id)) continue
+      seen.add(child.id)
+      out.push(child)
+      queue.push(child.id)
+    }
+  }
+  return out
+}
+
+/**
+ * `root`와 그 자손 전부를 한 조작으로 휴지통에 내린다(`deleteTask`·일괄 삭제가 같이 쓴다).
+ *
+ * 함께 내려간 행의 `deleted_with`는 **이 조작의 뿌리**다 — 바로 위 부모가 아니다.
+ * 부모를 적으면 `restoreTask(뿌리)`가 손자를 놓친다.
+ *
+ * **이미 휴지통에 있는 행은 다시 찍지 않는다.** `deleted_at`은 "언제 버려졌나"이고,
+ * 먼저 따로 버린 하위작업까지 다시 찍으면 그 시각이 거짓이 된다. 그 아래로도
+ * 내려가지 않는다 — 그 아래는 그 행의 삭제에 속한다. `root` 자신이 이미 휴지통에
+ * 있으면 그 아래 살아 있는 행을 **그 삭제에** 합류시킨다(부팅 정리와 같은 규칙).
+ */
+function trashTree(root: Record<string, unknown>, now: string): void {
+  const at = (root.deleted_at as string | null) || now
+  const rootId = root.deleted_at ? ((root.deleted_with ?? root.id) as string) : (root.id as string)
+  if (!root.deleted_at) {
+    root.deleted_at = at
+    root.deleted_with = null
+  }
+  // 따로 버린 행의 서브트리는 건너뛴다. 자손은 위에서 아래 순서라 부모가 먼저 나온다.
+  const skipped = new Set<unknown>()
+  for (const t of descendantsOf(data.tasks, root.id as string)) {
+    if (skipped.has(t.parent_id) || t.deleted_at) {
+      skipped.add(t.id)
+      continue
+    }
+    t.deleted_at = at
     // **함께 내려갔다는 사실을 적어 둔다.** `restoreTask`가 되살릴 집합이 이것이다.
     // 타임스탬프가 같은지로 대신하려 했다가 실패했다: `toISOString()`은 밀리초까지라
     // 연달아 일어난 두 삭제가 같은 값을 갖고, 그러면 사용자가 따로 버린 하위작업이
     // 부모 복원에 끌려 올라온다. 시계는 "무엇이 한 조작이었나"를 답할 수 없다.
-    t.deleted_with = t.id === id ? null : id
-  })
+    t.deleted_with = rootId
+  }
+}
+
+export function deleteTask(id: string): void {
+  assertWritable()
+  const task = data.tasks.find((t) => t.id === id)
+  if (task) trashTree(task, new Date().toISOString())
   save()
 }
 /**
- * 삭제를 되돌린다. **`deleteTask`의 거울이어야 한다.**
+ * 삭제를 되돌리고 **실제로 휴지통에서 꺼낸 id를 돌려준다.** 렌더러는 이 목록을 그대로
+ * 옮긴다(`useStore`의 `applyRestored`) — 화면이 집합을 따로 짐작하지 않는다.
  *
- * 그쪽은 `t.id === id || t.parent_id === id`로 하위작업까지 함께 내리는데
- * 이쪽은 그 한 행만 되살렸다. 그래서 Cmd+Z 한 번이 "부모는 살아났는데
- * 하위작업 셋은 휴지통에 남은" 상태를 만들었고, 화면에서는 하위작업이 통째로
- * 사라진 것으로 보였다.
+ * 왜 main이 답하는가: 렌더러의 `Task`에는 `deleted_with`가 없어서 한때 "같은
+ * `deletedAt`의 자손"으로 근사했는데, 그 근사와 이 함수가 갈리는 경우가 셋 있었다 —
+ * 중간 행 복원(아래 1), 낡은 연결(아래 2), 휴지통 복원 뒤의 되돌리기(아래 3). 갈리면
+ * '휴지통 비우기'가 화면에 살아 있는 행을 영구 삭제하거나, 디스크에는 살아 있는 행이
+ * 화면에서는 휴지통에 남는다. 판정을 한 곳에 두고 다른 쪽은 결과만 받는다.
  *
- * 되살릴 하위작업은 `deleted_with`로 고른다 — `deleteTask`가 부모와 함께 내린
- * 하위작업에만 부모 id를 적어 둔다. 그 전에 따로 지운 하위작업은 사용자가 따로
- * 지운 것이니 휴지통에 그대로 둔다: 부모를 되살렸다고 그것까지 끌고 올라오면
- * 이번엔 반대 방향으로 틀린다.
+ * 규칙:
+ * 1. **휴지통의 행**이면 그 행이 속한 삭제 조작 `op = deleted_with ?? id`와 시각
+ *    `at = deleted_at`을 읽는다. 그 행을 올리고, 자손 중 **같은 조작·같은 시각**
+ *    (`deleted_with === op && deleted_at === at`)인 행을 올린다. 그래서 A→B→C에서 A를
+ *    지운 뒤 B만 복원해도 B와 함께 내려간 C가 따라온다(C의 표시는 B가 아니라 뿌리 A다).
+ * 2. 시각까지 보는 이유는 **낡은 연결**이다. A→{B,D}에서 A를 지우고(T1) B를 복원하면
+ *    조상 A가 올라오면서 D는 `deleted_with = A`로 남는다. A를 다시 지우면(T2) D는 이미
+ *    휴지통이라 그 조작에 속하지 않는데, `deleted_with`만 보면 A 복원이 D를 끌어올린다.
+ * 3. **이미 살아 있는 행**이면 되돌리기(Cmd+Z)다 — 그 사이 휴지통에서 자손 하나를 복원해
+ *    조상인 이 행이 먼저 올라왔을 수 있다. 그때는 자손 중 `deleted_with === id`인 행을
+ *    올린다. 예전에는 여기서 그냥 돌아가, 렌더러가 화면에 살린 D가 디스크에서는 휴지통에
+ *    남았다.
+ *
+ * 어느 쪽이든 맞지 않는 휴지통 행에서 멈추고 **그 아래로 내려가지 않는다**: 따로 지운
+ * B 아래의 C를 올리면 C는 휴지통에 남은 부모에 매달려 어느 화면에도 없게 된다.
+ * `deleted_with`가 null인 옛 행(마이그레이션 전)은 1의 `op`가 자기 id라 자손을 묶지
+ * 않는다 — 렌더러도 이 답을 받으므로 갈리지 않는다.
  */
-export function restoreTask(id: string): void {
+export function restoreTask(id: string): string[] {
   assertWritable()
-  const parent = data.tasks.find((t) => t.id === id)
-  if (!parent) return
-  if (!parent.deleted_at) return
-  parent.deleted_at = null
-  parent.deleted_with = null
-  for (const t of data.tasks) {
-    if (t.parent_id === id && t.deleted_at && t.deleted_with === id) {
-      t.deleted_at = null
-      t.deleted_with = null
+  const row = data.tasks.find((t) => t.id === id)
+  if (!row) return []
+  const restored: string[] = []
+  const revive = (t: Record<string, unknown>): void => {
+    t.deleted_at = null
+    t.deleted_with = null
+    restored.push(t.id as string)
+  }
+  let sameOperation: (t: Record<string, unknown>) => boolean
+  if (row.deleted_at) {
+    const op = row.deleted_with ?? row.id
+    const at = row.deleted_at
+    sameOperation = (t) => t.deleted_with === op && t.deleted_at === at
+    revive(row)
+  } else {
+    sameOperation = (t) => t.deleted_with === id
+  }
+  const leftBehind = new Set<unknown>()
+  for (const t of descendantsOf(data.tasks, id)) {
+    if (leftBehind.has(t.parent_id)) {
+      leftBehind.add(t.id)
+      continue
     }
+    if (!t.deleted_at) continue
+    if (!sameOperation(t)) {
+      leftBehind.add(t.id)
+      continue
+    }
+    revive(t)
+  }
+  if (restored.length === 0) return []
+  // **되살아난 행을 휴지통에 남은 부모에 매달아 두지 않는다.**
+  // 휴지통은 계층 없이 평평하게 그려서 하위작업 행에도 복원 버튼이 있다(TrashView).
+  // 그런데 목록 뷰는 전부 `isTopLevel`로 거르고 하위작업은 **살아 있는** 부모의 상세
+  // 안에서만 그려진다 — 부모를 휴지통에 둔 채 자식만 올리면 그 할일은 DB에는 있는데
+  // 어느 화면에도 없다. 사용자에게는 "복원했더니 그냥 사라졌다"이고, 그 뒤 부모 행을
+  // '영구 삭제'하면 부모 제목만 적힌 확인창 아래에서 같이 지워진다
+  // (`permanentDeleteTask`가 자손을 함께 걷는다). 휴지통을 비우면
+  // 이번엔 부모 행만 사라져, 보이지도 고치지도 지우지도 못하는 행이 영원히 남는다.
+  // 조상**만** 올린다 — 그 조상의 다른 하위작업까지 끌어올리면 restoreTask(부모)와
+  // 같아져, 사용자가 고른 한 줄이 가족 전체를 되살린다. 올린 조상도 돌려주는 목록에
+  // 넣는다 — 렌더러가 그것까지 옮겨야 화면과 디스크가 같다.
+  let child = row
+  const walked = new Set<string>([id])
+  while (typeof child.parent_id === 'string') {
+    const parentId = child.parent_id
+    const ancestor = data.tasks.find((t) => t.id === parentId)
+    // 손상된 파일의 자기참조·순환 parent_id에 여기서 멈추지 않으면 앱이 통째로 선다.
+    if (!ancestor || walked.has(ancestor.id as string)) break
+    walked.add(ancestor.id as string)
+    if (ancestor.deleted_at) revive(ancestor)
+    child = ancestor
   }
   save()
+  return restored
 }
 export function permanentDeleteTask(id: string): void {
   assertWritable()
-  data.tasks = data.tasks.filter((t) => t.id !== id && t.parent_id !== id)
+  // 자손 전부를 함께 걷는다 — 직계만 지우면 손자가 없는 id를 가리키는 고아로 남는다.
+  const gone = new Set<unknown>([id, ...descendantsOf(data.tasks, id).map((t) => t.id)])
+  data.tasks = data.tasks.filter((t) => !gone.has(t.id))
   save()
   // 행이 실제로 사라지는 두 경로 중 하나다 — 첨부를 걷지 않으면 아무도 참조하지
   // 않는 사본이 폴더에 영원히 쌓인다. 다만 **지금 걷지는 않는다**: 삭제가 아직
@@ -931,6 +1180,14 @@ export function reorderTasks(orderedIds: string[]): void {
   // 리스트별 카운터라서 전역 재번호는 다른 리스트의 순서를 덮어쓴다.
   const moving = orderedIds.map((id) => data.tasks.find((t) => t.id === id)).filter((t) => t !== undefined)
   const slots = moving.map((t) => (t.sort_order as number) || 0).sort((a, b) => a - b)
+  // 슬롯은 엄격히 증가해야 한다. 리스트별 카운터라 리스트마다 1부터 세고,
+  // '전체'·'오늘'·태그처럼 리스트를 가로지르는 뷰는 같은 값을 쥔 행을 함께 넘긴다.
+  // 동점을 그대로 되돌려 주면 getTasks의 정렬이 안정 정렬이라 파일에 적힌 순서가
+  // 그대로 살아나, 재시작하면 드롭이 없던 일이 된다. (렌더러 applyReorder와 같은 규칙 —
+  // 한쪽만 고치면 화면과 디스크가 재시작 때 갈린다.)
+  for (let i = 1; i < slots.length; i++) {
+    if (slots[i] <= slots[i - 1]) slots[i] = slots[i - 1] + 1
+  }
   moving.forEach((t, i) => {
     t.sort_order = slots[i]
   })
@@ -938,11 +1195,6 @@ export function reorderTasks(orderedIds: string[]): void {
 }
 export function batchUpdateTasks(ids: string[], updates: Record<string, unknown>): void {
   assertWritable()
-  // 이 배치 안에 부모도 함께 들어 있는 하위작업은 **한 조작으로 함께 내려간 것**이다.
-  // 그 사실을 `deleted_with`에 적어야 부모 하나만 골라 복원했을 때(휴지통 화면)
-  // 하위작업이 따라 올라온다. 예전에는 전부 null이라 일괄 삭제한 부모를 되살리면
-  // main은 부모만 올리는데 렌더러는 하위작업까지 올려 둘이 갈렸다.
-  const batch = new Set(ids)
   for (const id of ids) {
     const task = data.tasks.find((t) => t.id === id)
     if (!task) continue
@@ -953,24 +1205,47 @@ export function batchUpdateTasks(ids: string[], updates: Record<string, unknown>
     if (updates.listId !== undefined) task.list_id = updates.listId
     if (updates.priority !== undefined) task.priority = updates.priority
     if (updates.dueDate !== undefined) task.due_date = updates.dueDate
-    // `deleteTask`와 같은 규칙 — 이미 버려진 것의 시각을 다시 찍지 않는다.
-    // 일괄 삭제는 호출처가 하위작업 id까지 전부 실어 보내고 되돌리기도 id마다
-    // 따로 복원하므로, 여기서는 캐스케이드 표시를 남기지 않는다.
-    if (updates.deleted !== undefined) {
-      if (!updates.deleted) {
-        task.deleted_at = null
-        task.deleted_with = null
-      } else if (!task.deleted_at) {
-        task.deleted_at = new Date().toISOString()
-        const parentId = task.parent_id
-        task.deleted_with = typeof parentId === 'string' && batch.has(parentId) ? parentId : null
-      }
+    if (updates.deleted !== undefined && !updates.deleted) {
+      task.deleted_at = null
+      task.deleted_with = null
     }
   }
+  if (updates.deleted) trashBatch(ids)
   save()
 }
 
-// === Habits ===
+/**
+ * 일괄 삭제. `deleteTask`와 같은 `trashTree`로 내린다 — 자손 전부, 이미 버려진 것의
+ * 시각은 다시 찍지 않는다.
+ *
+ * 배치 안에 조상도 함께 들어 있는 행은 **한 조작으로 함께 내려간 것**이다. 그 사실을
+ * `deleted_with`에 적어야 뿌리 하나만 골라 복원했을 때(휴지통 화면) 자손이 따라
+ * 올라온다. 예전에는 전부 null이라 일괄 삭제한 부모를 되살리면 main은 부모만 올리는데
+ * 렌더러는 하위작업까지 올려 둘이 갈렸다. 그래서 배치 안에 조상이 없는 행만 뿌리로
+ * 삼아 먼저 내리고, 그 서브트리가 배치의 나머지를 덮는다. 남은 것(순환으로 서로가
+ * 조상인 행)은 그 자리에서 뿌리가 된다.
+ */
+function trashBatch(ids: string[]): void {
+  const now = new Date().toISOString()
+  const batch = new Set<unknown>(ids)
+  const byId = new Map(data.tasks.map((t) => [t.id, t]))
+  const hasAncestorInBatch = (task: Record<string, unknown>): boolean => {
+    const walked = new Set<unknown>([task.id])
+    let cur = task
+    while (typeof cur.parent_id === 'string') {
+      if (batch.has(cur.parent_id)) return true
+      const next = byId.get(cur.parent_id)
+      if (!next || walked.has(next.id)) return false
+      walked.add(next.id)
+      cur = next
+    }
+    return false
+  }
+  const rows = ids.map((id) => byId.get(id)).filter((t) => t !== undefined)
+  for (const task of rows) if (!hasAncestorInBatch(task)) trashTree(task, now)
+  for (const task of rows) if (!task.deleted_at) trashTree(task, now)
+}
+
 export function getHabits(): unknown[] {
   return [...data.habits].sort(
     (a, b) => new Date(a.created_at as string).getTime() - new Date(b.created_at as string).getTime()
@@ -1256,31 +1531,170 @@ function attachmentNameCandidates(entry: string): string[] {
   return [...pieces].map((piece) => piece.split(/[\\/]/).pop() || piece)
 }
 
+/** 첨부 폴더의 이름들. 못 읽으면 빈 목록 — 아무것도 지우지 않는 쪽으로 떨어진다. */
+function listAttachmentNames(): string[] {
+  if (!attachmentsDir) return []
+  try {
+    return readdirSync(attachmentsDir)
+  } catch {
+    return []
+  }
+}
+
+/** 걷어 낸 첨부가 진짜로 지워지기 전에 머무는 기간. 그동안은 손으로 되찾을 수 있다. */
+const ATTACHMENT_QUARANTINE_MS = 30 * 24 * 60 * 60 * 1000
+
 /**
- * 참조가 사라진 첨부 사본을 지운다. 지운 개수를 돌려준다.
+ * 걷어 낸 첨부가 머무는 폴더 — `<userData>/attachments-quarantine/`.
+ *
+ * **첨부 폴더 안이 아니라 옆이다.** 안에 두면 다음 스윕의 `listAttachmentNames()`와
+ * 백업 아카이브의 폴더 훑기(`readdirSync(attachmentsDir)`)가 그것을 다시 본다.
+ */
+function attachmentQuarantineDir(): string {
+  return path.join(path.dirname(attachmentsDir), 'attachments-quarantine')
+}
+
+/**
+ * 격리 폴더를 **진짜 디렉터리로만** 돌려준다. 없으면 `create`일 때 만든다.
+ *
+ * 그 자리에 심링크가 놓여 있으면 null이다 — 따라가면 이동은 첨부를 바깥 아무 곳에나
+ * 내려놓고, 30일 정리는 첨부 폴더 밖의 파일을 지우는 원시연산이 된다. 파일이 놓여
+ * 있어도 null이다. null이면 호출자는 **아무것도 옮기지도 지우지도 않는다.**
+ */
+function attachmentQuarantineRoot(create: boolean): string | null {
+  const dir = attachmentQuarantineDir()
+  let stat = lstatOrNull(dir)
+  if (!stat && create) {
+    try {
+      mkdirSync(dir)
+    } catch (error) {
+      console.error(`[db] 첨부 격리 폴더 ${dir}를 만들지 못했다 — 첨부를 그대로 둔다`, error)
+      return null
+    }
+    stat = lstatOrNull(dir)
+  }
+  if (!stat) return null
+  if (!stat.isDirectory()) {
+    console.error(`[db] ${dir}가 디렉터리가 아니다(심링크 포함) — 첨부 격리·정리를 건너뛴다`)
+    return null
+  }
+  return dir
+}
+
+/**
+ * 30일이 지난 격리분을 지운다. 최선 노력이다 — 실패는 적어 두고 넘어간다.
+ *
+ * 나이는 격리 폴더 바로 아래 항목(스윕 폴더)의 `lstat` mtime으로 잰다. 스윕 폴더의
+ * mtime은 그 안으로 첨부를 옮겨 넣은 순간이다. `rmSync`의 재귀 삭제는 심링크를
+ * 따라가지 않는다 — 링크를 만나면 링크만 지운다.
+ */
+function purgeAttachmentQuarantine(now: number): void {
+  const dir = attachmentQuarantineRoot(false)
+  if (!dir) return
+  let entries: string[]
+  try {
+    entries = readdirSync(dir)
+  } catch (error) {
+    console.error(`[db] 첨부 격리 폴더 ${dir}를 읽지 못했다`, error)
+    return
+  }
+  for (const name of entries) {
+    const full = path.join(dir, name)
+    const stat = lstatOrNull(full)
+    if (!stat || now - Number(stat.mtimeMs) < ATTACHMENT_QUARANTINE_MS) continue
+    try {
+      rmSync(full, { recursive: true, force: true })
+    } catch (error) {
+      console.error(`[db] 30일 지난 첨부 격리분 ${full}를 지우지 못했다`, error)
+    }
+  }
+}
+
+/**
+ * 참조가 사라진 첨부 사본을 **첨부 폴더에서 걷어 낸다.** 걷어 낸 개수를 돌려준다.
  *
  * 행이 실제로 없어지는 자리(`permanentDeleteTask`·`emptyTrash`)와 시작 시점에
  * 돈다. 시작 시점이 필요한 이유: 참조만 떼는 경로(`updateTask`로 목록에서 제거)는
  * 행을 지우지 않으므로 그때는 아직 "휴지통에서 되돌릴 수 있는" 상태이고,
  * 다음 부팅이 그 판정이 확정되는 첫 지점이다.
+ *
+ * **지우지 않고 `attachments-quarantine/<시각>-XXXXXX/원래이름`으로 옮긴다.**
+ * 여기서 바로 unlink하던 때, `.bak`에서 복구한 부팅이 영구 손실을 냈다: 그 세션의
+ * `data.tasks`는 한 저장 낡아서, 마지막으로 커밋된 쓰기에서 붙인 첨부는 손상된
+ * primary(곧 `.corrupt-*`로 치워진다)에만 참조가 남아 있다. 그것이 "참조 없음"으로
+ * 보여 지워졌고, 남겨 둔 손상본 사본은 없는 파일을 가리키게 됐다. 복구 부팅에서
+ * GC를 건너뛰는 것으로는 못 막는다 — 다음 부팅이 같은 판정으로 지운다. 판정이 틀릴
+ * 수 있는 이상, 걷는 일은 되돌릴 수 있어야 한다.
+ *
+ * **되찾는 법:** `<userData>/attachments-quarantine/` 아래 스윕 폴더에서 파일을
+ * 원래 이름 그대로 `attachments/`로 다시 옮기면, 그 이름을 참조하는 할일이 다시
+ * 연다. 격리분은 30일 뒤 다음 GC가 지운다(`purgeAttachmentQuarantine`).
+ *
+ * 옮기지 못하면(격리 폴더를 못 만듦, 다른 볼륨이라 rename 실패 등) **그 자리에
+ * 둔다** — unlink로 떨어지지 않는다. 디렉터리도 옮기지 않는다: 예전 unlink가 거기서
+ * 실패해 남겼고, 앱이 만드는 모양도 아니다.
  */
-export function gcAttachments(): number {
+export function gcAttachments(onlyNames?: readonly string[] | null): number {
   if (dbReadFailed || !attachmentsDir) return 0
-  let names: string[]
-  try {
-    names = readdirSync(attachmentsDir)
-  } catch {
+  // **붙들려 있으면 한 개도 옮기지 않고, 격리분도 정리하지 않는다.** 이 조작들은
+  // `save()`를 지나지 않으므로 `holdSaves()`가 막지 못했고, 첫 실행에서는 그 때문에
+  // 전환 전 백업이 만들어지기 전에 첨부가 사라졌다 — `.bak`이 낡아 그 할일을 모르면
+  // 아직 살아 있는 사진·PDF가 "참조 없음"으로 보인다. 미루면 백업이 원본 폴더를
+  // 통째로 담은 뒤에 걷는다.
+  if (savesHeld) {
+    gcAttachmentsWhenReleased = true
     return 0
   }
+  // 이번 스윕이 옮길 것보다 **먼저** 정리한다 — 방금 옮긴 것이 같은 호출에서 지워질
+  // 여지를 처음부터 없앤다(mtime으로도 그럴 수 없지만, 순서로도 막아 둔다).
+  purgeAttachmentQuarantine(Date.now())
+  let names = listAttachmentNames()
+  // **예약된 스윕은 예약 시점의 스냅샷 안에서만 걷는다** — `gcArmedNames` 주석 참고.
+  // 부팅 스윕은 아무것도 넘기지 않아 예전 그대로 전부 본다.
+  if (onlyNames) {
+    const armed = new Set(onlyNames)
+    names = names.filter((name) => armed.has(name))
+  }
+  // 파일과 심링크만 옮긴다. 이름은 `readdirSync`가 준 것이라 경로 구분자가 없다 —
+  // 원본은 언제나 첨부 폴더 바로 아래다.
+  const doomed = unreferencedAttachments(names, data.tasks).filter((name) => {
+    const stat = lstatOrNull(path.join(attachmentsDir, name))
+    return Boolean(stat && (stat.isFile() || stat.isSymbolicLink()))
+  })
+  if (doomed.length === 0) return 0
+
+  const quarantineRoot = attachmentQuarantineRoot(true)
+  if (!quarantineRoot) return 0
+  let sweepDir: string
+  try {
+    // 스윕마다 새 폴더 — 같은 이름이 두 번 걸려도 앞선 격리분을 덮지 않는다.
+    // `mkdtempSync`가 접미사를 붙여 같은 밀리초의 두 스윕도 갈라 놓는다.
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    sweepDir = mkdtempSync(path.join(quarantineRoot, `${stamp}-`))
+  } catch (error) {
+    console.error('[db] 첨부 격리 스윕 폴더를 만들지 못했다 — 첨부를 그대로 둔다', error)
+    return 0
+  }
+
   let removed = 0
-  for (const name of unreferencedAttachments(names, data.tasks)) {
+  for (const name of doomed) {
     try {
-      // `unlinkSync`는 링크를 따라가지 않는다 — 링크 자체만 지운다.
-      unlinkSync(path.join(attachmentsDir, name))
+      // `renameSync`는 링크를 따라가지 않는다 — 심링크면 링크 자체가 옮겨진다.
+      renameSync(path.join(attachmentsDir, name), path.join(sweepDir, name))
       removed++
-    } catch {
-      // 디렉터리이거나 권한이 없다. 남긴다.
+    } catch (error) {
+      // 다른 볼륨(EXDEV)이거나 권한이 없다. **지우지 않고** 남긴다 — 다음 GC가 다시 본다.
+      console.error(`[db] 첨부 ${name}를 격리하지 못해 그대로 둔다`, error)
     }
+  }
+  if (removed === 0) {
+    try {
+      rmdirSync(sweepDir)
+    } catch {
+      /* 빈 스윕 폴더가 남아도 30일 뒤 정리된다 */
+    }
+  } else {
+    console.info(`[db] 참조 없는 첨부 ${removed}개를 ${sweepDir}로 옮겼다(30일 보관)`)
   }
   return removed
 }
@@ -1786,7 +2200,7 @@ function writeFileWithSync(target: string, contents: string): void {
  *
  * 판정을 돌려주는 것이 요점이다 — 마지막 편집을 잃은 종료와 정상 종료를 호출처가
  * 구별할 수 있어야 한다. 무엇을 할지(종료를 막을지, 사용자에게 알릴지)는 셸이
- * 정한다(`main/index.ts` — 이 워크트리 밖).
+ * 정한다(`main/index.ts`).
  */
 export function closeDatabase(): boolean {
   return flushSave()

@@ -121,7 +121,7 @@ Developer docs (Korean) live under [`docs/`](docs/README.md) — tutorials, how-
 
 ## Tech Stack
 
-- **Electron 40** — Native macOS app
+- **Electron 41** — Native macOS app
 - **React 19** + **TypeScript** — UI
 - **Tailwind CSS 3** — Styling
 - **Zustand** — State management

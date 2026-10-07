@@ -488,10 +488,10 @@ Google 캘린더 연동은 Google Cloud 콘솔에서 별도 심사를 받습니�
   ```
   (preflight를 먼저 돌리고 universal로 빌드한다. 문서 초판이 적어 둔 `package:mas`는
    끝이 `--config`로 잘려 있으니 쓰지 말 것.)
-  결과: `dist/mas/Greenday-<버전>.pkg`
+  결과: `dist/mas-universal/Greenday-<버전>-universal.pkg`
 
 - ⬜ **Transporter** 앱(App Store에서 무료)으로 `.pkg` 업로드
-  또는 `xcrun altool --upload-app -f dist/mas/Greenday-*.pkg -t macos -u <Apple ID> -p <앱 암호>`
+  또는 `xcrun altool --upload-app -f dist/mas-universal/Greenday-*.pkg -t macos -u <Apple ID> -p <앱 암호>`
 
 - ⬜ App Store Connect에서 업로드된 빌드 선택 → **심사 제출**
 

@@ -10,11 +10,32 @@ import {
   nextSaturday,
   nextSunday,
   startOfDay,
+  startOfWeek,
   format
 } from 'date-fns'
 import i18n from '../i18n'
 
-const DAY_MAP: Record<string, number> = {
+/**
+ * **사용자 입력으로 조회하는 표는 프로토타입이 없어야 한다.**
+ *
+ * 객체 리터럴은 `Object.prototype`을 상속하므로 `MAP['constructor']`가
+ * `undefined`가 아니라 **함수**를 돌려준다. 아래 조회들은 전부
+ * `!== undefined`로 가드한 뒤 그 값을 `NEXT_DAY_FN`의 인덱스로 쓰는데,
+ * 함수를 인덱스로 넣으면 `undefined(today)`가 되어 TypeError가 난다.
+ *
+ * 그 예외는 AddTask·QuickAdd의 `useEffect` 안에서 **글자를 칠 때마다** 터지고,
+ * 렌더러에 ErrorBoundary가 생기기 전까지는 앱 전체를 언마운트시켰다.
+ * 즉 "constructor"로 시작하는 할일을 적으려던 사용자는 빈 창을 보게 됐다.
+ * (`toString`·`valueOf`·`__proto__` 등 12개 키가 모두 같았다.)
+ *
+ * 호출처마다 `Object.hasOwn`을 붙이는 대신 표를 한 번 막는다 — 나중에 조회를
+ * 한 줄 더 추가하는 사람이 가드를 잊어도 안전하다.
+ */
+function lookupTable(entries: Record<string, number>): Record<string, number> {
+  return Object.assign(Object.create(null) as Record<string, number>, entries)
+}
+
+const DAY_MAP = lookupTable({
   일요일: 0,
   일: 0,
   월요일: 1,
@@ -29,11 +50,11 @@ const DAY_MAP: Record<string, number> = {
   금: 5,
   토요일: 6,
   토: 6
-}
+})
 
 // 영어 요일. 한국어 표와 나란히 두고 두 언어를 항상 같이 인식한다 — UI 언어를
 // 영어로 두고도 "내일"이라 적는 사용자가 있고, 그 반대도 있다.
-const EN_DAY_MAP: Record<string, number> = {
+const EN_DAY_MAP = lookupTable({
   sunday: 0,
   sun: 0,
   monday: 1,
@@ -51,7 +72,7 @@ const EN_DAY_MAP: Record<string, number> = {
   fri: 5,
   saturday: 6,
   sat: 6
-}
+})
 
 const EN_MONTHS = [
   'jan',
@@ -69,6 +90,26 @@ const EN_MONTHS = [
 ]
 
 const NEXT_DAY_FN = [nextSunday, nextMonday, nextTuesday, nextWednesday, nextThursday, nextFriday, nextSaturday]
+
+/**
+ * **"다음주 <요일>"의 기준점은 이번 주 일요일이지 `today + 6`이 아니다.**
+ *
+ * `nextX()`는 주어진 날짜보다 **엄격히 뒤**의 첫 요일을 돌려준다. 기준을
+ * `today + 6`으로 잡으면 그 지점이 이미 다음 주 한가운데라, 목표 요일이
+ * 기준보다 앞이면 그 주를 통째로 건너뛰고 한 주 더 간다. 49개 (오늘, 목표)
+ * 조합 중 21개가 이렇게 틀렸다 — 금요일에 "다음주 화요일"이 9/29가 아니라
+ * 10/6이 됐고, QuickAdd가 그 날짜를 그대로 마감일에 넣어 사용자는 마감이
+ * 일주일 밀린 줄도 모르고 놓쳤다.
+ *
+ * 이번 주 일요일(월요일 시작 주의 마지막 날)에 앉히면 7개 요일이 전부 한
+ * 규칙으로 다음 주 안에 떨어진다. 주 시작이 월요일인 건 이 파서가 이미
+ * "다음주"/"next week"를 `nextMonday(today)`로 정의했기 때문이다 — 같은
+ * 입력에서 "다음주"와 "다음주 월요일"이 다른 날을 가리키면 안 된다.
+ * (한국어·영어 두 갈래가 같은 실수를 복사해 놨었다. 기준은 여기 한 군데다.)
+ */
+function nextWeekAnchor(today: Date): Date {
+  return addDays(startOfWeek(today, { weekStartsOn: 1 }), 6)
+}
 
 export interface ParsedDateTime {
   date: string // "YYYY-MM-DD"
@@ -281,7 +322,7 @@ function parseDateExpression(text: string, today: Date): string | null {
   const nextWeekDay = text.match(/^다음\s*주\s*(.+)$/)
   if (nextWeekDay) {
     const dayNum = DAY_MAP[nextWeekDay[1]]
-    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](addDays(today, 6)))
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](nextWeekAnchor(today)))
   }
 
   // "이번 금요일", "이번주 월요일"
@@ -341,7 +382,7 @@ function parseEnglishDateExpression(text: string, today: Date): string | null {
   const nextWeekDay = text.match(/^next\s+(.+)$/)
   if (nextWeekDay) {
     const dayNum = EN_DAY_MAP[nextWeekDay[1].trim()]
-    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](addDays(today, 6)))
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](nextWeekAnchor(today)))
   }
 
   // "this friday" — 이번 주 안에 남아 있을 때만.

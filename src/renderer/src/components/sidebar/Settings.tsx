@@ -227,6 +227,27 @@ const PRIVACY_URL: Record<string, string> = {
   en: 'https://begreen.dev/privacy'
 }
 
+/**
+ * '지금 다운로드'·'다시 받기'. **누르자마자 막대로 바꾼다.**
+ *
+ * 첫 진행 이벤트가 올 때까지 버튼과 (다시 받기라면) 실패 문구가 그대로 남아, 눌렀는지
+ * 알 수 없었다. 0% 막대를 먼저 세우고, 실패하면 App.tsx의 'update-download-error'
+ * 리스너가 다시 받기 상태로 되돌린다.
+ *
+ * invoke의 거절에서도 되돌린다. 보통은 위 리스너가 먼저 했으므로 같은 값을 한 번 더
+ * 쓰는 것뿐이지만, 진행 이벤트가 오기 전에 끊긴 다운로드가 마침 한 시간 확인과 겹치면
+ * 메인이 그것을 확인 실패로 보낸다(main/index.ts) — 그때 막대가 0%에 얼지 않게 한다.
+ * 거절을 버리지 않으면 렌더러 콘솔에 처리되지 않은 rejection도 남는다.
+ */
+function startUpdateDownload(): void {
+  const download = window.api.downloadUpdate
+  if (!download) return
+  useStore.setState({ updateDownloadFailed: false, updateDownloadProgress: 0 })
+  download().catch(() => {
+    useStore.setState({ updateDownloadProgress: null, updateDownloadFailed: true })
+  })
+}
+
 export function Settings() {
   const { t } = useTranslation()
   const theme = useStore((s) => s.theme)
@@ -238,7 +259,9 @@ export function Settings() {
   const exportData = useStore((s) => s.exportData)
   const updateAvailable = useStore((s) => s.updateAvailable)
   const updateChecked = useStore((s) => s.updateChecked)
+  const updateFailed = useStore((s) => s.updateFailed)
   const updateDownloadProgress = useStore((s) => s.updateDownloadProgress)
+  const updateDownloadFailed = useStore((s) => s.updateDownloadFailed)
   const updateReady = useStore((s) => s.updateReady)
   const aiConfig = useStore((s) => s.aiConfig)
   const aiConnected = useStore((s) => s.aiConnected)
@@ -329,7 +352,10 @@ export function Settings() {
   return (
     // 배경·Escape·포커스 트랩은 Radix Dialog가 담당. toggleSettings는 인자를
     // 무시하는 토글이라 닫힘 신호만 받는다(open(true)에 뒤집히지 않게).
-    <Dialog open={showSettings} onOpenChange={(open) => !open && toggleSettings()}>
+    // **열려 있을 때만** 뒤집는다. Radix는 닫힘 애니메이션 동안 콘텐츠를 남겨 두고
+    // Escape·바깥 클릭을 계속 받아서, 그 사이 두 번째 닫힘 신호가 토글을 다시 뒤집어
+    // 다이얼로그를 도로 열었다(settingsDismiss.test.tsx).
+    <Dialog open={showSettings} onOpenChange={(open) => !open && showSettings && toggleSettings()}>
       {/* 헤더는 고정하고 본문만 스크롤한다. 이전에는 카드 전체가 스크롤 컨테이너라
           내용이 뷰포트의 ~2.8배인 이 패널에서 아래로 내려가면 닫기 버튼이 사라졌다. */}
       <DialogContent
@@ -710,6 +736,16 @@ export function Settings() {
                   <CheckCircle2 size={13} className={successText(isDark)} />
                   <span className={`text-xs ${labelText(isDark)}`}>{t('settings.updateViaAppStore')}</span>
                 </div>
+              ) : updateFailed && !updateAvailable ? (
+                // **실패 가지가 '최신' 가지보다 먼저다.** 뒤에 두면 확인이 실패한
+                // 상태가 `updateChecked && !updateAvailable`에 먼저 걸려 "최신
+                // 버전입니다"라고 거짓말한다 — 버전을 한 번도 못 물어본 채로.
+                // 새 버전을 이미 알고 있으면 띄우지 않는다: 아래 카드가 그 답이고,
+                // 한 시간 뒤 재확인이 실패했다고 그 답이 거짓이 되지는 않는다.
+                <div className="flex items-center gap-1.5 mt-1">
+                  <AlertTriangle size={13} className={errorText(isDark)} />
+                  <span className={`text-xs ${errorText(isDark)}`}>{t('settings.updateCheckFailed')}</span>
+                </div>
               ) : updateChecked && !updateAvailable ? (
                 <div className="flex items-center gap-1.5 mt-1">
                   <CheckCircle2 size={13} className={successText(isDark)} />
@@ -752,13 +788,31 @@ export function Settings() {
                     </p>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => (updateReady ? window.api.installUpdate?.() : window.api.downloadUpdate?.())}
-                    className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
-                  >
-                    {t(updateReady ? 'settings.updateInstall' : 'settings.updateDownloadNow')}
-                  </button>
+                  <div className="space-y-1.5">
+                    {/* 다운로드나 설치가 끊겼다. 막대는 App.tsx가 내렸고, 여기서 실패를
+                        말하고 같은 버튼을 '다시 받기'로 돌려준다. 확인 실패 문구를 빌려 쓰면
+                        새 버전 카드 옆에서 "확인 실패"라고 말하게 된다. 문구가 원인을 짚지
+                        않는 것은 이 채널이 설치 실패(Squirrel·quitAndInstall)도 실어 와서다. */}
+                    {updateDownloadFailed && !updateReady && (
+                      <div className="flex items-center gap-1.5">
+                        <AlertTriangle size={13} className={errorText(isDark)} />
+                        <span className={`text-xs ${errorText(isDark)}`}>{t('settings.updateDownloadFailed')}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => (updateReady ? window.api.installUpdate?.() : startUpdateDownload())}
+                      className={`w-full px-3 py-2 rounded-lg text-sm bg-primary-700 text-white hover:bg-primary-800 transition-colors ${focusRing(isDark)}`}
+                    >
+                      {t(
+                        updateReady
+                          ? 'settings.updateInstall'
+                          : updateDownloadFailed
+                            ? 'settings.updateDownloadRetry'
+                            : 'settings.updateDownloadNow'
+                      )}
+                    </button>
+                  </div>
                 )}
 
                 <button

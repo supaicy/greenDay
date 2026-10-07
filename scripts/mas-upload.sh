@@ -38,17 +38,47 @@ fi
 PKG="$PKG_LIST"
 echo "  $PKG ($(du -h "$PKG" | cut -f1))"
 
-# 유니버설인지 확인. 한쪽 아키텍처만 담겨 있으면 절반의 사용자가 못 쓴다.
-APP_BIN="$(find "$(dirname "$PKG")" -maxdepth 3 -path "*$APP_NAME.app/Contents/MacOS/*" -type f 2>/dev/null | head -1)"
-if [ -n "$APP_BIN" ]; then
-  archs="$(lipo -archs "$APP_BIN" 2>/dev/null)"
-  if [ -n "$archs" ]; then
-    case "$archs" in
-      *arm64*x86_64*|*x86_64*arm64*) echo "  아키텍처: $archs (유니버설)" ;;
-      *) echo "  경고: 아키텍처가 '$archs' 뿐입니다 — 나머지 맥에서는 실행되지 않습니다" >&2 ;;
-    esac
-  fi
+# **같은 버전의 지난 pkg를 걸러 낸다.** `mas:build`는 dist/를 비우지 않고 pkg 이름에는
+# 버전만 들어가므로, 버전을 안 올린 채 소스를 고치고 빌드를 잊으면 예전 pkg가 위
+# 검사를 그대로 통과했다. pkg가 마지막 커밋보다 오래됐으면 그 커밋은 들어 있지 않다.
+#
+# git을 못 돌리면 **멈춘다.** Xcode를 새로 깔고 라이선스에 동의하지 않은 맥에서는
+# /usr/bin/git이 실패하는데, 처음 이 검사를 넣었을 때는 그때 조용히 건너뛰었다 —
+# 위 유니버설 검사가 고쳐진 바로 그 "확인 못 했으니 통과" 구멍이다. Command Line
+# Tools의 git은 Xcode 라이선스와 따로라 한 번 더 시도한다.
+LAST_COMMIT="$(git log -1 --format=%ct 2>/dev/null || DEVELOPER_DIR=/Library/Developer/CommandLineTools git log -1 --format=%ct 2>/dev/null || true)"
+if [ -z "$LAST_COMMIT" ]; then
+  echo "ERROR: 마지막 커밋 시각을 알 수 없습니다 — pkg가 최신 소스로 만들어졌는지 확인하지 못했습니다." >&2
+  echo "    git이 동작하는지 확인하세요 (Xcode를 새로 깔았다면: sudo xcodebuild -license accept)" >&2
+  exit 1
 fi
+PKG_MTIME="$(stat -f %m "$PKG")"
+if [ "$PKG_MTIME" -lt "$LAST_COMMIT" ]; then
+  echo "ERROR: pkg가 마지막 커밋보다 오래됐습니다 — 최신 소스가 들어 있지 않습니다." >&2
+  echo "    rm -rf dist/mas* && npm run mas:build" >&2
+  exit 1
+fi
+
+# 유니버설인지 확인. 한쪽 아키텍처만 담겨 있으면 절반의 사용자가 못 쓴다.
+#
+# 실행 파일은 pkg 옆 `Greenday.app/Contents/MacOS/Greenday`로 **깊이 4**다. 예전에는
+# -maxdepth 3이라 한 번도 찾지 못했고, 못 찾으면 조용히 넘어가서 이 검사는 실제로
+# 돈 적이 없었다(2026-10-06 codex 검토에서 발견). 이제 못 찾거나 못 읽어도 멈춘다 —
+# 확인하지 못한 것을 확인한 것처럼 올리지 않는다.
+APP_BIN="$(dirname "$PKG")/$APP_NAME.app/Contents/MacOS/$APP_NAME"
+if [ ! -f "$APP_BIN" ]; then
+  echo "ERROR: pkg 옆에 앱 실행 파일이 없어 아키텍처를 확인할 수 없습니다: $APP_BIN" >&2
+  echo "    rm -rf dist/mas* && npm run mas:build" >&2
+  exit 1
+fi
+archs="$(lipo -archs "$APP_BIN" 2>/dev/null)"
+case "$archs" in
+  *arm64*x86_64*|*x86_64*arm64*) echo "  아키텍처: $archs (유니버설)" ;;
+  *)
+    echo "ERROR: 아키텍처가 '${archs:-알 수 없음}'입니다 — 유니버설이 아니면 일부 맥에서 실행되지 않습니다." >&2
+    exit 1
+    ;;
+esac
 
 echo "── 2/3  Apple 계정"
 
@@ -99,9 +129,18 @@ fi
 
 echo "── 3/3  검증 후 업로드"
 
+# **암호는 argv에 싣지 않는다.** `-p "$APPLE_APP_PASSWORD"`로 넘기면 검증·업로드가 도는
+# 몇 분 동안 같은 맥의 어떤 프로세스든 `ps`로 읽는다 — 위 머리말의 "어디에도 저장하지
+# 않는다"와 어긋났다. altool은 `@env:변수명`으로 환경변수에서 읽는다.
+export APPLE_APP_PASSWORD
+# 로그도 정해진 /tmp 경로가 아니라 이 실행만의 임시 파일에 — 누구나 쓰는 /tmp의 고정
+# 이름은 미리 심어 둔 심볼릭 링크로 다른 파일을 덮게 만들 수 있다.
+VALIDATE_LOG="$(mktemp -t greenday-mas-validate)"
+trap 'rm -f "$VALIDATE_LOG"' EXIT
+
 echo "  검증 중…"
 if ! xcrun altool --validate-app -f "$PKG" -t macos \
-       -u "$APPLE_ID" -p "$APPLE_APP_PASSWORD" 2>&1 | tee /tmp/mas-validate.log; then
+       -u "$APPLE_ID" -p @env:APPLE_APP_PASSWORD 2>&1 | tee "$VALIDATE_LOG"; then
   echo >&2
   echo "검증 실패. 위 메시지를 확인하세요. 업로드는 시도하지 않았습니다." >&2
   exit 1
@@ -110,13 +149,13 @@ fi
 # altool은 성공 시 "VERIFY SUCCEEDED" 와 "No errors validating" 을 출력한다.
 # 단순히 'error' 를 찾으면 그 성공 문구의 "no errors" 에 걸려 성공을 실패로 읽는다.
 # 실제 실패 표식만 본다.
-if grep -qE "ERROR ITMS-|\*\*\* Error|error:|VERIFY FAILED" /tmp/mas-validate.log; then
+if grep -qE "ERROR ITMS-|\*\*\* Error|error:|VERIFY FAILED" "$VALIDATE_LOG"; then
   echo >&2
   echo "검증에서 오류가 보고됐습니다. 업로드는 시도하지 않았습니다." >&2
   exit 1
 fi
 
-if ! grep -q "VERIFY SUCCEEDED" /tmp/mas-validate.log; then
+if ! grep -q "VERIFY SUCCEEDED" "$VALIDATE_LOG"; then
   echo >&2
   echo "검증 성공 표식을 찾지 못했습니다. 위 출력을 확인하세요." >&2
   exit 1
@@ -125,7 +164,7 @@ echo "  검증 통과"
 
 echo "  업로드 중… (파일이 커서 몇 분 걸립니다)"
 if xcrun altool --upload-app -f "$PKG" -t macos \
-     -u "$APPLE_ID" -p "$APPLE_APP_PASSWORD"; then
+     -u "$APPLE_ID" -p @env:APPLE_APP_PASSWORD; then
   echo
   echo "업로드 완료."
   echo "App Store Connect에서 처리에 5~30분 걸립니다. 처리가 끝나면"

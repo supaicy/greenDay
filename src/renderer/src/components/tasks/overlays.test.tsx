@@ -22,8 +22,10 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import i18n from '../../i18n'
+import { toLocalDateString } from '../../../../shared/date'
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts'
 import { useStore } from '../../store/useStore'
+import { AddTask } from './AddTask'
 import { DueDatePicker } from './DueDatePicker'
 import { PriorityMenu } from './PriorityMenu'
 import { RecurringPicker } from './RecurringPicker'
@@ -31,8 +33,11 @@ import { ReminderPicker } from './ReminderPicker'
 import { SortMenu } from './SortMenu'
 import { TagPicker } from './TagPicker'
 import { TaskContextMenu } from './TaskContextMenu'
+import { TaskItem } from './TaskItem'
 import { TaskMoreMenu } from './TaskMoreMenu'
 import { QuickAdd } from '../common/QuickAdd'
+import { UndoToast } from '../common/UndoToast'
+import { BatchBar } from './BatchBar'
 
 beforeAll(async () => {
   // jsdom의 navigator.language는 en-US라 초기 언어가 흔들린다 — 한국어로 고정.
@@ -63,7 +68,14 @@ const STORE_KEYS = [
   'updateTask',
   'duplicateTask',
   'removeTask',
-  'toggleTask'
+  'toggleTask',
+  'popUndo',
+  'setShowAddTask',
+  // 아래 셋은 배치 바 / 되돌리기 토스트 차선 테스트가 쓴다 — 되돌리지 않으면
+  // 뒤 테스트가 batchMode:true를 물려받아 TaskItem이 다른 분기를 그린다.
+  'batchMode',
+  'batchSelectedIds',
+  'undoStack'
 ] as const
 let storeSnapshot: Record<string, unknown>
 
@@ -102,6 +114,39 @@ describe('SortMenu', () => {
 })
 
 describe('ReminderPicker', () => {
+  /**
+   * Regression: 진단 3장 #18·#44 — 빠른 알림이 마감일을 UTC로 읽었다.
+   * Found by /qa on 2026-09-25
+   *
+   * 이 검사는 seoul·west 두 시간대에서 모두 돈다(vitest.config.ts). Asia/Seoul
+   * 에서는 UTC 자정이 로컬 09:00이라 **우연히** 맞아떨어져서, 한쪽만 돌리면
+   * 아무것도 못 잡는다. America/New_York에서는 전날 20:00이 됐다.
+   */
+  it.each([
+    ['reminder.atDue', '마감 시'],
+    ['reminder.day1', '1일 전']
+  ])('빠른 옵션 "%s"이 마감일을 로컬 기준으로 읽는다', async (_key, label) => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <ReminderPicker
+        dueDate="2026-09-25"
+        value={null}
+        onChange={onChange}
+        trigger={<button type="button">알림 설정</button>}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: '알림 설정' }))
+    await user.click(await screen.findByRole('button', { name: label }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const fired = new Date(onChange.mock.calls[0][0] as string)
+    // 마감일 당일(또는 하루 전) 오전 9시여야 한다 — 날짜가 밀리면 안 된다.
+    const expectedDay = label === '마감 시' ? '2026-09-25' : '2026-09-24'
+    expect(toLocalDateString(fired)).toBe(expectedDay)
+    expect(fired.getHours()).toBe(9)
+  })
+
   it('트리거를 한 번 누르면 열린다', async () => {
     const user = userEvent.setup()
     render(
@@ -276,6 +321,50 @@ describe('ui 프리미티브 — 프로젝트 규칙', () => {
 
     expect(contentClick).toHaveBeenCalled()
     expect(rowClick).not.toHaveBeenCalled()
+  })
+
+  // Tailwind 스페이싱 한 칸 = 4px. jsdom은 Tailwind를 물리지 않아 실제 좌표가
+  // 전부 0이므로, 앵커는 클래스에서 읽어 px로 환산한다.
+  const bottomPx = (el: HTMLElement): number => {
+    const m = el.className.match(/(?:^|\s)bottom-(\d+)(?:\s|$)/)
+    if (!m) throw new Error(`bottom-* 앵커가 없다: ${el.className}`)
+    return Number(m[1]) * 4
+  }
+
+  it('일괄 바가 되돌리기 토스트의 하단 차선을 비켜 앉는다', () => {
+    // Regression: 배치 모드에서 단건 삭제(행 우클릭 삭제 / 선택된 행에서
+    // Backspace)를 하면 UndoToast가 5초간 뜬다 — batchComplete·batchDelete·
+    // batchMove만 스스로 batchMode를 끄므로 단건 경로에서는 둘이 동시에 산다.
+    // 둘 다 `fixed bottom-* left-1/2 -translate-x-1/2`로 같은 자리를 다퉜고,
+    // 사이에 stacking context가 없어 z-90인 토스트가 바(z-50) 위로 올라가
+    // '이동'·'우선순위'를 덮고 클릭까지 가로챘다. z를 올려 바를 위로 세우는
+    // 건 답이 아니다 — 바가 훨씬 넓어 토스트가 통째로 숨고 방금 지운 할일의
+    // 되돌리기가 사라진다. 그래서 자리를 비킨다.
+    useStore.setState({
+      batchMode: true,
+      batchSelectedIds: ['task-1'],
+      undoStack: [
+        { type: 'deleteTask', data: {}, description: '"장보기" 삭제됨', timestamp: 1 }
+      ] as never
+    })
+    const bar = render(<BatchBar />).container.firstElementChild as HTMLElement
+    const toast = render(<UndoToast />).container.firstElementChild as HTMLElement
+    expect(bar).toBeTruthy()
+    expect(toast).toBeTruthy()
+
+    // 전제 — 가로 중앙 고정이라 둘의 x 범위는 반드시 겹친다. 세로로 갈라놓는
+    // 것 말고는 겹침을 피할 방법이 없다.
+    for (const el of [bar, toast]) {
+      expect(el.className).toContain('fixed')
+      expect(el.className).toContain('left-1/2')
+      expect(el.className).toContain('-translate-x-1/2')
+    }
+
+    // 토스트 카드 높이는 py-3(12+12) + 한 줄 20px = 44px, 제목이 길어 두 줄로
+    // 접히면 ~64px. 바는 그 띠를 넘어선 자리에 앉아야 한다. 어느 쪽 앵커가
+    // 나중에 움직여도(토스트를 올리는 것도 포함) 여기서 잡힌다.
+    const TOAST_BAND = 64
+    expect(bottomPx(bar)).toBeGreaterThanOrEqual(bottomPx(toast) + TOAST_BAND)
   })
 
   it('다이얼로그의 모서리 지정을 호출처가 이길 수 있다', async () => {
@@ -1006,5 +1095,194 @@ describe('공유 할일 동작', () => {
     await user.keyboard('{ArrowDown}{Enter}')
 
     expect(updateTask).toHaveBeenCalledWith({ id: 'task-1', listId: 'work' })
+  })
+})
+
+/**
+ * Regression: 진단 2.4 / 3장 #20 — 문자 단축키가 소문자만 비교했다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * Caps Lock은 shiftKey를 세우지 않고 `e.key`만 대문자로 만든다. 그래서
+ * userEvent의 '{Shift>}z'가 아니라 fireEvent로 key만 대문자로 보내야
+ * 실제 상황과 같아진다.
+ */
+describe('Caps Lock — 문자 단축키', () => {
+  it('대문자 key로 와도 Cmd+Z가 되돌린다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(window, { key: 'Z', metaKey: true })
+
+    // 예전에는 `key === 'z'`만 봐서, Caps Lock 하나로 방금 지운 할일을
+    // 키보드로 되돌릴 방법이 사라졌다.
+    expect(popUndo).toHaveBeenCalledTimes(1)
+  })
+
+  it('대문자 key로 와도 Cmd+N이 할일 추가를 연다', () => {
+    const setShowAddTask = vi.fn()
+    useStore.setState({ setShowAddTask, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(window, { key: 'N', metaKey: true })
+
+    expect(setShowAddTask).toHaveBeenCalledWith(true)
+  })
+
+  it('소문자도 그대로 동작한다 (회귀 방지의 반대쪽)', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+
+    expect(popUndo).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Regression: 진단 3장 #20 — 입력칸의 Cmd+Z를 전역 되돌리기가 가로챘다.
+ * Found by /qa on 2026-09-25
+ */
+describe('Cmd+Z는 글자를 치는 중이면 양보한다', () => {
+  it('입력칸에서 누른 Cmd+Z가 지운 할일을 되살리지 않는다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(
+      <>
+        <ShortcutHarness />
+        <input aria-label="제목" defaultValue="타이핑 중" />
+      </>
+    )
+
+    fireEvent.keyDown(screen.getByLabelText('제목'), { key: 'z', metaKey: true })
+
+    // 예전에는 preventDefault()가 그 칸의 네이티브 글자 되돌리기를 죽이고,
+    // 대신 몇 분 전에 지운 할일이 목록에 조용히 되살아났다.
+    expect(popUndo).not.toHaveBeenCalled()
+  })
+
+  it('contentEditable(노트 에디터)에서도 양보한다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    const { container } = render(
+      <>
+        <ShortcutHarness />
+        <div contentEditable data-testid="note" suppressContentEditableWarning />
+      </>
+    )
+    const note = container.querySelector('[data-testid="note"]') as HTMLElement
+    // jsdom은 contentEditable 속성만으로 isContentEditable을 세우지 않는다.
+    Object.defineProperty(note, 'isContentEditable', { value: true })
+
+    fireEvent.keyDown(note, { key: 'z', metaKey: true })
+
+    expect(popUndo).not.toHaveBeenCalled()
+  })
+
+  it('입력칸 밖에서는 그대로 되돌린다', () => {
+    const popUndo = vi.fn()
+    useStore.setState({ popUndo, showQuickAdd: false, showAddTask: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(document.body, { key: 'z', metaKey: true })
+
+    expect(popUndo).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * Regression: 진단 2.7 / 3장 #24 — 드래그가 'copy'를 광고해 드롭이 거부됐다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * HTML5 DnD는 `effectAllowed`와 `dropEffect`가 맞아야 드롭을 허용한다.
+ * 어긋나면 `onDrop`이 아예 발화하지 않아 재정렬이 조용히 죽는다 — 행이
+ * 흐려지며 드래그는 시작되므로 "기능이 없다"가 아니라 "앱이 놓쳤다"로 보인다.
+ */
+describe('할일 드래그 — 드래그와 드롭의 effect가 맞는가', () => {
+  const dragTask = {
+    id: 'drag-1',
+    title: '끌어보기',
+    completed: false,
+    priority: 'none',
+    dueDate: null,
+    listId: 'inbox',
+    parentId: null,
+    tags: [],
+    attachments: [],
+    pinned: false
+  } as never
+
+  function fakeTransfer(): { setData: ReturnType<typeof vi.fn>; effectAllowed: string; dropEffect: string } {
+    return { setData: vi.fn(), effectAllowed: 'uninitialized', dropEffect: 'none' }
+  }
+
+  function renderRow(): HTMLElement {
+    useStore.setState({ tasks: [dragTask] as never })
+    render(<TaskItem task={dragTask} />)
+    return screen.getByText('끌어보기').closest('[draggable="true"]') as HTMLElement
+  }
+
+  it('드래그 시작이 move를 허용한다', () => {
+    const dt = fakeTransfer()
+    fireEvent.dragStart(renderRow(), { dataTransfer: dt })
+    expect(dt.effectAllowed).toBe('move')
+  })
+
+  it('드래그와 드롭이 같은 effect를 말한다 (드롭이 허용되는 조건)', () => {
+    const row = renderRow()
+    const dt = fakeTransfer()
+    fireEvent.dragStart(row, { dataTransfer: dt })
+    fireEvent.dragOver(row, { dataTransfer: dt })
+    // 'copy' vs 'move'로 갈리면 브라우저가 드롭을 거부한다.
+    expect(dt.effectAllowed).toBe(dt.dropEffect)
+  })
+})
+
+/**
+ * Regression: 진단 #39 — 입력칸에서 누른 Escape가 상세 패널까지 닫았다.
+ * Found by /qa on 2026-09-25
+ *
+ * 손으로 쓴 onKeyDown(AddTask·SubtaskList·Sidebar·HabitTracker)은 Escape를 자기
+ * 몫으로 처리하면서 preventDefault를 걸지 않는다. 그래서 window 핸들러의
+ * defaultPrevented 가드가 안 걸리고, 그때 그 핸들러가 이미 showAddTask를
+ * 내려놓은 뒤라 Escape 체인이 한 칸 더 내려가 selectTask(null)까지 갔다 —
+ * App.tsx가 `selectedTaskId`를 보고 TaskDetail을 언마운트한다.
+ *
+ * userEvent가 아니라 fireEvent로 보낸다: 실제 상황과 같게 **입력칸에서** 올라온
+ * Escape여야 한다(포커스가 아니라 이벤트 target이 판정 기준이다).
+ *
+ * 하위작업·습관·사이드바 입력칸과 IME 조합 중 Escape는 Escape 계약을 맡은
+ * hooks/useKeyboardShortcuts.test.tsx에 있다.
+ */
+describe('입력칸에서 누른 Escape', () => {
+  it('할일 추가칸을 닫을 뿐, 열려 있던 상세 패널을 함께 닫지 않는다', () => {
+    useStore.setState({ selectedTaskId: 'task-1', showAddTask: true, showQuickAdd: false })
+    function Harness(): React.JSX.Element | null {
+      useKeyboardShortcuts()
+      const showAddTask = useStore((s) => s.showAddTask)
+      const setShowAddTask = useStore((s) => s.setShowAddTask)
+      // TaskList가 AddTask를 다는 방식 그대로 — onClose가 스토어 플래그를 내린다.
+      return showAddTask ? <AddTask onClose={() => setShowAddTask(false)} /> : null
+    }
+    const { container } = render(<Harness />)
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(useStore.getState().showAddTask).toBe(false)
+    expect(useStore.getState().selectedTaskId).toBe('task-1')
+  })
+
+  it('입력칸 밖에서 누르면 예전처럼 선택을 해제한다', () => {
+    // 반대쪽 못. 가드를 넓게 잡아 Escape가 아무것도 안 하게 되면 이게 깨진다.
+    useStore.setState({ selectedTaskId: 'task-1', showAddTask: false, showQuickAdd: false })
+    render(<ShortcutHarness />)
+
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    expect(useStore.getState().selectedTaskId).toBe(null)
   })
 })

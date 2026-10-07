@@ -15,7 +15,7 @@ PROFILE="${APPLE_KEYCHAIN_PROFILE:-haru}"   # notarytool 에 저장해 둔 자�
 APP_NAME="$(awk -F': *' '/^productName:/{print $2; exit}' electron-builder.yml)"
 [ -n "$APP_NAME" ] || { echo "ERROR: electron-builder.yml 에서 productName을 읽지 못했습니다." >&2; exit 1; }
 
-echo "── 1/4  사전 확인"
+echo "── 1/5  사전 확인"
 
 # 인증서
 if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
@@ -56,15 +56,24 @@ echo "  Google OAuth 클라이언트 ID OK"
 VERSION="$(node -p "require('./package.json').version")"
 echo "  버전 v$VERSION"
 
-echo "── 2/4  빌드"
+echo "── 2/5  헬스 스택(typecheck · lint · test)"
+# CI 의 release.yml 과 **같은 것**을 부른다. `npm run release` 는 태그를 밀지 않고 이
+# 맥에서 곧장 draft 릴리스까지 가는 경로라, 여기서만 빠지면 테스트가 빨간 커밋이
+# 서명·공증된 dmg 가 되어 나간다. electron-vite 의 esbuild 는 타입을 검사하지 않고
+# 지우기만 하므로(실측: tsc 가 TS2322 로 죽는 파일을 esbuild 는 exit 0 으로 통과),
+# 아래 빌드가 성공했다는 사실은 타입에 대해서도 테스트에 대해서도 아무 말이 아니다.
+# 빌드·공증보다 먼저 두는 이유: 1분짜리 실패를 20분 뒤에 알면 안 된다.
+npm run verify
+
+echo "── 3/5  빌드"
 export GREENDAY_RELEASE=1   # electron.vite.config.ts 의 릴리스 전용 검사를 켠다
 npx electron-vite build
 
-echo "── 3/4  패키징 + 서명 + 공증 + 게시(draft)"
+echo "── 4/5  패키징 + 서명 + 공증 + 게시(draft)"
 export APPLE_KEYCHAIN_PROFILE="$PROFILE"
 npx electron-builder --mac --arm64 --x64 --publish always
 
-echo "── 4/4  검증"
+echo "── 5/5  검증"
 # 사용자가 실제로 받는 건 dmg다. 빌드 중간산출물(dist/mac-*/*.app)이 아니라
 # dmg를 마운트해 그 안의 앱을 검사해야 실제 Gatekeeper 판정과 일치한다.
 # (dmg 컨테이너 자체는 서명하지 않는 것이 electron-builder 기본값이며,

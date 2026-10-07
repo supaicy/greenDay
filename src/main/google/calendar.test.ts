@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   GoogleCalendarClient,
-  GoogleApiError,
+  type GoogleApiError,
   toGoogleEventId,
   eventToGoogle,
   googleToEvent
@@ -375,5 +375,101 @@ describe('H16b — 옮긴 회차를 인스턴스로 반영한다', () => {
     ])
     await new GoogleCalendarClient('token', fetchImpl).upsertEvent('cal', event({ overrides: [MOVED] }))
     expect(requests.map((r) => r.method)).toEqual(['PUT', 'POST', 'GET', 'PATCH'])
+  })
+})
+
+/**
+ * Regression: 진단 3장 #32 — 할당량 초과(403)를 "이 캘린더는 우리 것이 아니다"로 읽었다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * 구글은 rate limit도 403으로 알린다. 상태 코드만 보면 거부와 불통이 같은 값이 되고,
+ * `getCalendar`가 둘 다 null로 접으면 `ensureAppCalendar`가 "캘린더가 사라졌다"로
+ * 읽어 Greenday 캘린더를 하나 더 만들고 syncState를 비운다. 목록 API가 이 범위에
+ * 없어서 버려진 캘린더는 앱이 다시 찾지도 못한다.
+ *
+ * 위의 `403도 null` 테스트는 그대로 둔다 — 범위 밖 캘린더의 403은 여전히 null이어야
+ * 하고, 거기서 던지면 연결이 영구히 막힌다. 갈라야 하는 것은 **본문의 reason**이다.
+ */
+describe('403 — 거부와 할당량을 가른다', () => {
+  const quotaBody = (reason: string): unknown => ({
+    error: { code: 403, message: 'Rate Limit Exceeded', errors: [{ domain: 'usageLimits', reason }] }
+  })
+
+  it.each(['rateLimitExceeded', 'userRateLimitExceeded', 'dailyLimitExceeded', 'quotaExceeded'])(
+    '할당량 403(%s)은 rate_limit으로 던진다 — null로 접지 않는다',
+    async (reason) => {
+      const { fetchImpl } = fakeApi(() => 403, quotaBody(reason))
+      await expect(new GoogleCalendarClient('tok', fetchImpl).getCalendar('ours')).rejects.toMatchObject({
+        name: 'GoogleApiError',
+        code: 'rate_limit'
+      })
+    }
+  )
+
+  it('권한 403(reason 없음)은 예전처럼 null — 범위 밖 캘린더에서 던지면 연결이 영구히 막힌다', async () => {
+    const { fetchImpl } = fakeApi(() => 403, {})
+    expect(await new GoogleCalendarClient('tok', fetchImpl).getCalendar('theirs')).toBeNull()
+  })
+
+  it('본문이 JSON이 아니어도(프록시가 가로챈 응답) 예전 동작으로 안전하게 내려앉는다', async () => {
+    const fetchImpl: FetchLike = async () =>
+      new Response('<html>Forbidden</html>', { status: 403, headers: { 'Content-Type': 'text/html' } })
+    expect(await new GoogleCalendarClient('tok', fetchImpl).getCalendar('theirs')).toBeNull()
+  })
+
+  it('모르는 reason의 403도 권한 거부로 본다 — 아는 이름일 때만 불통으로 연다', async () => {
+    const { fetchImpl } = fakeApi(() => 403, {
+      error: { errors: [{ domain: 'global', reason: 'insufficientPermissions' }] }
+    })
+    expect(await new GoogleCalendarClient('tok', fetchImpl).getCalendar('theirs')).toBeNull()
+  })
+
+  it('429는 그대로 rate_limit이다', async () => {
+    const { fetchImpl } = fakeApi(() => 429)
+    await expect(new GoogleCalendarClient('tok', fetchImpl).getCalendar('c')).rejects.toMatchObject({
+      code: 'rate_limit'
+    })
+  })
+})
+
+/**
+ * Value: protects=GoogleCalendarClient의 요청 하나당 상한(30초) — 응답하지 않는 네트워크에서
+ *   `google:sync-now`가 끝나고 network로 접힌다; fails_when=calendar.ts의 `request()`에서
+ *   `signal: AbortSignal.timeout(...)`을 빼면(undici 기본 5분까지 매달려 설정의 버튼이 busy로
+ *   잠기고, 일정 수만큼 곱해진다); why_new=같은 커밋의 상한은 CalDAV(client.test.ts)와 OAuth
+ *   토큰(oauth.test.ts)에만 시험이 있고 구글 캘린더 클라이언트에는 없다; seam=none
+ */
+describe('요청 상한', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('응답하지 않는 서버에 매달리지 않는다 — 상한 뒤 network로 접는다(null로 삼키지 않는다)', async () => {
+    // 30초를 실제로 기다릴 수는 없다. 요청한 값만 확인하고 타이머는 20ms로 줄인다.
+    const real = AbortSignal.timeout.bind(AbortSignal)
+    const asked: number[] = []
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      asked.push(ms)
+      return real(20)
+    })
+    // 연결은 받아 주고 응답은 하지 않는 서버. signal이 없으면 이 promise는 영영 끝나지 않는다.
+    const stalling: FetchLike = (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init.signal
+        if (!signal) return
+        if (signal.aborted) return reject(signal.reason)
+        signal.addEventListener('abort', () => reject(signal.reason))
+      })
+
+    const settled = await Promise.race([
+      new GoogleCalendarClient('tok', stalling).getCalendar('ours').then(
+        () => 'resolved',
+        (error: unknown) => error
+      ),
+      new Promise((resolve) => setTimeout(() => resolve('hung'), 500))
+    ])
+
+    expect(settled, '상한이 없어 요청이 끝나지 않았다').not.toBe('hung')
+    expect(settled).toMatchObject({ name: 'GoogleApiError', code: 'network' })
+    expect(asked).toEqual([30_000])
   })
 })

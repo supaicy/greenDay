@@ -402,6 +402,7 @@
     "shortcuts": "Keyboard shortcuts",
     "version": "Version",
     "checkingUpdate": "Checking for updates…",
+    "updateCheckFailed": "Update check failed — check your network connection",
     "upToDate": "You're up to date",
     "updateViaAppStore": "Updates are handled by the Mac App Store",
     "updateAvailable": "Update available",
@@ -420,6 +421,8 @@
     "updateDownloading": "Downloading... {{percent}}%",
     "updateInstall": "Restart to install",
     "updateDownloadNow": "Download now",
+    "updateDownloadFailed": "Couldn't download or install the update",
+    "updateDownloadRetry": "Retry download",
     "updateViewRelease": "View release notes",
     "notifPermProbeSent": "Sent a test notification. If you did not see a banner, allow Greenday in System Settings -> Notifications.",
     "notifPermUnsupported": "This system cannot display notifications, so reminders will not arrive.",
@@ -554,5 +557,14 @@
       "oldAppBody": "The new Greenday read your data successfully. haru.app in your Applications folder is no longer needed.",
       "dismiss": "Got it"
     }
+  },
+  "crash": {
+    "title": "Something broke while drawing this screen",
+    "body": "The app has not stopped — an error happened while rendering this view. Your tasks are still on disk.",
+    "exportHint": "Exporting your data first is the safe move. Export always works, even from a locked or broken screen.",
+    "export": "Export data",
+    "retry": "Try again",
+    "reload": "Reload the app",
+    "details": "Show error details"
   }
 }

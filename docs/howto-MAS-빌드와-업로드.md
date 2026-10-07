@@ -2,14 +2,14 @@
 
 샌드박스 `.pkg` 를 만들어 App Store Connect 에 올리는 절차. 메타데이터·심사 노트·App Privacy 답안은 [app-store-submission.md](app-store-submission.md) 에 붙여 넣을 형태로 있다 — 이 문서는 **빌드와 업로드**만 다룬다.
 
-> **2026-09-08 현재 막힌 곳 하나.** `resources/embedded.provisionprofile` 은 옛 App ID(`com.supaicy.haru`)용이다. 번들 ID 가 `com.begreen.greenday` 로 바뀌었으므로 사람이 새로 발급해 교체해야 한다(4절). 그 전까지 `npm run mas:preflight` 2/6 이 실패하는 것이 **정상**이고, 그 상태로는 `mas:build` 가 preflight 에서 멈춘다.
+> **막힌 곳 하나.** `resources/embedded.provisionprofile` 이 없다 — 옛 App ID(`com.supaicy.haru`)용 파일은 치웠다(2026-10-06 확인). 번들 ID 가 `com.begreen.greenday` 로 바뀌었으므로 사람이 새로 발급해 넣어야 한다(4절). 그 전까지 `npm run mas:preflight` 2/6 이 실패하는 것이 **정상**이고, 그 상태로는 `mas:build` 가 preflight 에서 멈춘다.
 
 ## 1. 준비물
 
 | 것 | 확인 방법 |
 |---|---|
 | **Apple Distribution** 인증서 (앱 서명) | `security find-identity -v -p codesigning \| grep "Apple Distribution"` |
-| **Mac Installer Distribution** 인증서 (`.pkg` 서명) | `security find-identity -v \| grep -E "Installer\|Apple Distribution"` |
+| **Mac Installer Distribution** 인증서 (`.pkg` 서명) | `security find-identity -v \| grep "3rd Party Mac Developer Installer"` — `Apple Distribution` 은 앱 인증서라 대신하지 못한다 |
 | `com.begreen.greenday` 용 **Mac App Store Connect** 프로비저닝 프로파일 | 4절 |
 | `GOOGLE_OAUTH_CLIENT_ID` | [howto-Google-OAuth-클라이언트.md](howto-Google-OAuth-클라이언트.md) |
 | App Store Connect 앱 레코드 (Bundle ID = `com.begreen.greenday`) | [app-store-submission.md](app-store-submission.md) 2절 |
@@ -22,7 +22,7 @@ Developer ID 인증서(직접 배포용)는 여기 쓸 수 없다 — preflight 
 
 | # | 항목 | 통과 조건 |
 |---|---|---|
-| 1/6 | 인증서 | `Apple Distribution` 또는 `3rd Party Mac Developer Application` + 설치 패키지 서명 인증서 |
+| 1/6 | 인증서 | `Apple Distribution` 또는 `3rd Party Mac Developer Application` + 설치 패키지 서명 인증서 `3rd Party Mac Developer Installer`(electron-builder 가 이 이름만 찾는다 — `Apple Distribution` 으로는 통과하지 않는다) |
 | 2/6 | 프로비저닝 프로파일 | `security cms -D` 로 열어 `com.apple.application-identifier`(또는 `application-identifier`)가 `<TEAM>.com.begreen.greenday` 로 끝나고 `Platform` 이 `OSX`. 옛 `com.supaicy.haru` 프로파일이면 "예상된 실패" 안내가 붙는다 |
 | 3/6 | 샌드박스 권한 | `resources/entitlements.mas.plist` 에 `app-sandbox`, `network.client`, **`network.server`** 가 있다 |
 | 4/6 | MAS 에서 꺼져야 하는 기능 | `process.mas` 를 직접 읽는 파일이 `src/main/capabilities.ts` 하나뿐, `index.ts` 가 `canSelfUpdate` 로, `ipc-handlers.ts` 가 `hasGlobalShortcuts` 로 분기한다(주석 줄은 제외하고 검사) |
@@ -37,18 +37,20 @@ Developer ID 인증서(직접 배포용)는 여기 쓸 수 없다 — preflight 
 GOOGLE_OAUTH_CLIENT_ID=<id> npm run mas:build
 ```
 
-스크립트는 세 가지를 순서대로 한다(`package.json`):
+스크립트는 네 가지를 순서대로 한다(`package.json`):
 
 ```
 bash scripts/mas-preflight.sh
+&& npm run verify
 && GREENDAY_RELEASE=1 electron-vite build
 && electron-builder --mac mas --universal
 ```
 
+- `npm run verify` — typecheck·lint·test. 직접 배포(`release.sh`·`release.yml`)와 같은 정의다.
 - `GREENDAY_RELEASE=1` 이라 클라이언트 ID 가 비면 `electron.vite.config.ts` 가 빌드를 **멈춘다**(preflight 6/6 과 이중).
 - `--universal` — App Store Connect 는 버전당 빌드 하나만 받으므로 arm64+x64 를 한 `.pkg` 로 만든다. 아키텍처별로 나뉘어 있으면 `mas:upload` 가 거절한다.
 - `electron-builder.yml` 의 `mas:` 블록이 적용된다: `entitlements.mas.plist` / `entitlements.mas.inherit.plist`, `hardenedRuntime: false`, `provisioningProfile`, `ITSAppUsesNonExemptEncryption: false`(수출 규정 설문 생략 — 표준 TLS 와 OS Keychain 만 쓴다).
-- 결과: `dist/` 아래 `Greenday-2.0.0*.pkg` (`mas:upload` 가 `find dist -name "Greenday-2.0.0*.pkg"` 로 찾는다).
+- 결과: `dist/mas-universal/Greenday-2.0.0-universal.pkg` — `mas.artifactName: ${productName}-${version}-${arch}.${ext}`. `mas:upload` 가 `find dist -name "Greenday-2.0.0*.pkg"` 로 찾는다. `mas:build` 는 `dist/` 를 비우지 않는다.
 
 `package:mas` 라는 스크립트도 있지만 **쓰지 말 것** — 끝이 `--config` 로 잘려 값이 비어 있고 preflight 도 universal 도 없다(`app-store-submission.md` 가 같은 지적을 한다).
 
@@ -87,13 +89,15 @@ npm run mas:upload
 
 `scripts/mas-upload.sh`:
 
-1. `dist` 에서 `Greenday-<version>*.pkg` 를 찾는다. 0개면 빌드부터, 2개 이상이면 `rm -rf dist/mas* && npm run mas:build` 를 안내한다. `lipo -archs` 로 유니버설인지 본다.
+1. `dist` 에서 `Greenday-<version>*.pkg` 를 찾는다. 0개면 빌드부터, 2개 이상이면 `rm -rf dist/mas* && npm run mas:build` 를 안내한다. 이어서 둘 중 하나라도 걸리면 **멈춘다**(`rm -rf dist/mas* && npm run mas:build` 안내):
+   - pkg 가 마지막 커밋(`git log -1`)보다 오래됐다 — 같은 버전의 지난 빌드다. git 을 못 돌리면(Xcode 라이선스 미동의 등) Command Line Tools 의 git 으로 한 번 더 보고, 그래도 안 되면 멈춘다(`sudo xcodebuild -license accept`).
+   - pkg 옆 `Greenday.app/Contents/MacOS/Greenday` 가 없거나 `lipo -archs` 가 arm64 와 x86_64 를 둘 다 보여 주지 않는다.
 2. 자격증명 — `APPLE_ID`/`APPLE_APP_PASSWORD` 환경변수 → 없으면 Keychain 항목 `AC_PASSWORD`(`MAS_KEYCHAIN_SERVICE` 로 변경 가능) → 없으면 터미널에서 묻는다. 한 번 저장해 두면 다시 묻지 않는다:
    ```bash
    security add-generic-password -s AC_PASSWORD -a '<Apple ID>' -w
    ```
    앱 암호는 appleid.apple.com 에서 발급한 `xxxx-xxxx-xxxx-xxxx` 형식.
-3. `xcrun altool --validate-app` 을 먼저 돌린다(몇 초). `VERIFY SUCCEEDED` 가 없거나 `ERROR ITMS-` 가 있으면 업로드하지 않는다.
+3. `xcrun altool --validate-app` 을 먼저 돌린다(몇 초). 앱 암호는 `-p @env:APPLE_APP_PASSWORD` 로 넘긴다 — 명령줄(`ps`)에 싣지 않는다. 검증 로그는 실행마다 `mktemp` 임시 파일에 쓰고 끝나면 지운다. `VERIFY SUCCEEDED` 가 없거나 `ERROR ITMS-` 가 있으면 업로드하지 않는다.
 4. `xcrun altool --upload-app -f <pkg> -t macos`. 끝나면 App Store Connect 처리에 5~30분.
 
 **Transporter** 앱(Mac App Store 무료)으로 같은 `.pkg` 를 끌어다 놓아도 된다. 결과는 같다.
@@ -115,5 +119,6 @@ npm run mas:upload
 | `needsLicenseKey` | false | 설정에 라이선스 칸이 없다 — Apple 3.1.1 |
 | `enforcesLicense` | false | 아무것도 잠그지 않는다 |
 | `updatesViaStore` | true | |
+| `inheritsLegacyData` | false | 샌드박스라 옛 데이터를 못 읽으므로 "옛 haru 앱은 지워도 됩니다" 안내를 띄우지 않는다(`migration/boot.ts`) |
 
 왜 이렇게 나눴는지는 [explanation-라이선스-게이트와-MAS.md](explanation-라이선스-게이트와-MAS.md). MAS 빌드는 샌드박스 컨테이너를 쓰므로 `~/Library/Application Support/ticktick` 의 기존 데이터를 읽지 못한다 — 직접 배포판에서 넘어오는 사용자에게는 새 설치다([2026-09-07-브리지-릴리스.md](2026-09-07-브리지-릴리스.md) 마지막 항목).

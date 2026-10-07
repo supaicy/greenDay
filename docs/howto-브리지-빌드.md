@@ -47,11 +47,11 @@ BRIDGE_BUILD=1 GREENDAY_RELEASE=1 electron-vite build
 | `artifactName` | 같은 파일 | `Greenday-1.5.0-bridge-${arch}.${ext}` — 사이트가 쓰는 고정 이름 `Greenday-<arch>.dmg` 와 겹치지 않게 |
 | `mac.protocols` | 같은 파일 | 스킴 `com.haru.app` 하나만 (YAML `extends` 는 배열을 합쳐 스킴이 둘 들어갔다 — 그래서 JS 설정이다) |
 | `publish.channel` | 같은 파일 | `latest` → `latest-mac.yml` 을 만든다 |
-| `publish.updaterCacheDirName` | 같은 파일 | `ticktick-updater` (옛 그대로) |
+| `publish.updaterCacheDirName` | 적지 않는다 | `ticktick-updater` (옛 그대로) — electron-builder 가 `package.json` `name` 에서 유도한다. 적어도 버려진다 |
 
 세 파일의 상수가 같아야 한다: `src/shared/app-id.ts` 의 `LEGACY_BUNDLE_ID`·`BRIDGE_VERSION`, `electron.vite.config.ts` 의 `BRIDGE_VERSION`, `electron-builder.bridge.cjs` 의 둘. `app-id.test.ts` 가 소스 쪽을 본다.
 
-서명·공증: electron-builder 는 Keychain 에 Developer ID 인증서가 있으면 서명하고, `APPLE_KEYCHAIN_PROFILE`(또는 `APPLE_API_KEY`/`_ID`/`_ISSUER`, 또는 `APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID`)이 있으면 공증한다. `scripts/release.sh` 3/4 단계가 `APPLE_KEYCHAIN_PROFILE` 을 export 한 채 electron-builder 를 부르는 것과 같은 메커니즘이다. `package:bridge` 는 `--publish` 가 없으므로 GitHub 에 올리지 않고 `dist/` 에만 남긴다.
+서명·공증: electron-builder 는 Keychain 에 Developer ID 인증서가 있으면 서명하고, `APPLE_KEYCHAIN_PROFILE`(또는 `APPLE_API_KEY`/`_ID`/`_ISSUER`, 또는 `APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID`)이 있으면 공증한다. `scripts/release.sh` 4/5 단계가 `APPLE_KEYCHAIN_PROFILE` 을 export 한 채 electron-builder 를 부르는 것과 같은 메커니즘이다. `package:bridge` 는 `--publish` 가 없으므로 GitHub 에 올리지 않고 `dist/` 에만 남긴다.
 
 결과물(`dist/`):
 
@@ -63,7 +63,7 @@ latest-mac.yml
 
 macOS electron-updater 는 **zip** 을 받아 설치한다. dmg 는 사람이 받는 것이다. 둘 다 올려야 한다.
 
-## 3. 검증 — release.sh 4/4 와 같은 검사를 손으로
+## 3. 검증 — release.sh 5/5 와 같은 검사를 손으로
 
 `release.sh` 는 기본 설정(`Greenday-*.dmg`)만 보므로 브리지에는 쓸 수 없다. 같은 검사를 직접 한다:
 

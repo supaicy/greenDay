@@ -129,12 +129,36 @@ export interface AiMessage {
 export type { AiConfig } from '../../../shared/ai-config'
 
 /**
+ * 부모와 한 번에 만들 하위작업(`AddTaskOptions.subtasks`). **이 API는** 직계 한 단계만
+ * 받는다 — 앱 자체는 하위작업 아래에 또 하위작업을 둘 수 있다(상세 패널의 SubtaskList).
+ */
+export interface SubtaskDraft {
+  title: string
+  description?: string
+  priority?: Priority
+}
+
+/**
  * `addTask(title, opts)`의 옵션. 스토어와 반복 스폰(RecurrenceSpawn)이 같은
  * 정의를 쓴다 — 각자 선언하던 시절엔 필드를 늘릴 때 한쪽만 늘어도 컴파일러가
  * 잡지 못해, 새 필드가 다음 회차에서 조용히 사라졌다.
  */
 export interface AddTaskOptions {
   listId?: string
+  /**
+   * 본문(메모)과 첨부. `addTasks`가 `''`/`[]`로 못 박고 있던 시절, 반복 할일을
+   * 완료하면 다음 회차가 빈 메모·첨부 없이 태어났다 — 내용은 완료본에만 남는데
+   * 완료본은 '완료' 스마트 리스트 말고는 어디에도 안 보여서, 사용자 눈에는
+   * 주간 장보기의 목록이 체크 한 번에 사라진 것이었다.
+   */
+  description?: string
+  attachments?: string[]
+  /**
+   * 부모와 함께 만들 하위작업. 부모 id는 `addTasks`가 발급 직후 직접 채운다 —
+   * 호출처가 따로 만들어 놓고 나중에 제목으로 부모를 되찾으면 같은 제목의 다른
+   * 할일에 붙는다(`aiAddTaskFromText`가 그렇게 하고 있다).
+   */
+  subtasks?: SubtaskDraft[]
   dueDate?: string | null
   startDate?: string | null
   pinned?: boolean

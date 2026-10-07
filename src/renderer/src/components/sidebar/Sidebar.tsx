@@ -37,7 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { SMART_LIST_PREDICATES, tagListId } from '../../utils/smartLists'
+import { SMART_LIST_PREDICATES, isTopLevel, tagListId } from '../../utils/smartLists'
 import { levelFromScore, levelProgress } from '../../utils/score'
 import type { SmartList, ViewType } from '../../types'
 
@@ -99,7 +99,15 @@ export function Sidebar() {
   const isDark = theme === 'dark'
 
   const taskCounts = useMemo(() => {
-    const incomplete = tasks.filter((t) => !t.completed)
+    // 하위작업은 목록에 독립 행으로 서지 않는다 — TaskList가 결과를 isTopLevel로
+    // 한 번 더 거른다. 뱃지가 tasks를 그대로 세면 하위작업 3개 달린 할일 하나가
+    // '기본함 4'로 뜨는데 열어 보면 1줄이다: 셋이 숨은 건지 사라진 건지 알 수
+    // 없는 숫자가 되어 뱃지를 '남은 일' 표시로 못 쓴다.
+    // 날짜 스마트 리스트(today/tomorrow/next7days/summary)는 판별식
+    // (SMART_LIST_PREDICATES → isActiveTopLevel)이 이미 걸러 준다. 바로 아래
+    // 태그 뱃지도 parentId를 거른다 — 여기만 빠져 있었다.
+    const topLevel = tasks.filter(isTopLevel)
+    const incomplete = topLevel.filter((t) => !t.completed)
     const counts: Record<string, number> = {
       // Badge counts share the SAME predicates as the list-view filters
       // (SMART_LIST_PREDICATES) so the sidebar number always matches the list.
@@ -109,7 +117,9 @@ export function Sidebar() {
       inbox: incomplete.filter((t) => t.listId === 'inbox').length,
       all: incomplete.length,
       summary: tasks.filter(SMART_LIST_PREDICATES.summary).length,
-      completed: tasks.filter((t) => t.completed).length,
+      completed: topLevel.filter((t) => t.completed).length,
+      // trash 만 tasks 가 아니라 trashTasks 를 그대로 센다 — TrashView 는 하위작업까지
+      // 전부 행으로 그리므로 이 뱃지는 걸러내면 오히려 목록과 어긋난다.
       trash: trashTasks.length
     }
     for (const list of lists) {
@@ -349,7 +359,12 @@ export function Sidebar() {
                 onKeyDown={(e) => {
                   if (e.nativeEvent.isComposing) return
                   if (e.key === 'Enter') handleAddFolder()
-                  if (e.key === 'Escape') setShowNewFolder(false)
+                  if (e.key === 'Escape') {
+                    // 이 Escape는 여기서 쓴다 — 전역 단축키(useKeyboardShortcuts)가 선택까지
+                    // 해제해 상세 패널을 닫지 않도록 알린다.
+                    e.preventDefault()
+                    setShowNewFolder(false)
+                  }
                 }}
                 placeholder={t('nav.folderNamePlaceholder')}
                 className={`flex-1 text-sm px-2 py-1 rounded outline-none ${isDark ? 'bg-sidebar-hover text-white placeholder-sidebar-muted' : 'bg-gray-200 text-gray-800 placeholder-gray-400'}`}
@@ -425,6 +440,8 @@ export function Sidebar() {
                   if (e.nativeEvent.isComposing) return
                   if (e.key === 'Enter') handleAddList()
                   if (e.key === 'Escape') {
+                    // 새 폴더 이름칸과 같다 — 이 Escape는 여기서 쓴다.
+                    e.preventDefault()
                     setShowNewList(false)
                     setNewListFolderId(null)
                   }

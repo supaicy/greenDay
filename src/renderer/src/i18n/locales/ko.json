@@ -402,6 +402,7 @@
     "shortcuts": "키보드 단축키",
     "version": "버전 정보",
     "checkingUpdate": "업데이트 확인 중…",
+    "updateCheckFailed": "업데이트 확인 실패 — 네트워크 연결을 확인하세요",
     "upToDate": "최신 버전입니다",
     "updateViaAppStore": "Mac App Store를 통해 자동으로 업데이트됩니다",
     "updateAvailable": "새 버전 사용 가능",
@@ -420,6 +421,8 @@
     "updateDownloading": "다운로드 중… {{percent}}%",
     "updateInstall": "재시작하여 설치",
     "updateDownloadNow": "지금 다운로드",
+    "updateDownloadFailed": "업데이트를 받거나 설치하지 못했습니다",
+    "updateDownloadRetry": "다시 다운로드",
     "updateViewRelease": "릴리스 노트 보기",
     "notifPermProbeSent": "테스트 알림을 보냈습니다. 배너가 보이지 않았다면 시스템 설정 → 알림에서 Greenday를 허용하세요.",
     "notifPermUnsupported": "이 시스템에서는 알림을 띄울 수 없어 리마인더가 도착하지 않습니다.",
@@ -554,5 +557,14 @@
       "oldAppBody": "새 Greenday가 데이터를 정상적으로 읽었습니다. 응용 프로그램 폴더의 haru.app는 이제 필요 없습니다.",
       "dismiss": "알겠어요"
     }
+  },
+  "crash": {
+    "title": "화면을 그리다 문제가 생겼습니다",
+    "body": "앱이 멈춘 것은 아니고, 이 화면을 그리는 중에 오류가 났습니다. 할 일 데이터는 그대로 디스크에 있습니다.",
+    "exportHint": "먼저 데이터를 내보내 두시면 안전합니다. 잠긴 화면에서도 내보내기는 항상 됩니다.",
+    "export": "데이터 내보내기",
+    "retry": "다시 시도",
+    "reload": "앱 새로고침",
+    "details": "오류 자세히 보기"
   }
 }

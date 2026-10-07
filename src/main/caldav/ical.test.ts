@@ -52,7 +52,7 @@ describe('foldLine', () => {
   })
 
   it('긴 줄을 CRLF+공백으로 접는다', () => {
-    const folded = foldLine('SUMMARY:' + 'a'.repeat(200))
+    const folded = foldLine(`SUMMARY:${'a'.repeat(200)}`)
     expect(folded).toContain('\r\n ')
     for (const part of folded.split('\r\n ')) {
       expect(Buffer.from(part, 'utf-8').length).toBeLessThanOrEqual(75)
@@ -60,14 +60,14 @@ describe('foldLine', () => {
   })
 
   it('한글이 코드포인트 중간에서 잘리지 않는다', () => {
-    const folded = foldLine('SUMMARY:' + '가'.repeat(100))
+    const folded = foldLine(`SUMMARY:${'가'.repeat(100)}`)
     // 잘린 조각이 유효한 UTF-8이면 대체 문자(U+FFFD)가 생기지 않는다.
     expect(folded).not.toContain('�')
-    expect(unfoldLines(folded).join('')).toBe('SUMMARY:' + '가'.repeat(100))
+    expect(unfoldLines(folded).join('')).toBe(`SUMMARY:${'가'.repeat(100)}`)
   })
 
   it('접은 줄은 다시 펼치면 원문과 같다', () => {
-    const original = 'DESCRIPTION:' + '내일 회의 준비 자료 정리하기 '.repeat(10)
+    const original = `DESCRIPTION:${'내일 회의 준비 자료 정리하기 '.repeat(10)}`
     expect(unfoldLines(foldLine(original)).join('')).toBe(original)
   })
 })
@@ -259,22 +259,34 @@ describe('parseEvents', () => {
  * 그래서 반복 할일이 한 번짜리 일정으로 나갔다.
  */
 describe('반복 직렬화', () => {
+  /**
+   * 로컬 벽시계로 지은 순간. 반복 시리즈는 이 프레임으로 나가므로 기대값이 실행
+   * 머신의 TZ에 묶이지 않는다 — UTC 리터럴로 적으면 TZ가 바뀌는 순간 갈라진다.
+   */
+  const localIso = (y: number, mo: number, d: number, h: number, mi: number): string =>
+    new Date(y, mo - 1, d, h, mi, 0, 0).toISOString()
+
   it('RRULE을 낸다', () => {
     const ics = serializeEvent(makeEvent({ rrule: 'FREQ=WEEKLY;BYDAY=MO' }), NOW)
     expect(ics).toContain('RRULE:FREQ=WEEKLY;BYDAY=MO')
   })
 
-  it('EXDATE·RDATE를 낸다', () => {
+  it('EXDATE·RDATE를 낸다 — 시리즈는 Z 없는 벽시계 스탬프다', () => {
     const ics = serializeEvent(
       makeEvent({
+        start: localIso(2026, 8, 3, 15, 0),
+        end: localIso(2026, 8, 3, 16, 0),
         rrule: 'FREQ=WEEKLY;BYDAY=MO',
-        exdates: ['2026-08-10T15:00:00.000Z'],
-        rdates: ['2026-08-12T00:00:00.000Z']
+        exdates: [localIso(2026, 8, 10, 15, 0)],
+        rdates: [localIso(2026, 8, 12, 0, 0)]
       }),
       NOW
     )
-    expect(ics).toContain('EXDATE:20260810T150000Z')
-    expect(ics).toContain('RDATE:20260812T000000Z')
+    // 값 형식은 DTSTART와 같아야 한다 — 여기서 갈라지면 서머타임 전환 뒤 예외가
+    // 규칙이 만드는 회차를 하나도 못 짚는다.
+    expect(ics).toContain('DTSTART:20260803T150000\r\n')
+    expect(ics).toContain('EXDATE:20260810T150000\r\n')
+    expect(ics).toContain('RDATE:20260812T000000\r\n')
   })
 
   it('종일 일정의 EXDATE·RDATE는 VALUE=DATE다 (형식이 DTSTART와 같아야 한다)', () => {
@@ -303,12 +315,14 @@ describe('반복 직렬화', () => {
   it('옮긴 회차는 같은 UID의 두 번째 VEVENT로 나간다', () => {
     const ics = serializeEvent(
       makeEvent({
+        start: localIso(2026, 8, 3, 15, 0),
+        end: localIso(2026, 8, 3, 16, 0),
         rrule: 'FREQ=WEEKLY;BYDAY=MO',
         overrides: [
           {
-            recurrenceId: '2026-08-10T15:00:00.000Z',
-            start: '2026-08-10T05:00:00.000Z',
-            end: '2026-08-10T06:30:00.000Z'
+            recurrenceId: localIso(2026, 8, 10, 15, 0),
+            start: localIso(2026, 8, 10, 5, 0),
+            end: localIso(2026, 8, 10, 6, 30)
           }
         ]
       }),
@@ -317,9 +331,11 @@ describe('반복 직렬화', () => {
     // 리소스 하나 안에 VEVENT 둘.
     expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
     expect(ics.match(/UID:greenday-1@supaicy\.github\.io/g)).toHaveLength(2)
-    expect(ics).toContain('RECURRENCE-ID:20260810T150000Z')
-    expect(ics).toContain('DTSTART:20260810T050000Z')
-    expect(ics).toContain('DTEND:20260810T063000Z')
+    // 예외 컴포넌트도 시리즈와 **같은 프레임**이다. `\r\n`까지 봐야 한다 —
+    // 그냥 `...150000`이면 옛 `...150000Z` 줄에도 걸려 회귀를 놓친다.
+    expect(ics).toContain('RECURRENCE-ID:20260810T150000\r\n')
+    expect(ics).toContain('DTSTART:20260810T050000\r\n')
+    expect(ics).toContain('DTEND:20260810T063000\r\n')
     // 예외는 스스로 반복하지 않는다.
     expect(ics.match(/RRULE:/g)).toHaveLength(1)
   })

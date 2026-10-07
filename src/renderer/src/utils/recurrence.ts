@@ -4,8 +4,8 @@
  * 패턴 형식 (RecurringPicker.tsx 기준):
  *   daily            → fromISODate + 1일
  *   weekly:1,3,5     → from 이후 가장 가까운 해당 요일 (0=일 ~ 6=토)
- *   monthly:15       → 다음 달 15일
- *   yearly:MM-DD     → 내년 해당 월일
+ *   monthly:15       → from 이후 가장 가까운 15일 (이번 달에 남아 있으면 이번 달)
+ *   yearly:MM-DD     → from 이후 가장 가까운 해당 월일 (올해에 남아 있으면 올해)
  *
  * TZ 드리프트 방지를 위해 Date(y, m, d) 로컬 생성, Date.now()/new Date() 비인수 호출 금지.
  */
@@ -118,12 +118,22 @@ function computeNextRecurringDate(pattern: string, fromISODate: string): string 
   if (pattern.startsWith('monthly:')) {
     const day = Number(pattern.slice('monthly:'.length))
     if (Number.isNaN(day)) return null
+    // 그 달에 없는 날짜는 말일로 당긴다. 넘치게 두면 formatDate가 2월 31일을
+    // 3월 3일로 정규화하고, 그 값이 다음 회차의 기준일이 되어 드리프트가 쌓인다.
+    // 같은 클램프를 이번 달 후보에도 쓴다 — occursOn이 2월 28일을 발생일로 보므로
+    // 한쪽만 클램프하면 거기서 또 갈린다.
+    //
+    // 이번 달에 아직 회차가 남아 있으면 그게 다음 회차다 — 건너뛴 회차 방지 가드.
+    // 무조건 m+1 하던 시절에는 9/10 마감 할일에 '매월 28일'을 걸면 9/28이 통째로
+    // 사라졌다. 픽커의 날짜는 마감일과 무관하게 정해지므로(기본값 1일) 흔한 설정이다.
+    // occursOn과 내보낸 RRULE(BYMONTHDAY)은 9/28에 블록을 그리는데, 정작 그 날
+    // 할 일만 없었다.
+    const thisMonthDay = Math.min(day, lastDayOfMonth(y, m))
+    if (thisMonthDay > d) return formatDate(y, m, thisMonthDay)
     // 다음 달 (12월 → 1월 / 연도 +1)
     const nextMonth = m + 1
     const nextYear = nextMonth > 11 ? y + 1 : y
     const normalizedMonth = nextMonth > 11 ? 0 : nextMonth
-    // 그 달에 없는 날짜는 말일로 당긴다. 넘치게 두면 formatDate가 2월 31일을
-    // 3월 3일로 정규화하고, 그 값이 다음 회차의 기준일이 되어 드리프트가 쌓인다.
     return formatDate(nextYear, normalizedMonth, Math.min(day, lastDayOfMonth(nextYear, normalizedMonth)))
   }
 
@@ -133,6 +143,13 @@ function computeNextRecurringDate(pattern: string, fromISODate: string): string 
     if (!parsed) return null
     const [targetMonth, targetDay] = parsed
     // 2월 29일 생일은 평년에 말일로 당긴다(넘치면 3월 1일로 굳는다).
+    // 올해 안에 그 월일이 아직 남아 있으면 그게 다음 회차다 — monthly와 같은
+    // 건너뛴 회차 방지 가드. 무조건 y+1 하던 시절에는 9/25 마감에 '매년 12월 25일'을
+    // 걸면 2026-12-25를 잃고 2027-12-25가 나왔다 — 1년치 알림이 조용히 사라진다.
+    const thisYearDay = Math.min(targetDay, lastDayOfMonth(y, targetMonth))
+    if (targetMonth > m || (targetMonth === m && thisYearDay > d)) {
+      return formatDate(y, targetMonth, thisYearDay)
+    }
     return formatDate(y + 1, targetMonth, Math.min(targetDay, lastDayOfMonth(y + 1, targetMonth)))
   }
 
@@ -251,7 +268,16 @@ function buildRecurrenceIndex(tasks: Task[]): Map<string, number> {
   return index
 }
 
-export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, number>, today: string): RecurrenceSpawn | null {
+export function nextRecurrenceSpawn(
+  task: Task,
+  existing: Task[] | Map<string, number>,
+  today: string,
+  /**
+   * 원본의 하위작업. 색인(Map)으로 부를 때는 전체 배열이 없어 여기서 찾을 수
+   * 없으므로 호출처가 준다 — 빠뜨리면 체크리스트만 조용히 안 실린다.
+   */
+  subtasks: Task[] = []
+): RecurrenceSpawn | null {
   if (!task.isRecurring || !task.recurringPattern) return null
   // today를 하한으로 준다 — 밀린 시리즈가 계속 연체 상태로 스폰되지 않게.
   const next = nextRecurringDate(task.recurringPattern, task.dueDate ?? today, today)
@@ -265,6 +291,18 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, n
     title: task.title,
     listId: task.listId,
     dueDate: next,
+    // 메모·첨부·체크리스트는 시리즈의 내용이지 그 회차의 것이 아니다. 안 실으면
+    // 다음 회차가 제목만 남은 껍데기로 태어나고, 내용은 화면에서 가려지는
+    // 완료본에만 남아 사용자에게는 지워진 것과 구별되지 않는다.
+    description: task.description,
+    // 원본과 같은 참조 문자열을 그대로 나눠 갖는다. 복사하지 않는 이유는 아래
+    // tags와 같다 — 첨부를 고치는 자리는 전부 새 배열을 만들어 갈아 끼우고
+    // (AttachmentList), 메인의 첨부 청소는 어느 행이든 그 이름을 적어 두고 있으면
+    // 파일을 남긴다(unreferencedAttachments). 여기서 펼치면 attachments가 없는
+    // 옛 행·부분 Task에 대해 터진다(실측: recurrence.test.ts 3건).
+    attachments: task.attachments,
+    // 체크리스트는 전부 미완료로 다시 선다(`addTasks`가 completed: false로 굽는다).
+    subtasks: subtasks.map((s) => ({ title: s.title, description: s.description, priority: s.priority })),
     // 기간은 길이를 지킨 채 통째로 옮긴다 — 시작일만 두고 오면 다음 회차가
     // 하루짜리로 쪼그라들고, 완료된 회차는 화면에서 가려져 흔적도 없다.
     startDate:
@@ -286,6 +324,28 @@ export function nextRecurrenceSpawn(task: Task, existing: Task[] | Map<string, n
   }
 }
 
+/**
+ * 스폰에 회차를 넘긴 뒤 **완료본에 남길** 오버라이드. 넘긴 키는 뺀다.
+ *
+ * 양쪽에 같은 키가 남으면 그 날짜를 두 인스턴스가 함께 주장한다 —
+ * getScheduledForOccurrence는 오버라이드에 그 날짜가 있는 완료본도 '자기 회차'로
+ * 인정하므로(movedHere), 캘린더에 같은 블록이 둘 겹치고 그 시리즈를 완료할 때마다
+ * 하나씩 는다. 단건 완료(toggleTask)는 이 정리를 하고 있었는데 일괄 완료가 빠져
+ * 있었다 — 두 경로가 다시 갈라지지 않게 규칙을 여기 한 곳에 둔다.
+ *
+ * 뺄 것이 아예 없으면 undefined를 준다: 쓰기 자체를 건너뛰라는 뜻이다(넘긴 키가
+ * 없는데도 updateTask를 부르면 일괄 완료가 선택 수만큼 스토어 쓰기와 IPC를 만든다).
+ */
+export function overridesAfterHandover(
+  task: Pick<Task, 'scheduledOverrides'>,
+  spawn: RecurrenceSpawn
+): Record<string, { start: string; end: string } | null> | null | undefined {
+  if (!spawn.scheduledOverrides) return undefined
+  const handed = new Set(Object.keys(spawn.scheduledOverrides))
+  const left = Object.entries(task.scheduledOverrides ?? {}).filter(([date]) => !handed.has(date))
+  return left.length > 0 ? Object.fromEntries(left) : null
+}
+
 /** date 이상인 오버라이드만 남긴다. 없으면 null(필드 자체를 만들지 않는다). */
 export function pickOverridesFrom(
   overrides: Task['scheduledOverrides'],
@@ -301,7 +361,13 @@ export function pickOverridesFrom(
  * 보장해야 한다 — 같은 시리즈의 8/15·8/16 회차를 함께 완료할 때 8/16이 아직 미완료인
  * 시점 기준으로 중복 판정하지 않으면 8/16 인스턴스가 한 번 더 생긴다.
  */
-export function collectRecurrenceSpawns(completing: Task[], existing: Task[], today: string): RecurrenceSpawn[] {
+export interface RecurrenceSpawnPlan {
+  /** 완료되는 인스턴스. 넘긴 회차를 여기서 빼야 그 날짜의 블록이 둘로 늘지 않는다. */
+  source: Task
+  spawn: RecurrenceSpawn
+}
+
+export function collectRecurrenceSpawns(completing: Task[], existing: Task[], today: string): RecurrenceSpawnPlan[] {
   // 반복이 하나도 없으면(흔한 경우) 정렬도 색인도 만들지 않는다.
   if (!completing.some((t) => t.isRecurring && t.recurringPattern)) return []
 
@@ -309,11 +375,22 @@ export function collectRecurrenceSpawns(completing: Task[], existing: Task[], to
   // 색인을 한 번 만들고 완료/스폰을 반영해 나간다. 예전에는 태스크마다 전체
   // 배열을 복사하고 다시 훑어 O(n·m)이었다(3,000건 전체 선택 시 ~50ms).
   const index = buildRecurrenceIndex(existing)
-  const spawns: RecurrenceSpawn[] = []
+  // 부모별 하위작업을 한 번만 모은다. 태스크마다 전체 배열을 훑으면 색인을 만든
+  // 이유(O(n·m) 회피)가 없어진다.
+  const childrenOf = new Map<string, Task[]>()
+  for (const t of existing) {
+    if (!t.parentId) continue
+    const kids = childrenOf.get(t.parentId)
+    if (kids) kids.push(t)
+    else childrenOf.set(t.parentId, [t])
+  }
+  const spawns: RecurrenceSpawnPlan[] = []
   for (const task of ordered) {
-    const spawn = nextRecurrenceSpawn(task, index, today)
+    const spawn = nextRecurrenceSpawn(task, index, today, childrenOf.get(task.id) ?? [])
     if (spawn) {
-      spawns.push(spawn)
+      // 어느 완료본이 이 회차를 넘겼는지 짝을 지어 돌려준다 — 짝을 버리면 호출처가
+      // 다시 계산해야 하고, 그 순간 단건 완료 경로와 규칙이 갈라진다.
+      spawns.push({ source: task, spawn })
       // 스폰한 회차를 색인에 올려, 같은 기한의 중복 인스턴스가 또 스폰하지 않게 한다.
       const key = seriesKey(spawn.recurringPattern, spawn.title, spawn.dueDate)
       index.set(key, (index.get(key) ?? 0) + 1)

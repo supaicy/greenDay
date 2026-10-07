@@ -32,8 +32,19 @@ export function BatchBar() {
   const count = batchSelectedIds.length
 
   return (
+    // **바닥 한가운데 차선(bottom-6)은 UndoToast의 것이다.** 둘 다 같은 앵커를
+    // 쓰면 배치 모드에서 단건 삭제(행 우클릭 삭제 / 선택된 행에서 Backspace)를
+    // 한 순간 토스트가 5초간 바 위에 겹친다 — 바는 z-50, 토스트는 z-90이고
+    // 사이에 stacking context가 없어(루트도 안 만든다) 토스트가 이긴다. 그때
+    // 바 한가운데의 '이동'·'우선순위'가 가려지고, 거기를 눌러도 토스트가
+    // (pointer-events-auto) 클릭을 먹는다. batchComplete·batchDelete·batchMove는
+    // 스스로 batchMode를 끄므로 단건 삭제 경로만 부딪힌다.
+    // z를 올려 바를 위로 세우는 것은 고치는 게 아니다 — 바가 토스트보다 훨씬
+    // 넓어 토스트가 통째로 뒤에 숨고, 방금 지운 할일의 '되돌리기'가 사라진다.
+    // 그래서 z가 아니라 자리를 비킨다: 토스트 띠(바닥 24~68px, 제목이 길어 두
+    // 줄이 되면 ~88px)를 넘긴 96px에 바를 둔다.
     <div
-      className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-4 py-2 rounded-xl shadow-2xl border ${
+      className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 px-4 py-2 rounded-xl shadow-2xl border ${
         isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200 shadow-lg'
       }`}
     >

@@ -110,7 +110,7 @@ Greenday의 AI 기능은 로컬 모델이나 클라우드 모델 모두 사용�
 
 ## 기술 스택
 
-- **Electron 40** — macOS 네이티브 앱
+- **Electron 41** — macOS 네이티브 앱
 - **React 19** + **TypeScript** — UI
 - **Tailwind CSS 3** — 스타일링
 - **Zustand** — 상태 관리

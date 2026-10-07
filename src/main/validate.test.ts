@@ -192,3 +192,44 @@ describe('task id — iCalendar 주입 방어', () => {
     expect(validateTaskUpdate({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' })).toBeTruthy()
   })
 })
+
+/**
+ * Regression: 진단 2.3 — tags·attachments만 검사에서 빠져 있었다.
+ * Found by /qa on 2026-09-25
+ * Report: docs/reports/2026-09-25-전체-진단.html
+ *
+ * `database.ts`의 `updateTask`는 받은 값을 그대로 `JSON.stringify` 하므로,
+ * 문자열이 들어오면 `"\"[]\""` 같은 이중 인코딩이 디스크에 남는다. 그러면
+ * 렌더러가 배열로 되읽지 못하고 `task.tags.map(...)`에서 던져 화면이 통째로
+ * 비었고, 값이 디스크에 있으니 재시작해도 같은 자리에서 다시 죽었다.
+ */
+describe('tags·attachments 모양', () => {
+  const fn = { 생성: validateTaskInput, 수정: validateTaskUpdate } as const
+
+  for (const [label, validate] of Object.entries(fn)) {
+    const base = label === '생성' ? { id: 't1', title: '할일' } : { id: 't1' }
+
+    it(`${label}: 문자열 배열은 통과한다`, () => {
+      expect(() => validate({ ...base, tags: ['업무', '긴급'], attachments: [] })).not.toThrow()
+    })
+
+    it(`${label}: 빠져 있으면 통과한다 (부분 페이로드)`, () => {
+      expect(() => validate(base)).not.toThrow()
+    })
+
+    it(`${label}: 배열이 아닌 tags는 거절한다`, () => {
+      for (const bad of ['[]', '업무', 42, {}, null, true]) {
+        expect(() => validate({ ...base, tags: bad })).toThrow('Invalid task payload')
+      }
+    })
+
+    it(`${label}: 문자열이 아닌 원소가 섞이면 거절한다`, () => {
+      expect(() => validate({ ...base, tags: ['업무', 7] })).toThrow('Invalid task payload')
+      expect(() => validate({ ...base, attachments: [{ path: 'x' }] })).toThrow('Invalid task payload')
+    })
+
+    it(`${label}: 배열이 아닌 attachments도 거절한다`, () => {
+      expect(() => validate({ ...base, attachments: '[]' })).toThrow('Invalid task payload')
+    })
+  }
+})

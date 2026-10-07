@@ -51,7 +51,9 @@ describe('nextRecurringDate', () => {
   })
 
   it('monthly: 12월이면 다음 해 1월', () => {
-    expect(nextRecurringDate('monthly:10', '2026-12-05')).toBe('2027-01-10')
+    // 기준일은 10일을 지난 날이어야 한다. 12/05를 쓰면 같은 달 12/10이 아직
+    // 남아 있어 연 경계가 아니라 '같은 달에 남은 회차'를 검사하게 된다.
+    expect(nextRecurringDate('monthly:10', '2026-12-15')).toBe('2027-01-10')
   })
 
   // ── yearly ─────────────────────────────────────────────
@@ -59,7 +61,7 @@ describe('nextRecurringDate', () => {
     expect(nextRecurringDate('yearly:07-21', '2026-07-21')).toBe('2027-07-21')
   })
 
-  it('yearly: 항상 +1년 (해당일 이전이어도)', () => {
+  it('yearly: 올해 그 월일이 이미 지났으면 내년', () => {
     expect(nextRecurringDate('yearly:01-01', '2026-07-21')).toBe('2027-01-01')
   })
 
@@ -337,5 +339,46 @@ describe('nextRecurrenceSpawn — 고정', () => {
       '2026-08-19'
     )
     expect(spawn?.pinned).toBe(true)
+  })
+})
+
+// 픽커의 '매월 N일'·'매년 M월 D일'은 마감일과 무관하게 정해진다(기본값 1일 / 1월 1일).
+// 그래서 마감일보다 뒤에 있는 회차가 같은 달·같은 해 안에 남아 있는 일이 흔하다.
+// 다음 회차를 무조건 한 주기 뒤로 잡던 시절에는 그 회차가 통째로 사라졌다 —
+// occursOn과 내보낸 RRULE은 그 날에 블록을 그리는데 정작 그 날 할 일만 없었다
+// (매년 반복이면 1년치가 조용히 사라진다).
+describe('같은 주기 안에 남은 회차', () => {
+  it('monthly: 9/10 마감에 매월 28일이면 다음은 이번 달 28일이다', async () => {
+    const { occursOn, nextRecurringDate } = await import('./recurrence')
+    const next = nextRecurringDate('monthly:28', '2026-09-10')
+    expect(next).toBe('2026-09-28')
+    // 스포너와 캘린더가 같은 날을 가리켜야 한다.
+    expect(occursOn('monthly:28', '2026-09-10', next as string)).toBe(true)
+  })
+
+  it('monthly: 그 달에 없는 날은 같은 달 말일로 당긴다', async () => {
+    const { occursOn, nextRecurringDate } = await import('./recurrence')
+    const next = nextRecurringDate('monthly:31', '2026-02-15')
+    expect(next).toBe('2026-02-28')
+    expect(occursOn('monthly:31', '2026-02-15', next as string)).toBe(true)
+  })
+
+  it('monthly: 이미 지난 날이면 다음 달로 넘어간다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    expect(nextRecurringDate('monthly:10', '2026-09-10')).toBe('2026-10-10')
+    expect(nextRecurringDate('monthly:5', '2026-09-10')).toBe('2026-10-05')
+  })
+
+  it('yearly: 9/25 마감에 매년 12월 25일이면 올해 12월 25일이다', async () => {
+    const { occursOn, nextRecurringDate } = await import('./recurrence')
+    const next = nextRecurringDate('yearly:12-25', '2026-09-25')
+    expect(next).toBe('2026-12-25')
+    expect(occursOn('yearly:12-25', '2026-09-25', next as string)).toBe(true)
+  })
+
+  it('yearly: 같은 달 안에서는 날짜까지 비교한다', async () => {
+    const { nextRecurringDate } = await import('./recurrence')
+    expect(nextRecurringDate('yearly:9-28', '2026-09-25')).toBe('2026-09-28')
+    expect(nextRecurringDate('yearly:9-20', '2026-09-25')).toBe('2027-09-20')
   })
 })

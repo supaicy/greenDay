@@ -89,6 +89,20 @@ const api = {
     ipcRenderer.on('update-not-available', handler)
     return () => ipcRenderer.removeListener('update-not-available', handler)
   },
+  // 실패에도 봉투가 없다 — 메인이 electron-updater의 원문 오류를 넘기지 않기
+  // 때문이다(`main/index.ts`의 'error' 리스너). 사용자 문구는 i18n에 있다.
+  onUpdateError: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('update-error', handler)
+    return () => ipcRenderer.removeListener('update-error', handler)
+  },
+  // 다운로드 실패는 확인 실패와 **다른 채널**이다 — 같은 'update-error'로 받으면 설정이
+  // "업데이트 확인 실패"를 새 버전 카드 옆에 띄우고 진행 막대가 멈춘다(`main/index.ts`).
+  onUpdateDownloadError: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('update-download-error', handler)
+    return () => ipcRenderer.removeListener('update-download-error', handler)
+  },
   onUpdateProgress: (callback: (percent: number) => void) => {
     const handler = (_: Electron.IpcRendererEvent, percent: number): void => callback(percent)
     ipcRenderer.on('update-download-progress', handler)
@@ -107,8 +121,10 @@ const api = {
   aiWarmup: () => ipcRenderer.invoke('ai:warmup'),
   aiCreateTask: (input: string, tasks: unknown[]) => ipcRenderer.invoke('ai:create-task', input, tasks),
   aiInterpretAction: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:interpret-action', message, tasks),
-  aiStreamChat: (message: string, tasks: unknown[], history: unknown[]) =>
-    ipcRenderer.invoke('ai:stream-chat', message, tasks, history),
+  // requestId는 그냥 통과시킨다. 여기서 만들지 않는 이유: 응답 이벤트를 받는 쪽이
+  // 스토어이므로, 자기가 낸 요청의 id를 스토어가 쥐고 있어야 대조가 성립한다.
+  aiStreamChat: (message: string, tasks: unknown[], history: unknown[], requestId: string) =>
+    ipcRenderer.invoke('ai:stream-chat', message, tasks, history, requestId),
   aiGetHistory: () => ipcRenderer.invoke('ai:get-history'),
   aiSaveHistory: (messages: unknown[]) => ipcRenderer.invoke('ai:save-history', messages),
   aiPullModel: (model: string) => ipcRenderer.invoke('ai:pull-model', model),
@@ -132,18 +148,20 @@ const api = {
     ipcRenderer.on('ai:pull-error', handler)
     return () => ipcRenderer.removeListener('ai:pull-error', handler)
   },
-  onAiStreamToken: (callback: (token: string) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, token: string): void => callback(token)
+  // 세 채널 모두 requestId를 함께 넘긴다. 리스너를 떼는 것으로는 main의 스트림이
+  // 멈추지 않으므로, 구독이 살아 있는 동안 남의 스트림 이벤트가 섞여 들어온다.
+  onAiStreamToken: (callback: (token: string, requestId: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, token: string, requestId: string): void => callback(token, requestId)
     ipcRenderer.on('ai:stream-token', handler)
     return () => ipcRenderer.removeListener('ai:stream-token', handler)
   },
-  onAiStreamDone: (callback: () => void) => {
-    const handler = (_: Electron.IpcRendererEvent): void => callback()
+  onAiStreamDone: (callback: (requestId: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, requestId: string): void => callback(requestId)
     ipcRenderer.on('ai:stream-done', handler)
     return () => ipcRenderer.removeListener('ai:stream-done', handler)
   },
-  onAiStreamError: (callback: (error: string) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, error: string): void => callback(error)
+  onAiStreamError: (callback: (error: string, requestId: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, error: string, requestId: string): void => callback(error, requestId)
     ipcRenderer.on('ai:stream-error', handler)
     return () => ipcRenderer.removeListener('ai:stream-error', handler)
   },

@@ -82,6 +82,19 @@ export interface Capabilities {
    * 대신 새 앱으로 옮겨가라는 안내를 띄운다.
    */
   isBridge: boolean
+
+  /**
+   * 옛 haru 설치의 데이터를 **이어받는** 빌드인가 — "옛 앱은 지워도 됩니다" 안내를
+   * 해도 되는가의 답이다.
+   *
+   * 직접 배포판은 옛 앱과 같은 userData(`~/Library/Application Support/ticktick`)를
+   * 보므로 이어받는다. MAS 판은 샌드박스 컨테이너라 그 폴더를 **아예 못 읽는다** —
+   * 신규 사용자용이다(docs/explanation-번들-ID-마이그레이션.md). 그런데 컨테이너에는
+   * 자기 데이터가 쌓이므로 무결성 검사는 'ok' 가 되고, `/Applications/haru.app` 이
+   * 눈에 띄면 배너가 **자기가 만든** 데이터를 두고 "haru 데이터를 정상적으로 읽었다"고
+   * 말한다. 그 말을 믿은 사용자는 옛 데이터를 열 수 있던 유일한 앱을 지운다.
+   */
+  inheritsLegacyData: boolean
 }
 
 export function capabilitiesFor(facts: PlatformFacts): Capabilities {
@@ -96,6 +109,8 @@ export function capabilitiesFor(facts: PlatformFacts): Capabilities {
     needsLicenseKey: !isStoreBuild,
     enforcesLicense: !facts.isDevBuild && !isStoreBuild,
     updatesViaStore: isStoreBuild,
-    isBridge
+    isBridge,
+    // Windows Store 는 해당 없다 — 옛 haru 는 macOS 전용이었고, 제약은 MAS 샌드박스만의 것이다.
+    inheritsLegacyData: !facts.isMas
   }
 }

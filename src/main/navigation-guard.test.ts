@@ -124,8 +124,8 @@ describe('isAppDocumentUrl — 개발 서버(http:)', () => {
 
   /**
    * 302 우회의 착륙 지점이 정확히 이 모양이다 — 허용된 진입 경로에서 출발해
-   * 다른 오리진(포트만 달라도 된다)으로 리다이렉트된다. `index.ts`가 이 판정을
-   * `will-redirect`에도 걸어야 실제로 막힌다.
+   * 다른 오리진(포트만 달라도 된다)으로 리다이렉트된다. `main-window.ts`가 이 판정을
+   * `will-redirect`에도 걸어야 실제로 막힌다(배선은 `mainWindow.test.ts`가 본다).
    */
   it('리다이렉트가 데려가려는 다른 오리진도 같은 판정에서 걸린다', () => {
     expect(isAppDocumentUrl('http://127.0.0.1:52665/pwned', DEV)).toBe(false)

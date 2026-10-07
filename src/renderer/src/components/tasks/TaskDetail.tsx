@@ -20,7 +20,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import type { Priority } from '../../types'
 
 // CM6 테마 (Atomic엔 theme prop이 없어 extensions로 전달). 배경은 투명 —
 // 부모 컬럼 배경을 그대로 쓰고, 본문 색만 앱 테마에 맞춰 대비를 확보한다.
@@ -69,10 +68,6 @@ export function TaskDetail() {
   const isDark = theme === 'dark'
 
   const [title, setTitle] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [dueTime, setDueTime] = useState('')
-  const [priority, setPriority] = useState<Priority>('none')
-  const [listId, setListId] = useState('inbox')
   // ⋯ 메뉴의 '하위 할일 추가'로 섹션을 꺼낸다. 하위작업이 0개면 평소엔 숨어 있어
   // 빈 태스크에서 메모가 최대 공간을 갖는다.
   const [showSubtasks, setShowSubtasks] = useState(false)
@@ -87,15 +82,18 @@ export function TaskDetail() {
   // 열릴 때 오른쪽에서 슬라이드인
   const [shown, setShown] = useState(false)
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: form state resets only when a different task is selected; watching other fields would overwrite in-progress edits
+  // 로컬로 미러링하는 것은 **제목뿐이다.** 제목만 blur 전까지 값이 이 컴포넌트에만
+  // 있어서, 다른 태스크로 옮길 때만 갈아끼워야 편집 중인 글자가 안 날아간다.
+  //
+  // 마감일·시각·우선순위·목록은 여기서 복사하지 않고 `task`에서 바로 읽는다.
+  // 예전에는 이 넷도 복사해 두고 `task.id`가 바뀔 때만 다시 채웠다. 패널을 열어둔
+  // 채 바깥에서(Cmd+D, 캘린더 드래그, 1-4, 우클릭 '이동') 같은 할일을 고치면
+  // 패널은 옛 값을 계속 들고 있었고, **다음 편집이 그 옛 값을 새 값 위에 덮어썼다** —
+  // 마감일 팝오버에서 '시각'만 채워도 onChange가 낡은 dueDate를 함께 실어 보내,
+  // 방금 Cmd+D로 정한 마감일이 아무 말 없이 예전 날짜로 되돌아갔다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 제목은 편집 중인 값이라 태스크가 바뀔 때만 다시 읽는다
   useEffect(() => {
-    if (task) {
-      setTitle(task.title)
-      setDueDate(task.dueDate || '')
-      setDueTime(task.dueTime || '')
-      setPriority(task.priority)
-      setListId(task.listId)
-    }
+    if (task) setTitle(task.title)
   }, [task?.id])
 
   const panelRef = useRef<HTMLDivElement>(null)
@@ -184,7 +182,7 @@ export function TaskDetail() {
 
   // 목록 행과 같은 헬퍼를 쓴다 — 같은 할일이 화면마다 다르게 읽히면 안 된다.
   const dueLabel =
-    formatDateRange(task.startDate, dueDate || null, dueTime || null) || t('detail.noDueDate')
+    formatDateRange(task.startDate, task.dueDate, task.dueTime) || t('detail.noDueDate')
 
   // 좌측 경계선 드래그로 폭 조절: 이동 중엔 로컬 state, 놓을 때 store에 persist.
   // 패널 우측 경계는 고정(창 우측에 핀)이므로 mousedown 시점 값을 그대로 사용.
@@ -265,15 +263,13 @@ export function TaskDetail() {
         <span className={`h-4 w-px ${isDark ? 'bg-surface-line' : 'bg-gray-300'}`} />
 
         <DueDatePicker
-          dueDate={dueDate || null}
-          dueTime={dueTime || null}
+          dueDate={task.dueDate}
+          dueTime={task.dueTime}
           startDate={task.startDate}
           reminderAt={task.reminderAt}
           recurringPattern={task.recurringPattern}
           isRecurring={task.isRecurring}
           onChange={(next) => {
-            setDueDate(next.dueDate ?? '')
-            setDueTime(next.dueTime ?? '')
             save({
               dueDate: next.dueDate,
               dueTime: next.dueTime,
@@ -286,7 +282,7 @@ export function TaskDetail() {
           onRecurringChange={(v) => save({ isRecurring: !!v, recurringPattern: v })}
           autoOpenRangeSignal={rangeSignal}
           trigger={
-            <button type="button" className={ctlCls(!!dueDate || !!dueTime)}>
+            <button type="button" className={ctlCls(!!task.dueDate || !!task.dueTime)}>
               <CalendarDays size={14} />
               {dueLabel}
             </button>
@@ -296,16 +292,13 @@ export function TaskDetail() {
         <div className="flex-1" />
 
         <PriorityMenu
-          value={priority}
-          onChange={(p) => {
-            setPriority(p)
-            save({ priority: p })
-          }}
+          value={task.priority}
+          onChange={(p) => save({ priority: p })}
           trigger={
             <button
               type="button"
               aria-label={t('priority.label')}
-              className={`shrink-0 rounded p-1.5 transition-colors ${focusRingCls} ${PRIORITY_COLOR[priority]} ${
+              className={`shrink-0 rounded p-1.5 transition-colors ${focusRingCls} ${priorityColor} ${
                 isDark ? 'hover:bg-surface-sunken' : 'hover:bg-gray-100'
               }`}
             >
@@ -375,17 +368,14 @@ export function TaskDetail() {
           <DropdownMenuTrigger asChild>
             <button type="button" className={ctlCls(false)}>
               <Inbox size={14} />
-              {lists.find((l) => l.id === listId)?.name ?? ''}
+              {lists.find((l) => l.id === task.listId)?.name ?? ''}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="min-w-[160px]">
             {lists.map((l) => (
               <DropdownMenuItem
                 key={l.id}
-                onSelect={() => {
-                  setListId(l.id)
-                  save({ listId: l.id })
-                }}
+                onSelect={() => save({ listId: l.id })}
                 className="gap-2 text-sm"
               >
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />

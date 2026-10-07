@@ -67,16 +67,29 @@ export default function App() {
     void useStore.getState().aiCheckConnection()
     // 자동 업데이트 이벤트 수신 (electron-updater에서 push)
     const cleanupUpdate = window.api.onUpdateAvailable?.((info) => {
-      useStore.setState({ updateAvailable: info, updateChecked: true })
+      useStore.setState({ updateAvailable: info, updateChecked: true, updateFailed: false })
     })
     const cleanupNotAvailable = window.api.onUpdateNotAvailable?.(() => {
-      useStore.setState({ updateChecked: true })
+      useStore.setState({ updateChecked: true, updateFailed: false })
+    })
+    // 실패도 "확인이 끝났다"이다 — `updateChecked`를 안 올리면 설정이 "업데이트
+    // 확인 중…"에 영영 갇힌다. 그렇다고 '최신 버전'은 아니라서 깃발을 갈라 둔다.
+    // 한 시간 뒤 재시도가 성공하면 위 두 핸들러가 이 깃발을 도로 내린다.
+    const cleanupUpdateError = window.api.onUpdateError?.(() => {
+      useStore.setState({ updateChecked: true, updateFailed: true })
+    })
+    // 다운로드 실패는 확인 실패가 아니다 — 새 버전이 있다는 답은 이미 받았다.
+    // 막대를 내려야 설정이 '다시 받기' 버튼을 돌려준다(`progress != null`이면 막대만
+    // 그린다). `updateReady`도 내린다: 이 채널은 설치 단계의 실패도 실어 오고, 그때
+    // "재시작하여 설치"를 계속 내밀면 같은 실패를 되풀이할 뿐이다.
+    const cleanupDownloadError = window.api.onUpdateDownloadError?.(() => {
+      useStore.setState({ updateDownloadProgress: null, updateDownloadFailed: true, updateReady: false })
     })
     const cleanupProgress = window.api.onUpdateProgress?.((percent) => {
-      useStore.setState({ updateDownloadProgress: percent })
+      useStore.setState({ updateDownloadProgress: percent, updateDownloadFailed: false })
     })
     const cleanupDownloaded = window.api.onUpdateDownloaded?.(() => {
-      useStore.setState({ updateReady: true, updateDownloadProgress: null })
+      useStore.setState({ updateReady: true, updateDownloadProgress: null, updateDownloadFailed: false })
     })
     // 글로벌 단축키 등록
     window.api.registerGlobalShortcut?.()
@@ -88,6 +101,8 @@ export default function App() {
       cleanup?.()
       cleanupUpdate?.()
       cleanupNotAvailable?.()
+      cleanupUpdateError?.()
+      cleanupDownloadError?.()
       cleanupProgress?.()
       cleanupDownloaded?.()
     }

@@ -109,7 +109,14 @@ export function SubtaskList({ taskId }: { taskId: string }) {
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return
             if (e.key === 'Enter') handleAdd()
-            if (e.key === 'Escape') setNewTitle('')
+            // 지울 글자가 있을 때만 이 Escape를 여기서 쓰고, 전역 단축키
+            // (useKeyboardShortcuts)가 선택까지 해제해 상세 패널을 닫지 않도록 알린다.
+            // 빈 칸이면 가져가지 않는다 — 이 칸은 패널에 늘 열려 있어서, 빈 칸에서도
+            // 가져가면 여기 포커스가 있는 한 Escape로 패널을 닫을 길이 없다.
+            if (e.key === 'Escape' && newTitle) {
+              e.preventDefault()
+              setNewTitle('')
+            }
           }}
           placeholder={t('detail.addSubtask')}
           className={`flex-1 bg-transparent text-sm outline-none ${

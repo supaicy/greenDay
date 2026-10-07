@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday 출시 준비 체크리스트</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1c;
+    --muted: #6b6b70;
+    --line: #e3e3e6;
+    --card: #fafafa;
+    --accent: #2f7d4f;
+    --warn: #a8620f;
+    --dead: #a13b3b;
+    --code-bg: #f2f2f4;
+    --you: #1d5fa8;
+    --you-soft: #eef4fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1c1e;
+      --fg: #e8e8ea;
+      --muted: #9a9aa0;
+      --line: #333338;
+      --card: #242427;
+      --accent: #6cc48d;
+      --warn: #e0a458;
+      --dead: #e08585;
+      --code-bg: #2a2a2e;
+      --you: #7fb3ec;
+      --you-soft: #1b2a3a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1c1e;
+    --fg: #e8e8ea;
+    --muted: #9a9aa0;
+    --line: #333338;
+    --card: #242427;
+    --accent: #6cc48d;
+    --warn: #e0a458;
+    --dead: #e08585;
+    --code-bg: #2a2a2e;
+    --you: #7fb3ec;
+    --you-soft: #1b2a3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 3rem 1.25rem 6rem;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.75rem; line-height: 1.3; margin: 0 0 .4rem; letter-spacing: -.02em; text-wrap: balance; }
+  h2 {
+    font-size: 1.15rem; margin: 3rem 0 1rem; padding-top: 1.25rem;
+    border-top: 1px solid var(--line); letter-spacing: -.01em; text-wrap: balance;
+  }
+  h3 { font-size: .98rem; margin: 1.6rem 0 .5rem; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: .875rem; margin: 0 0 2rem; }
+  code {
+    background: var(--code-bg); padding: .12em .38em; border-radius: 4px;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere;
+  }
+  pre {
+    background: var(--code-bg); border-radius: 6px; padding: .8rem .9rem; margin: .7rem 0;
+    font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow-x: auto; white-space: pre;
+  }
+  pre code { background: none; padding: 0; }
+  .lede {
+    background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    padding: 1.1rem 1.25rem; border-radius: 8px; margin: 0 0 1.25rem;
+  }
+  .lede p { margin: 0; }
+  .lede p + p { margin-top: .7rem; }
+
+  /* 준비 상태 원장 — 이 문서의 요점이다: 무엇이 있고 무엇이 없는가 */
+  .ledger { margin: 1.25rem 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .ledger-row {
+    display: grid; grid-template-columns: 1.6rem 1fr auto; gap: .75rem; align-items: start;
+    padding: .7rem .95rem; border-bottom: 1px solid var(--line); font-size: .9rem;
+  }
+  .ledger-row:last-child { border-bottom: none; }
+  .ledger-row.has { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+  .ledger-row.missing { background: color-mix(in srgb, var(--dead) 8%, transparent); }
+  .mark { font-weight: 700; line-height: 1.6; }
+  .mark.y { color: var(--accent); }
+  .mark.n { color: var(--dead); }
+  .ledger-row .what { min-width: 0; }
+  .ledger-row .what b { font-weight: 600; }
+  .ledger-row .note { color: var(--muted); font-size: .82rem; display: block; margin-top: .15rem; }
+  .who {
+    font-size: .72rem; font-weight: 600; padding: .2em .55em; border-radius: 4px; white-space: nowrap;
+  }
+  .who.you { color: var(--you); background: var(--you-soft); }
+  .who.me  { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+  /* 단계 — 실제 순서가 의미를 가지므로 번호를 쓴다 */
+  .step { display: grid; grid-template-columns: 2rem 1fr; gap: .9rem; margin: 1.75rem 0; }
+  .step-n {
+    width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
+    background: var(--you-soft); color: var(--you); font-weight: 700; font-size: .85rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .step-body { min-width: 0; }
+  .step-body > :first-child { margin-top: .25rem; }
+  .step h3 { margin-top: 0; }
+  ol, ul { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  .path { color: var(--muted); }
+  .path b { color: var(--fg); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  tbody tr:last-child td { border-bottom: none; }
+  .scroll { overflow-x: auto; margin: 1rem 0; }
+  .warn-box {
+    background: color-mix(in srgb, var(--warn) 9%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+    border-radius: 8px; padding: .85rem 1rem; margin: 1rem 0; font-size: .9rem;
+  }
+  .warn-box strong { color: var(--warn); }
+  footer { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Greenday 출시 준비 체크리스트</h1>
+<p class="sub">2026-09-26 확인, 09-30 갱신 · 팀 <code>32R6RHXU36</code> (MINSEOK SHIN) · 번들 ID <code>com.begreen.greenday</code></p>
+
+<div class="lede">
+  <p><strong>인증서는 이미 다 있습니다.</strong> 이 맥의 키체인과 저장소를 실제로 확인했고, App Store 제출에
+  필요한 인증서 3종이 모두 설치돼 있습니다. 새로 발급할 인증서는 <strong>없습니다.</strong></p>
+  <p>빠진 것은 <strong>딱 두 개</strong>입니다 — 프로비저닝 프로파일 파일 하나, Google OAuth 클라이언트 ID 문자열 하나.
+  둘 다 developer.apple.com과 Google Cloud 콘솔에서 받아야 하고, <strong>로그인이 필요해서 제가 대신 할 수 없습니다.</strong>
+  아래 2단계만 해주시면 그 뒤는 제가 전부 합니다.</p>
+  <p><strong>App ID <code>com.begreen.greenday</code>는 이미 등록돼 있습니다</strong>(2026-09-30 확인) —
+  등록 단계는 건너뛰고 프로파일 발급부터 하시면 됩니다.</p>
+</div>
+
+<h2>지금 상태</h2>
+
+<div class="ledger">
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>Apple Distribution</b> 인증서
+      <span class="note">App Store용 <em>앱</em> 서명. <code>Apple Distribution: MINSEOK SHIN (32R6RHXU36)</code></span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>3rd Party Mac Developer Installer</b> 인증서
+      <span class="note"><code>.pkg</code> 서명. electron-builder가 이 이름을 정확히 찾습니다 — 앱 인증서로는 대체 불가</span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>Developer ID Application</b> 인증서
+      <span class="note">직접 배포(다운로드) 채널용. App Store와는 별개 채널입니다</span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>공증 자격증명</b> <code>haru</code>
+      <span class="note">notarytool 키체인 프로파일. 직접 배포 시 공증에 씁니다</span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>App Store Connect 업로드 자격증명</b>
+      <span class="note">키체인 <code>AC_PASSWORD</code>에 Apple ID + 앱 암호가 저장돼 있어 업로드 때 아무것도 묻지 않습니다</span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>GitHub 토큰</b>
+      <span class="note"><code>gh</code> 로그인됨 (<code>supaicy</code>). 직접 배포의 릴리스 게시에 씁니다</span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row has">
+    <span class="mark y">✓</span>
+    <span class="what"><b>App ID</b> <code>com.begreen.greenday</code>
+      <span class="note">Apple 계정에 <strong>이미 등록돼 있습니다</strong>(2026-09-30 확인). 새로 만들 필요 없습니다 —
+      바로 Profiles로 가면 됩니다</span></span>
+    <span class="who me">준비됨</span>
+  </div>
+  <div class="ledger-row missing">
+    <span class="mark n">✗</span>
+    <span class="what"><b>프로비저닝 프로파일</b> <code>resources/embedded.provisionprofile</code>
+      <span class="note">파일이 아예 없습니다. App Store 빌드가 여기서 막힙니다 — <strong>1단계</strong></span></span>
+    <span class="who you">당신이</span>
+  </div>
+  <div class="ledger-row missing">
+    <span class="mark n">✗</span>
+    <span class="what"><b>Google OAuth 클라이언트 ID</b>
+      <span class="note">없이 빌드하면 릴리스 스크립트가 <em>실패</em>합니다(의도된 안전장치). Google 캘린더 연동 전용 — <strong>2단계</strong></span></span>
+    <span class="who you">당신이</span>
+  </div>
+</div>
+
+<p class="path">확인 방법(제가 방금 돌린 것과 같습니다): <code>npm run mas:preflight</code> — 6개 항목 중 2개가 ✗로 나옵니다.</p>
+
+<h2>1단계 — 프로비저닝 프로파일 받기</h2>
+
+<p>App Store 빌드는 앱 안에 <strong>이 앱 전용</strong> 프로파일을 심어야 합니다. 다른 앱 것이면 빌드는 멀쩡히
+끝나고 <em>업로드 단계에서</em> 거절됩니다 — 그래서 프리플라이트가 미리 막습니다.</p>
+
+<div class="step">
+  <span class="step-n">1</span>
+  <div class="step-body">
+    <h3>App ID — 이미 있습니다. 대신 <em>이름</em>을 고치세요</h3>
+    <p class="path"><b>developer.apple.com</b> → <b>Certificates, Identifiers &amp; Profiles</b> → <b>Identifiers</b></p>
+    <p>2026-09-30 확인 결과 목록은 이렇습니다:</p>
+<pre><code>Name        Identifier
+BicMac      com.supaicy.bicmac     ← 다른 제품, 무관
+Greenday    com.supaicy.haru       ← 옛 것. 배포된 적 없음
+Greenday    com.begreen.greenday   ← 우리가 쓸 것. 이미 등록됨</code></pre>
+    <p><strong>필요한 App ID는 이미 있습니다.</strong> 새로 등록할 것이 없으니 2로 넘어가셔도 됩니다.
+    다만 그 전에 한 가지만 정리하는 편이 안전합니다.</p>
+    <div class="warn-box">
+      <strong>둘 다 이름이 "Greenday"입니다.</strong> Identifier는 다른데 라벨이 같아서, 다음 단계의 프로파일
+      드롭다운과 <strong>App Store Connect의 Bundle ID 드롭다운</strong>에서 잘못 고르기 쉽습니다.
+      그리고 <strong>App Store Connect 앱 레코드는 한 번 만들면 Bundle ID를 바꿀 수 없습니다.</strong>
+      <br><br>
+      <code>com.supaicy.haru</code>를 열어 Description을 <code>Greenday (OLD — do not use)</code> 처럼
+      바꿔 두세요. Identifier는 못 바꾸지만 <strong>이름은 바꿀 수 있습니다.</strong>
+    </div>
+    <p><strong>지우지는 마세요.</strong> <code>com.supaicy.haru</code>는 한 번도 배포된 적이 없어
+    (실제로 나간 v1.4.1의 번들 ID는 <code>com.haru.app</code>이었습니다 —
+    <code>docs/explanation-번들-ID-마이그레이션.md</code>) 사용자도 App Store Connect 레코드도 붙어 있지
+    않습니다. 지워도 안전하지만 얻는 것이 없고, 참조하는 프로파일이 남아 있으면 삭제가 막히거나
+    그 프로파일이 무효가 됩니다. 라벨만 바꾸면 헷갈림은 사라집니다.</p>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-n">2</span>
+  <div class="step-body">
+    <h3>프로파일 만들기</h3>
+    <p class="path">같은 화면 왼쪽 → <b>Profiles</b> → <b>+</b></p>
+    <ol>
+      <li>종류는 <b>Distribution</b> 묶음 아래의 <b>Mac App Store Connect</b>를 고릅니다.
+        (Apple이 이름을 종종 바꿉니다 — <b>Mac App Store</b>로 보일 수도 있습니다. <strong>macOS · 배포용</strong>이면 맞습니다.
+        <b>Developer ID</b>나 <b>Mac Development</b>는 아닙니다.)</li>
+      <li>App ID로 <code>com.begreen.greenday</code>를 고릅니다.</li>
+      <li>인증서로 <b>Apple Distribution: MINSEOK SHIN</b>을 고릅니다. (이미 이 맥에 있는 그것입니다.)</li>
+      <li>이름은 자유 — 예: <code>Greenday Mac App Store</code>.</li>
+      <li><b>Generate</b> → <b>Download</b>.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-n">3</span>
+  <div class="step-body">
+    <h3>받은 파일을 정해진 자리에 두기</h3>
+    <p>내려받은 파일은 보통 <code>~/Downloads/Greenday_Mac_App_Store.provisionprofile</code> 같은 이름입니다.
+    아래를 터미널에 그대로 붙여 넣으면 이름까지 맞춰 옮깁니다.</p>
+<pre><code>cd ~/Code/services/greenDay
+cp ~/Downloads/*.provisionprofile resources/embedded.provisionprofile
+npm run mas:preflight</code></pre>
+    <p>프리플라이트의 <b>2/6 프로비저닝 프로파일</b>이 이렇게 나오면 성공입니다:</p>
+<pre><code>  ✓ 프로파일 App ID 일치: 32R6RHXU36.com.begreen.greenday
+  ✓ 플랫폼: macOS
+  ✓ 팀: 32R6RHXU36
+  ✓ 만료: 2027-…</code></pre>
+    <p><code>✗ 프로파일이 다른 앱의 것입니다</code>가 나오면 1단계의 App ID를 잘못 고른 것이니 다시 발급하면 됩니다.</p>
+  </div>
+</div>
+
+<h2>2단계 — Google OAuth 클라이언트 ID 받기</h2>
+
+<p>Google 캘린더 연동에만 쓰이는 값이고 <strong>비밀이 아닙니다</strong>(공개 클라이언트 + PKCE). 다만 빌드 시점에 앱에
+박히기 때문에, 없이 나간 릴리스는 연동이 통째로 죽습니다 — 그래서 릴리스 빌드가 값이 비면 실패하도록 돼 있습니다.</p>
+
+<div class="step">
+  <span class="step-n">1</span>
+  <div class="step-body">
+    <h3>Google Cloud 콘솔에서 만들기</h3>
+    <p class="path"><b>console.cloud.google.com</b> → 프로젝트 선택(또는 생성)</p>
+    <ol>
+      <li><b>API 및 서비스</b> → <b>라이브러리</b> → <b>Google Calendar API</b> → <b>사용 설정</b>.</li>
+      <li><b>OAuth 동의 화면</b> → 사용자 유형 <b>외부</b>. 앱 이름 <code>Greenday</code>, 지원 이메일,
+        개인정보처리방침 <code>https://begreen.dev/privacy</code>.
+        <b>범위 추가</b>에서 <code>.../auth/calendar.app.created</code> <strong>하나만</strong> 넣습니다.</li>
+      <li>게시 상태가 <b>테스트</b>인 동안은 <b>테스트 사용자</b>에 등록된 계정만 로그인됩니다 — 본인 계정을 넣어 두세요.</li>
+      <li><b>사용자 인증 정보</b> → <b>사용자 인증 정보 만들기</b> → <b>OAuth 클라이언트 ID</b> →
+        애플리케이션 유형 <b>데스크톱 앱</b>.</li>
+      <li>만들어진 <b>클라이언트 ID</b>를 복사합니다 — <code>…&#8203;.apps.googleusercontent.com</code>으로 끝나는 문자열입니다.</li>
+    </ol>
+    <div class="warn-box">
+      <strong>유형은 반드시 "데스크톱 앱"입니다.</strong> 번들 ID를 묻는 <b>iOS</b> 유형이 아닙니다.
+      이 앱은 루프백(<code>127.0.0.1</code>) 리디렉션 + PKCE를 쓰고, 데스크톱 앱 유형은 루프백을 자동 허용해서
+      리디렉션 URI를 따로 등록할 것이 없습니다. <strong>클라이언트 보안 비밀은 쓰지 않습니다</strong> — 코드가 보내지 않습니다.
+    </div>
+  </div>
+</div>
+
+<h2>제게 전달하는 방법</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>무엇</th><th>어떻게 주시면 되는지</th><th>비밀인가</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>프로비저닝 프로파일</b></td>
+      <td>1단계 3의 <code>cp</code> 명령으로 <code>resources/embedded.provisionprofile</code>에 두시고
+        <em>"프로파일 넣었다"</em>고만 말씀하시면 됩니다. 제가 그 자리에서 읽습니다.
+        <span class="note">옮기기가 번거로우면 내려받은 경로만 알려주셔도 제가 복사합니다.</span></td>
+      <td>아니요 — 공개 키와 App ID만 들어 있습니다. 서명에 쓰는 비밀키는 키체인에 있고 이 파일에 없습니다.</td>
+    </tr>
+    <tr>
+      <td><b>Google 클라이언트 ID</b></td>
+      <td>대화에 <strong>그대로 붙여 넣어</strong> 주세요.
+        <span class="note">예: <code>1234567890-abc….apps.googleusercontent.com</code></span></td>
+      <td>아니요 — 공개 클라이언트 ID입니다. <strong>클라이언트 보안 비밀은 주지 마세요</strong>(쓰지 않습니다).</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn-box">
+  <strong>절대 보내지 마실 것:</strong> Apple ID 비밀번호, 앱 암호(<code>xxxx-xxxx-xxxx-xxxx</code>),
+  <code>.p12</code> 인증서 파일과 그 암호, Google 클라이언트 보안 비밀.
+  전부 <strong>이미 키체인에 있거나 필요하지 않습니다.</strong> 업로드는 키체인의 <code>AC_PASSWORD</code>를
+  스크립트가 직접 읽어 쓰고, 값은 화면에도 로그에도 남지 않습니다.
+</div>
+
+<h2>그 뒤 제가 하는 것</h2>
+
+<ol>
+  <li><code>npm run mas:preflight</code> — 6개 항목 전부 ✓ 확인.</li>
+  <li><code>GOOGLE_OAUTH_CLIENT_ID=&lt;주신 값&gt; npm run mas:build</code> — 유니버설(arm64 + x86_64) 서명 빌드,
+    <code>.pkg</code>까지. <strong>여기가 이번 진단에서 electron-builder를 26으로 올린 뒤 아직 실제로 못 돌려본 구간입니다</strong> —
+    서명이 붙는 경로라 인증서 없이는 확인할 수 없었습니다. 깨지면 제가 고칩니다.</li>
+  <li>만들어진 앱을 실제로 띄워 <strong>샌드박스에서 동작하는지</strong> 확인 —
+    특히 Google 로그인의 루프백 콜백(샌드박스에서 리스닝 소켓이 열리는지는 서명 빌드로만 확인됩니다),
+    캘린더 동기화, 자동 업데이트가 꺼져 있는지, 전역 단축키가 꺼져 있는지.</li>
+  <li><code>npm run mas:upload</code> — 검증 후 App Store Connect 업로드.
+    <strong>이건 외부로 나가는 되돌리기 어려운 작업이라, 실행 전에 따로 확인받겠습니다.</strong></li>
+</ol>
+
+<h2>제가 할 수 없는 것</h2>
+
+<ul>
+  <li><strong>developer.apple.com·Google 콘솔 로그인</strong> — 그래서 위 2단계가 필요합니다.</li>
+  <li><strong>App Store Connect에서 심사 제출</strong> — 스크린샷·설명·가격·연령 등급은 웹에서 사람이 넣습니다.
+    (스크린샷 12장은 이미 저장소에 있습니다 — <code>docs/app-store/</code>.)</li>
+  <li><strong>심사 답변</strong> — <code>com.apple.security.network.server</code>를 왜 쓰는지 물어올 수 있습니다.
+    답변 문구가 <code>docs/app-store-submission.md</code>에 준비돼 있습니다(로그인 하는 동안만, <code>127.0.0.1</code>에만 바인드).</li>
+</ul>
+
+<h2>참고 — 지금 당장 할 수 있는 다른 채널</h2>
+
+<div class="lede">
+  <p><strong>직접 배포(다운로드) 채널은 Google ID만 있으면 바로 됩니다.</strong> 인증서·공증 자격증명·GitHub 토큰이
+  모두 준비돼 있어서, 프로비저닝 프로파일이 없어도 <code>GOOGLE_OAUTH_CLIENT_ID=&lt;값&gt; npm run release</code>로
+  서명·공증된 dmg를 만들어 GitHub 릴리스에 올릴 수 있습니다. App Store보다 빠른 길입니다.</p>
+</div>
+
+<p>GitHub Actions로 자동화하려면 시크릿 7개가 더 필요합니다(현재 <code>HOMEBREW_TAP_TOKEN</code> 하나만 등록됨) —
+<code>CSC_LINK</code>, <code>CSC_KEY_PASSWORD</code>, <code>APPLE_API_KEY_B64</code>, <code>APPLE_API_KEY_ID</code>,
+<code>APPLE_API_ISSUER</code>, <code>APPLE_TEAM_ID</code>, <code>GOOGLE_OAUTH_CLIENT_ID</code>.
+<strong>로컬에서 릴리스한다면 없어도 됩니다.</strong> 필요해지면 그때 따로 안내하겠습니다.</p>
+
+<footer>
+  2026-09-26 이 맥에서 실측 · 키체인 신원 4개, <code>notarytool</code> 프로파일, 키체인 <code>AC_PASSWORD</code>,
+  <code>gh</code> 로그인, <code>npm run mas:preflight</code> 6개 항목 확인<br>
+  근거 스크립트: <code>scripts/mas-preflight.sh</code> · <code>scripts/mas-upload.sh</code> · <code>scripts/release.sh</code>
+</footer>
+
+</main>
+</body>
+</html>

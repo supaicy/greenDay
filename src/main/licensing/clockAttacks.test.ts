@@ -217,6 +217,39 @@ describe('미래로 조작된 시작일이 창을 무한히 밀지 못한다', (
     const honest = NOW
     const h = boot({ trialStartMs: honest, lastSeenMs: NOW }, { at: NOW - 25 * 365 * DAY })
     expect(h.record.trialStartMs).toBe(honest)
+    // 파일만 지키는 것으로는 부족하다 — 그 실행이 잠기면 벽돌은 그대로다.
+    // (licenseManager.test.ts 결함 5가 남은 날짜까지 함께 못 박는다.)
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+  })
+
+  it('벽돌 방지가 내주는 것은 창 하나뿐이다 — 둘 다 미래로 써넣어도', () => {
+    // 위 갈래가 기록된 시작일을 그대로 믿으므로, `trialStartMs`와 `lastSeenMs`를
+    // **둘 다** 미래로 써넣은 위조는 창을 하나 얻는다. 그건 `resolveTrialStart`가
+    // 이미 받아들인 값("한 번의 편집 = 최대 한 창, 설정 폴더 삭제와 같다")이고,
+    // 여기서 못 박는 것은 **그 창이 실제로 닫힌다**는 것이다.
+    //
+    // 시간은 벽시계가 아니라 uptime으로 흐른다: `clockSafeNow()`가 위조된
+    // `lastSeen`에 얼어붙어 있어 단조 증거만 창을 닫을 수 있다.
+    const forged = NOW + 100 * 365 * DAY
+    let h = boot({ trialStartMs: forged, lastSeenMs: forged })
+    expect(h.manager.allowsPaidFeatures()).toBe(true)
+
+    h.idle(TRIAL_DURATION_MS + DAY)
+    h.wake()
+    expect(h.manager.getState().status).toBe('trialExpired')
+
+    // 재시작해도 끝이다 — 다시 편집하지 않는 한 새 창은 없다.
+    h = h.relaunch(NOW + TRIAL_DURATION_MS + DAY)
+    expect(h.manager.allowsPaidFeatures()).toBe(false)
+  })
+
+  it('미래 시작일은 lastSeen을 앞세워도 창이 길어지지 않는다', () => {
+    // 벽돌 방지 갈래로 들어가려고 `lastSeen`만 살짝 앞세우고 시작일은 100년 뒤로
+    // 써넣는 위조. 기록된 시작일을 무조건 믿으면 창이 100년이 되므로, 믿는 것은
+    // **래칫 안쪽**(`trialStart <= lastSeen`)일 때뿐이다 — 시계가 뒤로 간 정직한
+    // 기기는 언제나 그 안쪽이다(시작일은 과거, 래칫은 진짜 지금).
+    const h = boot({ trialStartMs: NOW + 100 * 365 * DAY, lastSeenMs: NOW + 40 * DAY })
+    expect(h.manager.getState().status).toBe('trialExpired')
   })
 
   it('보정한 값을 파일에 남긴다 — 그래야 다음 실행이 같은 창을 본다', () => {

@@ -1,6 +1,6 @@
 # 레퍼런스 — IPC 채널
 
-2026-09-08 `ebf40d6` 기준. 출처는 `src/main/ipc-handlers.ts`, `src/main/app-ipc.ts`, `src/main/migration/boot.ts`, `src/main/index.ts`(메인→렌더러 이벤트), `src/preload/index.ts`(렌더러가 부르는 이름), 등급 목록은 `src/main/ipc-gate.test.ts` 의 `FREE_CHANNELS`.
+2026-09-08 `ebf40d6` 기준(2026-10-07 `5894ea5` 에서 할일 삭제·복원, 일괄 수정, AI 스트림, 동기화, 업데이트 이벤트를 다시 맞췄다). 출처는 `src/main/ipc-handlers.ts`, `src/main/app-ipc.ts`, `src/main/migration/boot.ts`, `src/main/index.ts`(메인→렌더러 이벤트), `src/preload/index.ts`(렌더러가 부르는 이름), 등급 목록은 `src/main/ipc-gate.test.ts` 의 `FREE_CHANNELS`.
 
 ## 규칙
 
@@ -41,12 +41,12 @@
 | `get-trash-tasks` | free | — | 행 배열 | `getTrashTasks()` |
 | `create-task` | paid | `task` → `validateTaskInput` | `void` | `createTask` |
 | `update-task` | paid | `task` → `validateTaskUpdate` | `void` | `updateTask` |
-| `delete-task` | paid | `id` | `void` (휴지통) | `deleteTask` |
-| `restore-task` | paid | `id` | `void` | `restoreTask` |
-| `permanent-delete-task` | paid | `id` | `void` | `permanentDeleteTask` |
+| `delete-task` | paid | `id` | `void` (휴지통). 자손을 같은 시각으로 함께 내리고 `deleted_with` 에 뿌리 id 를 적는다(따로 휴지통에 있던 행과 그 아래는 건너뛴다) | `deleteTask` |
+| `restore-task` | paid | `id` | `string[]` — 실제로 휴지통에서 꺼낸 id. 같은 삭제 조작(`deleted_with`·`deleted_at`)으로 내려간 자손과 휴지통에 있던 조상을 함께 올린다. 렌더러는 이 목록을 그대로 옮긴다(`applyRestored`) | `restoreTask` |
+| `permanent-delete-task` | paid | `id` | `void` — 자손까지 함께 지운다 | `permanentDeleteTask` |
 | `empty-trash` | paid | — | `void` | `emptyTrash` |
 | `reorder-tasks` | paid | `ids: string[]` | `void` | `reorderTasks` |
-| `batch-update-tasks` | paid | `ids, updates` | `void` | `batchUpdateTasks` |
+| `batch-update-tasks` | paid | `ids, updates` → `validateBatchUpdate` | `void` | `batchUpdateTasks` |
 
 ### 습관·포모도로·점수
 
@@ -86,7 +86,7 @@
 | `ai:set-config` | paid | `updates` | | `aiSetConfig(updates)` |
 | `ai:create-task` | paid | `input, tasks` | 구조화된 할일 | `aiCreateTask` |
 | `ai:interpret-action` | paid | `message, tasks` | 액션 해석 | `aiInterpretAction` |
-| `ai:stream-chat` | paid | `message, tasks, history` | `void` — 결과는 아래 `ai:stream-*` 이벤트로 | `aiStreamChat` |
+| `ai:stream-chat` | paid | `message, tasks, history, requestId` | `void` — 결과는 아래 `ai:stream-*` 이벤트로, 같은 `requestId` 를 달고 | `aiStreamChat` |
 | `ai:get-history` | free | — | 메시지 배열 (`ai-chat.json`) | `aiGetHistory()` |
 | `ai:save-history` | paid | `messages` | `void` | `aiSaveHistory` |
 | `ai:pull-model` | paid | `model` | `void` — 진행은 `ai:pull-*` 이벤트로 | `aiPullModel(model)` |
@@ -101,7 +101,7 @@
 | `calendar:save-credentials` | paid | `{ serverUrl?, username?, password? }` — 오리진·계정이 바뀌면 비밀번호·캘린더·동기화 상태를 버린다 | 공개 설정 | `calendarSaveCredentials(input)` |
 | `calendar:test-connection` | paid | — | `{ ok, message, calendars }` (일정 담을 수 있는 것만) | `calendarTestConnection()` |
 | `calendar:select` | paid | `url, name` — 설정된 서버 오리진 밖이면 throw | 공개 설정 | `calendarSelect(url, name)` |
-| `calendar:sync-now` | paid | — | `{ ok, message, result }` (created/updated/deleted/skippedNoDate/failures) | `calendarSyncNow()` |
+| `calendar:sync-now` | paid | — . 데이터베이스가 읽기 전용이면 서버를 건드리지 않고 `ok: false` | `{ ok, message, result }` (created/updated/deleted/skippedNoDate/failures) | `calendarSyncNow()` |
 | `calendar:disconnect` | free | — | 기본 설정 (`clearSecret: true` — 보호 모드도 물러난다) | `calendarDisconnect()` |
 
 ### Google — `ipc-handlers.ts` → `google-config.ts`, `google-auth-flow.ts`, `google-sync.ts`
@@ -112,7 +112,7 @@
 |---|---|---|---|---|
 | `google:get-config` | free | — | 공개 설정 + `clientIdConfigured: boolean` | `googleGetConfig()` |
 | `google:connect` | paid | — (브라우저 로그인, 루프백 콜백). 로그인 뒤 **`Greenday` 캘린더를 찾거나 만든다**(`google/app-calendar.ts`) — 캘린더를 고르는 채널은 없다 | `{ ok, message }` | `googleConnect()` |
-| `google:sync-now` | paid | — . 매번 캘린더를 다시 확보한다(저장된 id 가 죽었으면 새로 만들고 상태를 비운다) | `{ ok, message, result }` | `googleSyncNow()` |
+| `google:sync-now` | paid | — . 매번 캘린더를 다시 확보한다(저장된 id 가 죽었으면 새로 만들고 상태를 비운다). 데이터베이스가 읽기 전용이면 서버를 건드리지 않고 `ok: false`. 할당량 초과(`rate_limit`)면 그 자리에서 멈추고 `ok: false` 와 그때까지의 `result` | `{ ok, message, result }` | `googleSyncNow()` |
 | `google:disconnect` | free | — (서버 revoke 시도 후 로컬 토큰 삭제, `clearSecret: true`). `calendarId`·`calendarName`·`syncState` 는 **남긴다** — 목록 API 가 없어 지우면 재연결 때 캘린더가 하나 더 생긴다 | 토큰 없는 설정 | `googleDisconnect()` |
 
 ### 언어·업데이트 — `app-ipc.ts`
@@ -143,18 +143,20 @@ preload 가 `on<이름>(callback)` 으로 노출하고 해제 함수를 돌려�
 |---|---|---|---|
 | `update-available` | `{ version, downloadUrl }` | `index.ts` autoUpdater (`canSelfUpdate` 일 때만 배선) | `onUpdateAvailable` |
 | `update-not-available` | — | 〃 | `onUpdateNotAvailable` |
+| `update-error` | — (원문 오류는 넘기지 않는다) | 〃 autoUpdater `'error'` — 우리가 연 확인이 진행 중이고 다운로드 중이 아닐 때 | `onUpdateError` |
+| `update-download-error` | — | 〃 autoUpdater `'error'` — 그 밖의 경우(다운로드·설치 실패) | `onUpdateDownloadError` |
 | `update-download-progress` | `percent: number` | 〃 | `onUpdateProgress` |
 | `update-downloaded` | — | 〃 | `onUpdateDownloaded` |
-| `ai:stream-token` | `token: string` | `ai:stream-chat` 핸들러 | `onAiStreamToken` |
-| `ai:stream-done` | — | 〃 | `onAiStreamDone` |
-| `ai:stream-error` | `error: string` | 〃 | `onAiStreamError` |
+| `ai:stream-token` | `token: string, requestId: string` | `ai:stream-chat` 핸들러 | `onAiStreamToken` |
+| `ai:stream-done` | `requestId: string` | 〃 | `onAiStreamDone` |
+| `ai:stream-error` | `error: string, requestId: string` | 〃 | `onAiStreamError` |
 | `ai:pull-progress` | `{ status, completed?, total?, percent }` | `ai:pull-model` 핸들러 | `onAiPullProgress` |
 | `ai:pull-done` | — | 〃 | `onAiPullDone` |
 | `ai:pull-error` | `error: string` | 〃 | `onAiPullError` |
 | `license:changed` | `PublicLicenseState` | `licensing/service.ts` `broadcast()` — 상태 전이·마감 타이머·재검증 | `onLicenseChanged` |
-| `global-quick-add` | — | `register-global-shortcut` 이 등록한 `Cmd/Ctrl+Shift+A` | `onGlobalQuickAdd` |
+| `global-quick-add` | — | `register-global-shortcut` 이 등록한 `Cmd/Ctrl+Shift+A` → `main-window.ts` `requestQuickAdd`. 창이 없으면 새로 만들고, 렌더러가 다시 `register-global-shortcut` 을 부를 때 보낸다(`flushPendingQuickAdd`) | `onGlobalQuickAdd` |
 
-## 무료 채널 전체 (36개, `FREE_CHANNELS`)
+## 무료 채널 전체 (35개, `FREE_CHANNELS`)
 
 ```
 ai:get-config  ai:get-history  app:capabilities  app:notification-permission

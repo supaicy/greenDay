@@ -1,10 +1,10 @@
-import { dialog, Notification, globalShortcut, BrowserWindow, shell } from 'electron'
+import { dialog, Notification, globalShortcut, shell } from 'electron'
 import { writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { v4 as uuid } from 'uuid'
 import * as db from './database'
 import * as ai from './ai-service'
-import { validateTaskInput, validateTaskUpdate } from './validate'
+import { validateTaskInput, validateTaskUpdate, validateBatchUpdate } from './validate'
 import { readConfigFile, writeConfigFile, toPublicConfig, DEFAULT_CONFIG, type CalendarConfig } from './calendar-config'
 import { CalDavClient, CalDavError } from './caldav/client'
 import { runSync } from './calendar-sync'
@@ -17,7 +17,7 @@ import {
   type GoogleConfig
 } from './google-config'
 import { GoogleCalendarClient, GoogleApiError } from './google/calendar'
-import { needsRefresh, refreshTokens, revokeToken, OAuthError } from './google/oauth'
+import { needsRefresh, refreshTokens, revokeToken, OAuthError, OAUTH_REFUSAL_CODES } from './google/oauth'
 import { startGoogleAuth } from './google-auth-flow'
 import { runGoogleSync } from './google-sync'
 import { ensureAppCalendar } from './google/app-calendar'
@@ -27,11 +27,18 @@ import { licensing, publicLicenseState } from './licensing/service'
 import { handle, LICENSE_REQUIRED } from './ipc-gate'
 import { asPurchaseSource, purchaseUrl, recoverUrl } from './licensing/endpoints'
 import { toLocalDateString } from '../shared/date'
+import { flushPendingQuickAdd, requestQuickAdd } from './main-window'
 
 // 빌드 때 주입되는 구글 OAuth 클라이언트 ID. 데스크톱 앱은 공개 클라이언트이므로
 // 이 값은 비밀이 아니다 — 인가 코드 가로채기는 PKCE가 막는다.
 declare const __GOOGLE_CLIENT_ID__: string
 const BUILTIN_GOOGLE_CLIENT_ID = typeof __GOOGLE_CLIENT_ID__ === 'string' ? __GOOGLE_CLIENT_ID__ : ''
+
+/**
+ * UTF-8 BOM. **CSV에만** 붙인다 — 왜 붙이고 왜 JSON에는 안 붙이는지는 쓰는 자리의 주석에.
+ * 리터럴 문자로 적지 않는다: 눈에 보이지 않아서 편집·붙여넣기·포매터에 조용히 사라진다.
+ */
+const UTF8_BOM = '\uFEFF'
 
 function csvCell(value: unknown): string {
   const s = String(value ?? '')
@@ -114,7 +121,7 @@ export function setupIpcHandlers(): void {
   handle('permanent-delete-task', 'paid', (_, id) => db.permanentDeleteTask(id))
   handle('empty-trash', 'paid', () => db.emptyTrash())
   handle('reorder-tasks', 'paid', (_, ids) => db.reorderTasks(ids))
-  handle('batch-update-tasks', 'paid', (_, ids, updates) => db.batchUpdateTasks(ids, updates))
+  handle('batch-update-tasks', 'paid', (_, ids, updates) => db.batchUpdateTasks(ids, validateBatchUpdate(updates)))
 
   // Habits
   handle('get-habits', 'free', () => db.getHabits())
@@ -138,10 +145,11 @@ export function setupIpcHandlers(): void {
   handle('pick-attachment', 'paid', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
+      // 형식 이름은 macOS가 그대로 띄운다 — 영어 UI에 한국어가 섞이지 않게 표를 거친다.
       filters: [
-        { name: '모든 파일', extensions: ['*'] },
-        { name: '이미지', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
-        { name: '문서', extensions: ['pdf', 'doc', 'docx', 'txt', 'md'] }
+        { name: uiStrings().filterAllFiles, extensions: ['*'] },
+        { name: uiStrings().filterImages, extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+        { name: uiStrings().filterDocuments, extensions: ['pdf', 'doc', 'docx', 'txt', 'md'] }
       ]
     })
     if (result.canceled) return []
@@ -210,7 +218,17 @@ export function setupIpcHandlers(): void {
             .join(',')
         )
         .join('\n')
-      writeFileSync(result.filePath, header + rows, 'utf-8')
+      // **BOM을 앞에 붙인다.** `.csv`에는 인코딩을 선언할 자리가 없어서 스프레드시트는
+      // 앞 바이트만 보고 짐작한다 — BOM이 없으면 엑셀은 시스템 코드페이지(한국어
+      // 윈도우는 CP949)로 읽고 한글 제목·설명·목록 이름이 통째로 깨져 나온다.
+      // 헤더가 전부 ASCII라 앞부분만 보고 판단하는 쪽에는 단서조차 없다 — 첫
+      // 비ASCII 바이트는 첫 데이터 행 한참 안쪽이다.
+      // 내보내기는 잠긴 화면에서도 열어 두는 유일한 길인데(데이터를 인질로 잡지
+      // 않는다), 돌려준 파일을 사용자가 못 읽으면 그 약속이 말뿐이 된다.
+      // **JSON 쪽에는 붙이지 말 것** — `JSON.parse`는 앞선 U+FEFF에서 그대로 터지고
+      // 복원 경로(`database.ts`의 load/restore)가 바로 그 파서다. 두 방향을
+      // `exportEncoding.test.ts`가 각각 못 박는다.
+      writeFileSync(result.filePath, `${UTF8_BOM}${header}${rows}`, 'utf-8')
     } else {
       writeFileSync(result.filePath, exportedData, 'utf-8')
     }
@@ -247,20 +265,27 @@ export function setupIpcHandlers(): void {
   handle('ai:set-config', 'paid', (_, updates) => ai.setAiConfig(updates))
   handle('ai:create-task', 'paid', (_, input, tasks) => ai.createTaskFromNL(input, tasks))
   handle('ai:interpret-action', 'paid', (_, message, tasks) => ai.interpretTaskAction(message, tasks))
-  handle('ai:stream-chat', 'paid', (event, message, tasks, history) => {
+  // **스트림 이벤트에 요청 id를 달아 보낸다.** 창에 채널은 하나뿐인데 스트림은 여럿
+  // 살아 있을 수 있다 — 렌더러가 리스너를 떼도 여기 `streamChat`은 끝까지 돈다(취소
+  // 경로가 없다). id가 없으면 렌더러는 어느 스트림의 토큰인지 구분할 방법이 없어,
+  // 버려진 답변이 다음 답변 말머리에 붙고 그 done이 새 스트림을 끊어 버렸다.
+  handle('ai:stream-chat', 'paid', (event, message, tasks, history, requestId) => {
     const sender = event.sender
+    // `pullModel`과 같은 방식으로 한 번 정규화한다. 보낸 sender에게만 되돌아가므로 값
+    // 자체가 위험하진 않지만, 타입이 흔들리면 렌더러의 일치 검사가 조용히 어긋난다.
+    const id = String(requestId ?? '')
     ai.streamChat(
       message,
       tasks,
       history ?? [],
       (token) => {
-        if (!sender.isDestroyed()) sender.send('ai:stream-token', token)
+        if (!sender.isDestroyed()) sender.send('ai:stream-token', token, id)
       },
       () => {
-        if (!sender.isDestroyed()) sender.send('ai:stream-done')
+        if (!sender.isDestroyed()) sender.send('ai:stream-done', id)
       },
       (error) => {
-        if (!sender.isDestroyed()) sender.send('ai:stream-error', error)
+        if (!sender.isDestroyed()) sender.send('ai:stream-error', error, id)
       }
     )
   })
@@ -288,10 +313,68 @@ export function setupIpcHandlers(): void {
   const storeCalendarConfig = (config: CalendarConfig, options: { clearSecret?: boolean } = {}): void =>
     writeConfigFile(db.getCalendarConfigPath(), config, db.realCrypto, options)
 
-  // CalDAV 오류는 사용자에게 그대로 보여줄 수 있게 다듬어져 있다. 그 외 예외는
-  // 내부 정보가 새지 않도록 일반 문구로 바꾼다.
-  const describeError = (error: unknown): string =>
-    error instanceof CalDavError ? error.message : '알 수 없는 오류가 발생했습니다.'
+  /**
+   * CalDAV 오류를 렌더러가 띄울 문장으로 바꾼다. **`code`만 본다.**
+   *
+   * `error.message`를 그대로 내보내던 자리다. 그 문자열은 개발자용이라 한국어로
+   * 박혀 있고 `일정 조회:` 같은 컨텍스트까지 붙는데, `CalendarSyncSection`이
+   * `response.message`를 그대로 출력하므로 **영어 UI에 한국어가 그대로 떴다.**
+   * 밖으로 나가는 문장은 `uiStrings()`에서만 나온다.
+   *
+   * 원문에서 남기는 것은 상태 코드 하나다 — 언어가 없고, 문의가 들어왔을 때
+   * 유일하게 쓸모 있는 값이다. 우리 오류 타입이 아닌 예외는 내부 정보가 새지
+   * 않도록 일반 문구로 접는다.
+   */
+  const describeError = (error: unknown): string => {
+    const strings = uiStrings()
+    if (!(error instanceof CalDavError)) return strings.syncErrorUnknown
+    const text = strings.caldavErrors[error.code]
+    return error.status === null ? text : `${text} (${error.status})`
+  }
+
+  /**
+   * 두 사본이 **같은 계정**인가 — 오리진과 사용자명이 같고, 지금 사본에 비밀번호가 남아 있다.
+   *
+   * 연결 확인·동기화는 시작할 때 읽은 사본(`snapshot`)으로 요청을 보낸다. 동기화는 바뀐
+   * 할일마다 요청 한 건, 건마다 최대 30초라 그 사이 사용자가 "연결 해제"(무료, 즉시)를
+   * 누르거나 다른 서버로 옮길 수 있다. 그때 끝에서 사본을 통째로 쓰면 지운 사용자명·
+   * 비밀번호·캘린더 주소·동기화 상태가 되살아난다 — 사용자는 끊었다고 믿는데 앱은 계속
+   * 그 캘린더에 쓴다. 구글 쪽 `isSameGrant`가 닫은 것과 같은 종류다.
+   *
+   * 오리진은 `calendar:save-credentials`의 결속 판정과 같은 `normalizedOrigin`으로 본다.
+   * 그쪽이 "같은 계정"이라 보고 비밀번호를 유지하는 변경(대소문자·기본 포트)에 여기서
+   * 결과를 버리면, 이미 서버에 올린 일정을 다음 동기화가 다시 만든다.
+   * 비밀번호 값은 비교하지 않는다 — 같은 계정의 비밀번호만 바꾼 것은 같은 연결이다.
+   */
+  const isSameCalDavAccount = (snapshot: CalendarConfig, current: CalendarConfig): boolean => {
+    const origin = normalizedOrigin(snapshot.serverUrl)
+    return (
+      origin !== null &&
+      origin === normalizedOrigin(current.serverUrl) &&
+      Boolean(snapshot.username) &&
+      current.username === snapshot.username &&
+      Boolean(current.password)
+    )
+  }
+
+  /** 동기화 상태는 캘린더 하나의 것이다 — 그 사이 다른 캘린더를 골랐으면 같은 대상이 아니다. */
+  const isSameCalDavTarget = (snapshot: CalendarConfig, current: CalendarConfig): boolean =>
+    isSameCalDavAccount(snapshot, current) && current.calendarUrl === snapshot.calendarUrl
+
+  /**
+   * **이 실행이 붙잡은 연결이 아직 저장돼 있을 때만**, 지금 디스크에 있는 값 위에 이 실행이
+   * 가진 필드만 얹어 쓴다. 바뀌었거나 끊겼으면 아무것도 쓰지 않는다 — 끊은 설정에 오류
+   * 문장을 남기지도, 새 연결에 옛 실행의 상태를 붙이지도 않는다. 렌더러에 돌려줄 답은
+   * 호출처가 그대로 만든다.
+   */
+  const storeIfSameCalDav = (
+    snapshot: CalendarConfig,
+    same: (snapshot: CalendarConfig, current: CalendarConfig) => boolean,
+    patch: Partial<Pick<CalendarConfig, 'syncState' | 'lastSyncAt' | 'lastError'>>
+  ): void => {
+    const current = loadCalendarConfig()
+    if (same(snapshot, current)) storeCalendarConfig({ ...current, ...patch })
+  }
 
   handle('calendar:get-config', 'free', () => toPublicConfig(loadCalendarConfig()))
 
@@ -339,7 +422,7 @@ export function setupIpcHandlers(): void {
   handle('calendar:test-connection', 'paid', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password) {
-      return { ok: false, message: '계정과 앱 암호를 먼저 입력하세요.', calendars: [] }
+      return { ok: false, message: uiStrings().calendarCredentialsMissing, calendars: [] }
     }
     try {
       const client = new CalDavClient({
@@ -348,12 +431,14 @@ export function setupIpcHandlers(): void {
         password: config.password
       })
       const calendars = await client.discoverCalendars()
-      storeCalendarConfig({ ...config, lastError: null })
+      // 확인하는 동안 끊었거나 계정을 바꿨으면 쓰지 않는다(`isSameCalDavAccount` 참고).
+      // 계정의 확인이라 그 사이 고른 캘린더는 상관없다 — 고른 것을 되돌리지 않는다.
+      storeIfSameCalDav(config, isSameCalDavAccount, { lastError: null })
       // 일정을 담을 수 없는 컬렉션(미리알림 등)은 고를 수 없게 미리 걸러 보낸다.
       return { ok: true, message: null, calendars: calendars.filter((c) => c.supportsEvents) }
     } catch (error) {
       const message = describeError(error)
-      storeCalendarConfig({ ...config, lastError: message })
+      storeIfSameCalDav(config, isSameCalDavAccount, { lastError: message })
       return { ok: false, message, calendars: [] }
     }
   })
@@ -390,7 +475,29 @@ export function setupIpcHandlers(): void {
   handle('calendar:sync-now', 'paid', async () => {
     const config = loadCalendarConfig()
     if (!config.username || !config.password || !config.calendarUrl) {
-      return { ok: false, message: '연동 설정을 먼저 마치세요.', result: null }
+      return { ok: false, message: uiStrings().syncNotConfigured, result: null }
+    }
+    /**
+     * **읽기 전용 세션에서는 원격을 건드리지 않는다.**
+     *
+     * 데이터 파일을 못 읽으면 세션이 읽기 전용으로 내려가고 `data`는 빈 기본값이
+     * 된다. 그런데 `getTasks()`에는 `assertWritable()`이 없어서(읽기는 무료 채널이라
+     * 의도된 것) 조용히 `[]`를 돌려준다. 캘린더 설정은 **별도 파일**이라 멀쩡히
+     * 로드되므로 `syncState`에는 이전에 올린 항목이 전부 남아 있고,
+     * `planSync`의 마지막 루프가 "목록에 없는 것 = 지워진 것"으로 보아
+     * **사용자의 캘린더에서 Greenday 일정을 전부 삭제**한다.
+     *
+     * 로컬이 이미 안 읽히는 그 순간에 마지막 남은 사본이 날아간다. 서버 삭제는
+     * 앱에서 되돌릴 수 없고, 비워진 state가 저장되면서 무엇을 지웠는지 기록도
+     * 사라진다.
+     *
+     * 이 저장소는 같은 위험을 이미 알고 있었다 — `databaseReadOnly.test.ts`가
+     * "빈 백업으로 진짜 백업을 덮지 않는다"며 `exportData()`가 읽기 전용에서
+     * 던지도록 못박아 두었다. 동기화 채널 둘만 같은 가드를 못 받았고,
+     * `isDatabaseReadOnly()`는 export돼 있으면서 자기 테스트 말고는 호출처가 없었다.
+     */
+    if (db.isDatabaseReadOnly()) {
+      return { ok: false, message: uiStrings().syncBlockedReadOnly, result: null }
     }
     try {
       const result = await runSync({
@@ -404,8 +511,9 @@ export function setupIpcHandlers(): void {
         state: config.syncState,
         now: new Date().toISOString()
       })
-      storeCalendarConfig({
-        ...config,
+      // 시작 사본(`config`)을 통째로 쓰면 그 사이의 "연결 해제"가 되돌려진다
+      // (`isSameCalDavAccount` 참고). 같은 연결·같은 캘린더일 때만 지금 값 위에 얹는다.
+      storeIfSameCalDav(config, isSameCalDavTarget, {
         syncState: result.state,
         lastSyncAt: new Date().toISOString(),
         lastError: null
@@ -414,7 +522,7 @@ export function setupIpcHandlers(): void {
       return { ok: true, message: null, result: summary }
     } catch (error) {
       const message = describeError(error)
-      storeCalendarConfig({ ...config, lastError: message })
+      storeIfSameCalDav(config, isSameCalDavTarget, { lastError: message })
       return { ok: false, message, result: null }
     }
   })
@@ -437,17 +545,67 @@ export function setupIpcHandlers(): void {
   const storeGoogle = (config: GoogleConfig, options: { clearSecret?: boolean } = {}): void =>
     writeGoogleConfig(googleConfigPath(), config, db.realCrypto, options)
 
-  const describeGoogleError = (error: unknown): string =>
-    error instanceof GoogleApiError || error instanceof OAuthError ? error.message : '알 수 없는 오류가 발생했습니다.'
+  /**
+   * 구글 쪽도 같다 — 문장은 `code`로만 고른다(위 `describeError` 참고).
+   *
+   * 다만 인덱싱이 느슨하다: `GoogleApiError['code']`는 닫힌 유니온이지만
+   * `OAuthError.code`는 그냥 `string`이라(google/oauth.ts) 타입이 전부를 못 잡는다.
+   * 그래서 **모르는 code는 반드시 접는다** — 접지 않으면 `undefined`가 그대로
+   * 렌더러로 가서 오류 칸이 빈 줄로 뜬다.
+   */
+  const describeGoogleError = (error: unknown): string => {
+    const strings = uiStrings()
+    if (!(error instanceof GoogleApiError) && !(error instanceof OAuthError)) return strings.syncErrorUnknown
+    const text = (strings.googleErrors as Record<string, string | undefined>)[error.code] ?? strings.syncErrorUnknown
+    // network 오류의 status는 0이다 — 붙여 봐야 아무 뜻이 없다.
+    return error instanceof GoogleApiError && error.status > 0 ? `${text} (${error.status})` : text
+  }
 
   const resolveClientId = (): string => BUILTIN_GOOGLE_CLIENT_ID || String(process.env.GOOGLE_OAUTH_CLIENT_ID ?? '')
 
   /**
+   * 두 사본이 **같은 그랜트**인가 — 같은 리프레시 토큰을 들고 있을 때만 그렇다.
+   *
+   * 실행 하나는 시작할 때 읽은 사본(`snapshot`)으로 요청을 보낸다. 요청마다 최대 30초라
+   * 그 사이 사용자가 끊거나 다시 연결할 수 있고, 그러면 이 실행이 얻은 것(갱신한 토큰·
+   * 캘린더 id·동기화 상태·오류 문장)은 지금 저장된 연결(`current`)의 것이 아니다.
+   *
+   * 한쪽이라도 리프레시 토큰이 없으면 **다르다**고 본다. `null === null`은 "둘 다
+   * 모른다"이지 같은 연결이라는 증거가 아니다 — 끊고 리프레시 토큰 없이 다시 연결한
+   * 새 연결을 옛 사본으로 덮게 된다.
+   */
+  const isSameGrant = (snapshot: GoogleConfig, current: GoogleConfig): boolean => {
+    const held = snapshot.tokens?.refreshToken
+    return Boolean(held) && current.tokens?.refreshToken === held
+  }
+
+  /**
+   * 실패를 `lastError`에 적는다 — **이 실행이 붙잡은 연결이 아직 저장돼 있을 때만.**
+   * 그 사이 끊었으면 깨끗이 비운 설정에 오류가 남고, 다시 연결했으면 새 계정에 옛
+   * 계정의 오류("다시 연결해 주세요")가 붙는다. 화면에 돌려줄 문장은 어느 쪽이든 만든다.
+   */
+  const noteGoogleError = (snapshot: GoogleConfig, error: unknown): string => {
+    const message = describeGoogleError(error)
+    const current = loadGoogle()
+    if (isSameGrant(snapshot, current)) storeGoogle({ ...current, lastError: message })
+    return message
+  }
+
+  /**
    * 유효한 액세스 토큰을 확보한다. 만료가 가까우면 미리 갱신하고 갱신 결과를 저장한다.
-   * 갱신에 실패하면 토큰을 버린다 — 죽은 토큰을 들고 계속 시도해 봐야 소용없고,
-   * 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
+   * 구글이 그랜트를 거절하면 토큰을 버린다 — 죽은 토큰을 들고 계속 시도해 봐야
+   * 소용없고, 사용자에게 재연결이 필요하다는 신호를 줘야 한다.
+   * 서버에 **닿지 못한** 실패는 거절이 아니므로 토큰을 남긴다.
+   *
+   * **갱신이 끝난 뒤의 저장은 지금 디스크에 있는 값 위에 한다.** 갱신은 최대 30초
+   * 걸리고, 그 사이 사용자가 "연결 해제"를 누를 수 있다. 시작할 때 읽어 둔 `config`로
+   * 쓰면 지운 리프레시 토큰이 되살아난다. 그래서 갱신에 쓴 리프레시 토큰이 아직
+   * 저장돼 있을 때만(`isSameGrant`) 그 결과를 반영한다. 실패도 같다 — 바뀐 연결에는
+   * 토큰도 오류 문장도 손대지 않는다.
    */
   const ensureGoogleToken = async (config: GoogleConfig): Promise<GoogleConfig> => {
+    // 아래 두 message는 **로그·cause 추적용이다.** 화면에 나가는 문장은
+    // `describeGoogleError`가 code(`not_connected`·`no_refresh_token`)로 고른다.
     if (!config.tokens) throw new OAuthError('not_connected', '구글 계정이 연결되어 있지 않습니다.')
     if (!needsRefresh(config.tokens, new Date().toISOString())) return config
     if (!config.tokens.refreshToken) {
@@ -462,11 +620,38 @@ export function setupIpcHandlers(): void {
         },
         (url, init) => fetch(url, init)
       )
-      const next = { ...config, tokens }
+      const current = loadGoogle()
+      if (!current.tokens) {
+        // 갱신하는 동안 연결이 해제됐다. 받은 토큰을 저장하면 해제가 무효가 된다.
+        throw new OAuthError('not_connected', '갱신 도중 구글 연결이 해제되었습니다.')
+      }
+      // 갱신하는 동안 다시 연결됐다 — 그쪽이 더 새 그랜트다. 우리 결과는 버린다.
+      if (!isSameGrant(config, current)) return current
+      const next = { ...current, tokens }
       storeGoogle(next)
       return next
     } catch (error) {
-      storeGoogle({ ...config, tokens: null, lastError: describeGoogleError(error) })
+      // 그 사이 끊었거나(위에서 우리가 던진 `not_connected`도 이 경우다) 다시 연결했다.
+      // 이 실패는 지금 저장된 연결의 것이 아니므로 아무것도 쓰지 않는다 — 토큰을 버리지
+      // 않는 것은 물론이고, 새 계정에 옛 그랜트의 오류 문장을 붙이지도 않는다.
+      const current = loadGoogle()
+      if (!isSameGrant(config, current)) throw error
+      // **거부와 불통을 뭉치지 않는다.** 구글이 실제로 그랜트를 거절했을 때만 토큰을
+      // 버린다. 오프라인·DNS·TLS 순간 실패는 `OAuthError('network')`로 오는데, 갱신
+      // 실패를 전부 "그랜트가 죽었다"로 읽으면 비행기에서 "지금 동기화" 한 번이
+      // 리프레시 토큰을 디스크에서 지운다(`tokens: null` → `tokens_enc: null`,
+      // 보호 모드가 아니면 `preserveCiphertext`가 되살릴 것도 없다). 그러면 브라우저
+      // OAuth 동의를 처음부터 다시 받아야 하고, 이 경로는 `revokeToken`도 안 부르니
+      // 구글 계정에는 죽은 승인이 남는다.
+      //
+      // 버리는 것은 이름 있는 거절(`OAUTH_REFUSAL_CODES`, google/oauth.ts)일 때뿐이다.
+      // `token_failed`는 그 이름들을 뺀 모든 비정상 응답(구글의 5xx 포함)이라 불통 쪽이다.
+      const refused = error instanceof OAuthError && OAUTH_REFUSAL_CODES.has(error.code)
+      storeGoogle({
+        ...current,
+        tokens: refused ? null : current.tokens,
+        lastError: describeGoogleError(error)
+      })
       throw error
     }
   }
@@ -478,11 +663,31 @@ export function setupIpcHandlers(): void {
    * 쓸 캘린더를 확보한다 — 앱이 만든 `Greenday` 캘린더. `calendar.app.created` 범위는
    * 그 하나에만 닿으므로 사용자가 고를 것이 없다. 저장된 id가 죽었으면(지웠거나 다른
    * 계정) 새로 만들고 동기화 상태를 비운다. 연결 직후와 매 동기화 앞에서 부른다.
+   *
+   * 확보하는 동안 연결이 바뀌었으면 **여기서 멈춘다.** 저장만 건너뛰고 결과를 돌려주면
+   * 호출처가 끊은 계정을 향해 동기화 본문을 돌린다(`ensureGoogleToken`과 같은 code).
    */
   const ensureGoogleCalendar = async (config: GoogleConfig): Promise<GoogleConfig> => {
     const { config: next } = await ensureAppCalendar(googleClient(config), config)
-    storeGoogle(next)
+    if (!storeIfSameGrant(config, next)) {
+      throw new OAuthError('not_connected', '캘린더를 확보하는 동안 구글 연결이 바뀌었습니다.')
+    }
     return next
+  }
+
+  /**
+   * **이 실행이 시작할 때의 연결이 아직 그대로일 때만 저장한다.**
+   *
+   * 저장할 값은 시작할 때 읽은 사본 위에 만든다. 그 사이(캘린더 확보·동기화 본문은
+   * 요청 수십 건, 건마다 최대 30초) 사용자가 "연결 해제"를 누르면 디스크의 토큰은
+   * 이미 지워졌는데, 끝에서 사본을 통째로 쓰면 지운 리프레시 토큰이 되살아난다 —
+   * 사용자는 끊었다고 믿는데 앱은 계속 그 계정에 쓴다. 다시 연결했다면 새 연결을
+   * 옛 사본으로 덮는다. 둘 다 이번 실행의 결과를 버리는 게 맞다.
+   */
+  const storeIfSameGrant = (snapshot: GoogleConfig, next: GoogleConfig): boolean => {
+    if (!isSameGrant(snapshot, loadGoogle())) return false
+    storeGoogle(next)
+    return true
   }
 
   handle('google:get-config', 'free', () => ({
@@ -493,10 +698,7 @@ export function setupIpcHandlers(): void {
   handle('google:connect', 'paid', async () => {
     const clientId = resolveClientId()
     if (!clientId) {
-      return {
-        ok: false,
-        message: '구글 OAuth 클라이언트 ID가 설정되지 않았습니다. 빌드 설정을 확인하세요.'
-      }
+      return { ok: false, message: uiStrings().googleClientIdMissing }
     }
     const config = loadGoogle()
     let connected: GoogleConfig
@@ -505,8 +707,10 @@ export function setupIpcHandlers(): void {
       connected = { ...config, tokens, lastError: null }
       storeGoogle(connected)
     } catch (error) {
+      // 시작할 때의 사본(`config`)이 아니라 지금 값 위에 적는다 — 브라우저 동의는 몇 분이
+      // 걸릴 수 있고, 사본을 통째로 쓰면 그 사이 바뀐 연결을 되돌린다.
       const message = describeGoogleError(error)
-      storeGoogle({ ...config, lastError: message })
+      storeGoogle({ ...loadGoogle(), lastError: message })
       return { ok: false, message }
     }
     // 로그인 직후 캘린더까지 확보한다 — 사용자가 고를 단계가 없으므로 여기서 끝나야
@@ -515,37 +719,66 @@ export function setupIpcHandlers(): void {
       await ensureGoogleCalendar(connected)
       return { ok: true, message: null }
     } catch (error) {
-      const message = describeGoogleError(error)
-      storeGoogle({ ...loadGoogle(), lastError: message })
-      return { ok: false, message }
+      return { ok: false, message: noteGoogleError(connected, error) }
     }
   })
 
   handle('google:sync-now', 'paid', async () => {
     const loaded = loadGoogle()
     if (!loaded.tokens) {
-      return { ok: false, message: '구글 계정을 먼저 연결하세요.', result: null }
+      return { ok: false, message: uiStrings().syncGoogleNotConnected, result: null }
     }
+    /**
+     * **읽기 전용 세션에서는 원격을 건드리지 않는다.**
+     *
+     * 데이터 파일을 못 읽으면 세션이 읽기 전용으로 내려가고 `data`는 빈 기본값이
+     * 된다. 그런데 `getTasks()`에는 `assertWritable()`이 없어서(읽기는 무료 채널이라
+     * 의도된 것) 조용히 `[]`를 돌려준다. 캘린더 설정은 **별도 파일**이라 멀쩡히
+     * 로드되므로 `syncState`에는 이전에 올린 항목이 전부 남아 있고,
+     * `planSync`의 마지막 루프가 "목록에 없는 것 = 지워진 것"으로 보아
+     * **사용자의 캘린더에서 Greenday 일정을 전부 삭제**한다.
+     *
+     * 로컬이 이미 안 읽히는 그 순간에 마지막 남은 사본이 날아간다. 서버 삭제는
+     * 앱에서 되돌릴 수 없고, 비워진 state가 저장되면서 무엇을 지웠는지 기록도
+     * 사라진다.
+     *
+     * 이 저장소는 같은 위험을 이미 알고 있었다 — `databaseReadOnly.test.ts`가
+     * "빈 백업으로 진짜 백업을 덮지 않는다"며 `exportData()`가 읽기 전용에서
+     * 던지도록 못박아 두었다. 동기화 채널 둘만 같은 가드를 못 받았고,
+     * `isDatabaseReadOnly()`는 export돼 있으면서 자기 테스트 말고는 호출처가 없었다.
+     */
+    if (db.isDatabaseReadOnly()) {
+      return { ok: false, message: uiStrings().syncBlockedReadOnly, result: null }
+    }
+    // 이 실행이 붙잡은 연결. 실패를 적기 전에 이것이 아직 저장된 연결인지 대조한다.
+    let grant = loaded
     try {
-      const config = await ensureGoogleCalendar(await ensureGoogleToken(loaded))
+      grant = await ensureGoogleToken(loaded)
+      const config = await ensureGoogleCalendar(grant)
       const result = await runGoogleSync({
         client: googleClient(config),
         calendarId: config.calendarId ?? '',
         tasks: db.getTasks() as unknown as TaskRow[],
         state: config.syncState
       })
-      storeGoogle({
+      const { state, stoppedBy, ...summary } = result
+      if (stoppedBy) {
+        // 할당량에 걸려 중간에 멈췄다. 올린 만큼의 상태는 저장해야 다음 동기화가
+        // 같은 쓰기를 다시 태우지 않는다. 끝난 동기화가 아니므로 lastSyncAt은 두고,
+        // 요약(올린 수·남은 수)은 그대로 보여 준다.
+        const message = describeGoogleError(stoppedBy)
+        storeIfSameGrant(config, { ...config, syncState: state, lastError: message })
+        return { ok: false, message, result: summary }
+      }
+      storeIfSameGrant(config, {
         ...config,
-        syncState: result.state,
+        syncState: state,
         lastSyncAt: new Date().toISOString(),
         lastError: null
       })
-      const { state, ...summary } = result
       return { ok: true, message: null, result: summary }
     } catch (error) {
-      const message = describeGoogleError(error)
-      storeGoogle({ ...loadGoogle(), lastError: message })
-      return { ok: false, message, result: null }
+      return { ok: false, message: noteGoogleError(grant, error), result: null }
     }
   })
 
@@ -571,19 +804,21 @@ export function setupIpcHandlers(): void {
   })
 
   // Quick add (global shortcut)
-  handle('register-global-shortcut', 'free', () => {
+  handle('register-global-shortcut', 'free', (event) => {
     // MAS 샌드박스에서는 시스템 전역 단축키를 등록할 수 없어 조용히 실패 → no-op
     if (!currentCapabilities().hasGlobalShortcuts) return false
+    // **이 호출은 "렌더러가 이제 받을 수 있다"는 신호이기도 하다.** App.tsx가 이
+    // invoke 바로 다음 줄에서 `onGlobalQuickAdd` 리스너를 걸고, invoke는 비동기라
+    // 이 핸들러는 그 줄보다 뒤에 돈다. 창이 없던 동안 눌린 핫키를 여기서 흘려보낸다 —
+    // 창 생성 이벤트(`did-finish-load`)에 걸면 리스너보다 먼저 도착해 그대로
+    // 사라진다(main-window.ts의 `quickAddPending` 주석 참고).
+    flushPendingQuickAdd(event.sender)
+    // 창이 하나도 없을 때 무엇을 하는지는 `requestQuickAdd`가 안다. 여기서
+    // `getAllWindows()`를 직접 보던 동안, macOS에서 창을 닫으면(= 전역 단축키가
+    // 존재하는 이유인 바로 그 상태) 핫키가 무반응이면서 다른 앱의 Cmd+Shift+A는
+    // 계속 가로챘다 — 없는 것보다 나쁜 상태였다.
     try {
-      globalShortcut.register('CommandOrControl+Shift+A', () => {
-        const wins = BrowserWindow.getAllWindows()
-        if (wins.length > 0) {
-          const win = wins[0]
-          if (win.isMinimized()) win.restore()
-          win.focus()
-          win.webContents.send('global-quick-add')
-        }
-      })
+      globalShortcut.register('CommandOrControl+Shift+A', requestQuickAdd)
       return true
     } catch {
       return false

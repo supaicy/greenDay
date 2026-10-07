@@ -1,5 +1,218 @@
 # TODOS
 
+## 2026-09-26 진단 후 남은 것
+
+전수 진단으로 결함 65건을 찾아 63건을 고쳤다(브랜치 `qa/2026-09-25-diagnosis-fixes`, 커밋 51).
+보고서: `docs/reports/2026-09-25-전체-진단.html`. 아래는 **그 작업에서 의도적으로 남긴 것**이다.
+
+### ~~[P1] 의존성 취약점 35건~~ ✅ DONE (2026-09-26)
+
+**`npm audit`: 35 → 0건.** 제안한 순서 그대로 electron 먼저, electron-builder 다음,
+남은 것은 lockfile 갱신으로 닫았다.
+
+- `electron` 40.8.0 → **40.10.6** (`4b045dc`) — 권고 25건 중 24건. high 둘 포함
+  (custom protocol CORS 우회, `Function.prototype.bind`로 context isolation 우회).
+  선언 하한도 올려 `npm ci`가 되돌아가지 않게 했다.
+- `electron` 40.10.6 → **41.10.7** (`ee16442`) — 40.x가 못 닫은 마지막 하나
+  (sandboxed iframe의 allow-popups 우회, 41.10.3+ 필요). Chromium 144 → 146.
+  메이저 업이라 신뢰 경계·preload 표면·IPC 왕복·네비게이션 가드를 실측으로 다시 확인했다.
+- `electron-builder` 25.1.8 → **26.15.3** (`4a6661d`) — `tar` critical(CVSS 8.2) 등 20건.
+  `--mac --dir`로 실제 패키징하고 **만들어진 `Greenday.app`을 띄워** 확인했다.
+- 남은 15건은 semver 범위 안이라 lockfile만 갱신 (`57번째 커밋`).
+  출하물에 닿는 둘: `electron-updater` 6.8.3 → 6.8.9(교차 출처 리다이렉트에서
+  `Authorization` 헤더 유출, prod 의존성), `uuid` 11.1.0 → 11.1.1(버퍼 경계 검사).
+
+**2026-10-06 재측정: 그 뒤 새로 공개된 권고 18건**(high 8 · moderate 10). 비파괴
+`npm audit fix`로 undici·http-cache-semantics·source-map-js 3건을 닫아 **15건**이 남았다
+(아래 [P2] 남은 권고). audit이 "바로 고칠 수 있다"고 표시한 fast-glob·postcss-nested·
+electron-builder-squirrel-windows는 상위 패키지 경유 표시라 실제로는 안 닫혔다 —
+**표시 개수가 아니라 고친 뒤 재조회한 값을 적을 것.**
+
+**검증하지 못한 것:** 서명·공증·MAS 업로드는 인증서가 필요하다. electron-builder
+업그레이드는 설정 파싱과 패키징까지만 확인했다 — **첫 실제 릴리스 때 그 경로를
+반드시 다시 봐야 한다.**
+
+### [P2] 출시를 막고 있는 것 — 사람이 받아 와야 하는 둘 (2026-09-26 실측)
+
+인증서는 **이미 다 있다.** 이 맥 키체인에 `Apple Distribution`,
+`3rd Party Mac Developer Installer`, `Developer ID Application`이 모두 있고
+(팀 `32R6RHXU36`), notarytool 프로파일 `haru`와 키체인 `AC_PASSWORD`(업로드용),
+`gh` 로그인까지 준비돼 있다. 새로 발급할 인증서는 없다.
+
+`npm run mas:preflight`이 걸러내는 ✗는 둘뿐이다.
+
+1. **`resources/embedded.provisionprofile` 이 없다.** App ID
+   `com.begreen.greenday`는 **이미 등록돼 있다**(2026-09-30 확인) — Profiles →
+   **Mac App Store Connect** 유형, App ID `com.begreen.greenday`, 인증서
+   `Apple Distribution` → 내려받아 그 경로에 저장.
+
+   **주의: Identifiers에 "Greenday"라는 이름이 둘이다.** `com.supaicy.haru`(옛 것)와
+   `com.begreen.greenday`(쓸 것)의 Name이 같아서, 프로파일 드롭다운과 **App Store
+   Connect의 Bundle ID 드롭다운**에서 잘못 고르기 쉽다. ASC 앱 레코드는 만든 뒤에
+   Bundle ID를 바꿀 수 없다. 옛 것의 Description을 `Greenday (OLD — do not use)`로
+   바꿔 두거나, **프로파일 먼저 지우고 App ID를 지워도 된다**(2026-09-30 사용자에게
+   안내한 방식). 배포된 적이 없고 저장소 어디도 `com.supaicy.haru`를 쓰지 않는다(확인함).
+   지운 Identifier는 다시 등록할 수 없지만 다시 쓸 일이 없다. 순서만 지킬 것 — App ID를
+   참조하는 프로파일이 남아 있으면 삭제가 막히거나 그 프로파일이 무효가 된다.
+   `com.supaicy.bicmac`(BicMac)은 별개 앱이라 건드리지 않는다.
+2. **`GOOGLE_OAUTH_CLIENT_ID` 가 없다.** Google Cloud 콘솔 → 사용자 인증 정보 →
+   OAuth 클라이언트 ID → **데스크톱 앱** 유형(번들 ID를 묻는 iOS 유형이 아니다).
+   범위는 `calendar.app.created` 하나. 비밀이 아니다 — 클라이언트 보안 비밀은 쓰지 않는다.
+   자세한 것은 `docs/howto-Google-OAuth-클라이언트.md`.
+
+**직접 배포 채널은 2번만 있으면 지금 바로 된다** — 프로비저닝 프로파일은 App Store
+전용이라 `GOOGLE_OAUTH_CLIENT_ID=<값> npm run release`로 서명·공증된 dmg를 낼 수 있다.
+
+GitHub Actions 자동화는 시크릿 7개가 더 필요하다(현재 `HOMEBREW_TAP_TOKEN` 하나만
+등록됨): `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY_B64`, `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER`, `APPLE_TEAM_ID`, `GOOGLE_OAUTH_CLIENT_ID`. 로컬 릴리스만
+한다면 없어도 된다.
+
+### [P2] 남은 dev 의존성 권고 15건 — 위험 수용 (2026-10-06, 재검토 2027-01-06)
+
+고칠 버전이 **존재하지 않거나** 메이저 이주가 필요한 것들이다. 판단 기준은 "dev 의존성이라
+괜찮다"가 아니라(electron·react도 devDependencies라 `--omit=dev` 0건은 출하물 안전의
+증거가 못 된다 — codex 지적) **취약 함수에 바깥 사람이 정한 입력이 닿는가**다.
+
+| 경로 | 권고 | 고칠 길 | 닿는 입력 |
+|---|---|---|---|
+| tailwindcss 3.4.19 → braces 3.0.3, micromatch, chokidar, fast-glob | 깊게 중첩된 패턴의 스택 소진 DoS (high) | braces 패치 버전 없음(3.0.3이 최신). Tailwind 4 이주 | `tailwind.config.js`의 content 글롭 — 우리가 쓴 고정 문자열뿐 |
+| tailwindcss → postcss-nested 6.2.0 → postcss-selector-parser 6.1.4 | 평탄한 선택자 파싱 이차 복잡도 (moderate) | 7.1.6에만 있음. postcss-nested 6.x가 ^6을 요구 → Tailwind 4 | `src/renderer/src/index.css`(324줄)와 Tailwind 생성 CSS — 외부 CSS 없음 |
+| electron-builder 26.15.3 → app-builder-lib → @electron/get 3 → global-agent → roarr → sprintf-js 1.1.3 | 무제한 정밀도 지정자 DoS (moderate) | sprintf-js 패치 없음. @electron/get 5.x는 global-agent를 뺐지만 ESM·Node≥22.12 — builder가 올려야 함. audit이 권하는 26.5.0은 **다운그레이드**라 거부 | roarr 로그 포맷 문자열 — 라이브러리 상수, 패키징 때만 실행 |
+
+출하되는 `app.asar`에는 `dependencies`만 들어가고 위 패키지는 하나도 없다. 렌더러
+번들에도 빌드 도구는 들어가지 않는다.
+
+**재검토:** Tailwind 4 이주(출시 후 별도 작업), electron-builder가 @electron/get 5로 올리는
+릴리스, 또는 2027-01-06 중 가장 이른 때.
+
+**Tailwind 4 이주 때 함께:** `tailwind-merge`를 2.6 → 3.x로 되돌린다. 2026-10-06에
+Tailwind 3 위에 Tailwind 4 전용인 3.6.0이 깔려 있던 것을 2.6으로 맞췄다. 소스의 클래스 토큰
+550개 전 쌍(약 30만)에서 두 버전 출력이 같음을 확인한 뒤라 동작 변화는 없다.
+
+### [P2] 배포 전 리뷰 3회차에서 남은 것 (2026-10-07, 수정 주기 상한 3에 도달)
+
+ship 리뷰는 수정 주기를 셋까지만 돈다. 3회차에서 나온 것은 CRITICAL이 없고 화면·디스크 불일치나
+데이터 손실도 없어서, 다시 리뷰받지 못할 로직 변경을 넣지 않고 여기 남긴다. **출시 후 첫 작업으로.**
+
+- **되돌리기가 이전 삭제의 행까지 끌어올린다** (`database.ts` `restoreTask`의 '이미 살아 있는 행' 분기 —
+  리뷰어 셋이 따로 발견). 이 분기는 `deleted_with === id`만 보고 시각은 안 본다. A→{B,D}: A 삭제(T1) →
+  휴지통에서 B 복원(A 함께 살아남, D는 남김) → A 다시 삭제(T2) → Cmd+Z가 T1의 D까지 살린다. 일괄 되돌리기는
+  뿌리가 아닌 id에도 restore를 불러 같은 분기를 탄다. 화면은 main의 답을 그대로 옮기므로 화면과 디스크는
+  일치하고 지운 것도 다시 지울 수 있다 — 과잉 복원이지 손실이 아니다. 고칠 것: 삭제 시각을 undo 페이로드에
+  싣고 `restoreTask(id, at?)`로 넘겨 이 분기도 `deleted_at === at`을 보게, 일괄 되돌리기는 뿌리만 부르게.
+  휴지통 복원 버튼 연타도 같은 분기를 탄다 — 처리 중에는 버튼을 막을 것.
+- **업데이트 오류 분류가 공유 'error' 이벤트에 기대고 있다** (`index.ts` `checksInFlight`/`downloading`).
+  다운로드 중 정시 확인이 실패하면(GitHub API 403 등) 멀쩡한 다운로드가 '실패'로 보이고, 그때 '다시 다운로드'를
+  누르면 다운로드가 겹친다. 확인 실패는 `checkForUpdates().catch`에서, 다운로드 실패는 `app-ipc.ts`의
+  download-update 거부에서 보내도록 출처에서 가를 것.
+- **리프레시 토큰 없는 Google 연결은 동작하지 않는다** (`isSameGrant`가 그런 그랜트를 자기 자신과도 다르게 본다).
+  `prompt=consent`·`access_type=offline`라 실제로는 드물다. 연결 시점에 `no_refresh_token`으로 거절하거나
+  액세스 토큰으로 비교. 지금은 확보 중 캘린더가 원격에 새로 생기고 저장되지 않을 수 있다.
+- 일괄 되돌리기가 id마다 store를 따로 써서 렌더가 N번(`Promise.all(ids.map(restoreOnMain))`); `resyncFromMain`이
+  진행 중이면 새 요청을 버린다(대기 플래그로 한 번 더); `useRealMain` 테스트 하네스가 진행 중인 비동기 저장을
+  기다리지 않고 임시 폴더를 지운다; `google:connect` 실패 경로 두 곳은 테스트가 없다; `DeletedTaskUndo.subtaskIds`는
+  이제 읽는 곳이 없다; 주간 캘린더 `bg-[#1C1C1E]` 두 곳은 `surface.canvas` 토큰으로.
+
+### [P2] 적대적 검토가 남긴 것 (2026-10-07) — 대부분 이 브랜치 전부터 있던 것
+
+Claude 적대적 검토(Codex 외부 검토는 gstack 모델 판별 스크립트 오류로 이번에 못 돌았다 — 누락으로 기록).
+사용자가 병합 전에 고치기로 한 둘(CalDAV 해제 경합, 복구 부팅의 첨부 삭제)은 고쳤다. 나머지:
+
+- **Google 403의 본문을 못 읽으면 '캘린더 사라짐'으로 보고 Greenday 캘린더를 하나 더 만든다**
+  (`google/calendar.ts` `getCalendar`가 not_found·forbidden을 null로). 목록 범위가 없어 옛 캘린더를 되찾지도
+  못한다. 이름 있는 거절 사유일 때만 다시 만들 것 — '거부와 불통을 뭉치지 말 것'의 같은 규칙.
+- **Google 동기화의 401/403(치명)은 이번 실행에서 이미 올린 것의 상태를 버린다** (`google-sync.ts` `isFatal → throw`) —
+  다음 실행이 같은 것을 다시 올린다. 할당량 멈춤처럼 부분 상태를 돌려줄 것.
+- **반복 시리즈를 TZID 없는 벽시계 시각으로 내보낸다** (`caldav/ical.ts` `toLocalStamp`) — RFC 5545상 '보는 사람
+  시간대 기준'이라 서버마다 해석이 갈리고, 여행 뒤 편집하면 시리즈 전체가 새 시간대로 다시 쓰인다.
+  TZID + VTIMEZONE이 표준 해법.
+- **CalDAV 412 뒤 재시도 삭제가 UID를 못 읽어도 지운다** (`calendar-sync.ts`) — 파괴적 동작이니 UID가 일치할 때만.
+- **정렬 슬롯 '엄격 증가'가 숨은 행과 겹칠 수 있다** (`database.ts`·`useStore.ts` reorder) — 목록을 가로지르는 뷰
+  (오늘·태그)에서 끌어 놓으면 손대지 않은 목록에 동순위가 생겨 파일 순서로 갈린다.
+- **일괄 업데이트 검증이 listId·priority·ids 모양을 안 본다** (`validateBatchUpdate`) — 객체 priority가 저장되면
+  매 부팅 화면이 오류 경계로 떨어진다. 주석은 형제 채널과 같아졌다고 과장한다.
+- **로딩 중인 창에 보낸 전역 빠른 추가가 사라진다** (`main-window.ts` `requestQuickAdd`) — 창이 막 만들어져
+  렌더러가 아직 리스너를 안 걸었으면 버려진다. `isLoading()`이면 미룰 것.
+- **업로드의 '낡은 pkg' 검사가 커밋 안 된 변경을 못 본다** (`mas-upload.sh`) — 더러운 트리면 거절.
+- (설계) **휴지통에서 하위작업을 복원하면 따로 지운 조상까지 살아난다** — 의도된 동작으로 문서화돼 있지만,
+  행 하나 복원이 다른 나중 삭제를 조용히 되돌린다.
+
+### [P3] 배포 전 리뷰에서 이월한 것 (2026-10-07, 사용자 결정: TODOS로)
+
+ship 배포 전 리뷰(리뷰어 8 + 레드팀)가 찾은 것 중 출시를 막지 않아 미룬 것. 출처는
+리뷰 로그(`gstack-review-read`)와 PR 본문의 Pre-Landing Review 절.
+
+- **업그레이드 직후 첫 동기화 몰림** (`caldav/sync.ts` 지문의 `wallclock` 마커, 완료 회차 단일화) —
+  완료한 반복 회차가 많은 사용자는 첫 동기화에서 회차마다 PUT이 직렬로 나간다(1년 매일 습관 ≈ 365건).
+  한 번만 일어나는 교정이지만 상한이 없다. 실행당 상한(예: 200) 후 다음 실행으로 넘기거나 진행 표시.
+- **AI 설정을 요청마다 디스크에서 다시 읽음** (`ai-service.ts` `snapshot()` → `hydrateFromDisk()`) —
+  메인 스레드 동기 I/O + safeStorage 복호화가 요청마다. 그리고 `saveAiConfig`가 쓰기 실패를 삼켜서,
+  디스크에 못 쓴 채 방금 켠 localOnly가 다음 요청에 디스크의 옛 값으로 되돌아갈 수 있다(보안 리뷰,
+  신뢰도 5). 한 번만 읽고, 저장 실패는 `setAiConfig`가 던지게.
+- **이중 인코딩된 태그·첨부를 빈 배열로 읽음** (`useStore.ts` `parseStringArray`) — 그 뒤 편집이
+  `[새것]`으로 덮어써 옛 참조를 잃고, 다음 부팅 GC가 파일을 지운다. 한 단계 더 풀어 보기.
+- **부팅 복구 전 스냅숏 없음** (`database.ts` `healUnreachableTasks`) — 바꾼 행의 원래 값을 남기지 않고
+  `.bak`은 다음 저장에 회전된다. 고친 경우가 있으면 `ticktick-data.json.pre-heal-<ts>` 한 번.
+- **일괄 완료가 반복 원본마다 따로 저장** (`useStore.ts` `batchComplete` → `updateTask` k번) — 한 번의 set + IPC로.
+- **저장된 오류 문구가 쓴 순간의 언어로 고정** (`ipc-handlers.ts` `lastError`) — 코드로 저장하고 읽을 때 번역.
+- **Google 오류 코드가 번역표와 컴파일 타임에 묶이지 않음** (`ipc-handlers.ts` `describeGoogleError`의 캐스트).
+- **ErrorBoundary가 테마 키 `'ticktick-theme'`를 따로 적음** — 스토어와 공유하는 상수로.
+- **이주 안내 무결성 검사가 primary가 멀쩡해도 `.bak`까지 파싱** (`migration/handoff.ts` `checkIntegrity`) —
+  `handoff.test.ts`가 `backupReadable`을 계약으로 고정해서 이번에 건드리지 않았다. 숨긴 안내는 이제 검사를 안 한다.
+- **일·주 캘린더의 초점 시각이 다름**(06:00 / 08:00) — 24시간 밴드가 된 뒤라 하나로 맞출지 결정.
+- **단순화 권고(advisory)**: `TIME_OF_DAY`와 `ai-service.ts`의 `TIME_RE` 중복, 정렬 슬롯 "엄격 증가" 규칙이
+  main·렌더러에 복붙, `restoreTask`와 부팅 복구의 조상 걷기 중복, 렌더러 `parsePlainObject`와 main
+  `parseOverrides` 중복, `habitCompletionRate`의 안 쓰는 `windowDays` 인자, `completedOccurrence`가
+  같은 파일의 `toIsoOrNull`·`reanchor`를 다시 구현.
+- **(2회차) Google `invalid_client`가 설치된 모든 사용자의 그랜트를 지운다** — 클라이언트를 실수로 지웠다
+  복구하는 운영 사고에도 전부 재연결이 필요해진다. 지울 때 revoke도 하지 않아 Google 계정 쪽 승인은 남는다.
+  invalid_client는 토큰을 남기고 오류만 보여 줄지, 지우기 전에 best-effort revoke를 할지 결정(보안, 신뢰도 4).
+- **(2회차) 토큰 파일을 잠깐 못 읽은 것을 '연결 해제'로 본다** (`readGoogleConfig`가 복호화 실패를 `tokens:null`로) —
+  거절 아닌 경로에서 그랜트를 지울 수 있다. 원본 파일의 tokens_enc 유무로 판정(신뢰도 3).
+- **(2회차) Keychain을 거부한 사용자는 실행마다 sentinel 재작성을 시도** (`arrival.ts` `refreshSentinelIfOpen`) —
+  두 번째 Keychain 창이 뜨는지 실기 확인 필요. 뜬다면 denied·unavailable은 건너뛴다(신뢰도 4).
+- **(2회차) 복제와 반복 스폰이 직계 하위작업만 복사** (`duplicateTask`, 반복 다음 회차) — 3단계 트리의 손자가
+  빠진다. 삭제·복원은 이제 모든 후손을 다루므로 맞출지 결정.
+- **(2회차) 종일 영역 높이 상한에 넘침 표시가 없다** — 주간 칸 96px·일간 30vh를 넘는 종일 할일은 스크롤하기 전엔
+  안 보인다(macOS 오버레이 스크롤바). 하단 페이드나 "+N".
+- **(2회차) 트리 탐색 비용·중복** — `trashBatch`가 뿌리마다, 렌더러 `batchDelete`가 id마다 자식 인덱스를 새로 만든다
+  (O(k·n), 할일 앱 규모에서는 수십 ms). main `descendantsOf`와 렌더러 `descendantIds`를 `src/shared/`로 하나로.
+- **테스트 빈틈**: AI 스트림 오류 채널의 요청 id 가드(`useStore.test.ts`의 가짜 버스가 오류 채널을 비워 둠),
+  `createWindow`가 네비게이션 가드를 실제로 거는지(`navigation-guard.test.ts`는 판정만 본다).
+
+### [P3] bisect 가능성
+
+수정 38건을 병렬 적용하면서 여러 건이 같은 파일(`useStore.ts`·`ipc-handlers.ts` 등)을
+건드렸고, 먼저 커밋된 쪽이 옆 수정의 변경을 함께 안고 갔다. **브랜치 끝은 전부 초록**이지만
+중간 커밋 일부는 단독으로 빌드되지 않는다. 히스토리를 정리하려면 rebase가 필요하다.
+
+**처리 (2026-10-06 결정):** 트렁크에는 **squash 병합**으로 올린다 — 트렁크 이력은 커밋
+하나라 bisect가 깨지지 않고, 결함별 세부 커밋은 원격 브랜치와 PR에 남는다. rebase로
+61개를 다시 쓰지 않는다(일부는 커밋 설명과 실제 변경도 어긋나 있어 보존할 가치가 낮다).
+
+### ~~[P4] 이미 고아가 된 데이터~~ ✅ DONE (2026-10-06)
+
+휴지통 하위작업 버그(`bfa8b55`)로 이미 보이지 않게 된 행을 부팅 때 되찾는다
+(`database.ts` `healUnreachableTasks`, 멱등). 규칙은 `restoreTask`와 같다 — 휴지통에
+있는 **조상만** 올리고, 없는 id·순환에서 끊긴 사슬은 그 자리에서 최상위로. 행은 지우지
+않고 휴지통 안은 건드리지 않는다. `databaseOrphanHeal.test.ts`(고치기 전 5개 실패),
+패키징한 앱에 옛 빌드 모양의 파일을 깔고 띄워 화면에서 확인했다.
+**실제 사용자 프로필은 열어 보지 않았다** — 첫 실행 로그의
+`[db] 보이지 않던 할일 복구` 줄이 그 파일에 해당 행이 있었는지를 알려 준다.
+
+### 확인하지 못한 범위
+
+MAS 샌드박스 빌드, 실제 iCloud·Google 서버 왕복, 알림 권한 승인 상태, 실제 라이선스
+활성화(`IS_ENFORCED = false`로 테스트), 다중 디스플레이. 동기화 수정들은 서버 대역 위에서만
+검증됐다.
+
+**MAS 샌드박스 검증은 TestFlight로 한다(2026-10-06 결정).** `mas:build`는 Apple
+Distribution 서명이라 이 맥에서 바로 실행되지 않는다 — 로컬에서 띄우려면 `mas-dev` 타깃과
+이 맥을 등록한 개발 프로파일이 따로 필요하다(codex 지적, 원래 계획의 "로컬 샌드박스
+검증"은 성립하지 않았다). 대신 업로드 → Mac용 TestFlight 내부 테스트로 **심사에 낼 바로
+그 바이너리**를 설치해 확인한다. 특히 Google 로그인의 루프백 콜백.
+
 ## 트렁크 결정 (2026-08-15, 확정)
 
 - **`supaicy/coordinate`가 트렁크다.** main은 4월에 갈라진 실험 가지로 동결.
