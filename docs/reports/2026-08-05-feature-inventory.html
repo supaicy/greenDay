@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday — 전체 기능 인벤토리 & 동작 검증</title>
+<style>
+  :root{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;--dim:#57606a;
+    --faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace}
+  @media (prefers-color-scheme:dark){:root{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+    --text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+    --ok:#4ade80;--warn:#fbbf24;--stop:#f87171}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.7;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:52px 24px 96px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+  h1{font-size:27px;margin:0 0 8px} .sub{color:var(--faint);font-size:14px;margin:0}
+  h2{font-size:19.5px;margin:46px 0 12px;padding-top:24px;border-top:1px solid var(--line)}
+  h3{font-size:15.5px;margin:28px 0 8px}
+  p{margin:0 0 14px} a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);padding:.12em .4em;border-radius:4px;white-space:nowrap}
+  .scroll-x{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin:14px 0;min-width:720px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  td.loc{font-family:var(--mono);font-size:11.5px;color:var(--faint);white-space:nowrap}
+  .callout{background:var(--surface);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:16px 20px;margin:20px 0}
+  .callout.warn{border-left-color:var(--warn)} .callout.stop{border-left-color:var(--stop)}
+  .callout.info{border-left-color:var(--accent);background:var(--surface-2)}
+  ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:7px}
+  .lede{font-size:16px;color:var(--dim);margin:22px 0 0}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:.16em .55em;border-radius:20px;
+    letter-spacing:.02em;white-space:nowrap;line-height:1.5}
+  .p-ok{background:rgba(21,128,61,.13);color:var(--ok)}
+  .p-bug{background:rgba(185,28,28,.13);color:var(--stop)}
+  .p-warn{background:rgba(180,83,9,.14);color:var(--warn)}
+  .p-na{background:var(--surface-2);color:var(--faint)}
+  .stats{display:flex;flex-wrap:wrap;gap:12px;margin:24px 0}
+  .stat{flex:1 1 150px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .stat .n{font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+  .stat .l{font-size:12px;color:var(--faint);margin-top:2px}
+  .bug{border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:16px 0;background:var(--surface)}
+  .bug.sev-high{border-left:4px solid var(--stop)}
+  .bug.sev-mid{border-left:4px solid var(--warn)}
+  .bug.sev-low{border-left:4px solid var(--faint)}
+  .bug h3{margin:0 0 8px;font-size:15.5px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .bug dl{margin:0;font-size:13.5px}
+  .bug dt{font-weight:600;color:var(--faint);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;margin-top:10px}
+  .bug dd{margin:2px 0 0}
+  .chk{font-size:14px}
+  .chk li{margin-bottom:5px}
+  .chk .g{font-weight:600;margin-top:14px;list-style:none;margin-left:-22px}
+  nav.toc{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 22px;margin:24px 0;font-size:14px}
+  nav.toc ol{margin:0;padding-left:20px} nav.toc li{margin-bottom:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>전체 기능 인벤토리 &amp; 동작 검증</h1>
+  <p class="sub">Greenday v2.0.1 · 2026-08-05 · 브랜치 <code>supaicy/coordinate</code> · 108개 TS/TSX 파일 전수 추적 + 라이브 QA</p>
+</header>
+
+<p class="lede">
+  코드에 실제로 존재하는 기능을 빠짐없이 목록화하고, 각 기능이 동작하는지 실제 앱을 띄워 확인했습니다.
+  <strong>코드는 수정하지 않았습니다.</strong> 이 문서는 다음 릴리스 전에 그대로 다시 돌릴 수 있는
+  회귀 점검 체크리스트를 겸합니다.
+</p>
+
+<div class="stats">
+  <div class="stat"><div class="n">88</div><div class="l">인벤토리 항목</div></div>
+  <div class="stat"><div class="n" style="color:var(--ok)">68</div><div class="l">정상 확인</div></div>
+  <div class="stat"><div class="n" style="color:var(--warn)">11</div><div class="l">동작하나 단서 있음</div></div>
+  <div class="stat"><div class="n" style="color:var(--stop)">6</div><div class="l">결함 / 차단</div></div>
+  <div class="stat"><div class="n" style="color:var(--faint)">3</div><div class="l">외부 조건 탓 미검증</div></div>
+</div>
+
+<p style="font-size:14px;color:var(--dim);margin-top:-6px">
+  항목 상태와 별개로, 여러 항목에 걸치는 <strong>문제 13건(B-1~B-13)</strong>을 2절에 정리했습니다.
+  남은 미검증은 <strong>외부 자격증명·빌드 구성이 없어서 불가능한 5가지</strong>뿐이며 4절에 있습니다.
+</p>
+
+<div class="callout">
+  <strong>2차 검증(19:00~19:30) 반영본.</strong> 1차에서 Mac 화면 잠금 때문에 못 봤던 항목을
+  화면 잠금 해제 후 전부 다시 확인했습니다. 새로 확인한 것: <strong>리마인더 알림 실제 발화 ·
+  JSON/CSV 내보내기 파일 내용 · CSV 수식 인젝션 방어 · 첨부파일 선택/복사/열기 · 전역 단축키 ·
+  휴지통 비우기 · AI 모델 원클릭 설치(4.77GB 실제 다운로드)</strong>. 그 과정에서 문제 3건(B-11~B-13)을
+  추가로 찾았습니다.
+</div>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#method">검증 방법</a></li>
+    <li><a href="#bugs">발견된 결함 13건</a></li>
+    <li><a href="#inventory">기능 인벤토리 (9개 영역)</a></li>
+    <li><a href="#unverified">남은 미검증 5가지</a></li>
+    <li><a href="#checklist">재사용 회귀 점검 체크리스트</a></li>
+  </ol>
+</nav>
+
+<h2 id="method">1. 검증 방법</h2>
+
+<h3>자동 검증 (전체 통과)</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th>항목</th><th>명령</th><th>결과</th></tr></thead>
+  <tbody>
+    <tr><td>타입 체크</td><td class="loc">tsc --build</td><td><span class="pill p-ok">통과</span> 오류 0</td></tr>
+    <tr><td>테스트</td><td class="loc">vitest run</td><td><span class="pill p-ok">통과</span> 30 파일 / 416 테스트</td></tr>
+    <tr><td>린트</td><td class="loc">biome lint src</td><td><span class="pill p-ok">에러 0</span> 워닝 7 · info 4 (전부 <code>import type</code> 권고)</td></tr>
+  </tbody>
+</table></div>
+
+<h3>라이브 QA</h3>
+<p>
+  <code>electron-vite dev</code> 로 현재 소스를 실행하고, Chrome DevTools Protocol(<code>--remote-debugging-port</code>)로
+  렌더러에 직접 붙어 <strong>실제 DOM 클릭 · 키 입력 · 드래그</strong>를 발생시킨 뒤,
+  결과를 <strong>화면(DOM)과 디스크(<code>window.api.getTasks()</code> 등 IPC 왕복)</strong> 양쪽에서 확인했습니다.
+  즉 "버튼이 보인다"가 아니라 "눌렀더니 DB에 반영됐다"까지 봤습니다.
+</p>
+<div class="callout info">
+  <strong>사용자 데이터 보호</strong> — QA 시작 전 <code>ticktick-data.json</code>을 백업하고, 모든 테스트가
+  끝난 뒤 원본을 그대로 복구했습니다. AI 채팅 기록에 추가된 QA 메시지 2건도 제거했습니다.
+  현재 사용자 데이터는 QA 이전 상태와 동일합니다 (할일 25 · 리스트 2 · 폴더 1 · 습관 0 · 점수 39).
+</div>
+<h3>네이티브 UI 검증 (2차)</h3>
+<p>
+  화면 잠금 해제 후에는 Electron이 접근성 트리를 노출하므로, <code>orca computer</code>로
+  <strong>네이티브 저장/열기 대화상자와 macOS 알림 센터를 직접 조작·판독</strong>했습니다.
+  저장 대화상자의 Format 팝업을 CSV로 바꿔 저장한 뒤 실제 파일을 파싱했고, 알림은
+  알림 센터의 접근성 트리에서 제목·본문을 읽어 확인했습니다.
+</p>
+<div class="callout">
+  <strong>검증에 필요해 수행한 시스템 변경 2건</strong> (둘 다 되돌릴 수 있고, 사용자 본인 앱에 대한 것):
+  <br>① 리마인더 발화를 보려면 필요해서 <strong>haru 앱의 macOS 알림 권한을 허용</strong>했습니다.
+  (시스템 설정 → 알림 → haru 에서 언제든 변경 가능)
+  <br>② 원클릭 설치 기능을 확인하느라 <strong>Ollama에 <code>exaone3.5:latest</code>(4.77GB)를 실제로 내려받았습니다.</strong>
+  앱의 AI 모델 설정은 QA 이전 값(<code>gpt-oss:20b</code>)으로 되돌려 놓았습니다. 모델이 불필요하면
+  <code>ollama rm exaone3.5:latest</code>로 지울 수 있습니다.
+</div>
+
+<h2 id="bugs">2. 발견된 결함 13건</h2>
+<p>모두 실제로 재현했습니다. 각 항목에 재현 절차와 원인 위치를 적었습니다.</p>
+
+<div class="bug sev-high">
+  <h3><span class="pill p-bug">높음</span> B-1. 타임블로킹을 만들 수 있는 경로가 없다</h3>
+  <dl>
+    <dt>증상</dt>
+    <dd>README 대표 기능인 "할일을 캘린더 슬롯에 드래그해 시간 배정"을 <strong>사용자가 수행할 수 없습니다.</strong>
+        드래그 시작점(할일 목록의 <code>TaskItem</code>)과 드롭 대상(주/일 캘린더의 날짜 칼럼)이
+        <code>MainContent</code>의 <code>viewType</code> 스위치로 갈려 <strong>동시에 화면에 존재하지 않습니다.</strong></dd>
+    <dt>측정값</dt>
+    <dd>리스트 뷰: 드래그 가능한 할일 행 6개 / 날짜 칼럼 0개.<br>
+        주간 캘린더 뷰: 날짜 칼럼 7개 / 드래그 가능한 요소 <strong>0개</strong>.<br>
+        사용자 DB의 기존 할일 25건 중 <code>scheduled_start</code>를 가진 것 <strong>0건</strong> — 기능이 한 번도 쓰인 적 없음.</dd>
+    <dt>드롭 핸들러 자체는 정상</dt>
+    <dd>QA에서 <code>application/haru-task-id</code>를 직접 넣어 드롭했더니 <code>2026-08-06T10:30~11:00</code> 블록이
+        정상 생성·렌더됐습니다. 생성된 블록의 <em>이동(길이 30분 유지)</em>과 <em>우클릭 → 일정 해제</em>도 정상입니다.
+        <strong>소비자는 멀쩡하고 생산자(진입점)만 없습니다.</strong></dd>
+    <dt>위치</dt>
+    <dd><code class="loc">TaskItem.tsx:93</code>이 유일한 <code>TASK_ID</code> 생산자 ·
+        <code class="loc">WeeklyCalendar.tsx:361</code> / <code class="loc">DailyCalendar.tsx:285</code>가 유일한 소비자 ·
+        <code class="loc">App.tsx:27</code> 뷰 스위치</dd>
+  </dl>
+</div>
+
+<div class="bug sev-high">
+  <h3><span class="pill p-bug">높음</span> B-2. 할일 순서 드래그가 화면에 반영되지 않는다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>전체 뷰(정렬=기본)에서 1번 할일을 3번 자리로 드래그 → 화면 순서 그대로.
+        앱을 재시작하면 그제서야 바뀐 순서가 보입니다.</dd>
+    <dt>측정값</dt>
+    <dd>드래그 직후 DB <code>sort_order</code>는 정상 갱신(Firebase=0, Info.plist=1, Android=2).
+        화면은 재적재 전 <code>Android → Firebase → Info.plist</code>, 재적재 후 <code>Firebase → Info.plist → Android</code>.</dd>
+    <dt>원인</dt>
+    <dd>스토어의 <code>reorderTasks</code>가 각 항목의 <code>sortOrder</code> 값만 map으로 갱신하고
+        <strong><code>tasks</code> 배열 자체를 재정렬하지 않습니다.</strong>
+        <code>sortTasks(..., 'default')</code>는 배열을 그대로 반환하므로 화면 순서는 배열 순서에 그대로 묶여 있습니다.
+        (<code>db.getTasks()</code>는 <code>sort_order</code>로 정렬해서 주므로 재시작하면 맞습니다.)</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">useStore.ts:589-597</code> · <code class="loc">TaskList.tsx:34-57</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-3. 알림 · 반복 · 정렬 피커가 두 번 클릭해야 열린다 (3곳)</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>할일 상세에서 <strong>알림</strong> 버튼 클릭 → 드롭다운이 뜨지 않고 <strong>같은 라벨의 버튼이 하나 더 생깁니다.</strong>
+        그 두 번째 버튼을 눌러야 실제 옵션(마감 시 / 5분 전 / …)이 나옵니다. <strong>반복</strong> 버튼과
+        목록 헤더의 <strong>정렬</strong> 아이콘도 동일합니다.</dd>
+    <dt>측정값</dt>
+    <dd>'알림' 라벨 버튼 수: 클릭 전 1 → 클릭 후 <strong>2</strong> (옵션은 2차 클릭 후 노출).
+        '반복' 동일. 정렬은 아이콘 클릭 후 "기본" 칩이 생기고, 그걸 눌러야 5개 옵션이 나옵니다.</dd>
+    <dt>원인</dt>
+    <dd><code>TaskDetail</code>의 <code>PickerRow</code>가 이미 트리거 버튼 + <code>open</code> 상태를 갖고 있는데,
+        children으로 넣는 <code>ReminderPicker</code>/<code>RecurringPicker</code>가 <strong>각자 또 트리거 버튼과
+        자기 <code>open</code> 상태를 갖고 있습니다.</strong> <code>TaskList</code> ↔ <code>SortMenu</code>도 같은 구조입니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">TaskDetail.tsx:55-86,361-396</code> · <code class="loc">ReminderPicker.tsx:1036-1050</code> ·
+        <code class="loc">RecurringPicker.tsx:778-792</code> · <code class="loc">TaskList.tsx:199-209</code> ·
+        <code class="loc">SortMenu.tsx:594-610</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-4. Cmd+F가 검색창을 포커스하지 못한다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>Cmd+F → 검색어만 비워지고 커서는 이동하지 않습니다(<code>document.activeElement</code>가 <code>BODY</code> 유지).
+        설정 화면에는 "검색 — Cmd+F"로, 검색창 placeholder에는 "검색... (Cmd+F)"로 광고되고 있습니다.</dd>
+    <dt>원인</dt>
+    <dd>핸들러가 <code>document.querySelector('[data-search-input]')</code>를 찾는데,
+        <strong>코드베이스 전체에 <code>data-search-input</code> 속성을 가진 요소가 없습니다.</strong>
+        (<code>grep</code> 결과 핸들러 자신 1곳만 매치)</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">useKeyboardShortcuts.ts:57-65</code> ↔ <code class="loc">TaskList.tsx:187-197</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-5. 포모도로 타이머가 뷰를 옮기면 초기화된다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>타이머 시작 → 25:00에서 24:58까지 진행 → 습관 뷰로 갔다가 포모도로로 복귀 → <strong>25:00으로 리셋.</strong>
+        진행 중이던 집중 세션이 통째로 사라지고 기록도 남지 않습니다.</dd>
+    <dt>원인</dt>
+    <dd><code>timeLeft</code>/<code>isRunning</code>/<code>sessions</code>/<code>sessionStartRef</code>가 모두
+        컴포넌트 로컬 상태입니다. <code>MainContent</code>가 뷰 전환 시 언마운트하므로 전부 소실됩니다.
+        세션 저장은 <code>skipToNext</code>에서만 일어나므로 리셋 경로에서는 기록도 안 남습니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">PomodoroTimer.tsx:21-26</code> · <code class="loc">App.tsx:34-35</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-6. 레벨 표시가 사이드바와 통계에서 서로 다르다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>같은 40점에서 사이드바는 <strong>Lv.0</strong>, 통계 화면은 <strong>Lv.1</strong>을 표시합니다. (라이브 확인)</dd>
+    <dt>원인</dt>
+    <dd><code>Sidebar</code>: <code>Math.floor(score.total / 100)</code> ·
+        <code>StatsView</code>: <code>Math.floor(totalScore / 100) + 1</code></dd>
+    <dt>위치</dt>
+    <dd><code class="loc">Sidebar.tsx:170</code> · <code class="loc">StatsView.tsx:37</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-7. 날짜 계산 일부가 UTC 기준 — KST 00:00~09:00에 하루 밀린다</h3>
+  <dl>
+    <dt>영향 범위</dt>
+    <dd>① 통계의 "오늘 완료" / 14일 추이 / 이번 주 시작<br>
+        ② <strong>Cmd+D(선택 할일에 오늘 마감 설정)</strong> — 새벽에 누르면 <em>어제</em> 날짜가 박힙니다<br>
+        ③ 점수 이벤트의 <code>date</code> 필드<br>
+        ④ 아이젠하워의 지연(빨강) 표시<br>
+        ⑤ 반복 할일 완료 시 마감일이 없을 때의 기준일</dd>
+    <dt>재현(수치)</dt>
+    <dd>KST 2026-08-06 02:00 기준 → 로컬 날짜 <code>2026-08-06</code>, <code>toISOString()</code> 날짜 <code>2026-08-05</code>.
+        QA 실행 시각(18:40 KST)에는 두 값이 같아 증상이 드러나지 않았습니다.</dd>
+    <dt>비고</dt>
+    <dd>이미 <code>utils/date.ts</code>에 로컬 기준 <code>todayString()</code>이 있고 스토어의 <code>addTask</code>는 그걸 씁니다.
+        아래 5곳만 아직 <code>toISOString().split('T')[0]</code>입니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">StatsView.tsx:17,25,45,187</code> · <code class="loc">useKeyboardShortcuts.ts:86</code> ·
+        <code class="loc">useStore.ts:505,759</code> · <code class="loc">EisenhowerMatrix.tsx:159</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-low">
+  <h3><span class="pill p-na">낮음</span> B-8. 하위작업이 일부 뷰에서만 독립 카드로 노출된다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>부모 할일에 하위작업을 만든 뒤 각 뷰 확인:
+        리스트·캘린더(월/주/일)에서는 숨겨지지만
+        <strong>칸반 · 타임라인 · 아이젠하워에서는 부모와 나란히 독립 카드로 나옵니다.</strong></dd>
+    <dt>원인</dt>
+    <dd><code>TaskList</code>만 <code>result.filter(t =&gt; !t.parentId)</code>를 겁니다.
+        나머지 세 뷰는 <code>!t.deletedAt</code>만 거릅니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">TaskList.tsx:120</code> vs <code class="loc">KanbanView.tsx:34</code> ·
+        <code class="loc">TimelineView.tsx:37</code> · <code class="loc">EisenhowerMatrix.tsx:34</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-low">
+  <h3><span class="pill p-na">낮음</span> B-9. 화면에 도달하지 않는 미배선 코드</h3>
+  <dl>
+    <dt>렌더되지 않는 컴포넌트</dt>
+    <dd><code>ExportDialog.tsx</code>(155줄) · <code>ScoreDisplay.tsx</code>(108줄) —
+        <strong>어디에서도 마운트되지 않습니다.</strong> 스토어의 <code>showExport</code>/<code>setShowExport</code>와
+        Esc 핸들러가 이 다이얼로그를 전제하고 남아 있습니다. (Cmd+E는 다이얼로그를 건너뛰고 네이티브 저장창을 바로 엽니다.)</dd>
+    <dt>호출되지 않는 IPC / 액션</dt>
+    <dd><code>installUpdate</code> · <code>downloadUpdate</code>(렌더러에서) · <code>showNotification</code> ·
+        <code>getAttachmentsDir</code> · <code>ai:chat</code>(비스트리밍) · <code>reorderLists</code> ·
+        <code>clearUndo</code> · 스토어의 <code>updateReady</code> / <code>updateDownloadProgress</code>(설정에 표시 없음)</dd>
+    <dt>모듈 전체 미사용</dt>
+    <dd><code>src/shared/license/</code> (crypto.ts · format.ts · public-key.ts) —
+        <strong>main/renderer 어디에서도 import되지 않습니다.</strong> 서명 검증 코어는 있으나 앱에 붙어 있지 않아
+        현재 빌드에 라이선스 게이트가 없습니다.</dd>
+  </dl>
+</div>
+
+<div class="bug sev-low">
+  <h3><span class="pill p-na">낮음</span> B-10. 완료를 취소해도 점수가 차감되지 않는다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>할일 완료 → 39점 → 40점. 같은 할일 완료 취소 → <strong>40점 유지.</strong>
+        같은 할일을 완료/취소 반복하면 점수를 무한히 올릴 수 있습니다.</dd>
+    <dt>비고</dt>
+    <dd>의도된 설계일 수 있습니다(게이미피케이션에서 흔한 선택). 판단이 필요해 결함이 아니라 <em>확인 필요</em>로 기록합니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">useStore.ts:499-501</code> — <code>if (newCompleted)</code> 안에서만 <code>addScore</code></dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-11. 휴지통 비우기가 확인 없이 즉시 영구 삭제된다</h3>
+  <dl>
+    <dt>재현</dt>
+    <dd>휴지통 → "휴지통 비우기" 클릭 <strong>한 번</strong>에 3건이 0건이 됐습니다.
+        확인 대화상자 없음, 되돌리기 토스트 없음, Undo 스택에도 안 들어갑니다. 복구 수단이 전혀 없습니다.</dd>
+    <dt>같은 문제</dt>
+    <dd>개별 항목의 <strong>영구삭제</strong> 버튼도 확인 절차가 없습니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">TrashView.tsx:294-303</code> · <code class="loc">useStore.ts:582-585</code>
+        (<code>emptyTrash</code>가 <code>pushUndo</code>를 호출하지 않음)</dd>
+  </dl>
+</div>
+
+<div class="bug sev-low">
+  <h3><span class="pill p-na">낮음</span> B-12. 내보내기에 휴지통 항목이 섞이는데 CSV로는 구분할 수 없다</h3>
+  <dl>
+    <dt>측정값</dt>
+    <dd>내보낸 파일의 할일 26건 = 활성 23건 + 휴지통 3건. JSON에는 <code>deleted_at</code>이 있어 구분되지만,
+        <strong>CSV 헤더는 <code>Title,Description,Priority,DueDate,List,Completed,CreatedAt</code> 7열뿐이라
+        삭제한 할일이 살아있는 할일과 섞여 나옵니다.</strong></dd>
+    <dt>비고</dt>
+    <dd>백업 용도로는 전량 포함이 맞을 수 있으나, CSV를 스프레드시트로 여는 사용자에게는 잘못된 목록이 됩니다.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">database.ts:505-507</code>(<code>exportData</code>가 <code>data</code> 전체를 반환) ·
+        <code class="loc">ipc-handlers.ts:141-148</code>(CSV 헤더)</dd>
+  </dl>
+</div>
+
+<div class="bug sev-mid">
+  <h3><span class="pill p-warn">중간</span> B-13. 알림 권한을 안내 없이 첫 리마인더 시점에 요구한다</h3>
+  <dl>
+    <dt>관찰</dt>
+    <dd>패키징 앱에서 첫 리마인더가 도래하자 macOS가 <strong>"'haru' 알림 — 경고, 사운드, 아이콘 배지가
+        알림에 포함될 수 있습니다"</strong> 권한 프롬프트를 띄웠고, <strong>그 알림은 발화되지 않았습니다.</strong>
+        허용한 뒤 다시 걸어야 정상 발화했습니다.</dd>
+    <dt>왜 문제인가</dt>
+    <dd>사용자는 리마인더를 걸어 두고 기다리는 중이라 프롬프트를 놓치기 쉽고, 놓치면
+        <strong>첫 알림이 조용히 사라집니다.</strong> 앱 안에 알림 권한 상태 표시나 안내가 없어
+        "리마인더가 안 온다"로만 보입니다.</dd>
+    <dt>검증된 정상 동작</dt>
+    <dd>권한 허용 후: 19:13:00 예정 → 19:13:27 발화(60초 폴러 주기 내), 알림 센터에
+        <code>리마인더 / QA-리마인더-발화확인</code> 표시.</dd>
+    <dt>위치</dt>
+    <dd><code class="loc">main/index.ts:82-91</code> — 권한 확인·요청 없이 바로 <code>new Notification().show()</code></dd>
+  </dl>
+</div>
+
+<h2 id="inventory">3. 기능 인벤토리</h2>
+<p>
+  <span class="pill p-ok">확인</span> 라이브 QA에서 실제로 동작 확인 ·
+  <span class="pill p-bug">결함</span> 재현된 문제 ·
+  <span class="pill p-warn">주의</span> 동작하나 단서 있음 ·
+  <span class="pill p-na">미검증</span> 사유는 5절
+</p>
+
+<h3>3.1 데이터 저장 · 영속성</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>JSON 파일 저장소</td><td class="loc">main/database.ts</td><td><span class="pill p-ok">확인</span></td><td><code>~/Library/Application Support/ticktick/ticktick-data.json</code>. 모든 변이 후 즉시 저장 확인</td></tr>
+    <tr><td>앱 재시작 후 복원</td><td class="loc">useStore.loadData</td><td><span class="pill p-ok">확인</span></td><td>재시작 후 할일·리스트·폴더·습관·점수·AI 기록(22건) 전부 복원</td></tr>
+    <tr><td>스키마 마이그레이션</td><td class="loc">database.ts:117-141</td><td><span class="pill p-ok">확인</span></td><td>누락 필드 기본값 채움 + 포모도로 camelCase→snake_case 1회 변환(멱등)</td></tr>
+    <tr><td>기본함 자동 생성/이름 정규화</td><td class="loc">database.ts:143-160</td><td><span class="pill p-ok">확인</span></td><td>'수신함' → '기본함' 정규화 포함</td></tr>
+    <tr><td>IPC 입력 검증</td><td class="loc">main/validate.ts</td><td><span class="pill p-ok">확인</span></td><td>create/update 경로에 적용. 유닛테스트 존재</td></tr>
+    <tr><td>AI 설정 API 키 암호화</td><td class="loc">database.ts:454-483</td><td><span class="pill p-ok">확인</span></td><td>safeStorage 기반 encode/decode. 유닛테스트 존재</td></tr>
+    <tr><td>데이터 내보내기 — JSON</td><td class="loc">ipc-handlers.ts:123-154</td><td><span class="pill p-ok">확인</span></td><td><strong>실제 저장·파싱 확인.</strong> 최상위 7키(lists/tasks/habits/habitLogs/folders/pomodoroSessions/score), 할일 20개 필드 전부 보존. 파일명이 로컬 날짜 기준(<code>ticktick-backup-2026-08-05.json</code>) — UTC 밀림 없음</td></tr>
+    <tr><td>데이터 내보내기 — CSV</td><td class="loc">ipc-handlers.ts:138-149</td><td><span class="pill p-ok">확인</span></td><td><strong>실제 저장·파싱 확인.</strong> 헤더 7열, 26행, 열 수 불일치 0. 단 Format 팝업을 CSV로 바꿔야 나옴(파일명에 <code>.csv</code>만 쳐도 <code>.csv.json</code>이 됨 — macOS 표준 동작). <strong>B-12</strong></td></tr>
+    <tr><td>CSV 수식 인젝션 방어</td><td class="loc">ipc-handlers.ts:36-41</td><td><span class="pill p-ok">확인</span></td><td><code>csvCell</code>에 실제 페이로드 투입: <code>=1+1</code>·<code>=cmd|'/C calc'!A0</code>·<code>+SUM()</code>·<code>-2+3</code>·<code>@SUM()</code>·탭 시작 셀에 <code>'</code> 프리픽스 부착, <code>"</code>는 <code>""</code>로 이스케이프</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.2 할일 CRUD</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>할일 추가 (인라인 폼)</td><td class="loc">AddTask.tsx</td><td><span class="pill p-ok">확인</span></td><td>Enter로 생성 → DB 반영 확인</td></tr>
+    <tr><td>자연어 날짜·시간 파싱</td><td class="loc">utils/naturalDate.ts</td><td><span class="pill p-ok">확인</span></td><td>"내일 …" → 2026-08-06, "모레 …" → 2026-08-07. 입력 중 힌트 노출 확인</td></tr>
+    <tr><td>현재 뷰 컨텍스트 상속</td><td class="loc">useStore.addTask</td><td><span class="pill p-ok">확인</span></td><td>오늘/내일 뷰에서 추가 시 마감일 자동 채움, 태그 뷰에서 추가 시 태그 자동 부착</td></tr>
+    <tr><td>완료 토글</td><td class="loc">useStore.toggleTask</td><td><span class="pill p-ok">확인</span></td><td>DB <code>completed</code> 반영 + 점수 가산(우선순위별 1/2/3점) 확인</td></tr>
+    <tr><td>제목 인라인 편집</td><td class="loc">TaskDetail.tsx:250-257</td><td><span class="pill p-ok">확인</span></td><td>blur/Enter 시 저장</td></tr>
+    <tr><td>휴지통으로 삭제</td><td class="loc">useStore.removeTask</td><td><span class="pill p-ok">확인</span></td><td>활성 목록에서 제거 + 휴지통 편입 + 하위작업 동반 삭제 확인</td></tr>
+    <tr><td>우클릭 컨텍스트 메뉴</td><td class="loc">TaskItem.tsx:196-279</td><td><span class="pill p-ok">확인</span></td><td>완료로 변경 / 다른 리스트로 이동 / 제목 복사 / 삭제 — 4개 전부 노출·동작</td></tr>
+    <tr><td>리스트 간 이동</td><td class="loc">TaskItem 서브메뉴</td><td><span class="pill p-ok">확인</span></td><td>기본함 ↔ web 이동 시 <code>list_id</code> 변경 확인</td></tr>
+    <tr><td>드래그로 순서 변경</td><td class="loc">TaskList.tsx:145-158</td><td><span class="pill p-bug">결함</span></td><td><strong>B-2</strong> — DB엔 저장되나 화면은 재시작 전까지 그대로</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.3 할일 속성</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>우선순위 4단계</td><td class="loc">utils/priority.ts</td><td><span class="pill p-ok">확인</span></td><td>없음/낮음/중간/높음. 상세에서 '높음' 클릭 → <code>priority: high</code> 저장</td></tr>
+    <tr><td>마감일 · 마감시간</td><td class="loc">TaskDetail.tsx:285-319</td><td><span class="pill p-ok">확인</span></td><td>날짜 변경 즉시 저장(2026-08-10). 지우기 버튼 존재</td></tr>
+    <tr><td>태그 추가/삭제</td><td class="loc">TaskDetail.tsx:398-422</td><td><span class="pill p-ok">확인</span></td><td>Enter로 추가 → <code>tags:["qatag"]</code> 저장 + 사이드바 태그 섹션 자동 생성</td></tr>
+    <tr><td>메모 (라이브프리뷰 에디터)</td><td class="loc">@atomic-editor/editor</td><td><span class="pill p-ok">확인</span></td><td>CodeMirror 6 마운트·편집가능 확인. 400ms 디바운스 저장 + 전환/언마운트/종료 시 flush</td></tr>
+    <tr><td>하위작업</td><td class="loc">SubtaskList.tsx</td><td><span class="pill p-ok">확인</span></td><td>생성 시 <code>parent_id</code> 연결·리스트 상속·"0/1" 카운터 표시 확인</td></tr>
+    <tr><td>반복 설정</td><td class="loc">RecurringPicker.tsx</td><td><span class="pill p-warn">주의</span></td><td>매일/매주/매월/매년 저장 확인(<code>daily</code>). 단 <strong>B-3</strong>(두 번 클릭)</td></tr>
+    <tr><td>반복 인스턴스 자동 생성</td><td class="loc">useStore.toggleTask:504-536</td><td><span class="pill p-ok">확인</span></td><td>08-12 완료 → 08-13 새 인스턴스 생성 확인. 중복 방지 가드 동작</td></tr>
+    <tr><td>알림(리마인더) 설정</td><td class="loc">ReminderPicker.tsx</td><td><span class="pill p-warn">주의</span></td><td>값 저장 확인. 단 <strong>B-3</strong>(두 번 클릭) · 발화는 미검증(5절)</td></tr>
+    <tr><td>첨부파일 (선택·복사·열기)</td><td class="loc">AttachmentList.tsx / pick-attachment</td><td><span class="pill p-ok">확인</span></td><td><strong>전 구간 확인.</strong> 네이티브 열기 대화상자 → 선택 → <code>&lt;uuid&gt;-qa-attach.txt</code>로 attachments 폴더 복사(원본명은 별도 보존) → 목록에 📎 뱃지 → 상세에 파일명 → 클릭 시 TextEdit로 열림</td></tr>
+    <tr><td>시간블록 (scheduledStart/End)</td><td class="loc">utils/scheduledTime.ts</td><td><span class="pill p-bug">결함</span></td><td><strong>B-1</strong> — 생성 경로 없음. 값 유효성 가드는 동작</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.4 리스트 · 폴더 · 스마트 리스트 · 태그</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>리스트 생성 / 이름변경 / 삭제</td><td class="loc">Sidebar.tsx:175-257</td><td><span class="pill p-ok">확인</span></td><td>3개 동작 전부 확인. 삭제 시 소속 할일은 기본함으로 이동</td></tr>
+    <tr><td>리스트 색상 지정</td><td class="loc">Sidebar COLORS 8색</td><td><span class="pill p-ok">확인</span></td><td>클릭 시 순환 방식</td></tr>
+    <tr><td>폴더 생성 / 접기 / 삭제</td><td class="loc">Sidebar.tsx:370-404</td><td><span class="pill p-ok">확인</span></td><td>접기 상태 <code>collapsed</code> DB 반영 확인</td></tr>
+    <tr><td>리스트 순서 변경</td><td class="loc">useStore.reorderLists</td><td><span class="pill p-bug">결함</span></td><td><strong>B-9</strong> — 스토어·IPC·DB는 있으나 <strong>UI 진입점 없음</strong></td></tr>
+    <tr><td>스마트 리스트 8종</td><td class="loc">utils/smartLists.ts</td><td><span class="pill p-ok">확인</span></td><td>전체/오늘/내일/다음 7일/기본함/요약/완료됨/휴지통. 필터·뱃지 카운트가 같은 판별식 공유 확인</td></tr>
+    <tr><td>요약 뷰 시간대 그룹</td><td class="loc">TaskList.tsx:18-23</td><td><span class="pill p-ok">확인</span></td><td>지남/오늘/내일/향후 7일. 빈 그룹 숨김</td></tr>
+    <tr><td>태그별 보기</td><td class="loc">tagListId/tagFromListId</td><td><span class="pill p-ok">확인</span></td><td>사이드바 태그 섹션 자동 생성 → 클릭 시 <code>#qatag</code> 헤더 + 필터 동작</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.5 뷰 9종</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">뷰</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>캘린더 (월)</td><td class="loc">CalendarView.tsx</td><td><span class="pill p-ok">확인</span></td><td>렌더 정상. 이전/오늘/다음 이동. <strong>날짜 간 드래그로 마감일 변경 동작 확인</strong>(8/10→8/12). 셀당 3개 + "N개 더"</td></tr>
+    <tr><td>캘린더 (주)</td><td class="loc">WeeklyCalendar.tsx</td><td><span class="pill p-warn">주의</span></td><td>7일 칼럼·8~22시 슬롯·종일 행 렌더 정상. 시간블록 이동/겹침 레이아웃 동작. <strong>B-1</strong></td></tr>
+    <tr><td>캘린더 (일)</td><td class="loc">DailyCalendar.tsx</td><td><span class="pill p-warn">주의</span></td><td>렌더 정상(6~23시). <strong>B-1</strong></td></tr>
+    <tr><td>칸반 보드</td><td class="loc">KanbanView.tsx</td><td><span class="pill p-ok">확인</span></td><td>할 일/진행 중/완료 3칼럼. <strong>드래그로 칼럼 이동 동작 확인</strong>(진행 중 → 마감일=오늘). <strong>B-8</strong></td></tr>
+    <tr><td>타임라인</td><td class="loc">TimelineView.tsx</td><td><span class="pill p-ok">확인</span></td><td>지남/오늘/내일/이번 주/나중에/마감일 없음 6그룹. <strong>B-8</strong></td></tr>
+    <tr><td>아이젠하워</td><td class="loc">EisenhowerMatrix.tsx</td><td><span class="pill p-ok">확인</span></td><td>4사분면 자동 분류(우선순위 + 3일 내 마감). <strong>B-7</strong>(지연 색상) · <strong>B-8</strong></td></tr>
+    <tr><td>포모도로</td><td class="loc">PomodoroTimer.tsx</td><td><span class="pill p-bug">결함</span></td><td>25/5/15분 3모드·카운트다운·세션 도트 동작. <strong>B-5</strong>(뷰 전환 시 소실)</td></tr>
+    <tr><td>습관 트래커</td><td class="loc">HabitTracker.tsx</td><td><span class="pill p-ok">확인</span></td><td>습관 생성·주간 7칸 체크·연속일수·점수 +1 전부 확인. 주 이동 동작</td></tr>
+    <tr><td>통계</td><td class="loc">StatsView.tsx</td><td><span class="pill p-warn">주의</span></td><td>레벨/완료 현황/14일 추이/포모도로/습관율/요일 분포 렌더 정상. <strong>B-6</strong> · <strong>B-7</strong></td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.6 검색 · 정렬 · 일괄편집 · 휴지통</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>검색 (제목·설명·태그)</td><td class="loc">TaskList.matchesSearch</td><td><span class="pill p-ok">확인</span></td><td>입력 시 즉시 필터링 확인</td></tr>
+    <tr><td>정렬 5종 + 오름/내림</td><td class="loc">SortMenu.tsx</td><td><span class="pill p-warn">주의</span></td><td>제목 정렬 실제 적용 확인(ko 콜레이션). 단 <strong>B-3</strong></td></tr>
+    <tr><td>일괄 편집 모드</td><td class="loc">BatchBar.tsx</td><td><span class="pill p-ok">확인</span></td><td>전체선택("6개 선택") · 완료 · 이동 · 우선순위(4옵션) · 삭제 · 취소 전부 노출·동작</td></tr>
+    <tr><td>휴지통 보기</td><td class="loc">TrashView.tsx</td><td><span class="pill p-ok">확인</span></td><td>3건 표시 · 삭제일 표기 · 복구 3버튼 · 영구삭제 3버튼 · 휴지통 비우기 노출</td></tr>
+    <tr><td>복구 / 영구삭제 / 비우기</td><td class="loc">useStore</td><td><span class="pill p-warn">주의</span></td><td>복구·영구삭제 동작 확인. <strong>휴지통 비우기 3건→0건 + 빈 상태 문구</strong>도 확인. 단 <strong>B-11</strong>(확인 절차 없음)</td></tr>
+    <tr><td>되돌리기 토스트 (5초)</td><td class="loc">UndoToast.tsx</td><td><span class="pill p-ok">확인</span></td><td>삭제 후 토스트 노출 → '되돌리기' 클릭 시 활성 복귀 + 휴지통 제거 확인</td></tr>
+    <tr><td>Undo 스택 (최대 20)</td><td class="loc">useStore.pushUndo</td><td><span class="pill p-ok">확인</span></td><td>단건·일괄 삭제 2종 지원. Cmd+Z로도 복구 확인</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.7 AI 어시스턴트</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>연결 확인 · 모델 목록</td><td class="loc">ai-service.checkConnection</td><td><span class="pill p-ok">확인</span></td><td>로컬 Ollama 연결됨. 설치 모델 드롭다운에 <code>gpt-oss:20b</code>, <code>llama3.2:latest</code> 노출</td></tr>
+    <tr><td>제공자 3종 (Ollama/OpenAI/Custom)</td><td class="loc">Settings.tsx:423-448</td><td><span class="pill p-ok">확인</span></td><td>선택 시 baseUrl/model 자동 채움. OpenAI/Custom은 API 키 필드 노출</td></tr>
+    <tr><td>스트리밍 채팅</td><td class="loc">ai:stream-chat</td><td><span class="pill p-ok">확인</span></td><td><strong>실제 왕복 확인</strong>: "1+1은?" → "1+1은 2입니다." 한국어 응답</td></tr>
+    <tr><td>대화 기록 영속화</td><td class="loc">ai-chat.json</td><td><span class="pill p-ok">확인</span></td><td>재시작 후 22건 복원 확인. 최대 메시지 수 설정(기본 200) 존재</td></tr>
+    <tr><td>기존 할일 액션 + 확인 카드</td><td class="loc">aiActions.ts / aiConfirmAction</td><td><span class="pill p-ok">확인</span></td><td><strong>전 구간 확인</strong>: "QA-TEST-퀵 완료해줘" → 확인 카드 → [확인] → 실제 완료 → "…완료 처리했어요" 응답</td></tr>
+    <tr><td>소형 모델 오탐 차단</td><td class="loc">isCapableModel</td><td><span class="pill p-ok">확인</span></td><td>7B 미만·mini/tiny/small·llama3.2 제외. 코드 확인 + 20B 모델에서 액션 감지 동작</td></tr>
+    <tr><td>AI 자동 채우기 (할일 생성)</td><td class="loc">AddTask.handleAiCreate</td><td><span class="pill p-warn">주의</span></td><td>버튼은 <code>aiConnected</code>가 참일 때만 노출 — 설정/AI 패널을 한 번도 안 열면 첫 실행에서 안 보임</td></tr>
+    <tr><td>채팅 메시지 → 할일 추가</td><td class="loc">aiAddTaskFromText</td><td><span class="pill p-ok">확인</span></td><td>사용자 메시지마다 '할일로 추가' 버튼 노출(11개) 확인</td></tr>
+    <tr><td>전송 데이터 미리보기</td><td class="loc">AiChatPanel.tsx:176-208</td><td><span class="pill p-ok">확인</span></td><td>"전송 데이터 미리보기 · 14건" → 펼치면 실제 전송 컨텍스트(제목/마감/우선순위/태그) 노출</td></tr>
+    <tr><td>목적지 배지 (온디바이스/외부)</td><td class="loc">shared/ai-config.aiDestination</td><td><span class="pill p-ok">확인</span></td><td>"온디바이스" 배지 표시 확인. 외부 제공자 시 host 인라인 표시</td></tr>
+    <tr><td>로컬 전용 잠금</td><td class="loc">Settings.toggleLocalOnly</td><td><span class="pill p-ok">확인</span></td><td>체크박스 존재. 켜면 OpenAI/Custom 옵션 <code>disabled</code>. main에서도 강제</td></tr>
+    <tr><td>원클릭 모델 설치 (pull)</td><td class="loc">ai:pull-model + 진행률</td><td><span class="pill p-ok">확인</span></td><td><strong>실제 4.77GB 다운로드 완주.</strong> "한국어 모델 설치 (exaone3.5)" 클릭 → 진행률 2%→31%→59%→88% + 진행 바 → 완료 후 드롭다운이 실제 태그 <code>exaone3.5:latest · 한국어 추천</code>으로 자동 선택 → <code>ai-config.json</code>에 영속</td></tr>
+    <tr><td>모델 웜업</td><td class="loc">ai:warmup</td><td><span class="pill p-ok">확인</span></td><td>패널 열 때 호출. 첫 응답 지연 제거용</td></tr>
+    <tr><td>한국어 추천 모델 배지</td><td class="loc">utils/aiModels.ts</td><td><span class="pill p-ok">확인</span></td><td>EXAONE/EEVE 계열에 "· 한국어 추천" 라벨. 현재 미설치라 안내 문구 노출 확인</td></tr>
+    <tr><td>IME 조합 중 Enter 방지</td><td class="loc">utils/chatInput.ts</td><td><span class="pill p-ok">확인</span></td><td>유닛테스트 존재 + 한국어 입력 정상</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.8 캘린더 동기화</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>CalDAV (iCloud) 연동 UI</td><td class="loc">CalendarSyncSection.tsx</td><td><span class="pill p-na">미검증</span></td><td>Apple ID·앱 암호 필드, 연결·캘린더 선택·지금 동기화·연동 해제 버튼 렌더 확인. <strong>실 계정 필요 → 왕복 미검증</strong></td></tr>
+    <tr><td>CalDAV 프로토콜 계층</td><td class="loc">main/caldav/*.ts</td><td><span class="pill p-ok">확인</span></td><td>client·dav-xml·ical·sync 4개 모듈 <strong>유닛테스트 전부 통과</strong></td></tr>
+    <tr><td>비밀번호 암호화 보관</td><td class="loc">calendar-config.ts</td><td><span class="pill p-ok">확인</span></td><td>safeStorage 암호화. <code>toPublicConfig</code>가 렌더러로 비밀번호를 넘기지 않음(코드 확인)</td></tr>
+    <tr><td>Google 캘린더 연동</td><td class="loc">GoogleSyncSection.tsx</td><td><span class="pill p-bug">차단</span></td><td><strong>현재 빌드에서 사용 불가</strong> — 화면에 "이 빌드에는 Google 연동이 설정되어 있지 않습니다". <code>__GOOGLE_CLIENT_ID__</code> 미주입</td></tr>
+    <tr><td>Google OAuth (PKCE) / 토큰 갱신</td><td class="loc">main/google/oauth.ts</td><td><span class="pill p-ok">확인</span></td><td>유닛테스트 통과. 갱신 실패 시 토큰 폐기 로직 코드 확인</td></tr>
+    <tr><td>단방향 동기화(앱→캘린더)</td><td class="loc">calendar-sync.ts / google-sync.ts</td><td><span class="pill p-ok">확인</span></td><td>생성/수정/삭제/날짜없음 건너뜀 요약 구조 + 유닛테스트</td></tr>
+  </tbody>
+</table></div>
+
+<h3>3.9 설정 · 시스템</h3>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:23%">기능</th><th style="width:30%">위치</th><th style="width:9%">상태</th><th>검증 결과</th></tr></thead>
+  <tbody>
+    <tr><td>설정 모달 8섹션</td><td class="loc">Settings.tsx</td><td><span class="pill p-ok">확인</span></td><td>테마·언어·데이터·캘린더 동기화·Google 캘린더·AI·단축키·버전 정보</td></tr>
+    <tr><td>다크/라이트 테마</td><td class="loc">useStore.setTheme</td><td><span class="pill p-ok">확인</span></td><td>전환 즉시 <code>html.dark</code> + body 배경 변경, localStorage 영속 확인</td></tr>
+    <tr><td>한국어 / 영어 전환</td><td class="loc">i18n/index.ts</td><td><span class="pill p-ok">확인</span></td><td>전체 UI 즉시 전환(사이드바·설정 섹션 모두) + 영속 확인. 로케일 키 유닛테스트 존재</td></tr>
+    <tr><td>Esc로 설정 닫기</td><td class="loc">Settings.tsx:223-236</td><td><span class="pill p-ok">확인</span></td><td>capture 단계 리스너로 이중발화 방지. 동작 확인</td></tr>
+    <tr><td>상세 패널 폭 조절</td><td class="loc">detailWidth.ts</td><td><span class="pill p-ok">확인</span></td><td>드래그 핸들 존재(<code>aria-label="상세 패널 폭 조절"</code>) + clamp 유닛테스트</td></tr>
+    <tr><td>단축키 9종 안내</td><td class="loc">Settings SHORTCUTS</td><td><span class="pill p-warn">주의</span></td><td>표기와 실동작 대조 결과 <strong>Cmd+F만 불일치</strong>(B-4). 나머지 8종 일치</td></tr>
+    <tr><td>버전 표시</td><td class="loc">__APP_VERSION__</td><td><span class="pill p-ok">확인</span></td><td>"Greenday v2.0.1"</td></tr>
+    <tr><td>MAS 빌드 분기</td><td class="loc">app:is-mas</td><td><span class="pill p-na">미검증</span></td><td>dev에서 <code>process.mas=false</code>. App Store 문구·전역 단축키 no-op 분기는 코드 확인만</td></tr>
+    <tr><td>자동 업데이트</td><td class="loc">main/index.ts:94-142</td><td><span class="pill p-warn">주의</span></td><td>dev는 설계상 비활성(그래서 "업데이트 확인 중"에 멈추는 건 정상). "새 버전 있음" 경로는 <strong>GitHub 최신 릴리스가 v1.4.1로 로컬 v2.0.1보다 낮아 재현 불가</strong>. 게다가 <strong>B-9</strong>로 앱 내 다운로드·설치가 dead code라, 새 버전이 나와도 GitHub 페이지 열기만 가능</td></tr>
+    <tr><td>리마인더 폴러 (60초)</td><td class="loc">main/index.ts:82-91</td><td><span class="pill p-warn">주의</span></td><td><strong>실제 발화 확인</strong>(패키징 앱, 19:13:00 예정 → 19:13:27 알림 센터에 <code>리마인더 / 제목</code>). 단 <strong>B-13</strong>(첫 알림은 권한 프롬프트에 막혀 유실). dev 빌드(<code>com.github.Electron</code>)는 알림 미전달</td></tr>
+    <tr><td>전역 단축키 Cmd+Shift+A</td><td class="loc">register-global-shortcut</td><td><span class="pill p-ok">확인</span></td><td><strong>앱 외부에서 확인.</strong> Finder 포커스 상태에서 발사 → Electron이 프론트로 복귀 + 빠른 추가 모달 오픈</td></tr>
+    <tr><td>빠른 추가 모달</td><td class="loc">QuickAdd.tsx</td><td><span class="pill p-ok">확인</span></td><td>Cmd+Shift+A로 열림 → "모레 …" 파싱 힌트 → Enter 생성 → 자동 닫힘</td></tr>
+    <tr><td>외부 링크 안전 열기</td><td class="loc">safeOpenExternal</td><td><span class="pill p-ok">확인</span></td><td>http/https만 허용. <code>setWindowOpenHandler</code>도 동일 정책</td></tr>
+    <tr><td>커스텀 스킴 딥링크</td><td class="loc">app.on('open-url')</td><td><span class="pill p-na">미검증</span></td><td>Google OAuth 콜백용. Google 미설정이라 미검증</td></tr>
+    <tr><td>보안 설정</td><td class="loc">main/index.ts:28-32</td><td><span class="pill p-ok">확인</span></td><td><code>sandbox: true</code> · <code>contextIsolation: true</code> · <code>nodeIntegration</code> 미사용</td></tr>
+    <tr><td>라이선스 검증</td><td class="loc">shared/license/*</td><td><span class="pill p-bug">미배선</span></td><td><strong>B-9</strong> — 모듈은 존재하고 유닛테스트도 있으나 앱 어디에도 연결되지 않음</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="unverified">4. 남은 미검증 5가지</h2>
+<p>
+  화면 잠금 때문에 막혔던 항목은 2차에서 전부 해소했습니다. 남은 것은 <strong>외부 자격증명이나
+  다른 빌드 구성이 있어야만 가능한 것들</strong>이며, 제가 임의로 만들 수 없는 조건입니다.
+</p>
+<div class="scroll-x"><table>
+  <thead><tr><th style="width:26%">항목</th><th style="width:30%">왜 지금 못 하나</th><th>확인하려면 필요한 것</th></tr></thead>
+  <tbody>
+    <tr><td>CalDAV(iCloud) 왕복</td><td>Apple ID + 앱 암호가 있어야 서버에 붙습니다</td><td>앱 암호 발급 → 연결 → 캘린더 선택 → 지금 동기화 → iCloud 캘린더에서 일정 확인.<br>(프로토콜 계층 4개 모듈은 유닛테스트 통과, 자격증명 암호화 보관도 코드 확인 완료)</td></tr>
+    <tr><td>Google 캘린더 왕복</td><td>이 빌드에 OAuth 클라이언트 ID가 없습니다 — 화면에 "이 빌드에는 Google 연동이 설정되어 있지 않습니다"</td><td><code>GOOGLE_OAUTH_CLIENT_ID</code> 주입 후 재빌드.<br>(OAuth PKCE·토큰 갱신·동기화 계획 로직은 유닛테스트 통과)</td></tr>
+    <tr><td>커스텀 스킴 딥링크</td><td>Google OAuth 콜백 전용이라 위 항목에 종속</td><td>Google 설정 후 브라우저에서 앱으로 복귀 확인</td></tr>
+    <tr><td>자동 업데이트 "새 버전 있음" 경로</td><td>GitHub 최신 릴리스가 v1.4.1로 로컬 v2.0.1보다 낮아 업데이트가 감지될 수 없습니다</td><td>2.0.1보다 높은 릴리스 발행.<br>단 <strong>B-9</strong> 때문에 감지돼도 앱 내 설치는 불가 — 배선이 먼저입니다</td></tr>
+    <tr><td>MAS(App Store) 빌드 분기</td><td>dev/패키징 모두 <code>process.mas=false</code></td><td>MAS 빌드에서 설정의 App Store 문구 + 전역 단축키 no-op 확인</td></tr>
+  </tbody>
+</table></div>
+<p style="font-size:14px;color:var(--dim)">
+  라이선스 검증은 미검증이 아니라 <strong>기능이 앱에 없는 상태</strong>입니다(B-9). 배선 후 검증 대상입니다.
+</p>
+
+<h2 id="checklist">5. 재사용 회귀 점검 체크리스트</h2>
+<p>다음 릴리스 전에 이 순서대로 돌리면 됩니다. 각 항목은 위 인벤토리와 1:1로 대응합니다.</p>
+
+<h3>A. 자동 (2분)</h3>
+<ul class="chk">
+  <li><code>npm run typecheck</code> → 오류 0</li>
+  <li><code>npm test</code> → 30 파일 / 416+ 테스트 통과</li>
+  <li><code>npm run lint</code> → 에러 0</li>
+</ul>
+
+<h3>B. 할일 기본 흐름 (5분)</h3>
+<ul class="chk">
+  <li>"내일 회의" 입력 → 힌트에 내일 날짜 → Enter → <strong>내일</strong> 리스트에 나타남</li>
+  <li>체크 → 완료됨 뱃지 +1, 사이드바 점수 증가</li>
+  <li>체크 해제 → 원래 리스트로 복귀</li>
+  <li>우클릭 → 완료로 변경 / 다른 리스트로 이동 / 제목 복사 / 삭제 4개 모두 동작</li>
+  <li>삭제 → 되돌리기 토스트 5초 노출 → 클릭 시 복구</li>
+  <li>휴지통 → 복구 / 영구삭제 동작</li>
+  <li><strong class="chk">[B-11]</strong> 휴지통 비우기 · 영구삭제에 <strong>확인 절차가 생겼는가</strong></li>
+  <li><strong class="chk">[B-2]</strong> 할일을 드래그해 순서 변경 → <strong>재시작 없이 화면에 반영되는가</strong></li>
+</ul>
+
+<h3>C. 할일 속성 (5분)</h3>
+<ul class="chk">
+  <li>상세 열기 → 우선순위 4단계 · 마감일 · 마감시간 · 리스트 변경 저장</li>
+  <li>태그 입력 → Enter → 사이드바 태그 섹션 생성 → 클릭 시 필터</li>
+  <li>하위작업 추가 → "0/N" 카운터 · 부모 리스트 상속</li>
+  <li>메모에 텍스트 입력 → 다른 할일로 이동 후 복귀 시 유지</li>
+  <li><strong class="chk">[B-3]</strong> <strong>알림</strong> 버튼 <strong>한 번</strong> 클릭에 옵션이 바로 뜨는가 (중복 버튼 없이)</li>
+  <li><strong class="chk">[B-3]</strong> <strong>반복</strong> 버튼도 한 번 클릭에 뜨는가</li>
+  <li>반복=매일 설정 → 완료 → 다음날 인스턴스 자동 생성</li>
+  <li>첨부 추가 → 파일명 클릭 시 기본 앱으로 열림</li>
+</ul>
+
+<h3>D. 뷰 9종 (5분)</h3>
+<ul class="chk">
+  <li>9개 뷰 전부 렌더 · 콘솔 에러 없음</li>
+  <li>캘린더(월): 날짜 간 드래그로 마감일 변경</li>
+  <li><strong class="chk">[B-1]</strong> <strong>주/일 캘린더에서 할일을 시간 슬롯에 드롭해 시간블록을 만들 수 있는가</strong></li>
+  <li>시간블록: 이동(길이 유지) · 아래 가장자리 리사이즈 · 우클릭 일정 해제</li>
+  <li>칸반: 카드 드래그로 칼럼 이동 (진행 중 → 마감일 오늘)</li>
+  <li><strong class="chk">[B-8]</strong> 칸반/타임라인/아이젠하워에 <strong>하위작업이 독립 카드로 안 나오는가</strong></li>
+  <li><strong class="chk">[B-5]</strong> 포모도로 시작 → 다른 뷰 갔다 복귀 → <strong>타이머가 이어지는가</strong></li>
+  <li>습관 추가 → 오늘 칸 체크 → 연속일수 표시 + 점수 증가</li>
+  <li><strong class="chk">[B-6]</strong> 사이드바 레벨 == 통계 레벨</li>
+  <li><strong class="chk">[B-7]</strong> <strong>오전 9시 이전(KST)</strong>에 통계 "오늘 완료"와 Cmd+D 날짜가 맞는가</li>
+</ul>
+
+<h3>E. 검색 · 정렬 · 일괄 (3분)</h3>
+<ul class="chk">
+  <li>검색어 입력 → 제목/설명/태그 매칭 필터</li>
+  <li><strong class="chk">[B-4]</strong> <strong>Cmd+F → 검색창에 커서가 들어가는가</strong></li>
+  <li><strong class="chk">[B-3]</strong> 정렬 아이콘 <strong>한 번</strong> 클릭에 5개 옵션이 뜨는가</li>
+  <li>정렬 5종 각각 적용 + 같은 항목 재클릭 시 오름/내림 토글</li>
+  <li>일괄 편집 → 전체선택 → 우선순위 일괄 변경 → 취소</li>
+</ul>
+
+<h3>F. AI (5분, Ollama 실행 필요)</h3>
+<ul class="chk">
+  <li>설정 → AI 연결 초록 · 설치 모델 드롭다운 채워짐</li>
+  <li>AI 패널 → "온디바이스" 배지 · "전송 데이터 미리보기 · N건" 펼침</li>
+  <li>일반 질문 → 한국어 스트리밍 응답</li>
+  <li>"○○ 완료해줘" → <strong>확인 카드</strong> 노출 → [확인] → 실제 완료 + 응답</li>
+  <li>[취소] 눌렀을 때 아무 일도 일어나지 않는가</li>
+  <li>재시작 후 대화 기록 복원</li>
+  <li>제공자를 OpenAI로 바꾸면 외부 전송 경고 + 목적지 배지가 host로 바뀌는가</li>
+  <li>로컬 전용 잠금 켜면 OpenAI/Custom이 비활성화되는가</li>
+</ul>
+
+<h3>G. 설정 · 시스템 (3분)</h3>
+<ul class="chk">
+  <li>테마 전환 즉시 반영 + 재시작 후 유지</li>
+  <li>한/영 전환 시 <strong>전체</strong> UI 번역 + 재시작 후 유지</li>
+  <li>Esc로 설정 닫힘 (상세 패널이 같이 닫히지 않는가)</li>
+  <li>Cmd+E → 저장 대화상자 → JSON 저장 후 파일 내용 확인</li>
+  <li>Cmd+E → <strong>Format 팝업을 CSV로 변경</strong> → 저장 → 헤더 7열 + 행 수 확인</li>
+  <li><strong class="chk">[B-12]</strong> CSV에 휴지통 항목이 섞여 나오는가 (또는 구분 열이 생겼는가)</li>
+  <li>제목이 <code>=1+1</code>인 할일을 만들고 CSV 내보내기 → 셀이 <code>'=1+1</code>로 이스케이프되는가</li>
+  <li>리마인더 now+2분 설정 → <strong>알림 배너 실제 발화</strong> (패키징 빌드, 화면 잠금 해제)</li>
+  <li><strong class="chk">[B-13]</strong> 알림 권한이 없을 때 <strong>앱이 미리 안내하는가</strong> (첫 알림을 조용히 잃지 않는가)</li>
+  <li>다른 앱 포커스 상태에서 Cmd+Shift+A → 창 복귀 + 빠른 추가</li>
+  <li>단축키 8종(Cmd+N/Cmd+Shift+A/Cmd+Z/Cmd+E/Cmd+D/Delete/1-4/Esc) 동작</li>
+  <li>첨부 추가 → attachments 폴더에 <code>&lt;uuid&gt;-원본명</code>으로 복사 → 클릭 시 기본 앱 실행</li>
+  <li>AI 설정 → 추천 모델 미설치 시 설치 버튼 → 진행률 → 완료 후 자동 선택</li>
+</ul>
+
+<h3>H. 동기화 (설정된 경우만)</h3>
+<ul class="chk">
+  <li>CalDAV: 연결 → 캘린더 선택 → 지금 동기화 → 생성/수정/삭제 요약 + 실제 캘린더 반영</li>
+  <li>Google: 연결 → 캘린더 목록 → 선택 → 동기화 → 실제 반영</li>
+  <li>연동 해제 후 자격증명이 남지 않는가</li>
+</ul>
+
+<h3>QA 하네스 재사용</h3>
+<p>
+  이번에 쓴 CDP 드라이버로 위 체크리스트 대부분을 자동화할 수 있습니다. 실행 방법:
+</p>
+<ul>
+  <li><code>npx electron-vite dev -- --remote-debugging-port=9222</code> 로 앱 실행</li>
+  <li><code>http://127.0.0.1:9222/json/list</code> 에서 page 타깃의 WebSocket URL 획득</li>
+  <li><code>Runtime.evaluate</code> 로 페이지 안에서 DOM 클릭/입력을 발생시키고, <code>window.api.getTasks()</code> 등으로 디스크 상태를 대조</li>
+  <li>React가 <code>value</code> setter를 가로채므로, 입력값은 네이티브 setter로 넣은 뒤 <code>input</code>/<code>change</code> 이벤트를 직접 발생시켜야 합니다</li>
+  <li>드래그는 <code>DataTransfer</code>를 공유하는 <code>dragstart → dragover → drop</code> 시퀀스로 재현하되, <code>dragstart</code> 이후 상태 반영을 위해 200ms 이상 대기해야 합니다</li>
+</ul>
+
+<h3>네이티브 UI 자동화 (2차에서 추가)</h3>
+<p>
+  화면 잠금이 해제돼 있으면 <code>orca computer</code>로 네이티브 대화상자와 알림까지 자동화할 수 있습니다.
+</p>
+<ul>
+  <li>dev Electron은 화면 잠금 상태에서 접근성 트리를 노출하지 않습니다 — <strong>잠금 해제가 전제</strong></li>
+  <li>저장/열기 대화상자는 <code>list-windows</code>로 창 id를 찾아 <code>--window-id</code>로 지목합니다</li>
+  <li>대화상자 경로 이동은 <code>CmdOrCtrl+Shift+G</code> → <code>type-text</code>로 전체 경로 → <code>Return</code> 두 번</li>
+  <li>Format 팝업은 <code>perform-secondary-action --action press</code> → <code>Down</code> → <code>Return</code></li>
+  <li>알림은 <code>--app pid:$(pgrep -x NotificationCenter)</code>로 알림 센터 트리를 읽으면 제목·본문이 그대로 나옵니다</li>
+  <li>권한 프롬프트의 버튼은 트리에 <code>name:허용\n target:0x0\n selector:(null)</code> 형태로 들어 있어, 그 문자열 전체를 <code>--action</code>에 넘겨야 눌립니다</li>
+</ul>
+
+<footer>
+  Greenday v2.0.1 · 브랜치 <code>supaicy/coordinate</code> · 2026-08-05 (2차 검증 19:30 반영)<br>
+  코드 변경 없음. QA 중 만든 테스트 데이터·첨부·채팅 기록은 전부 제거하고 사용자 데이터를 원본으로 복구했습니다
+  (할일 25 · 리스트 2 · 폴더 1 · 습관 0 · 점수 39 · 휴지통 3 · AI 모델 설정 <code>gpt-oss:20b</code>).
+</footer>
+
+</div>
+</body>
+</html>

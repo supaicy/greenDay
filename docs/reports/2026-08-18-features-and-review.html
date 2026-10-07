@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>기능 넷과 리뷰 다섯 바퀴</title>
+<style>
+  :root {
+    --bg:#fafaf9; --surface:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#16a34a; --accent-soft:#f0fdf4; --warn:#b45309; --warn-soft:#fffbeb;
+    --hot:#b91c1c; --hot-soft:#fef2f2; --cool:#1d4ed8; --cool-soft:#eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e; --line:#44403c;
+      --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33;
+      --hot:#f87171; --hot-soft:#7f1d1d33; --cool:#93c5fd; --cool-soft:#1e3a8a33; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:26px; }
+  h2 { font-size:19px; margin:40px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+  h3 { font-size:15.5px; margin:24px 0 6px; }
+  .tldr { background:var(--accent-soft); border:1px solid var(--accent); border-radius:10px; padding:16px 20px; }
+  .tldr strong { color:var(--accent); }
+  .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; white-space:nowrap; }
+  code { font:12.5px ui-monospace,"SF Mono",Menlo,monospace; background:var(--surface);
+    border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  ul { padding-left:22px; margin:8px 0; } li { margin:6px 0; }
+  .note { color:var(--muted); font-size:13.5px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 18px; margin:14px 0; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; border-radius:5px; padding:1px 7px; white-space:nowrap; }
+  .tag.done { background:var(--accent-soft); color:var(--accent); }
+  .tag.bug { background:var(--hot-soft); color:var(--hot); }
+  .tag.mine { background:var(--warn-soft); color:var(--warn); }
+  .tag.cool { background:var(--cool-soft); color:var(--cool); }
+  .num { font-variant-numeric:tabular-nums; }
+  .pipe { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:16px 0; }
+  .pipe div { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .pipe b { display:block; font-size:13px; }
+  .pipe span { color:var(--muted); font-size:12px; }
+  footer { margin-top:48px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+<h1>기능 넷과 리뷰 다섯 바퀴</h1>
+<div class="meta">2026-08-18 · Greenday · 커밋 <code>5e534e9</code> → <code>516e252</code> · 브랜치 <code>supaicy/coordinate</code>(push 안 함)</div>
+
+<div class="tldr">
+<strong>요청한 두 가지를 넣고, 리뷰를 다섯 바퀴 돌렸습니다.</strong> 기간·이동·복제·고정 네 기능과 우클릭 메뉴의 Radix 전환이 들어갔고, 그 뒤 <strong>실재하는 결함 <span class="num">26</span>건</strong>을 찾아 전부 고쳤습니다. 그중 <strong><span class="num">6</span>건은 제가 앞선 리뷰를 반영하다 새로 만든 것</strong>이고, <strong><span class="num">2</span>건은 테스트로는 보이지 않아 실제 앱을 몰아서야 나왔습니다.</p>
+<p style="margin:8px 0 0">가장 뼈아픈 지적은 코드가 아니라 <strong>제 테스트</strong>였습니다 — 변이 테스트로 확인해보니 <strong>코드를 고장 내도 통과하는 테스트가 여럿</strong>이었습니다. 최종: typecheck 0 · lint 0 errors · <strong><span class="num">675</span> tests green</strong> · 빌드 정상.
+</div>
+
+<h2>1 · 요청한 것</h2>
+<table>
+<thead><tr><th>요청</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td><strong>기간(시작~종료) 설정</strong></td><td><code>startDate</code>를 새로 두고 <code>dueDate</code>가 종료일 역할. 기한 팝오버의 '기간' 행으로 켜고, 시작일 입력의 <code>max</code>가 마감일에 묶입니다. 거꾸로 된 기간은 저장되지 않고, 마감일만 옮기면 기간이 길이를 지킨 채 따라갑니다.</td></tr>
+<tr><td><strong>다른 리스트로 이동</strong></td><td>⋯ 메뉴와 우클릭 메뉴의 하위메뉴로.</td></tr>
+<tr><td><strong>복제</strong></td><td>원본과 다음 항목 사이의 <code>sortOrder</code>를 받아 바로 아래에. 완료 이력·시간블록·고정·<em>반복</em>은 물려받지 않습니다.</td></tr>
+<tr><td><strong>고정</strong></td><td>어떤 정렬 기준보다 앞섭니다. 목록·칸반·타임라인·아이젠하워·미배정 레일 다섯 화면이 같은 규칙을 씁니다.</td></tr>
+<tr><td><strong>우클릭 메뉴 → Radix</strong></td><td>손수 만든 <code>&lt;div&gt;</code> 두 곳(할일 행·캘린더 블록)을 전환. 겹치는 항목은 <code>TaskActionItems.tsx</code> 한 곳에 두고 ⋯ 메뉴와 공유합니다 — 한쪽만 고치면 메뉴마다 다른 말을 하니까요.</td></tr>
+</tbody>
+</table>
+<p class="note">나눔의 기준은 <strong>누르면 그 자리에서 끝나는가</strong>입니다. 편집기가 필요한 것(기간·태그·첨부·하위작업)은 그 편집기가 있는 상세 패널의 ⋯에만 뒀습니다.</p>
+
+<h2>2 · 리뷰 다섯 바퀴</h2>
+<div class="pipe">
+  <div><b>/simplify</b><span>정리 4명 (재사용·단순화·효율·고도)</span></div>
+  <div><b>Codex</b><span>gpt-5.6-sol 교차 검증</span></div>
+  <div><b>/review</b><span>특작 4명 (테스트·보안·데이터·유지보수)</span></div>
+  <div><b>/code-review</b><span>동작·설계 결함 12건</span></div>
+  <div><b>라이브 QA</b><span>CDP로 실제 앱 구동</span></div>
+</div>
+
+<h3>고쳐진 결함 (발췌)</h3>
+<div class="scroll">
+<table>
+<thead><tr><th>무엇이 잘못됐나</th><th>사용자에게는</th><th>출처</th></tr></thead>
+<tbody>
+<tr><td>메뉴 프리미티브의 <strong>클릭 전파 차단이 죽은 코드</strong>였다 — <code>{...props}</code>가 <code>onClick</code> 뒤에 펼쳐져, 호출처가 <code>onClick</code>을 주면 가드가 통째로 덮였다</td><td>메뉴에서 '삭제'를 누르면 지운 직후 그 행이 선택돼 빈 화면이 남는다(그 가드가 이 프리미티브의 존재 이유)</td><td>유지보수</td></tr>
+<tr><td>날짜가 <strong>iCal 본문으로 거의 그대로</strong> 나간다(<code>toDateStamp</code>은 하이픈만 지운다)</td><td>개행이 섞인 <code>dueDate</code> 하나면 사용자 캘린더에 임의 속성을 끼워 넣을 수 있었다</td><td>보안</td></tr>
+<tr><td>복제본의 <code>sortOrder</code>를 main이 버리고 <code>maxOrder+1</code>로 덮었다</td><td>화면에선 원본 아래 있다가 <strong>재시작하면 목록 맨 끝으로</strong></td><td>직접 · Codex</td></tr>
+<tr><td>⋯의 '기간 설정'·'태그'를 눌러도 팝오버가 <strong>열렸다가 ~400ms 뒤 사라졌다</strong></td><td>기능이 아예 없는 것처럼 보였다</td><td><span class="tag mine">라이브 QA</span></td></tr>
+<tr><td>기간에 마감 시각이 붙으면 시각 분기가 먼저라 기간이 통째로 사라졌다</td><td>8/18~8/20 09:00이 캘린더에 8/20의 60분짜리로</td><td>code-review</td></tr>
+<tr><td>복제가 <strong>반복까지 복사</strong>해 두 할일이 같은 시리즈 키를 가졌다</td><td>둘 다 완료하면 다음 회차가 하나만 생겨 <strong>나머지 시리즈가 말없이 끝났다</strong></td><td>code-review</td></tr>
+<tr><td>고정한 반복 할일이 다음 회차에서 고정을 잃었다</td><td>완료할 때마다 다시 고정해야 했다</td><td>Codex</td></tr>
+<tr><td>고정 목록에서 드래그 한 번이 고정 배치를 <code>sortOrder</code>에 구웠다</td><td>고정을 풀어도 그 항목이 맨 위에 남았다</td><td>고도 · Codex</td></tr>
+<tr><td>마감일만 옮기는 조작(캘린더 드래그·<code>Cmd+D</code>·AI 재예약)이 기간을 지웠다</td><td>사흘짜리 일이 드래그 한 번에 경고 없이 하루짜리로</td><td>Codex</td></tr>
+<tr><td>구버전으로 내려가 마감일을 지우면 <strong>끝 없는 시작일</strong>이 남고 아무도 안 고쳤다</td><td>화면에 <code>2026-08-18 ~ </code>가 매달린 채로</td><td>데이터</td></tr>
+<tr><td>기간 라벨이 양끝을 상대어로 찍었다</td><td><strong>'오늘 ~ 오늘'</strong>. 게다가 상세 패널은 같은 값을 ISO로 찍어 화면마다 다르게 읽혔다</td><td>code-review</td></tr>
+<tr><td>기간 모드에서 <strong>끝을 늘리면 시작일까지 따라 움직였다</strong></td><td>8/16~8/16에서 끝만 8/19로 바꿨더니 8/19~8/19</td><td><span class="tag mine">라이브 QA</span></td></tr>
+<tr><td>우클릭 메뉴를 <code>{open &amp;&amp; ...}</code>로 감쌌다 — <code>CLAUDE.md</code>가 명시적으로 금지한 형태</td><td>닫힘 애니메이션이 죽고, 트리거로 포커스 돌려주는 게 언마운트 순서에 딸려갔다</td><td><span class="tag mine">code-review</span></td></tr>
+<tr><td>기간을 켜며 대신 잡아준 마감일이 끌 때 남았다</td><td>고른 적 없는 마감일이 붙어 '오늘'과 캘린더에 나타났다</td><td><span class="tag mine">code-review</span></td></tr>
+<tr><td>칸반 <strong>완료 열만</strong> 고정을 무시했다</td><td>고정한 할일이 완료되는 순간 아무 데나 떨어졌다</td><td>code-review</td></tr>
+<tr><td>렌더러 배열에 없는 할일의 기한 수정이 <strong>쓰기 자체를 포기</strong>했다</td><td>main은 자기 저장소에서 찾는데, 조용히 유실됐다</td><td><span class="tag mine">code-review</span></td></tr>
+<tr><td>CSV의 새 열을 <strong>가운데 끼웠다</strong></td><td>기존 열 위치로 읽던 스프레드시트·스크립트가 오류 없이 엉뚱한 값을 읽었다</td><td><span class="tag mine">데이터</span></td></tr>
+</tbody>
+</table>
+</div>
+<p class="note"><span class="tag mine">표시</span>는 제가 앞선 리뷰를 반영하다 새로 만든 것입니다. 리뷰를 여러 바퀴 돌린 이유가 이겁니다 — 한 바퀴로는 자기가 방금 만든 결함을 못 봅니다.</p>
+
+<h2>3 · 가장 뼈아픈 지적: 통과만 하던 테스트</h2>
+<div class="card">
+<p>테스트 전문 리뷰어가 <strong>변이 테스트</strong>로 확인했습니다. 코드를 일부러 고장 냈는데 <strong>전부 초록이었습니다.</strong></p>
+</div>
+<div class="scroll">
+<table>
+<thead><tr><th>심은 결함</th><th>그때</th><th>지금</th></tr></thead>
+<tbody>
+<tr><td><code>createTask</code>가 새 컬럼(<code>start_date</code>·<code>pinned</code>)을 버리게</td><td>통과</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td><code>pinned</code>의 0/1 강제를 제거</td><td>통과</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>정렬 방향(<code>* dir</code>)과 <code>createdAt</code> 분기를 삭제</td><td>통과</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>기간 진행 판정의 하한을 <code>&lt;=</code> → <code>&lt;</code></td><td>통과</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>복제본 <code>sortOrder</code>를 <code>+1</code>로</td><td>통과</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>CalDAV의 역전 기간 가드를 제거</td><td>통과</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>깨진 날짜 복구를 제거</td><td>—</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>기간 라벨을 다시 상대어로</td><td>—</td><td><span class="tag bug">FAIL</span></td></tr>
+<tr><td>메뉴의 포커스 복귀 예외를 제거</td><td>—</td><td><span class="tag bug">FAIL</span></td></tr>
+</tbody>
+</table>
+</div>
+<p>이번 사이클에서 <strong>변이를 직접 심어 확인한 것만 <span class="num">17</span>가지</strong>입니다. 통과하는 테스트를 보고 "덮였다"고 말하지 않으려고, 고칠 때마다 고장부터 내봤습니다.</p>
+
+<h2>4 · 라이브 QA — 테스트로는 보이지 않는 것</h2>
+<div class="card">
+<p>⋯ 메뉴의 '기간 설정'이 <strong>동작하지 않았습니다.</strong> 단위 테스트는 전부 초록이었습니다.</p>
+<p>CDP로 실제 앱을 몰아 30·120·400·1000ms 시점을 찍어보니 답이 나왔습니다:</p>
+<table style="margin-top:8px">
+<tr><th>+30ms</th><td>팝오버 <code>state: open</code>, 입력 3개 <span class="tag done">열림</span></td></tr>
+<tr><th>+120ms</th><td>그대로 <span class="tag done">열림</span></td></tr>
+<tr><th>+400ms</th><td><code>[]</code> <span class="tag bug">사라짐</span></td></tr>
+</table>
+<p style="margin-top:10px">Radix 메뉴가 닫히며 포커스를 트리거로 되돌리는 순간, 갓 열린 팝오버가 <code>focus-outside</code>로 스스로 닫습니다. <strong>다른 오버레이로 넘기는 항목일 때만</strong> 포커스 복귀를 막았습니다 — 나머지는 그대로 돌려줘야 키보드 사용자가 자리를 잃지 않습니다. 태그도 같은 구조라 함께 고쳐졌습니다.</p>
+</div>
+<p class="note">QA 전후로 <code>ticktick-data.json</code>을 백업·대조했습니다. 26개 할일이 <code>start_date</code>·<code>pinned</code>·<code>due_date</code>까지 백업과 동일합니다.</p>
+
+<h2>5 · 최종</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>커밋</th><th>내용</th></tr></thead>
+<tbody>
+<tr><td><code>5e534e9</code></td><td>기능 넷 + 우클릭 메뉴 Radix 전환</td></tr>
+<tr><td><code>82b533b</code></td><td>/simplify 반영 — 중복 랭크 표, 서술자 계층, 행마다 만들던 메뉴 서브트리, 4중 조회</td></tr>
+<tr><td><code>c53ec55</code></td><td>/review + Codex 반영 — 전파 차단, iCal 날짜 검증, 반복 고정, 기간 이동, 통과만 하던 테스트 8건</td></tr>
+<tr><td><code>7bdd4ee</code></td><td>/code-review 12건 — 기간+시각, 반복 복제, 칸반 완료 열, 라벨 통일, CLAUDE.md 갱신</td></tr>
+<tr><td><code>516e252</code></td><td>라이브 QA 2건 — 포커스 핸드오프, 끝 편집</td></tr>
+</tbody>
+</table>
+</div>
+
+<table>
+<thead><tr><th>검사</th><th>결과</th></tr></thead>
+<tbody>
+<tr><td><code>tsc --build</code></td><td><span class="tag done">0 errors</span></td></tr>
+<tr><td><code>biome lint</code></td><td><span class="tag done">0 errors</span> (경고 7건은 이번 변경과 무관한 기존 것)</td></tr>
+<tr><td><code>vitest run</code></td><td><span class="tag done">675 passed</span> / 41 files — 시작 613에서 <strong>+62</strong></td></tr>
+<tr><td><code>electron-vite build</code></td><td><span class="tag done">정상</span></td></tr>
+<tr><td>전체 규모</td><td class="num">41 files, +2117 / −302</td></tr>
+</tbody>
+</table>
+
+<h2>6 · 남은 것</h2>
+<ul>
+<li><strong>조용한 실패 표면.</strong> IPC 거부는 이제 콘솔에 남지만, 사용자에게 보이지는 않습니다. 지금은 그 경로로 갈 값을 로드 때 미리 정리해 막아뒀습니다. 제대로 된 실패 표시는 TODOS 항목입니다.</li>
+<li><strong>시리즈 정체성.</strong> 반복 시리즈 키가 (패턴·제목·마감일)이라 같은 제목이 겹치면 충돌합니다. 복제가 반복을 물려받지 않게 한 것은 그 회피책입니다 — 근본 수정은 TODOS 항목입니다.</li>
+<li><strong>테스트 픽스처.</strong> 전체 <code>Task</code> 리터럴이 네 파일에 흩어져 있어, 필드가 늘 때마다 여러 곳을 고쳐야 합니다(이번에 두 번 그랬습니다). 공유 <code>makeTask</code>로 모으는 건 별건으로 잡는 게 낫습니다.</li>
+<li>커밋 다섯 개는 <strong>로컬에만</strong> 있습니다(공개 저장소 push 보류 중).</li>
+</ul>
+
+<footer>
+Greenday · 기능 넷과 리뷰 다섯 바퀴 · 2026-08-18 · <code>5e534e9</code> … <code>516e252</code>
+</footer>
+</main>
+</body>
+</html>

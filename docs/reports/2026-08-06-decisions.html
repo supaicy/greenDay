@@ -1,0 +1,458 @@
+<title>Greenday — 같이 정할 것 10가지</title>
+<style>
+:root{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;--dim:#57606a;
+--faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--stop:#b91c1c;
+--mono:"SF Mono","Fira Code",Menlo,monospace}
+@media (prefers-color-scheme:dark){:root{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+--text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+--ok:#4ade80;--warn:#fbbf24;--stop:#f87171}}
+:root[data-theme="dark"]{--bg:#16181d;--surface:#1e2128;--surface-2:#262a33;
+--text:#e6e8eb;--dim:#a8b0ba;--faint:#8b939e;--line:#303640;--accent:#7aa7f0;
+--ok:#4ade80;--warn:#fbbf24;--stop:#f87171}
+:root[data-theme="light"]{--bg:#fff;--surface:#f7f8fa;--surface-2:#eef1f5;--text:#1f2328;
+--dim:#57606a;--faint:#6e7781;--line:#d8dee4;--accent:#2563eb;--ok:#15803d;
+--warn:#b45309;--stop:#b91c1c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);line-height:1.75;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:52px 24px 96px}
+header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:8px}
+h1{font-size:27px;margin:0 0 8px;letter-spacing:-.01em} .sub{color:var(--faint);font-size:14px;margin:0}
+h2{font-size:19.5px;margin:52px 0 6px;padding-top:26px;border-top:1px solid var(--line)}
+h2 .tag{font-size:12px;font-weight:600;color:var(--faint);letter-spacing:.05em;display:block;margin-bottom:4px}
+h3{font-size:15.5px;margin:26px 0 8px}
+p{margin:0 0 14px} a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:.12em .4em;border-radius:4px;word-break:break-word}
+.scroll-x{overflow-x:auto;max-width:100%}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;min-width:520px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:8px}
+.lede{font-size:16.5px;color:var(--dim);margin:22px 0 0}
+.callout{background:var(--surface);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:15px 20px;margin:20px 0}
+.callout.warn{border-left-color:var(--warn)}
+.callout.stop{border-left-color:var(--stop)}
+.callout.note{border-left-color:var(--accent)}
+.callout p:last-child{margin-bottom:0}
+
+.dec{border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:22px 0;background:var(--surface)}
+.dec > h3{margin-top:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.num{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;
+padding:0 7px;border-radius:13px;background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;flex:none}
+.situation{font-size:14.5px;color:var(--dim);margin:0 0 16px}
+.opts{list-style:none;padding:0;margin:0}
+.opts li{border:1px solid var(--line);border-radius:9px;padding:12px 15px;margin-bottom:9px;
+background:var(--bg);font-size:14.5px}
+.opts li.rec{border-color:var(--accent);border-width:2px;background:var(--surface-2)}
+.opts li:last-child{margin-bottom:0}
+.opt-k{font-weight:700;margin-right:7px}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:11px;
+background:var(--accent);color:#fff;margin-left:8px;vertical-align:1px;white-space:nowrap}
+.badge.no{background:rgba(185,28,28,.14);color:var(--stop)}
+.why{margin:15px 0 0;padding-top:13px;border-top:1px dashed var(--line);font-size:14px;color:var(--dim)}
+.why strong{color:var(--text)}
+.why p:last-child{margin-bottom:0}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:11px;
+background:var(--surface-2);color:var(--dim);white-space:nowrap}
+.pill.block{background:rgba(185,28,28,.12);color:var(--stop)}
+.pill.wait{background:rgba(180,83,9,.14);color:var(--warn)}
+.pill.ok{background:rgba(21,128,61,.12);color:var(--ok)}
+footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <h1>같이 정할 것 10가지</h1>
+  <p class="sub">Greenday · 2026-08-06 · 전수 검증 + 수정 + 리뷰 사이클을 끝낸 시점</p>
+</header>
+
+<p class="lede">
+어제까지의 작업으로 <strong>코드 쪽 미결은 거의 사라졌습니다.</strong>
+남은 것들은 대부분 제가 혼자 정할 수 없는 것 — 돈, 계정, 그리고
+"이 기능이 원래 뭘 해야 하는가" 입니다.
+</p>
+
+<p>각 항목마다 선택지와 제 추천을 붙였습니다. <strong>번호 + 기호만 답해 주시면 됩니다</strong>
+(예: <code>①가 ②가 ③나</code>). 다르게 보시면 근거를 다시 짚어보겠습니다.</p>
+
+<h2><span class="tag">한눈에 보기</span>10가지</h2>
+
+<div class="scroll-x">
+<table>
+<thead><tr><th>#</th><th>정할 것</th><th>지금 막고 있는 것</th><th>제 추천</th></tr></thead>
+<tbody>
+<tr><td>①</td><td>이번 수정본을 다시 올릴까</td><td><span class="pill ok">완료 08-06</span></td><td><strong>2.0.2 업로드 완료</strong></td></tr>
+<tr><td>②</td><td>가격 — 유료 / 무료</td><td><span class="pill ok">결정됨 08-06</span></td><td><strong>₩19,000 일회성 · 플랫폼별</strong></td></tr>
+<tr><td>③</td><td>Google 캘린더를 이번 출시에 넣을까</td><td><span class="pill block">심사 리젝 위험</span></td><td>등록 시도 → 등급 보고 결정</td></tr>
+<tr><td>④</td><td>iCloud 동기화를 실제로 검증할까</td><td><span class="pill wait">미검증 1건</span></td><td>지금 앱 암호 하나</td></tr>
+<tr><td>⑤</td><td>반복 할일의 시간블록 의미</td><td><span class="pill wait">코드 수정 불가</span></td><td>시각만 물려주기</td></tr>
+<tr><td>⑥</td><td>출시 전에 고칠 부채 범위</td><td>일정</td><td>2건만</td></tr>
+<tr><td>⑦</td><td>색 팔레트 교체 시점</td><td>스크린샷</td><td>이번엔 안 함</td></tr>
+<tr><td>⑧</td><td>직접판매 라이선스 서버</td><td>—</td><td>보류</td></tr>
+<tr><td>⑨</td><td>GitHub 공개 저장소</td><td>—</td><td>그대로 + 안내 한 줄</td></tr>
+<tr><td>⑩</td><td>AI 로드맵 다음 단계</td><td>—</td><td>출시 후 RAG v1만</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2><span class="tag">A · 지금 정해야 심사가 굴러갑니다</span>①②③</h2>
+
+<div class="dec">
+<h3><span class="num">①</span> <span style="color:var(--ok)">2026-08-06 완료</span> — 2.0.2 업로드됨</h3>
+
+<div class="callout" style="margin-top:0">
+<p><strong>완료.</strong> 2.0.2를 빌드해 App Store Connect에 올렸습니다.
+Delivery UUID <code>fbee3f89-9cfa-4f6d-adef-50f13288a029</code> · 검증·업로드 무오류 ·
+유니버설(x86_64 + arm64) · 설치 인증서 서명 확인.</p>
+<p>여기에는 8/2 빌드에 없던 것들이 들어갔습니다 — 전수 검증에서 고친 데이터 손상 버그들,
+그리고 오늘 엔지니어링 리뷰에서 결정한 T1~T5(단일 인스턴스 락, Windows 딥링크 수신,
+capabilities 추출, 구글 인증 취소 버그 수정).</p>
+<p style="margin-bottom:0"><strong>다음:</strong> 처리에 5~30분. 끝나면 App Store Connect의
+'빌드' 탭에 2.0.2가 나타납니다. 그다음 스토어 화면을 채우고 심사에 제출합니다.
+유료로 정하셨으므로 <strong>유료 앱 계약(세금 서류 + 은행)</strong>이 병행되어야 합니다.</p>
+</div>
+
+<p class="situation" style="margin-top:18px"><em>아래는 결정 전 검토 내용입니다.</em></p>
+
+<p class="situation">
+8월 2일 16:54에 App Store Connect로 올린 2.0.1은 <strong>어제 찾은 버그들이 들어가기 전</strong>의 빌드입니다.
+그 사이에 고친 것 중에는 데이터가 실제로 깨지는 것도 있습니다 —
+리스트 순서 재배치가 <em>다른 리스트</em>의 순서를 망가뜨리던 것,
+포모도로에서 재생→건너뛰기 두 번이면 점수와 집중시간이 무한히 생기던 것,
+확인 창 뒤로 Backspace가 새어나가 뒤에 선택된 할일이 지워지던 것.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 2.0.2로 올려서 다시 업로드하고, 그걸로 심사에 넣는다<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> 올라가 있는 2.0.1로 그냥 심사 제출하고, 수정본은 승인 후 업데이트로</li>
+<li><span class="opt-k">(다)</span> 지금은 아무것도 안 한다</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 리스트 순서 손상은 심사에서 걸리는 종류가 아니라
+<strong>사용자 손에서 조용히 터지는</strong> 종류입니다. 심사관은 리스트를 두 개 만들어
+순서를 바꿔보지 않지만, 실제 사용자는 합니다.</p>
+<p>그리고 지금이 가장 싼 시점입니다. 아직 심사 대기줄에 서지 않았기 때문에
+다시 올려도 잃는 시간이 <strong>0</strong>입니다. 승인 후에 고치면 심사를 한 번 더 받습니다.</p>
+<p>비용은 버전 번호 하나입니다. 지금 설정에는 빌드 번호가 따로 없어서
+<code>package.json</code>의 <code>2.0.1 → 2.0.2</code>가 가장 간단합니다.
+빌드·서명·업로드는 이미 한 번 통과한 경로라 그대로 다시 돌리면 됩니다.</p>
+</div>
+</div>
+
+<div class="dec">
+<h3><span class="num">②</span> 가격 — <span style="color:var(--ok)">2026-08-06 결정됨</span></h3>
+
+<div class="callout" style="margin-top:0">
+<p><strong>결정: ₩19,000 일회성. 기능 차등 없음. 가격 축은 플랫폼.</strong>
+Mac ₩19,000 / Windows ₩19,000 / (나중에) iOS. 동기화는 iCloud·Google 모두 <strong>포함</strong>이고
+어느 것도 잠그지 않습니다. 근거와 산수는
+<a href="2026-08-06-pricing-structure.html">요금제 구조</a>에 있습니다.</p>
+<p style="margin-bottom:0">함께 결정: 지금은 <strong>App Store에 집중</strong>. Windows는 맥 출시 이후 판단.</p>
+</div>
+
+<p class="situation" style="margin-top:18px"><em>아래는 결정 전 검토 내용입니다.</em></p>
+
+<p class="situation">
+<a href="2026-08-03-pricing-proposal.html">가격 정책 제안</a>에서 <strong>₩19,000 일회성, 기능 차등 없음</strong>을 권해드렸고
+아직 답을 못 받았습니다. 여기가 실제 병목인 이유는 유료로 가면
+<strong>유료 앱 계약 → 세금 서류(W-8BEN) → 은행 계좌</strong> 심사가 며칠 걸리기 때문입니다.
+그 며칠은 지금 시작해야 지금 끝납니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 유료 ₩19,000 일회성 · 무료 체험 없음 · 기능 차등 없음<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> 무료로 출시 — 다운로드·리뷰를 먼저 쌓고 나중에 유료화</li>
+<li><span class="opt-k">(다)</span> 다른 가격 (숫자를 알려주시면 그대로 갑니다)</li>
+</ul>
+
+<div class="why">
+<p><strong>⚠ 2026-08-06 정정.</strong> 이 항목의 원래 근거는 "GitHub에 5,742명이 받아간
+무료 채널이 이미 있다"였습니다. 실측해 보니 <strong>실제 설치파일 다운로드는 118건</strong>이고,
+5,742는 자동 업데이터 폴링 파일 카운트였습니다. 118건은 무료 티어가 아닙니다.
+그러므로 "앱스토어까지 무료로 낼 이유가 약하다"는 논거는 <strong>약해졌습니다</strong> —
+무료 유입이 필요하면 GitHub 쪽을 쓰라고 했는데, 그 GitHub 쪽이 월 24건입니다.</p>
+<p>다시 계산한 결론은 <a href="2026-08-06-pricing-structure.html">요금제 구조</a>에 있습니다.
+요지: 가격 축을 <strong>기능이 아니라 플랫폼</strong>으로 잡고(Mac / Windows / iOS 각각 일회성,
+기능은 전부 포함), 지금은 Mac ₩19,000 하나로 출발.
+그리고 목표하신 월 300~1,000만원까지는 유입이 <strong>140~460배</strong> 모자라서,
+요금제로는 닿지 않습니다.</p>
+<p><strong>(나)를 고르셔도 틀린 선택은 아닙니다.</strong> 다만 그건
+"초기 사용자에게는 평생 무료로 준다"는 <strong>결정</strong>이지 "나중에 받으면 되지"가 아닙니다.
+정정된 숫자를 보면 (나)의 설득력은 오히려 <em>올라갔습니다</em> —
+지금 부족한 건 돈을 낼 사람이 아니라 앱을 아는 사람입니다.</p>
+</div>
+</div>
+
+<div class="dec">
+<h3><span class="num">③</span> Google 캘린더 — 지금 빌드에서는 그 기능이 죽어 있습니다</h3>
+
+<p class="situation">
+OAuth 클라이언트 ID가 빌드에 없어서, 설정 화면에서 Google 연동을 누르면
+<strong>"이 빌드에는 Google 연동이 설정되어 있지 않습니다"</strong>가 뜹니다.
+심사관도 같은 화면을 봅니다. 코드는 완성돼 있고, 빠진 건 등록뿐입니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 지금 등록하고 넣는다 — 콘솔 작업 30분<span class="badge">추천 (조건부)</span></li>
+<li><span class="opt-k">(나)</span> 이번 출시는 iCloud만. Google UI를 숨기고 다음 버전에</li>
+<li><span class="opt-k">(다)</span> 그대로 낸다<span class="badge no">비추천</span></li>
+</ul>
+
+<div class="why">
+<p><strong>(다)는 피하셔야 합니다.</strong> 화면에 있는데 작동하지 않는 기능은
+Apple 심사 가이드라인 2.1(불완전한 앱)의 전형적인 리젝 사유입니다.
+심사 한 사이클(24~48시간)을 그냥 날립니다.</p>
+<p><strong>(가)를 권하되 조건이 붙습니다.</strong> 등록 절차는
+<a href="2026-08-05-sync-setup.html">동기화 준비할 것</a>에 순서대로 적어뒀습니다.
+4번 단계에서 범위(<code>calendar.app.created</code>)를 추가하실 때
+구글이 화면에 <strong>민감(Sensitive) / 제한(Restricted) / 일반</strong> 중 뭐라고 표시하는지
+알려주세요. <strong>일반이면 (가)로 끝, 민감이면 검증 절차가 며칠~몇 주 붙으니 (나)로 전환</strong>합니다.</p>
+<p>덤으로 이게 <a href="2026-08-05-unverified-items.html">미검증 항목</a> 중 U-1(Google 왕복)과
+U-2(딥링크 복귀) 두 개를 한꺼번에 풉니다. 지금 그 둘은 자격증명이 없어서 막혀 있을 뿐입니다.</p>
+</div>
+</div>
+
+<h2><span class="tag">B · 코드가 답을 기다리고 있습니다</span>④⑤</h2>
+
+<div class="dec">
+<h3><span class="num">④</span> iCloud 동기화를 실제로 왕복시켜 볼까요</h3>
+
+<p class="situation">
+프로토콜 코드는 유닛 테스트로 검증됐고 비밀번호는 <code>safeStorage</code>로 암호화돼
+렌더러에 노출되지 않는 것까지 확인했습니다. 하지만
+<strong>실제 iCloud 캘린더에 일정이 만들어지고, 수정이 중복이 아니라 갱신으로 반영되고,
+삭제가 따라가는지</strong>는 확인하지 못했습니다. Apple ID와 앱 전용 암호가 필요합니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 앱 전용 암호를 하나 만들어 주시면 제가 왕복 검증합니다<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> 검증 없이 출시하고 사용자 신고에 대응한다</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 동기화는 이 앱에서 <strong>실패하면 남의 데이터를 망가뜨리는 유일한 기능</strong>입니다.
+다른 기능은 잘못돼도 앱 안에서 끝나지만, 동기화는 사용자의 실제 캘린더에 씁니다.
+그리고 앱스토어 설명의 핵심 판매 포인트이기도 합니다 — 무료판과 유료판을 가르는 게 이겁니다.</p>
+<p><strong>준비하실 것:</strong> <code>account.apple.com</code>에서 앱 전용 암호 1개.
+개발자 계정도 API 키도 필요 없습니다. 끝나면 그 자리에서 폐기하시면 됩니다.</p>
+<p><strong>안전장치:</strong> 실제 일정이 있는 캘린더 말고 <strong>테스트용 캘린더를 하나 새로 만들어</strong>
+거기에만 붙이겠습니다. 앱은 자기가 만든 일정만 건드리지만, 굳이 위험을 질 이유가 없습니다.</p>
+</div>
+</div>
+
+<div class="dec">
+<h3><span class="num">⑤</span> 반복 할일을 캘린더에 끌어다 놓으면 무슨 뜻인가</h3>
+
+<p class="situation">
+어제 '배정 안 됨' 레일을 만들면서 드러난 문제입니다. 지금은
+<strong>반복 할일을 특정 날짜에 놓으면 화면에 보이는 모든 날에 같은 블록이 뜹니다</strong> —
+주간 뷰면 7일 전부. 반복 패턴(매일/매주 월·수/매월 15일)을 아예 보지 않기 때문입니다.
+"매주 월요일"짜리도 일요일·화요일에 다 뜹니다. 어느 쪽이 맞는지는 제품 결정입니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> <strong>시각만 물려준다</strong> — 놓은 시각을 기억했다가, 반복이 실제로 걸리는 날에만 그 시각에 블록을 그린다<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> <strong>그날 하나만</strong> — 일반 할일과 똑같이. 놓은 날짜·시각 그대로, 다음 반복에는 안 물려준다</li>
+<li><span class="opt-k">(다)</span> <strong>반복 할일은 드래그를 막는다</strong> — 레일에서 회색 처리하고 안내</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 반복 할일에 시간을 붙이는 이유가 대부분
+"매일 아침 7시 운동", "매주 월요일 2시 보고서" 같은 <strong>고정 루틴</strong>이기 때문입니다.
+한 번 정해두면 계속 그 자리에 있는 게 자연스럽고, (나)로 하면
+매주 같은 걸 다시 끌어다 놓아야 합니다.</p>
+<p><strong>(가)의 단점도 있습니다.</strong> "이번 주만 예외적으로 수요일에" 같은 건 안 됩니다.
+그건 <em>occurrence 개별 편집</em>이라는 훨씬 큰 기능이라, 지금 범위에 넣지 않는 게 맞다고 봅니다.
+그리고 패턴에 안 맞는 요일에 놓으면 블록이 그 자리에 안 남으니
+"매주 월요일에 표시됩니다" 같은 안내를 한 줄 띄우겠습니다.</p>
+<p><strong>비용:</strong> 반복 패턴이 이미 <code>daily</code> / <code>weekly:1,3,5</code> /
+<code>monthly:15</code> / <code>yearly:MM-DD</code> 형식으로 정의돼 있어서,
+"이 날짜가 이 패턴에 걸리나"를 판정하는 함수 하나 + 캘린더 두 곳에서 필터.
+테스트 포함 반나절입니다.</p>
+</div>
+</div>
+
+<h2><span class="tag">C · 이번 출시 범위</span>⑥⑦</h2>
+
+<div class="dec">
+<h3><span class="num">⑥</span> 남은 부채 중 어디까지 출시 전에 고칠까</h3>
+
+<p class="situation">
+어제 리뷰에서 확인했지만 범위 밖으로 둔 것들입니다. 전부 근거가 남아 있어서
+어느 것이든 바로 착수할 수 있습니다. 문제는 순서입니다.
+</p>
+
+<div class="scroll-x">
+<table>
+<thead><tr><th>항목</th><th>사용자에게 보이는 증상</th><th>비용</th><th>추천</th></tr></thead>
+<tbody>
+<tr><td>자정 롤오버</td><td>앱을 켜둔 채 자정을 넘기면 칸반에서 카드를 옮길 때 <strong>어제 날짜가 박힌다</strong></td><td>반나절</td><td><span class="pill ok">출시 전</span></td></tr>
+<tr><td>일괄 완료 + 반복</td><td>일괄 완료로 반복 할일을 끝내면 <strong>시리즈가 거기서 멈춘다</strong></td><td>반나절</td><td><span class="pill ok">출시 전</span></td></tr>
+<tr><td>AI 스트리밍 리렌더</td><td>채팅 답변이 흐르는 동안 앱 전체가 초당 30~100번 다시 그려진다</td><td>반나절</td><td>출시 후</td></tr>
+<tr><td>div 접근성 (린트 50건)</td><td>키보드만 쓰는 사용자가 사이드바·설정 일부를 조작 못 한다</td><td>1~2일</td><td>출시 후</td></tr>
+<tr><td>모달 프리미티브</td><td>없음 (내부 구조)</td><td>반나절</td><td>출시 후</td></tr>
+<tr><td>캘린더 드롭 핸들러 중복</td><td>없음 (내부 구조)</td><td>2~3시간</td><td>출시 후</td></tr>
+</tbody>
+</table>
+</div>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 위 표대로 — 출시 전 2건만<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> AI 리렌더까지 3건</li>
+<li><span class="opt-k">(다)</span> 전부 다 고치고 출시</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 위 두 개는 <strong>사용자가 만든 데이터에 틀린 값이 남는</strong> 종류이고,
+아래 넷은 불편하거나 내부 문제입니다. 앞의 것은 나중에 고쳐도 이미 박힌 값은 안 돌아옵니다.</p>
+<p><strong>(다)는 권하지 않습니다.</strong> div 접근성 50건은 파일마다 수동 판단이 필요해서
+자동화가 위험하고, 그만큼 회귀 위험을 출시 직전에 만드는 셈입니다.
+접근성은 중요하지만 <em>다음 버전에 제대로</em> 하는 게 맞습니다.</p>
+</div>
+</div>
+
+<div class="dec">
+<h3><span class="num">⑦</span> 색 팔레트 교체를 스크린샷 전에 할까</h3>
+
+<p class="situation">
+앱 표면은 채도 1~3%의 중립 그레이인데 Tailwind 기본 <code>gray</code>는 채도 28~39%의
+한랭 계열입니다. 15개 컴포넌트에 아직 섞여 있어서 큰 면이 맞붙으면 한쪽이 붕 뜹니다.
+<strong>타이밍 문제인 이유:</strong> 앱스토어 스크린샷을 찍고 나서 색을 바꾸면 다시 찍어야 합니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 이번 출시에는 안 한다. 스크린샷은 지금 색으로<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> 스크린샷 찍기 전에 먼저 바꾼다 (1일 + 대비율 재검증)</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 지금 색이 <em>틀린</em> 게 아니라 <em>덜 정돈된</em> 것입니다.
+그리고 <code>tailwind.config.js</code> 한 곳만 고치면 전부 바뀌는 작업이라
+나중에 해도 비용이 늘지 않습니다. 반면 지금 하면 설정 화면에서 실측해둔
+대비율(5.49:1 / 9.46:1 / 11.26:1 등)을 전부 다시 재야 하고,
+그건 출시를 며칠 미룹니다.</p>
+<p>스크린샷을 다시 찍는 건 어차피 <strong>다음 버전에 한 번은 해야 하는 일</strong>입니다
+(기능이 추가되면 바뀌니까). 그때 색과 같이 처리하는 게 낫습니다.</p>
+</div>
+</div>
+
+<h2><span class="tag">D · 지금 안 정해도 되지만 방향은 잡아두면 좋은 것</span>⑧⑨⑩</h2>
+
+<div class="dec">
+<h3><span class="num">⑧</span> 직접판매(웹사이트) 채널을 지금 만들까</h3>
+
+<p class="situation">
+라이선스 <strong>서명·검증 코어와 키 발급 도구는 완성</strong>돼 있습니다 (테스트 29개 통과).
+그런데 <strong>어디에서도 쓰이지 않습니다</strong> — 앱에 배선이 안 돼 있고 활성화 서버도 없습니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 지금은 앱스토어만. 라이선스는 만들어둔 채로 보류<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> 직접판매도 같이 — 활성화 서버 + 앱 배선 + 설정 UI</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 아직 <strong>한 명도 돈을 낸 적이 없습니다.</strong>
+앱스토어판은 Apple이 결제·환불·영수증을 전부 처리해서 라이선스 코드가 아예 필요 없고
+(오히려 키 입력 칸이 있으면 가이드라인 3.1.1 위반으로 리젝입니다),
+직접판매를 켜는 순간 <strong>서버 운영 부담</strong>과 <strong>개인정보처리방침 수정</strong>이 따라옵니다 —
+지금 "개발자가 운영하는 서버가 없습니다"라고 공표돼 있는데 그게 거짓이 됩니다.</p>
+<p><strong>(나)를 고르시면</strong> 키 형태도 같이 정해야 합니다 — 평생 / 연간 구독 / 평생+버전 상한.
+②에서 일회성을 고르셨다면 <strong>평생</strong>이 일관됩니다.</p>
+</div>
+</div>
+
+<div class="dec">
+<h3><span class="num">⑨</span> GitHub 공개 저장소를 어떻게 둘까</h3>
+
+<p class="situation">
+v1.4.1이 MIT로 공개돼 있고 <strong>118건</strong> 받아갔습니다
+(2026-08-06 실측. 이전에 쓴 5,742는 자동 업데이터 폴링 파일 카운트였습니다).
+이번 작업(한/영, 동기화, 어제 수정 전부)은 말씀대로 올리지 않고 로컬에만 있습니다.
+유입은 사실상 클리앙 한 곳이고, 최근 14일 저장소 방문자는 21명입니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 그대로 둔다 + README에 "앱스토어판이 최신" 한 줄<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> 저장소를 아카이브(읽기 전용)로 전환</li>
+<li><span class="opt-k">(다)</span> 계속 공개로 개발한다</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> Mac App Store에는 무료 체험 기능이 없습니다.
+GitHub 무료판이 그 자리를 대신합니다 — "써보고 마음에 들면 앱스토어에서 사세요"가
+자연스럽게 성립합니다. 아카이브하면 그 유입이 끊깁니다.
+<em>다만 정직하게: 그 유입이 월 24건입니다.</em> 체험판 역할을 한다는 말은 맞지만
+규모로는 아직 아무 역할도 못 하고 있습니다. 그래도 <strong>닫아서 얻는 게 없습니다</strong> —
+아카이브는 비용만 있고 이득이 없는 쪽입니다.</p>
+<p>다만 <strong>안내 한 줄은 필요합니다.</strong> 지금은 이슈가 올라와도
+어느 버전 얘기인지 구분이 안 됩니다. "이 저장소는 v1.4.1에서 멈춰 있고
+동기화·다국어는 App Store판에 있습니다" 정도면 충분합니다.</p>
+<p><strong>(다)는 ②·⑧과 충돌합니다.</strong> 소스가 공개돼 있으면 라이선스 검사를 지우고
+다시 빌드하면 그만입니다. 유료화를 택하신 이상 새 작업은 비공개가 맞습니다.</p>
+</div>
+</div>
+
+<div class="dec">
+<h3><span class="num">⑩</span> AI 로드맵 — 다음에 뭘 할까</h3>
+
+<p class="situation">
+로컬 AI 프라이버시 로드맵에서 남은 건 두 개입니다.
+둘 다 <a href="../proposals/2026-07-27-embedded-runtime-and-local-rag.html">제안서</a>에
+설계까지 적어두고 승인을 기다리는 상태입니다.
+</p>
+
+<ul class="opts">
+<li class="rec"><span class="opt-k">(가)</span> 출시 후 <strong>로컬 RAG v1(키워드 관련도)</strong>만 — 반나절, 순수 함수, 저위험<span class="badge">추천</span></li>
+<li><span class="opt-k">(나)</span> RAG를 임베딩 방식(v2)으로 바로 간다</li>
+<li><span class="opt-k">(다)</span> <strong>내장 런타임</strong>(Ollama 설치 불필요)까지 간다</li>
+<li><span class="opt-k">(라)</span> 둘 다 당분간 보류</li>
+</ul>
+
+<div class="why">
+<p><strong>왜 (가)인가.</strong> 지금은 AI에게 물어볼 때마다 <strong>할일 전체</strong>를 컨텍스트로 보냅니다.
+할일이 수백 개인 사용자에게는 느리고, 외부 API를 쓰는 경우엔 나가는 데이터도 많아집니다.
+키워드 관련도만으로도 이게 크게 줄고, 순수 함수라 테스트로 다 덮입니다.</p>
+<p><strong>(다)는 큰 결정입니다.</strong> 번들에 모델 런타임이 들어가면 크기가 수 GB 단위로 늘고,
+앱스토어 샌드박스와도 부딪힙니다. <strong>앱스토어에서 실제로 팔리는지 본 다음</strong>에
+판단하는 게 맞다고 봅니다.</p>
+</div>
+</div>
+
+<h2><span class="tag">참고</span>답을 안 주셔도 제가 지금 할 수 있는 것</h2>
+
+<p>결정을 기다리는 동안 진행 가능한 것들입니다. 말씀만 주시면 바로 시작합니다.</p>
+
+<ul>
+<li><strong>어제 작업 커밋</strong> — 40개 파일 수정 + 15개 신규가 아직 작업 트리에만 있습니다.
+(로컬 커밋만 합니다. push는 안 합니다.)</li>
+<li><strong>앱스토어 메타데이터 채우기</strong> — 가격과 무관합니다.
+<a href="2026-08-02-appstore-metadata.html">붙여넣기용 문서</a>는 이미 준비돼 있습니다.</li>
+<li><strong>MAS 빌드 분기 검증(U-5)</strong> — <code>mas</code> 타겟으로 빌드해서
+① 설정에 "App Store를 통해 업데이트"가 뜨는지 ② 전역 단축키가 no-op인지
+③ 업데이트 IPC가 no-op인지 확인. 자격증명 없이 가능합니다.</li>
+<li><strong>스크린샷 촬영</strong> — ⑦에서 (가)를 고르시면 지금 색으로 바로 찍습니다.</li>
+</ul>
+
+<div class="callout note">
+<p><strong>남은 미검증 1건은 어느 쪽으로도 못 풉니다.</strong>
+U-4(자동 업데이트 "새 버전 있음" 경로)는 GitHub 최신 릴리스가 v1.4.1이라
+로컬 2.0.1보다 낮아서 <strong>업데이트 감지 자체가 일어나지 않습니다.</strong>
+2.0.1보다 높은 릴리스를 발행해야 검증되는데, ⑨에서 (가)를 고르시면
+공개 저장소에는 새 릴리스를 안 올리므로 이 경로는 계속 미검증으로 남습니다.
+앱스토어판은 어차피 Apple이 업데이트를 처리하므로(U-5) 실사용 영향은 없습니다.</p>
+</div>
+
+<footer>
+Greenday · 2026-08-06 · 근거 문서:
+<a href="2026-08-05-feature-inventory.html">기능 전수 검증</a> ·
+<a href="2026-08-05-unverified-items.html">미검증 항목</a> ·
+<a href="2026-08-03-pricing-proposal.html">가격 제안</a> ·
+<a href="2026-08-02-license-design.html">라이선스 구조</a> ·
+<a href="2026-08-05-sync-setup.html">동기화 준비</a>
+</footer>
+
+</div>

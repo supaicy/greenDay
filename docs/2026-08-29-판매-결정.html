@@ -1,0 +1,257 @@
+<title>팔기 전에 정할 둘 — 결정 브리프</title>
+<style>
+:root {
+  --ground:#F8F9FB; --surface:#FFFFFF; --sunk:#EEF0F5;
+  --ink:#12151D; --ink-soft:#3D4356; --ink-mute:#6B7185;
+  --rule:#E0E3EC; --rule-soft:#ECEEF4;
+  --go:#1F7A4D; --go-bg:#E7F3EC;
+  --stop:#C0342A; --stop-bg:#FBECEA;
+  --warn:#91600B; --warn-bg:#FAF2E0;
+  --info:#2C5FA8; --info-bg:#E9F0FA;
+  --console:#7A3E9D; --console-bg:#F3EBF9;
+  --mono:'SF Mono','JetBrains Mono','IBM Plex Mono',Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1016; --surface:#151822; --sunk:#1A1E2A;
+    --ink:#E7E9F0; --ink-soft:#B6BBCB; --ink-mute:#8C92A6;
+    --rule:#252938; --rule-soft:#1E222E;
+    --go:#5DBE8B; --go-bg:#11251B;
+    --stop:#FF7A6B; --stop-bg:#2A1512;
+    --warn:#DFA44C; --warn-bg:#281F11;
+    --info:#79ADEB; --info-bg:#131F2E;
+    --console:#C08FE0; --console-bg:#221730;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1016; --surface:#151822; --sunk:#1A1E2A;
+  --ink:#E7E9F0; --ink-soft:#B6BBCB; --ink-mute:#8C92A6;
+  --rule:#252938; --rule-soft:#1E222E;
+  --go:#5DBE8B; --go-bg:#11251B;
+  --stop:#FF7A6B; --stop-bg:#2A1512;
+  --warn:#DFA44C; --warn-bg:#281F11;
+  --info:#79ADEB; --info-bg:#131F2E;
+  --console:#C08FE0; --console-bg:#221730;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;word-break:keep-all;overflow-wrap:break-word}
+.wrap{max-width:980px;margin:0 auto;padding:0 26px 110px}
+
+header.mast{padding:56px 0 28px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0;color:var(--ink-mute);margin:0 0 15px}
+h1{font-size:clamp(30px,4.6vw,46px);line-height:1.1;letter-spacing:-.025em;font-weight:700;margin:0 0 17px;text-wrap:balance}
+.lede{font-size:17.5px;color:var(--ink-soft);margin:0;max-width:66ch;text-wrap:pretty}
+.factbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin:26px 0 0}
+.fact{background:var(--surface);padding:14px 16px}
+.fact .k{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0;color:var(--ink-mute);display:block;margin-bottom:5px}
+.fact .v{font-family:var(--sans);font-size:13.5px;color:var(--ink-soft)}
+.fact .v.ok{color:var(--go);font-weight:600}
+.fact .v.no{color:var(--stop);font-weight:600}
+
+h2{font-size:23px;font-weight:700;letter-spacing:-.015em;margin:0;padding-bottom:11px;border-bottom:1px solid var(--ink);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h2 .ph{font-family:var(--sans);font-size:12.5px;letter-spacing:0;color:var(--ink-mute);font-weight:400}
+.sec{margin:56px 0 0}
+.sec-note{font-size:14.5px;color:var(--ink-mute);margin:13px 0 0;max-width:72ch;text-wrap:pretty}
+
+.tw{overflow-x:auto;margin:20px 0 0}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}
+th,td{text-align:left;padding:11px 16px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+th{font-family:var(--sans);font-size:11.5px;font-weight:600;letter-spacing:0;color:var(--ink-mute);border-bottom:1px solid var(--rule);white-space:nowrap}
+td.sym{font-weight:600;width:25%}
+
+.step{display:grid;grid-template-columns:56px 1fr;gap:0 22px;padding:28px 0;border-bottom:1px solid var(--rule-soft)}
+.step > *,.check li > *{min-width:0}
+.stepno{font-family:var(--mono);font-size:15px;font-weight:700;line-height:1.5;color:var(--ink-mute);font-variant-numeric:tabular-nums;position:sticky;top:18px;align-self:start;letter-spacing:-.02em}
+.step.gate .stepno{color:var(--stop)}
+.step h3{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;line-height:1.35;text-wrap:balance}
+.where{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0;padding:2.5px 8px;border-radius:2px;display:inline-block;margin:0 0 11px}
+.w-con{background:var(--console-bg);color:var(--console)}
+.w-term{background:var(--sunk);color:var(--ink-mute)}
+.step p{margin:0 0 12px;max-width:74ch;text-wrap:pretty}
+.step p:last-child{margin-bottom:0}
+.step ul,.step ol{max-width:74ch;padding-left:21px;margin:0 0 12px}
+.step li{margin-bottom:7px}
+
+code{font-family:var(--mono);font-size:.875em;background:var(--sunk);padding:1.5px 5px;border-radius:2px;word-break:break-word}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.65;background:var(--sunk);border-left:2px solid var(--rule);padding:14px 17px;overflow-x:auto;margin:0 0 13px}
+pre code{background:none;padding:0;font-size:inherit}
+pre.cmd{border-left-color:var(--go)}
+pre.val{border-left-color:var(--console)}
+
+.call{margin:0 0 13px;padding:13px 17px;font-size:14.5px;line-height:1.62;max-width:74ch;border-left:2px solid}
+.call .lb{font-family:var(--sans);font-size:11.5px;letter-spacing:0;display:block;margin-bottom:5px;font-weight:600}
+.call:last-child{margin-bottom:0}
+.stopc{background:var(--stop-bg);border-color:var(--stop)}.stopc .lb{color:var(--stop)}
+.warnc{background:var(--warn-bg);border-color:var(--warn)}.warnc .lb{color:var(--warn)}
+.infoc{background:var(--info-bg);border-color:var(--info)}.infoc .lb{color:var(--info)}
+.goc{background:var(--go-bg);border-color:var(--go)}.goc .lb{color:var(--go)}
+.conc{background:var(--console-bg);border-color:var(--console)}.conc .lb{color:var(--console)}
+
+.check{list-style:none;padding:0;margin:18px 0 0;max-width:76ch}
+.check li{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--rule-soft);font-size:15px;align-items:start}
+.check li::before{content:"\2610";font-family:var(--mono);font-size:17px;color:var(--ink-mute);line-height:1.4}
+.check li b{font-weight:650}
+.check li .why{grid-column:2;display:block;font-size:13.5px;color:var(--ink-mute);margin-top:3px;line-height:1.55}
+
+footer{margin-top:68px;padding-top:24px;border-top:2px solid var(--ink);font-size:14px;color:var(--ink-mute);max-width:76ch}
+footer p{margin:0 0 11px}
+
+@media (max-width:760px){.step{grid-template-columns:1fr;gap:10px}.stepno{position:static}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<style>.w-adm{background:var(--go-bg);color:var(--go)}</style>
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">결정 브리프 · 2026-08-29</p>
+  <h1>팔기 전에 정할 둘</h1>
+  <p class="lede">두 결정을 다시 파고들었더니 <strong>전제 하나가 틀려 있었다.</strong> v2.0.1 Draft에는 라이선싱 코드가 아예 없다 — 그 빌드는 만들어진 뒤 3주 지나서야 라이선싱이 들어왔다. 그 사실이 두 결정을 모두 바꾼다.</p>
+
+  <div class="factbar">
+    <div class="fact"><span class="k">트라이얼</span><span class="v">30일 · 유예 30일</span></div>
+    <div class="fact"><span class="k">v1.4.1 (공개 중)</span><span class="v no">라이선싱 코드 없음</span></div>
+    <div class="fact"><span class="k">v2.0.1 (Draft)</span><span class="v no">라이선싱 코드 없음</span></div>
+    <div class="fact"><span class="k">라이선싱 도입</span><span class="v">2026-08-18</span></div>
+    <div class="fact"><span class="k">미병합 감사 커밋</span><span class="v no">4개 브랜치 · 15커밋</span></div>
+  </div>
+</header>
+
+<section class="sec">
+  <h2>먼저 바로잡을 전제 <span class="ph">이것 때문에 앞선 제안이 얕았다</span></h2>
+  <div class="tw">
+    <table>
+      <thead><tr><th>내가 그렇다고 여겼던 것</th><th>실제</th></tr></thead>
+      <tbody>
+        <tr><td class="sym">v2.0.1은 그냥 최신 빌드다</td><td><strong>라이선싱이 들어오기 3주 전 빌드다.</strong> 7/30에 만들어졌고 <code>src/main/licensing</code>은 8/18에 생겼다 — 그 안에 라이선스라는 개념 자체가 없다</td></tr>
+        <tr><td class="sym">기존 사용자가 갑자기 잠긴다</td><td>v1.4.1에도 라이선싱 코드가 없다. <strong>업데이트하지 않는 한 영원히 안 잠긴다</strong></td></tr>
+        <tr><td class="sym">라이선스 UI는 켤 때 나타난다</td><td><code>needsLicenseKey = !isStoreBuild</code>라 <strong>직판 빌드에는 이미 나오고 있다.</strong> 켜는 것은 UI가 아니라 그 뒤의 잠금이다</td></tr>
+        <tr><td class="sym">저장소는 태그만 붙이면 된다</td><td>main과 작업 브랜치가 <strong>서로 갈라져 있다</strong>(15 / 214). 감사 브랜치 4개 15커밋이 아직 안 들어왔다</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="sec">
+  <h2>결정 A <span class="ph">IS_ENFORCED를 언제 켜나</span></h2>
+  <p class="sec-note">켜는 순간 트라이얼 시작일이 기록되기 시작한다. 그 전까지는 아무것도 기록되지 않으므로 <strong>켜는 날 모든 사용자가 온전한 30일을 받는다.</strong> 이것은 의도된 설계다.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>안</th><th>무슨 일이 일어나나</th><th>판단</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="sym">A1 · 팔기 시작하는 날 켠다</td>
+          <td>판매와 잠금이 같은 날 시작된다</td>
+          <td>방향은 맞다. 다만 <strong>그날이 첫 실거래 활성화가 되면 안 된다</strong> — 아래 A4</td>
+        </tr>
+        <tr>
+          <td class="sym">A2 · 먼저 팔고 나중에 켠다</td>
+          <td>산 사람이 받은 키가 아무것도 하지 않는다</td>
+          <td><strong>탈락.</strong> 돈을 받고 아무것도 주지 않는 구간이 생긴다</td>
+        </tr>
+        <tr>
+          <td class="sym">A3 · 버전으로 가른다<br>(1.x 영원히 무료, 2.x부터 유료)</td>
+          <td>기존 사용자는 지금 쓰는 것을 계속 쓴다. 유료는 새 버전을 고른 사람에게만 적용된다</td>
+          <td><strong>공짜로 얻는 안전장치다.</strong> v1.4.1에 라이선싱 코드가 없어서 이미 사실이다 — 말로 못박기만 하면 된다</td>
+        </tr>
+        <tr>
+          <td class="sym">A4 · 켠 빌드로 실거래 1건을 먼저 통과시킨다</td>
+          <td>공개 전에 결제 → 키 → 활성화 → 잠금 해제 전 경로를 한 번 밟는다</td>
+          <td><strong>필수다.</strong> 코드 주석이 이미 그 조건을 못박고 있다</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call goc" style="margin-top:22px">
+    <span class="lb">제안 — A4의 절차로 A1에 가되, A3를 함께 공지한다</span>
+    셋은 배타적이지 않다. <strong>A3는 비용이 0이고 반발을 없앤다</strong>(이미 사실이니 문장 하나면 된다). A4는 첫 고객이 버그를 대신 밟는 일을 막는다. 그 둘을 갖춘 뒤 A1로 간다.
+  </div>
+
+  <div class="step gate">
+    <div class="stepno">!</div>
+    <div>
+      <h3>A4를 건너뛰면 무엇이 터지는지는 이미 봤다</h3>
+      <p>이번 감사에서 <strong>앱에 박힌 공개키에 짝이 되는 개인키가 없었다.</strong> 그대로 출시했으면 증상은 이렇게 나타났다:</p>
+      <ol>
+        <li>고객이 결제한다 — 성공</li>
+        <li>키가 메일로 간다 — 성공</li>
+        <li>앱에 입력한다 → 서버가 <strong>기기 슬롯을 소모한다</strong></li>
+        <li>서명 검증 실패로 앱이 거절한다</li>
+        <li>고객은 "결제했는데 안 된다" + 슬롯 하나를 이미 잃은 상태</li>
+      </ol>
+      <p>결제·발송·활성화가 <strong>각각은 성공하는데</strong> 마지막에서만 어긋나는 종류라, 실거래를 한 번 통과시켜 보기 전에는 드러나지 않는다.</p>
+    </div>
+  </div>
+
+  <h3 style="font-size:16px;margin:32px 0 0">순서</h3>
+  <ul class="check">
+    <li><b>서버를 배포한다</b><span class="why">지금 pay.begreen.dev는 응답하지 않는다. 토스·Paddle 신청도 살아 있는 사이트를 요구한다</span></li>
+    <li><b>결제 레일을 하나라도 연다</b><span class="why">토스 클라이언트 키 또는 Paddle 가격 ID. 관리자 화면 ▸ 제품 탭에서 켠다</span></li>
+    <li><b>IS_ENFORCED를 켠 빌드를 만든다 — 아직 공개하지 않는다</b><span class="why">본인 맥에 설치해 트라이얼 상태가 뜨는지 확인</span></li>
+    <li><b>본인 카드로 실제 결제를 한 건 한다</b><span class="why">환불하면 된다. 이 한 건이 A4의 전부다</span></li>
+    <li><b>키를 입력해 활성화가 통과하는지 본다</b><span class="why">여기서 막히면 공개 전에 잡은 것이다</span></li>
+    <li><b>환불하고 라이선스가 revoked로 바뀌는지 본다</b><span class="why">관리자 화면에서 확인. 환불 경로가 죽어 있으면 분쟁 때 손으로 처리해야 한다</span></li>
+    <li><b>그 빌드를 공개한다</b><span class="why">공지에 "1.x는 계속 무료" 한 줄을 넣는다</span></li>
+  </ul>
+
+  <div class="call infoc">
+    <span class="lb">여유가 하나 더 있다</span>
+    재검증에 실패해도 <strong>유예 30일</strong>이 열린다. 출시 직후 서버가 죽어도 사용자가 즉시 잠기지 않는다. 트라이얼 30일과 합치면 <strong>최악의 경우에도 60일</strong>의 복구 시간이 있다.
+  </div>
+</section>
+
+<section class="sec">
+  <h2>결정 B <span class="ph">v2.0.1 Draft를 어떻게 하나</span></h2>
+
+  <div class="call stopc">
+    <span class="lb">공개하면 안 된다</span>
+    <strong>v2.0.1에는 라이선싱 코드가 없다.</strong> 2026-07-30 빌드이고 <code>src/main/licensing</code>은 2026-08-18에 들어왔다. 공개하면 "팔 수 없는 빌드"가 최신이 되고, 랜딩의 다운로드 버튼이 그것을 가리킨다. 감사에서 나온 96건도 그 뒤의 일이다.
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>안</th><th>결과</th><th>판단</th></tr></thead>
+      <tbody>
+        <tr><td class="sym">B1 · Draft를 공개한다</td><td>라이선싱 없는 빌드가 최신이 된다. 감사 전 코드다</td><td><strong>탈락</strong></td></tr>
+        <tr><td class="sym">B2 · 폐기하고 현재 작업에서 새로 자른다</td><td>라이선싱·감사 수정이 모두 들어간 빌드가 나간다</td><td><strong>이쪽.</strong> 단 선행 작업이 있다</td></tr>
+        <tr><td class="sym">B3 · 판매 준비가 다 될 때까지 v1.4.1을 둔다</td><td>4개월 된 빌드가 계속 최신으로 남는다</td><td>B2가 늦어지면 그 사이의 기본값. 적극적으로 고를 이유는 없다</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="font-size:16px;margin:32px 0 0">B2의 선행 작업 — 저장소가 갈라져 있다</h3>
+  <pre class="val"><code>main               ←  작업 브랜치에 없는 커밋 15개
+supaicy/coordinate ←  main에 없는 커밋 214개
+audit/data                                    2커밋 미병합
+audit/licensing                               3커밋 미병합
+audit/shell                                   3커밋 미병합
+audit/sync                                    7커밋 미병합</code></pre>
+  <ul class="check">
+    <li><b>감사 브랜치 4개를 병합한다</b><span class="why">15커밋. 감사가 찾은 것들이 여기 있다 — 릴리스에 들어가야 의미가 있다</span></li>
+    <li><b>main과 작업 브랜치를 합친다</b><span class="why">양쪽이 서로 갈라져 있다. 어느 쪽이 진짜인지 먼저 정한다</span></li>
+    <li><b>Draft를 지운다</b><span class="why">남겨 두면 언젠가 누가 "공개" 버튼을 누른다. 지우기 어렵다면 제목에 표시라도 한다</span></li>
+    <li><b>버전을 정하고 태그를 민다</b><span class="why">1.4.1 → 2.0.2로 건너뛰어도 된다. 2.0.0·2.0.1은 공개된 적이 없다</span></li>
+  </ul>
+</section>
+
+<section class="sec">
+  <h2>덤 <span class="ph">랜딩을 만들다 걸린 것</span></h2>
+  <p class="sec-note">결정은 아니지만 위 둘과 맞물린다.</p>
+  <div class="step">
+    <div class="stepno">+</div>
+    <div>
+      <h3>릴리스를 유니버설 하나로 낼 것인가</h3>
+      <p>지금 <code>release.yml</code>은 <code>--arm64 --x64</code>로 따로 낸다. 그래서 랜딩이 버튼을 둘 그려야 하고, 사용자에게 <strong>"본인 맥이 Apple Silicon입니까 Intel입니까"</strong>를 묻게 된다. 대부분 모른다.</p>
+      <p>MAS 빌드는 이미 <code>--universal</code>이다. 직판도 유니버설로 바꾸면 버튼이 하나가 되고 그 질문이 사라진다. 대가는 다운로드 용량이 대략 두 배다.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p><strong>가장 중요한 한 줄.</strong> v2.0.1을 공개하지 않는 것 — 그것 하나가 "팔 수 없는 빌드를 최신으로 만드는" 사고를 막는다. 나머지는 순서의 문제다.</p>
+  <p><strong>근거.</strong> 라이선싱 도입 시점은 <code>git log --reverse -- src/main/licensing</code>, 태그별 파일 존재 여부는 <code>git cat-file -e &lt;tag&gt;:&lt;path&gt;</code>, 브랜치 격차는 <code>git rev-list --count</code>, 트라이얼·유예 상수는 <code>trialWindow.ts</code> 직접 확인이다.</p>
+</footer>
+
+</div>

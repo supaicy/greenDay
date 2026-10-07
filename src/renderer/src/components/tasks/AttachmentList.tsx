@@ -1,4 +1,5 @@
 import { Paperclip, X, Plus } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 
 function parseAttachment(entry: string): { name: string; path: string } {
@@ -23,7 +24,9 @@ export function AttachmentList({
   attachments: string[]
   onUpdate: (attachments: string[]) => void
 }) {
-  const { pickAttachment, theme } = useStore()
+  const { t } = useTranslation()
+  const pickAttachment = useStore((s) => s.pickAttachment)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
 
   const handleAdd = async () => {
@@ -44,12 +47,18 @@ export function AttachmentList({
   }
 
   return (
-    <div className="mt-3">
+    <div>
+      {/* 헤더는 0개여도 그린다 — 하위작업과 같은 규칙. 없으면 빈 상태에서
+          '+ 파일 추가' 한 줄만 남아 무슨 섹션인지 알 수 없었다. */}
+      <div className={`text-xs font-medium mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+        {t('detail.attachments')} {attachments.length}
+      </div>
+
       {/* 첨부 파일 목록 */}
       {attachments.length > 0 && (
         <div className="space-y-1 mb-2">
           {attachments.map((entry, index) => {
-            const { name } = parseAttachment(entry)
+            const att = parseAttachment(entry)
             return (
               <div
                 key={`${taskId}-${entry}`}
@@ -61,9 +70,22 @@ export function AttachmentList({
                   size={14}
                   className={isDark ? 'text-gray-500 flex-shrink-0' : 'text-gray-400 flex-shrink-0'}
                 />
-                <span className={`flex-1 text-sm truncate ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title={name}>
-                  {name}
-                </span>
+                {/* 파일명 클릭 시 시스템 기본 앱으로 첨부파일 열기 */}
+                <button
+                  type="button"
+                  title={att.name}
+                  // `open-attachment`는 이제 거절할 수 있다 — 첨부 폴더 밖이거나
+                  // 파일이 사라진 경우다(봉쇄 검사가 없는 경로에 닫는 쪽으로 떨어진다).
+                  // 안 받으면 처리되지 않은 rejection이 되고 사용자는 아무 반응도 못 본다.
+                  onClick={() => {
+                    void window.api
+                      .openAttachment(att.path)
+                      .catch((error: unknown) => console.error('[attachment] 열지 못했다', error))
+                  }}
+                  className={`flex-1 text-sm text-left truncate ${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+                >
+                  {att.name}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleRemove(index)}
@@ -85,12 +107,12 @@ export function AttachmentList({
         onClick={handleAdd}
         className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded transition-colors w-full ${
           isDark
-            ? 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/50'
+            ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
             : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
         }`}
       >
         <Plus size={16} />
-        파일 추가
+        {t('detail.addAttachment')}
       </button>
     </div>
   )

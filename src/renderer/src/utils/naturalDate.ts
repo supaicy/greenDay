@@ -10,10 +10,32 @@ import {
   nextSaturday,
   nextSunday,
   startOfDay,
+  startOfWeek,
   format
 } from 'date-fns'
+import i18n from '../i18n'
 
-const DAY_MAP: Record<string, number> = {
+/**
+ * **사용자 입력으로 조회하는 표는 프로토타입이 없어야 한다.**
+ *
+ * 객체 리터럴은 `Object.prototype`을 상속하므로 `MAP['constructor']`가
+ * `undefined`가 아니라 **함수**를 돌려준다. 아래 조회들은 전부
+ * `!== undefined`로 가드한 뒤 그 값을 `NEXT_DAY_FN`의 인덱스로 쓰는데,
+ * 함수를 인덱스로 넣으면 `undefined(today)`가 되어 TypeError가 난다.
+ *
+ * 그 예외는 AddTask·QuickAdd의 `useEffect` 안에서 **글자를 칠 때마다** 터지고,
+ * 렌더러에 ErrorBoundary가 생기기 전까지는 앱 전체를 언마운트시켰다.
+ * 즉 "constructor"로 시작하는 할일을 적으려던 사용자는 빈 창을 보게 됐다.
+ * (`toString`·`valueOf`·`__proto__` 등 12개 키가 모두 같았다.)
+ *
+ * 호출처마다 `Object.hasOwn`을 붙이는 대신 표를 한 번 막는다 — 나중에 조회를
+ * 한 줄 더 추가하는 사람이 가드를 잊어도 안전하다.
+ */
+function lookupTable(entries: Record<string, number>): Record<string, number> {
+  return Object.assign(Object.create(null) as Record<string, number>, entries)
+}
+
+const DAY_MAP = lookupTable({
   일요일: 0,
   일: 0,
   월요일: 1,
@@ -28,9 +50,66 @@ const DAY_MAP: Record<string, number> = {
   금: 5,
   토요일: 6,
   토: 6
-}
+})
+
+// 영어 요일. 한국어 표와 나란히 두고 두 언어를 항상 같이 인식한다 — UI 언어를
+// 영어로 두고도 "내일"이라 적는 사용자가 있고, 그 반대도 있다.
+const EN_DAY_MAP = lookupTable({
+  sunday: 0,
+  sun: 0,
+  monday: 1,
+  mon: 1,
+  tuesday: 2,
+  tue: 2,
+  tues: 2,
+  wednesday: 3,
+  wed: 3,
+  thursday: 4,
+  thu: 4,
+  thur: 4,
+  thurs: 4,
+  friday: 5,
+  fri: 5,
+  saturday: 6,
+  sat: 6
+})
+
+const EN_MONTHS = [
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'may',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'oct',
+  'nov',
+  'dec'
+]
 
 const NEXT_DAY_FN = [nextSunday, nextMonday, nextTuesday, nextWednesday, nextThursday, nextFriday, nextSaturday]
+
+/**
+ * **"다음주 <요일>"의 기준점은 이번 주 일요일이지 `today + 6`이 아니다.**
+ *
+ * `nextX()`는 주어진 날짜보다 **엄격히 뒤**의 첫 요일을 돌려준다. 기준을
+ * `today + 6`으로 잡으면 그 지점이 이미 다음 주 한가운데라, 목표 요일이
+ * 기준보다 앞이면 그 주를 통째로 건너뛰고 한 주 더 간다. 49개 (오늘, 목표)
+ * 조합 중 21개가 이렇게 틀렸다 — 금요일에 "다음주 화요일"이 9/29가 아니라
+ * 10/6이 됐고, QuickAdd가 그 날짜를 그대로 마감일에 넣어 사용자는 마감이
+ * 일주일 밀린 줄도 모르고 놓쳤다.
+ *
+ * 이번 주 일요일(월요일 시작 주의 마지막 날)에 앉히면 7개 요일이 전부 한
+ * 규칙으로 다음 주 안에 떨어진다. 주 시작이 월요일인 건 이 파서가 이미
+ * "다음주"/"next week"를 `nextMonday(today)`로 정의했기 때문이다 — 같은
+ * 입력에서 "다음주"와 "다음주 월요일"이 다른 날을 가리키면 안 된다.
+ * (한국어·영어 두 갈래가 같은 실수를 복사해 놨었다. 기준은 여기 한 군데다.)
+ */
+function nextWeekAnchor(today: Date): Date {
+  return addDays(startOfWeek(today, { weekStartsOn: 1 }), 6)
+}
 
 export interface ParsedDateTime {
   date: string // "YYYY-MM-DD"
@@ -91,13 +170,28 @@ function parseNaturalTime(tokens: string[]): { time: string; consumed: number } 
     return { time: fmtTime(h, 0), consumed }
   }
 
-  // "14:50", "9:30"
-  const colonTime = tokens[0].match(/^(\d{1,2}):(\d{2})$/)
+  // 영어: "3pm", "3 pm", "3:30 pm", "at 5pm".
+  // 아래 "14:50" 분기보다 먼저 봐야 한다 — "3:30 pm"이 24시간제로 03:30이 되면 안 된다.
+  const hasAt = /^at\s+/i.test(joined)
+  const en = joined.toLowerCase().replace(/^at\s+/, '')
+  const ampmEn = en.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
+  if (ampmEn) {
+    let h = parseInt(ampmEn[1], 10)
+    const m = ampmEn[2] ? parseInt(ampmEn[2], 10) : 0
+    if (h >= 1 && h <= 12 && m <= 59) {
+      if (ampmEn[3] === 'pm' && h < 12) h += 12
+      if (ampmEn[3] === 'am' && h === 12) h = 0
+      return { time: fmtTime(h, m), consumed: countConsumed(tokens, (hasAt ? 'at' : '') + ampmEn[0]) }
+    }
+  }
+
+  // "14:50", "9:30" — 앞에 "at"이 붙어도 받는다.
+  const colonTime = (hasAt ? tokens[1] : tokens[0])?.match(/^(\d{1,2}):(\d{2})$/)
   if (colonTime) {
     const h = parseInt(colonTime[1], 10)
     const m = parseInt(colonTime[2], 10)
     if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      return { time: fmtTime(h, m), consumed: 1 }
+      return { time: fmtTime(h, m), consumed: hasAt ? 2 : 1 }
     }
   }
 
@@ -152,7 +246,8 @@ export function parseNaturalDateTime(input: string): ParsedDateTime | null {
     }
   }
 
-  // 붙여쓰기 처리: "내일14시50분" → 첫 토큰에서 날짜+시간을 분리
+  // 붙여쓰기 처리: "내일14시50분" → 첫 토큰에서 날짜+시간을 분리.
+  // (영어는 단어를 붙여 쓰지 않으므로 한국어 키워드만 본다.)
   if (!dateStr && tokens.length > 0) {
     const first = tokens[0]
     const dateKeywords = ['오늘', '내일', '모레', '글피']
@@ -227,7 +322,7 @@ function parseDateExpression(text: string, today: Date): string | null {
   const nextWeekDay = text.match(/^다음\s*주\s*(.+)$/)
   if (nextWeekDay) {
     const dayNum = DAY_MAP[nextWeekDay[1]]
-    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](addDays(today, 6)))
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](nextWeekAnchor(today)))
   }
 
   // "이번 금요일", "이번주 월요일"
@@ -263,6 +358,62 @@ function parseDateExpression(text: string, today: Date): string | null {
     return fmt(new Date(parseInt(isoDate[1], 10), parseInt(isoDate[2], 10) - 1, parseInt(isoDate[3], 10)))
   }
 
+  return parseEnglishDateExpression(text.toLowerCase(), today)
+}
+
+/** 영어 날짜 표현. 한국어 패턴이 모두 실패한 뒤에만 시도한다. */
+function parseEnglishDateExpression(text: string, today: Date): string | null {
+  if (text === 'today') return fmt(today)
+  if (text === 'tomorrow' || text === 'tmr' || text === 'tmrw') return fmt(addDays(today, 1))
+  if (text === 'day after tomorrow' || text === 'overmorrow') return fmt(addDays(today, 2))
+
+  // "in 3 days", "3 days later", "in 2 weeks", "in 1 month"
+  const relative = text.match(/^(?:in\s+)?(\d+)\s*(day|week|month)s?(?:\s+later|\s+from\s+now)?$/)
+  if (relative) {
+    const n = parseInt(relative[1], 10)
+    if (relative[2] === 'day') return fmt(addDays(today, n))
+    if (relative[2] === 'week') return fmt(addWeeks(today, n))
+    return fmt(addMonths(today, n))
+  }
+
+  if (/^next\s+week$/.test(text)) return fmt(nextMonday(today))
+
+  // "next monday", "next fri"
+  const nextWeekDay = text.match(/^next\s+(.+)$/)
+  if (nextWeekDay) {
+    const dayNum = EN_DAY_MAP[nextWeekDay[1].trim()]
+    if (dayNum !== undefined) return fmt(NEXT_DAY_FN[dayNum](nextWeekAnchor(today)))
+  }
+
+  // "this friday" — 이번 주 안에 남아 있을 때만.
+  const thisWeekDay = text.match(/^this\s+(.+)$/)
+  if (thisWeekDay) {
+    const dayNum = EN_DAY_MAP[thisWeekDay[1].trim()]
+    if (dayNum !== undefined) {
+      const target = NEXT_DAY_FN[dayNum](addDays(today, -1))
+      if (target >= today) return fmt(target)
+    }
+  }
+
+  // 요일만: "monday", "fri"
+  if (EN_DAY_MAP[text] !== undefined) return fmt(NEXT_DAY_FN[EN_DAY_MAP[text]](today))
+
+  // "mar 5", "march 5th", "5 mar"
+  const monthDay = text.match(/^([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?$/) || null
+  const dayMonth = text.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]{3,9})$/) || null
+  const monthName = monthDay?.[1] ?? dayMonth?.[2]
+  const dayOfMonth = monthDay?.[2] ?? dayMonth?.[1]
+  if (monthName && dayOfMonth) {
+    const m = EN_MONTHS.indexOf(monthName.slice(0, 3))
+    const d = parseInt(dayOfMonth, 10)
+    if (m >= 0 && d >= 1 && d <= 31) {
+      const year = today.getFullYear()
+      let date = new Date(year, m, d)
+      if (date < today) date = new Date(year + 1, m, d)
+      return fmt(date)
+    }
+  }
+
   return null
 }
 
@@ -279,14 +430,18 @@ export function getDateSuggestions(input: string): { label: string; date: string
     suggestions.push({ label: input, date: parsed })
   }
 
+  // 기본 칩은 현재 UI 언어의 표현으로 만든다. 라벨만 번역하고 파싱 원문은 그대로
+  // 두면 영어 UI에서 "Today"를 눌러도 파서가 못 알아듣는다.
+  const isEn = i18n.language?.startsWith('en')
   const defaults = [
-    { label: '오늘', text: '오늘' },
-    { label: '내일', text: '내일' },
-    { label: '다음 주', text: '다음주' }
+    { label: i18n.t('quickDate.today'), text: isEn ? 'today' : '오늘' },
+    { label: i18n.t('quickDate.tomorrow'), text: isEn ? 'tomorrow' : '내일' },
+    { label: i18n.t('quickDate.nextWeek'), text: isEn ? 'next week' : '다음주' }
   ]
 
+  const needle = input.toLowerCase()
   for (const d of defaults) {
-    if (d.label.includes(input) || d.text.includes(input)) {
+    if (d.label.toLowerCase().includes(needle) || d.text.includes(needle)) {
       const date = parseNaturalDate(d.text)
       if (date && !suggestions.find((s) => s.date === date)) {
         suggestions.push({ label: d.label, date })

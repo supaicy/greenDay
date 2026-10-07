@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday — 라이선스 구조</title>
+<style>
+  :root {
+    --bg:#ffffff; --surface:#f7f8fa; --surface-2:#eef1f5;
+    --text:#1f2328; --dim:#57606a; --faint:#6e7781;
+    --line:#d8dee4; --accent:#2563eb; --ok:#15803d; --warn:#b45309; --stop:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#16181d; --surface:#1e2128; --surface-2:#262a33;
+      --text:#e6e8eb; --dim:#a8b0ba; --faint:#8b939e;
+      --line:#303640; --accent:#7aa7f0; --ok:#4ade80; --warn:#fbbf24; --stop:#f87171;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);line-height:1.75;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:840px;margin:0 auto;padding:52px 24px 96px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:8px}
+  h1{font-size:28px;margin:0 0 8px;letter-spacing:-.01em}
+  .sub{color:var(--faint);font-size:14px;margin:0}
+  h2{font-size:20px;margin:48px 0 14px;padding-top:24px;border-top:1px solid var(--line)}
+  h3{font-size:15.5px;margin:28px 0 8px}
+  p{margin:0 0 14px} a{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:.12em .4em;border-radius:4px;word-break:break-word}
+  pre{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;margin:12px 0}
+  .scroll-x{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  .callout{background:var(--surface);border-left:3px solid var(--ok);border-radius:0 8px 8px 0;padding:16px 20px;margin:20px 0}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.stop{border-left-color:var(--stop)}
+  ul,ol{margin:0 0 14px;padding-left:22px} li{margin-bottom:8px}
+  .lede{font-size:16.5px;color:var(--dim);margin:24px 0 0}
+  .pass{color:var(--ok);font-weight:600}
+  .flow{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:18px 0;
+    font-family:var(--mono);font-size:12.5px;line-height:1.9;overflow-x:auto;white-space:pre}
+  .q{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 22px;margin:16px 0}
+  .q h3{margin-top:0}
+  footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>라이선스 구조</h1>
+  <p class="sub">Greenday · 2026-08-02 · 오프라인 서명 코어 완료 · 테스트 416개 통과</p>
+</header>
+
+<p class="lede">
+  물어보신 두 가지 — <strong>무작위 입력</strong>과 <strong>키 공유</strong> — 에 대한 답과,
+  그에 맞춰 만든 것을 정리했습니다. 마지막에 사장님이 정하실 것 하나가 있습니다.
+</p>
+
+<h2>핵심: 대조가 아니라 서명입니다</h2>
+
+<p>
+  흔히 생각하는 방식은 "앱이 정답 키 목록을 갖고 있다가 입력값과 대조"입니다.
+  그러면 앱을 뜯어 목록을 꺼낼 수 있습니다. 그래서 그렇게 하지 않았습니다.
+</p>
+
+<div class="flow">[사장님만 가진 개인키]  ──서명──▶  라이선스 키 발급
+                                    │
+                                    ▼
+[앱에 박힌 공개키]      ──검증──▶  진짜인지 판정만</div>
+
+<p>
+  앱 안에는 <strong>정답이 없습니다.</strong> 공개키로는 "이게 사장님이 서명한 게 맞나"만
+  확인할 수 있고, 새 키를 만들어낼 수는 없습니다. 앱을 통째로 분해해도 마찬가지입니다.
+</p>
+
+<h2>질문 1. 무작위로 계속 입력하면?</h2>
+
+<div class="callout">
+  <strong>사실상 불가능합니다. 시도 횟수 제한조차 필요 없습니다.</strong>
+  Ed25519 서명을 개인키 없이 맞히려면 현실적으로 불가능한 계산량이 듭니다.
+  무작위로 아무리 넣어도 맞을 확률이 0에 수렴합니다.
+</div>
+
+<p>실제로 확인한 것들입니다. 가짜 함수가 아니라 <strong>진짜 Ed25519 키쌍</strong>으로 시험했습니다.</p>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>시도</th><th>결과</th></tr></thead>
+  <tbody>
+    <tr><td>무작위 문자열 5종 (<code>abc</code>, <code>123456</code>, 200자 난수 등)</td><td class="pass">전부 거부</td></tr>
+    <tr><td>기기 수를 3 → 99로 고침</td><td class="pass">거부</td></tr>
+    <tr><td>다른 개인키로 위조</td><td class="pass">거부</td></tr>
+    <tr><td>필드를 빼거나 망가뜨림</td><td class="pass">거부</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>질문 2. 키를 공유하면?</h2>
+
+<p>
+  솔직하게 말씀드립니다. <strong>오프라인만으로는 완전히 막을 수 없습니다.</strong>
+  서버가 없으면 "이 키가 지금 몇 대에서 쓰이는지" 셀 방법이 없기 때문입니다.
+  그래서 온라인 활성화를 택하신 게 맞는 판단입니다.
+</p>
+
+<p>지금 만든 코어에는 공유 억제 장치 두 개가 이미 들어 있습니다.</p>
+
+<h3>구매자 이름 각인</h3>
+<p>
+  서명된 내용 안에 구매자 이름과 이메일이 들어갑니다. 설정 화면에 항상 표시됩니다.
+</p>
+<pre>✓ 홍길동 (hong@example.com) 님께 발급됨</pre>
+<p>
+  자기 이름이 박힌 키를 커뮤니티에 올리는 사람은 거의 없습니다.
+  Sublime Text가 이 방식만으로 굴러갑니다. 정품 사용자에게 드는 비용은 0입니다.
+</p>
+
+<h3>활성화 토큰에도 서명</h3>
+<p>
+  이게 놓치기 쉬운 부분이라 미리 넣었습니다. 서버가 "이 기기에서 언제까지 유효"라고
+  응답할 때, <strong>그 응답 자체에 서명</strong>을 붙입니다.
+</p>
+
+<div class="callout warn">
+  <strong>서명이 없으면 서버가 있어도 뚫립니다.</strong>
+  <code>hosts</code> 파일을 고쳐 가짜 서버를 세우거나, 앱이 저장해 둔 활성화 파일을
+  손으로 고치는 것만으로 무제한 사용이 됩니다. 서명이 있으면 둘 다 통하지 않습니다.
+</div>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>공격</th><th>결과</th></tr></thead>
+  <tbody>
+    <tr><td>캐시된 활성화 만료일을 2099년으로 고침</td><td class="pass">거부</td></tr>
+    <tr><td>가짜 서버를 세워 토큰 발급</td><td class="pass">거부</td></tr>
+    <tr><td>다른 기기의 토큰을 복사해 옴</td><td class="pass">거부</td></tr>
+    <tr><td>다른 라이선스의 토큰을 갖다 붙임</td><td class="pass">거부</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>반드시 아셔야 할 한계</h2>
+
+<div class="callout stop">
+  <strong>소스가 공개돼 있으면 어떤 방식도 의미가 없습니다.</strong>
+  검사하는 코드를 지우고 다시 빌드하면 그만이기 때문입니다.
+  이건 온라인 활성화든 오프라인이든, 세상의 모든 클라이언트 측 라이선스가 똑같이 갖는 한계입니다.
+  <br><br>
+  그래서 아까 <strong>오늘 작업을 공개 저장소에 올리지 않기로 하신 게</strong> 이 맥락에서도 맞습니다.
+  반대로 말하면, 강한 DRM에 시간을 더 쏟을 이유도 없습니다 —
+  라이선스가 막는 건 <em>마음먹고 뚫는 사람</em>이 아니라
+  <em>아무 키나 넣어보는 사람</em>과 <em>별생각 없이 공유하는 사람</em>입니다.
+</div>
+
+<h2>정한 규칙 두 가지</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>상황</th><th>처리</th><th>왜</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>인터넷이 없어 재확인을 못 함</td>
+      <td><strong>유예 기간을 준다</strong></td>
+      <td>돈 낸 사용자가 비행기 안이라는 이유로 앱을 못 쓰는 게 가장 나쁜 실패입니다</td>
+    </tr>
+    <tr>
+      <td>구독 기간이 끝남</td>
+      <td><strong>유예 없이 즉시 종료</strong></td>
+      <td>기간제 상품의 기간이 끝난 것이라 인터넷 여부와 무관합니다</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>발급은 이렇게 하시게 됩니다</h2>
+
+<pre>node scripts/license.mjs issue --name "홍길동" --email hong@example.com --seats 3</pre>
+
+<p>실행하면 이런 키가 나오고, 이걸 구매자에게 보내시면 됩니다.</p>
+
+<pre>eyJwYXlsb2FkIjp7ImlkIjoibGljXzgwMDAwMDRhMTg2ZjRiMmEi
+LCJuYW1lIjoi7ZmN6ri464-ZIiwiZW1haWwiOiJob25nQGV4YW1w
+bGUuY29tIiwic2VhdHMiOjMsImlzc3VlZEF0IjoiMjAyNi0wOC0w…</pre>
+
+<p>
+  발급 내역은 <code>.license-keys/issued.jsonl</code> 에 자동으로 쌓입니다.
+  서버 DB와 별개로 손에 남는 기록이 있어야 나중에 대조가 됩니다.
+</p>
+
+<div class="callout stop">
+  <strong>지금 바로 하셔야 할 것이 하나 있습니다.</strong>
+  <pre style="margin:10px 0">.license-keys/private.pem</pre>
+  이 파일을 <strong>1Password 같은 곳에 백업</strong>해 주세요.
+  잃어버리면 기존 라이선스를 이어서 발급할 방법이 없습니다.
+  (새 키쌍을 만들면 이미 판매한 키가 전부 무효가 됩니다.)
+  <br><br>
+  커밋되지 않도록 막아뒀고, 실제로 차단되는지 확인했습니다.
+</div>
+
+<h2>앱스토어판은 별개입니다</h2>
+
+<p>
+  놓치기 쉬운 함정이 있습니다. Apple 심사 가이드라인 <strong>3.1.1</strong>은
+  앱 안에서 외부 결제로 유도하는 것을 금지합니다.
+  앱스토어판에 "키 입력" 칸이 있으면 <strong>거절 사유</strong>가 됩니다.
+</p>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>채널</th><th>라이선스</th><th>키 입력 UI</th></tr></thead>
+  <tbody>
+    <tr><td>Mac App Store</td><td>Apple 영수증</td><td><strong>없음</strong> (있으면 거절)</td></tr>
+    <tr><td>웹사이트 직접 다운로드</td><td>시리얼 키 + 온라인 활성화</td><td>있음</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  이 코드베이스에 이미 쓰고 있는 <code>process.mas</code> 분기를 그대로 쓰면 됩니다.
+  자동 업데이트와 전역 단축키를 이미 그렇게 처리하고 있어서 패턴이 맞습니다.
+</p>
+
+<h2>남은 작업</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>항목</th><th>상태</th></tr></thead>
+  <tbody>
+    <tr><td>서명·검증 코어</td><td class="pass">완료 (테스트 29개)</td></tr>
+    <tr><td>키 발급 도구</td><td class="pass">완료</td></tr>
+    <tr><td>활성화 서버 (Cloudflare Workers + DB)</td><td>대기</td></tr>
+    <tr><td>앱 쪽 연동 + 설정 UI</td><td>대기</td></tr>
+    <tr><td>앱스토어판에서 UI 숨김</td><td>대기</td></tr>
+    <tr><td>개인정보처리방침 갱신</td><td>대기</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="callout warn">
+  <strong>개인정보처리방침을 반드시 고쳐야 합니다.</strong>
+  지금 <em>"개발자가 운영하는 서버가 없습니다"</em> 라고 공표돼 있는데,
+  활성화 서버가 생기면 이 문장이 거짓이 됩니다.
+  <br><br>
+  다만 핵심 약속은 지킬 수 있습니다. 활성화는 텔레메트리가 아닙니다 —
+  나가는 것은 <strong>키와 기기 식별자뿐이고, 할 일 내용은 전혀 나가지 않습니다.</strong>
+  이렇게 정확히 적으면 정직하면서 강점도 유지됩니다.
+</div>
+
+<h2>사장님이 정하실 것</h2>
+
+<div class="q">
+  <h3>가격 정책</h3>
+  <p>
+    서버 API 모양이 여기서 갈립니다. 지금 만든 키 형식은 셋 다 지원하도록
+    열어뒀지만(만료일·기기수·버전상한), 실제로 뭘 쓸지는 정하셔야 합니다.
+  </p>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>형태</th><th>키에 들어가는 것</th><th>서버가 할 일</th></tr></thead>
+    <tbody>
+      <tr><td><strong>평생 라이선스</strong></td><td>만료일 없음</td><td>기기 수만 셈</td></tr>
+      <tr><td><strong>연간 구독</strong></td><td>만료일 1년 뒤</td><td>갱신 시 새 키 발급</td></tr>
+      <tr><td><strong>평생 + 버전 상한</strong></td><td>"v2까지"</td><td>기기 수만 셈</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    예전에 <em>"경쟁 서비스가 연 7~8만원이니 1/3 가격, 또는 절반 가격에 평생"</em> 이라고
+    말씀하셨는데, 그 방향으로 구체적인 안을 잡아드릴 수 있습니다.
+  </p>
+  <p>
+    함께 정할 것: 무료로 남길 기능과 유료로 돌릴 기능의 경계,
+    무료 체험 유무, 앱스토어와 직접판매의 가격 차이, 기기 수 기본값.
+  </p>
+</div>
+
+<div class="callout">
+  <strong>순서 제안.</strong> 가격 정책을 먼저 정하고 그다음에 서버를 만드는 편이 낫습니다.
+  구독이냐 평생이냐에 따라 서버가 해야 할 일이 꽤 달라지고,
+  나중에 바꾸면 이미 발급한 키까지 손봐야 합니다.
+  <br><br>
+  다만 <strong>App Store 제출은 이것과 무관하게 지금 진행 가능합니다.</strong>
+  앱스토어판은 Apple이 결제를 처리하므로 라이선스 시스템이 필요 없습니다.
+</div>
+
+<footer>Greenday · 2026-08-02 · 궁금한 점은 그냥 물어보세요</footer>
+
+</div>
+</body>
+</html>

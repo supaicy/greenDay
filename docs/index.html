@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>haru — macOS 올인원 생산성 앱</title>
+<meta name="description" content="할일 · 캘린더 · 뽀모도로 · 습관 · AI를 한 곳에서. 맥을 위한 올인원 생산성 앱, haru." />
+<meta property="og:title" content="haru — macOS 올인원 생산성 앱" />
+<meta property="og:description" content="할일 · 캘린더 · 뽀모도로 · 습관 · AI를 한 곳에서." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="icon-128.png" />
+<style>
+  :root{
+    --bg:#0d0d0f; --panel:#161619; --panel2:#1c1c20; --line:#2a2a30;
+    --fg:#f2f2f4; --muted:#9a9aa2; --accent:#ff6b5c; --accent2:#ffb35c;
+    --radius:16px; font-synthesis:none;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Pretendard,Roboto,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+  /* ambient glow */
+  .glow{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(600px 400px at 15% -5%, rgba(255,107,92,.18), transparent 60%),
+      radial-gradient(700px 500px at 90% 0%, rgba(255,179,92,.12), transparent 55%);}
+
+  header{position:relative;z-index:2;padding:22px 0}
+  nav{display:flex;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em}
+  .brand img{width:30px;height:30px;border-radius:8px}
+  .nav-links{display:flex;gap:26px;color:var(--muted);font-size:14px}
+  .nav-links a:hover{color:var(--fg)}
+
+  /* hero */
+  .hero{position:relative;z-index:2;text-align:center;padding:70px 0 40px}
+  .pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:26px}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  h1{font-size:clamp(40px,7vw,72px);line-height:1.02;letter-spacing:-.04em;font-weight:800;margin-bottom:20px}
+  h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:620px;margin:0 auto 34px}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:15px;
+    padding:14px 24px;border-radius:12px;transition:transform .15s ease,box-shadow .15s ease,background .15s}
+  .btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent2));color:#1a0f0d;
+    box-shadow:0 10px 30px -10px rgba(255,107,92,.6)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 40px -12px rgba(255,107,92,.7)}
+  .btn-ghost{border:1px solid var(--line);color:var(--fg)}
+  .btn-ghost:hover{background:var(--panel2)}
+  .cta-note{margin-top:14px;font-size:13px;color:var(--muted)}
+
+  /* app window mockup */
+  .shot{position:relative;z-index:2;margin:56px auto 0;max-width:940px;
+    border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+    box-shadow:0 40px 120px -30px rgba(0,0,0,.8);background:var(--panel)}
+  .titlebar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .traffic{width:12px;height:12px;border-radius:50%}
+  .t1{background:#ff5f57}.t2{background:#febc2e}.t3{background:#28c840}
+  .titlebar span{margin-left:12px;color:var(--muted);font-size:13px}
+  .app{display:grid;grid-template-columns:200px 1fr;min-height:360px}
+  .side{border-right:1px solid var(--line);padding:16px 12px;background:var(--panel2);font-size:13px}
+  .side .sec{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin:14px 8px 8px}
+  .side .item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:9px;color:#d7d7dc}
+  .side .item.active{background:rgba(255,107,92,.16);color:#fff}
+  .side .item .ic{width:16px;height:16px;border-radius:5px;background:var(--line)}
+  .side .item.active .ic{background:var(--accent)}
+  .main{padding:22px 26px}
+  .main h3{font-size:19px;letter-spacing:-.02em;margin-bottom:16px}
+  .task{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
+  .cb{width:18px;height:18px;border-radius:6px;border:1.5px solid #4a4a52;flex:none}
+  .cb.done{background:var(--accent);border-color:var(--accent);position:relative}
+  .cb.done::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;color:#1a0f0d;font-size:12px;font-weight:800}
+  .task .tt{flex:1}
+  .task.done .tt{color:var(--muted);text-decoration:line-through}
+  .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .flag{font-size:11px;padding:2px 8px;border-radius:6px}
+  .flag.hi{color:#ff8a7d;background:rgba(255,107,92,.14)}
+  .flag.med{color:#ffcf8a;background:rgba(255,179,92,.14)}
+
+  /* features */
+  section.features{position:relative;z-index:2;padding:90px 0 30px}
+  .eyebrow{text-align:center;color:var(--accent);font-weight:600;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px}
+  .features h2{text-align:center;font-size:clamp(28px,4vw,40px);letter-spacing:-.03em;margin-bottom:52px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .card{border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border-radius:var(--radius);padding:24px;transition:border-color .2s,transform .2s}
+  .card:hover{border-color:#3a3a44;transform:translateY(-3px)}
+  .card .emo{font-size:24px;margin-bottom:14px;display:block}
+  .card h4{font-size:16px;letter-spacing:-.01em;margin-bottom:7px}
+  .card p{color:var(--muted);font-size:14px}
+
+  footer{position:relative;z-index:2;border-top:1px solid var(--line);margin-top:80px;padding:34px 0;color:var(--muted);font-size:13px}
+  .foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  .foot a:hover{color:var(--fg)}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}.app{grid-template-columns:1fr}.side{display:none}.nav-links{display:none}}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<header><div class="wrap"><nav>
+  <div class="brand"><img src="icon-128.png" alt="haru"/> haru</div>
+  <div class="nav-links">
+    <a href="#features">기능</a>
+    <a href="https://github.com/supaicy/haru">GitHub</a>
+    <a href="https://github.com/supaicy/haru/releases">릴리스</a>
+  </div>
+</nav></div></header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="pill"><span class="dot"></span> macOS · v2.0.0 정식 출시</div>
+    <h1>하루를 <span class="grad">한 화면</span>에서<br/>정리하세요</h1>
+    <p class="sub">할일 · 캘린더 · 타임블로킹 · 뽀모도로 · 습관 · AI 어시스턴트를 하나로. 맥을 위한 올인원 생산성 앱.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/supaicy/haru/releases/latest/download/haru.dmg">⌘ 무료 다운로드 (Apple Silicon)</a>
+      <a class="btn btn-ghost" href="https://github.com/supaicy/haru">소스 보기</a>
+    </div>
+    <div class="cta-note">macOS 12+ · 서명·공증된 DMG · Homebrew: <code>brew install --cask supaicy/haru/haru</code></div>
+  </section>
+
+  <div class="shot">
+    <div class="titlebar"><i class="traffic t1"></i><i class="traffic t2"></i><i class="traffic t3"></i><span>haru — 오늘</span></div>
+    <div class="app">
+      <aside class="side">
+        <div class="sec">스마트 리스트</div>
+        <div class="item active"><i class="ic"></i> 오늘</div>
+        <div class="item"><i class="ic"></i> 다음 7일</div>
+        <div class="item"><i class="ic"></i> 전체</div>
+        <div class="sec">뷰</div>
+        <div class="item"><i class="ic"></i> 캘린더</div>
+        <div class="item"><i class="ic"></i> 뽀모도로</div>
+        <div class="item"><i class="ic"></i> 습관</div>
+      </aside>
+      <div class="main">
+        <h3>오늘 · 4개</h3>
+        <div class="task"><i class="cb"></i><span class="tt">디자인 리뷰 준비</span><span class="flag hi">높음</span><span class="tag">일</span></div>
+        <div class="task"><i class="cb"></i><span class="tt">2시 팀 미팅</span><span class="tag">🔔 13:30</span></div>
+        <div class="task"><i class="cb"></i><span class="tt">주간 회고 작성</span><span class="flag med">보통</span><span class="tag">🔁 매주</span></div>
+        <div class="task done"><i class="cb done"></i><span class="tt">운동 30분</span><span class="tag">습관</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section class="features" id="features">
+    <div class="eyebrow">한 앱, 모든 흐름</div>
+    <h2>필요한 도구가 전부 들어 있습니다</h2>
+    <div class="grid">
+      <div class="card"><span class="emo">✅</span><h4>할일 관리</h4><p>하위 작업·우선순위·태그·마감일. 아이젠하워 매트릭스와 칸반 보드까지.</p></div>
+      <div class="card"><span class="emo">🗓️</span><h4>캘린더 · 타임블로킹</h4><p>작업을 시간 슬롯에 드래그해 "언제 할지"를 배정. 일간·주간 뷰.</p></div>
+      <div class="card"><span class="emo">🔔</span><h4>리마인더</h4><p>설정한 시각에 정확히 시스템 알림이 울립니다. 반복 작업에도 이어집니다.</p></div>
+      <div class="card"><span class="emo">🍅</span><h4>뽀모도로</h4><p>집중·휴식 타이머로 작업에 몰입하고 세션을 기록합니다.</p></div>
+      <div class="card"><span class="emo">🔥</span><h4>습관 트래커</h4><p>매일·매주 습관을 체크하고 연속 기록을 쌓아 동기를 유지합니다.</p></div>
+      <div class="card"><span class="emo">🤖</span><h4>AI 어시스턴트</h4><p>자연어로 작업 생성, 일정·마감 질문. Ollama 로컬 또는 OpenAI 호환.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap foot">
+  <div>© 2026 haru · MIT License</div>
+  <div><a href="https://github.com/supaicy/haru">GitHub</a> · <a href="https://github.com/supaicy/haru/releases">릴리스</a> · <a href="https://github.com/supaicy/haru/blob/main/CHANGELOG.md">변경 이력</a> · <a href="privacy.html">개인정보처리방침</a></div>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>haru — 메모 영역 배치 목업</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-100:#dbeafe; --primary-700:#2563eb;
+    --g100:#f3f4f6; --g200:#e5e7eb; --g300:#d1d5db; --g400:#9ca3af;
+    --g500:#6b7280; --g600:#4b5563; --g700:#374151; --g800:#1f2937;
+    --red:#ef4444; --blue:#3b82f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Arial,sans-serif;color:var(--g800);background:#eef0f2;-webkit-font-smoothing:antialiased;font-size:14px;padding:14px;overflow:auto}
+
+  .ctrls{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:50;display:flex;gap:6px;align-items:center;background:rgba(28,28,30,.94);color:#fff;padding:8px 12px;border-radius:12px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+  .ctrls b{color:#c7c7cc;margin-right:2px}
+  .ctrls button{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:7px;padding:6px 10px;cursor:pointer;font-size:12px;white-space:nowrap}
+  .ctrls button.on{background:#fff;color:#1c1c1e;border-color:#fff}
+
+  /* 상세 패널 (하단 패널을 모사; 데스크탑 폭 가정) */
+  .panel{max-width:1120px;margin:56px auto 0;background:#fff;border:1px solid var(--g200);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.08);height:620px;display:flex;flex-direction:column;overflow:hidden}
+  .grip{height:14px;display:grid;place-items:center;flex-shrink:0}
+  .grip::before{content:"";width:38px;height:4px;border-radius:3px;background:var(--g300)}
+
+  /* 헤더 */
+  .head{display:flex;align-items:center;gap:12px;padding:2px 18px 12px;border-bottom:1px solid var(--g200)}
+  .circle{width:22px;height:22px;border:2px solid var(--red);border-radius:50%;flex-shrink:0}
+  .title{flex:1;font-size:18px;font-weight:600}
+  .hchip{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;font-size:12px;border:1px solid var(--g200);color:var(--g600);white-space:nowrap}
+  .hchip.date{background:#eff6ff;border-color:#dbeafe;color:var(--primary-700)}
+  .seg{display:inline-flex;background:var(--g100);border-radius:8px;padding:2px}
+  .seg span{font-size:12px;padding:4px 9px;border-radius:6px;color:var(--g500)}
+  .seg span.on{background:#fff;color:var(--red);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .ic{color:var(--g400);cursor:pointer}
+
+  /* 메타 띠 */
+  .metabar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 18px;border-bottom:1px solid var(--g100)}
+  .mchip{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;font-size:12px;border:1px solid var(--g200);color:var(--g600);background:#fff;cursor:pointer;white-space:nowrap}
+  .tags{display:flex;align-items:center;gap:6px;flex:1;min-width:160px;color:var(--g400)}
+  .tag{background:var(--g200);color:var(--g600);border-radius:6px;padding:2px 8px;font-size:12px}
+
+  /* 본문 zone */
+  .body{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px 18px 16px}
+  .sublist{flex-shrink:0}
+  .sub{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px;color:var(--g700)}
+  .sub .sc{width:15px;height:15px;border:1.5px solid var(--g300);border-radius:4px;flex-shrink:0}
+  .sub.done .sc{background:var(--primary);border-color:var(--primary)}
+  .sub.done span{text-decoration:line-through;color:var(--g400)}
+  .add{color:var(--g400);font-size:13px;padding:5px 0;cursor:pointer}
+  .h4{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--g400);text-transform:uppercase;margin:2px 0 6px}
+  .notes{flex:1;min-height:0;border:1px solid var(--g200);border-radius:10px;padding:12px 14px;background:#fcfcfd;overflow:auto;line-height:1.7;color:var(--g700)}
+  .notes h1{font-size:20px;margin:2px 0 8px}
+  .notes code{background:var(--g100);border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:.9em}
+  .notes .cursor-line{background:#eef4ff;margin:0 -6px;padding:0 6px;border-radius:3px}
+  .muted{color:var(--g400)}
+
+  /* ===== 배치 변형 ===== */
+  /* A: 하위작업/첨부(상단 컴팩트) → 메모(아래, 전체폭) [현재] */
+  .body.A .zone-side{flex-shrink:0;max-height:42%;overflow:auto;margin-bottom:10px}
+  .body.A .zone-notes{flex:1;min-height:0;display:flex}
+  /* B: 메모(상단, 큼) → 하위작업/첨부(아래 컴팩트) */
+  .body.B{flex-direction:column}
+  .body.B .zone-notes{flex:1;min-height:0;display:flex;order:1;margin-bottom:10px}
+  .body.B .zone-side{flex-shrink:0;max-height:34%;overflow:auto;order:2}
+  /* C: 메모(좌, 큼) | 하위작업·첨부(우, 좁은 레일) */
+  .body.C{flex-direction:row;gap:14px}
+  .body.C .zone-notes{flex:1;min-width:0;display:flex}
+  .body.C .zone-side{width:280px;flex-shrink:0;overflow:auto;border-left:1px solid var(--g100);padding-left:14px}
+  /* D: 탭 (메모 / 하위작업) */
+  .body.D .tabs{display:flex;gap:4px;flex-shrink:0;margin-bottom:8px}
+  .body.D .tabs button{border:none;background:var(--g100);color:var(--g500);font-size:12px;padding:5px 12px;border-radius:7px;cursor:pointer}
+  .body.D .tabs button.on{background:var(--primary-100);color:var(--primary-700);font-weight:500}
+  .body:not(.D) .tabs{display:none}
+  .body.D .zone-notes{flex:1;min-height:0;display:flex}
+  .body.D .zone-side{flex:1;min-height:0;overflow:auto}
+  .body.D.tab-notes .zone-side{display:none}
+  .body.D.tab-side .zone-notes{display:none}
+
+  .hint{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:40;font-size:12px;color:var(--g500);background:#fff;padding:6px 14px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+</style>
+</head>
+<body>
+<div class="ctrls">
+  <b>메모 배치</b>
+  <button class="on" id="bA" onclick="setL('A')">A 하위작업↑ / 메모↓ (현재)</button>
+  <button id="bB" onclick="setL('B')">B 메모↑ / 하위작업↓</button>
+  <button id="bC" onclick="setL('C')">C 메모 좌 · 사이드 우</button>
+  <button id="bD" onclick="setL('D')">D 탭</button>
+</div>
+
+<div class="panel">
+  <div class="grip"></div>
+  <div class="head">
+    <div class="circle"></div>
+    <div class="title">Android 키스토어 생성 + 보안 백업</div>
+    <div class="hchip date">📅 오늘 14:00</div>
+    <div class="seg"><span>없음</span><span>낮음</span><span>중간</span><span class="on">높음</span></div>
+    <div class="ic">🗑</div><div class="ic">✕</div>
+  </div>
+  <div class="metabar">
+    <div class="mchip">☰ 수신함 ▾</div>
+    <div class="mchip">🔔 알림</div>
+    <div class="mchip">🔁 반복</div>
+    <div class="tags">🏷 <span class="tag">앱스토어</span> <span class="muted">태그…</span></div>
+  </div>
+
+  <div class="body A tab-notes" id="body">
+    <div class="tabs">
+      <button class="on" onclick="setTab('notes')">메모</button>
+      <button onclick="setTab('side')">하위작업 · 첨부</button>
+    </div>
+    <div class="zone-side">
+      <div class="h4">하위 작업 1/3</div>
+      <div class="sub done"><span class="sc"></span><span>키스토어(.jks) 생성</span></div>
+      <div class="sub"><span class="sc"></span><span>SHA-1 / SHA-256 지문 등록</span></div>
+      <div class="sub"><span class="sc"></span><span>비밀번호 1Password 백업</span></div>
+      <div class="add">＋ 하위 작업 추가</div>
+      <div class="h4" style="margin-top:12px">첨부</div>
+      <div class="add">＋ 파일 추가</div>
+    </div>
+    <div class="zone-notes">
+      <div class="notes">
+        <h1>키스토어 백업 절차</h1>
+        <p>키스토어는 앱 서명의 핵심. 유출 시 앱 업데이트 불가하므로 오프라인 백업 필수.</p>
+        <p class="cursor-line">1. <code>keytool -genkey -v -keystore haru.jks</code></p>
+        <p>2. Play Console → 앱 서명 키 등록</p>
+        <p>3. SHA-1 / SHA-256 지문을 Firebase 콘솔에 등록</p>
+        <p>4. .jks + 비밀번호를 1Password & 외장 SSD 2곳에 백업</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="hint">👆 상단 버튼으로 메모 영역 배치 A/B/C/D 비교 · 파란 줄 = 커서 있는 줄(라이브프리뷰 raw)</div>
+
+<script>
+  const body=document.getElementById('body')
+  function setL(x){
+    body.className='body '+x+(x==='D'?' tab-notes':'')
+    ;['A','B','C','D'].forEach(k=>document.getElementById('b'+k).classList.toggle('on',k===x))
+  }
+  function setTab(t){
+    body.classList.remove('tab-notes','tab-side')
+    body.classList.add(t==='notes'?'tab-notes':'tab-side')
+    body.querySelectorAll('.tabs button').forEach((b,i)=>b.classList.toggle('on',(t==='notes')===(i===0)))
+  }
+</script>
+</body>
+</html>

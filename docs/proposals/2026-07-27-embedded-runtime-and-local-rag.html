@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru · 내장 런타임 & 로컬 RAG 제안 (2026-07-27)</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-700:#2563eb; --primary-50:#eff6ff;
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px 80px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px}
+  .kicker{color:var(--primary-700);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:28px;margin:6px 0 8px;line-height:1.25}
+  .sub{color:var(--muted);font-size:15px}
+  h2{font-size:20px;margin:38px 0 12px;padding-top:8px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--primary);color:#fff;font-size:14px;font-weight:700;flex:none}
+  h3{font-size:15px;margin:18px 0 6px}
+  p{margin:8px 0}
+  .lead{font-size:16px;background:var(--primary-50);border:1px solid #dbeafe;border-radius:12px;padding:16px 18px;color:#1e3a8a}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;color:#334155;font-weight:700;font-size:12px;letter-spacing:.03em}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f1f5f9;border-radius:5px;padding:1px 6px;color:#0f172a}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;margin-left:6px}
+  .p-far{background:#e0e7ff;color:#3730a3}
+  .p-rec{background:#dcfce7;color:#166534}
+  ul.pro{list-style:none;padding:0;margin:8px 0}
+  ul.pro li{position:relative;padding:4px 0 4px 24px;font-size:14px}
+  ul.pro li::before{content:"＋";position:absolute;left:0;color:var(--green);font-weight:800}
+  ul.con{list-style:none;padding:0;margin:8px 0}
+  ul.con li{position:relative;padding:4px 0 4px 24px;font-size:14px}
+  ul.con li::before{content:"－";position:absolute;left:2px;color:var(--red);font-weight:800}
+  .decide{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 18px;margin-top:12px}
+  .decide h3{margin-top:0;color:#9a3412}
+  .decide ol{margin:6px 0 0;padding-left:20px;font-size:14px}
+  .rec{background:#0f172a;color:#e2e8f0;border-radius:14px;padding:22px 24px;margin-top:36px}
+  .rec h2{color:#fff;margin-top:0}
+  .rec h2 .n{background:#334155}
+  .rec .step{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #1e293b}
+  .rec .step:last-child{border-bottom:0}
+  .rec .step b{color:#7dd3fc}
+  .rec .num{flex:none;width:22px;height:22px;border-radius:6px;background:#1d4ed8;color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;margin-top:2px}
+  .foot{margin-top:34px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="kicker">Design Proposal · 결정 대기</div>
+    <h1>내장 런타임 &amp; 로컬 RAG</h1>
+    <div class="sub">2026-07-27 · 로컬 AI/프라이버시 로드맵의 [장기] 두 항목 — 착수 전 결정이 필요한 아키텍처 갈림길</div>
+  </header>
+
+  <p class="lead">
+    나머지 로드맵 항목(원클릭 온보딩·전송 미리보기·네트워크 인디케이터·한국어 모델·기존-할일 액션)은
+    이번 세션에 모두 구현했습니다. 남은 <b>내장 런타임</b>과 <b>로컬 RAG</b>는 네이티브 모듈 번들링·패키징·
+    임베딩 저장 스키마 등 <b>되돌리기 어려운 결정</b>이 선행돼야 해, 밤샘 무검증 구현 대신 이 제안서로 정리합니다.
+    각 항목의 접근·트레이드오프·결정 사항을 아래에 두고, 승인 시 단계적으로 구현합니다.
+  </p>
+
+  <h2><span class="n">1</span> 내장 런타임 <span class="pill p-far">장기</span></h2>
+  <p>Ollama 의존을 없애고 앱만 설치하면 로컬 AI가 되도록 — <span class="code">node-llama-cpp</span>(llama.cpp 바인딩)로
+  GGUF 모델을 앱 프로세스 안에서 직접 구동한다.</p>
+
+  <ul class="pro">
+    <li>설치 0 — 사용자가 Ollama를 따로 깔 필요 없음(온보딩 마찰 제거)</li>
+    <li>완전 온디바이스 — 이그레스 자체가 불가능(프라이버시 최상)</li>
+    <li>서버 프로세스/포트 관리 불필요</li>
+  </ul>
+  <ul class="con">
+    <li>번들 크기 급증 — 아키텍처별(arm64/x64) 네이티브 바이너리 + GGUF 모델 2–5GB</li>
+    <li>macOS 패키징 난이도 — 네이티브 모듈 코드서명/노터라이즈, <b>MAS 샌드박스</b>는 JIT/네이티브 실행 제약으로 사실상 불가 가능성</li>
+    <li>런타임 리소스 — RAM/CPU 점유, 콜드 로드, 배터리</li>
+    <li>유지보수 — 모델·바인딩 버전 추적, 아키텍처 매트릭스 빌드</li>
+  </ul>
+
+  <table>
+    <thead><tr><th>측면</th><th>Ollama(현행)</th><th>내장 런타임(제안)</th></tr></thead>
+    <tbody>
+      <tr><td>설치</td><td>사용자가 Ollama 설치 필요</td><td>없음(앱에 포함/최초 실행 시 모델 다운로드)</td></tr>
+      <tr><td>번들</td><td>수 MB</td><td>+네이티브 바이너리, 모델은 번들 또는 다운로드(2–5GB)</td></tr>
+      <tr><td>배포 채널</td><td>Developer ID · MAS 모두 OK</td><td>Developer ID 위주 — <b>MAS는 검증 필요</b></td></tr>
+      <tr><td>프라이버시</td><td>로컬 루프백(온디바이스)</td><td>완전 인프로세스(이그레스 불가)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="decide">
+    <h3>결정 필요</h3>
+    <ol>
+      <li>번들 vs 최초 실행 다운로드 — 앱 크기(2–5GB↑)를 감수할지, 첫 실행에 모델을 받을지</li>
+      <li>기본 모델 — 한국어 품질 고려(예: EXAONE 3.5 GGUF). 크기/품질 트레이드오프</li>
+      <li>배포 채널 — MAS 샌드박스에서 동작 불가 시, 내장 모드는 <b>Developer ID 빌드 전용</b>으로 한정할지</li>
+      <li>아키텍처 — arm64 전용 vs arm64+x64 유니버설(빌드 시간/크기)</li>
+      <li>폴백 — Ollama를 계속 1순위로 두고 내장은 옵트인 "내장 모드"로 병행할지</li>
+    </ol>
+  </div>
+
+  <h2><span class="n">2</span> 로컬 RAG / 임베딩 <span class="pill p-far">장기</span></h2>
+  <p>지금은 <span class="code">buildAiTaskContext</span>가 상위 ~40개 태스크를 통째로 전송한다. 질의와 관련된 태스크만
+  골라 보내면 <b>이그레스 감소(프라이버시) + 답변 초점 향상</b>을 동시에 얻는다.</p>
+
+  <h3>v1 — 키워드 관련도(스테핑 스톤, 임베딩 불필요)</h3>
+  <ul class="pro">
+    <li>순수 함수 · 네트워크 0 · 즉시 테스트 가능 — 질의 토큰과 태스크(제목/태그) 겹침으로 상위 K 선택</li>
+    <li>추가 모델 설치/스키마 변경 없음 — 지금 바로 구현 가능</li>
+  </ul>
+  <ul class="con">
+    <li>의미 검색은 아님 — 동의어/문맥은 못 잡음(“장보기” vs “마트”)</li>
+  </ul>
+
+  <h3>v2 — 임베딩(의미 검색)</h3>
+  <p>Ollama <span class="code">/api/embeddings</span>(예: 한국어에 강한 <span class="code">bge-m3</span>/<span class="code">nomic-embed-text</span>)로
+  태스크를 임베딩, 콘텐츠 해시로 캐시, 질의 임베딩과 코사인 유사도 상위 K 전송.</p>
+  <ul class="con">
+    <li>임베딩 모델 추가 설치 필요</li>
+    <li>임베딩 저장/캐시 — DB 테이블·컬럼 추가 + 태스크 편집 시 무효화</li>
+    <li>콜드스타트(최초 전량 임베딩) 비용</li>
+  </ul>
+
+  <div class="decide">
+    <h3>결정 필요</h3>
+    <ol>
+      <li>v1(키워드)부터 출시할지 — 저위험·즉시 가치. 이후 v2(임베딩) 승격</li>
+      <li>임베딩 모델 선택(한국어 품질) 및 자동 설치 유도 여부</li>
+      <li>저장 위치 — 새 DB 테이블 vs 태스크 행 컬럼(BLOB), 무효화 트리거(저장 시 재임베딩 vs 지연)</li>
+      <li>상위 K 크기 + 최근성 하한(관련도 낮아도 최근 태스크 N개는 유지할지)</li>
+      <li>프라이버시 표기 — 전송 미리보기(이미 구현)와 연동해 "관련 N개만 전송" 노출</li>
+    </ol>
+  </div>
+
+  <div class="rec">
+    <h2><span class="n">➤</span> 추천 실행 순서</h2>
+    <div class="step"><div class="num">1</div><div><b>로컬 RAG v1(키워드 관련도)</b> 먼저 — 순수·테스트 가능·저위험. 전송 태스크를 질의 관련 상위 K로 축소해 이그레스를 즉시 줄인다. (승인 시 이번 주 구현 가능)</div></div>
+    <div class="step"><div class="num">2</div><div><b>로컬 RAG v2(임베딩)</b> — 임베딩 모델·캐시 스키마 결정 후. 의미 검색으로 recall 향상.</div></div>
+    <div class="step"><div class="num">3</div><div><b>내장 런타임</b> — MAS 샌드박스 실증 스파이크 먼저(동작 가능 여부 확인). 가능하면 Developer ID 빌드에 옵트인 "내장 모드"로, Ollama는 1순위 유지.</div></div>
+    <div class="step"><div class="num">4</div><div>각 단계는 독립 출시 — 하나가 막혀도 나머지는 진행. 내장 런타임은 번들 크기 결정이 가장 큰 게이트.</div></div>
+  </div>
+
+  <div class="foot">
+    이 두 항목은 <span class="code">TODOS.md</span>의 [장기]로 남겨 두었고, 나머지 로드맵/후속은 모두 이번 세션에 반영했습니다.
+    승인 주시면 위 1번(키워드 RAG)부터 착수합니다.
+  </div>
+</div>
+</body>
+</html>

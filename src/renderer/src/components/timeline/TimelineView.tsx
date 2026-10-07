@@ -1,48 +1,43 @@
 import type React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { toDateString } from '../../utils/date'
-import type { Task, Priority } from '../../types'
+import { useToday } from '../../hooks/useToday'
+import { shiftIsoByDays } from '../../utils/recurrence'
+import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Clock, AlertTriangle } from 'lucide-react'
-
-// 우선순위 정렬 순서
-const priorityOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 }
-
-// 우선순위 색상
-const priorityColor: Record<Priority, string> = {
-  high: 'text-red-500',
-  medium: 'text-amber-500',
-  low: 'text-blue-500',
-  none: 'text-gray-400'
-}
+import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
+import { isActiveTopLevel } from '../../utils/smartLists'
 
 interface TimelineGroup {
   id: string
-  label: string
+  labelKey: string
   icon: React.ReactNode
   tasks: Task[]
   color: string // 타임라인 원 색상
 }
 
 export function TimelineView(): React.ReactElement {
-  const { theme, tasks, selectTask, selectedTaskId, toggleTask } = useStore()
+  const { t } = useTranslation()
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const selectTask = useStore((s) => s.selectTask)
+  const selectedTaskId = useStore((s) => s.selectedTaskId)
+  const toggleTask = useStore((s) => s.toggleTask)
   const isDark = theme === 'dark'
 
+  // 자정에 갱신되는 '오늘' — 마운트 시점에 고정하면 밤을 넘긴 창에서 그룹이 어제 기준으로 남는다.
+  const todayStr = useToday()
+
   const groups = useMemo(() => {
-    const now = new Date()
-    const todayStr = toDateString(now)
-
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowStr = toDateString(tomorrow)
-
+    // 전부 todayStr에서 파생한다. 렌더 시각의 new Date()로 잡으면 자정을 넘겨도
+    // '내일'과 '이번 주 끝'만 어제 기준으로 남아 그룹이 어긋난다.
+    const tomorrowStr = shiftIsoByDays(todayStr, 1)
     // 이번 주 끝 (토요일)
-    const endOfWeek = new Date(now)
-    const dayOfWeek = endOfWeek.getDay()
-    endOfWeek.setDate(endOfWeek.getDate() + (6 - dayOfWeek))
-    const endOfWeekStr = toDateString(endOfWeek)
+    const [y, m, d] = todayStr.split('-').map(Number)
+    const endOfWeekStr = shiftIsoByDays(todayStr, 6 - new Date(y, m - 1, d).getDay())
 
-    const activeTasks = tasks.filter((t) => !t.completed && !t.deletedAt)
+    const activeTasks = tasks.filter(isActiveTopLevel)
 
     const overdue: Task[] = []
     const today: Task[] = []
@@ -68,20 +63,14 @@ export function TimelineView(): React.ReactElement {
     }
 
     // 각 그룹 우선순위 순 정렬
-    const sortFn = (a: Task, b: Task) => priorityOrder[a.priority] - priorityOrder[b.priority]
-    overdue.sort(sortFn)
-    today.sort(sortFn)
-    tomorrowTasks.sort(sortFn)
-    thisWeek.sort(sortFn)
-    later.sort(sortFn)
-    noDueDate.sort(sortFn)
+    for (const group of [overdue, today, tomorrowTasks, thisWeek, later, noDueDate]) group.sort(byPinnedThenPriority)
 
     const result: TimelineGroup[] = []
 
     if (overdue.length > 0) {
       result.push({
         id: 'overdue',
-        label: '기한 초과',
+        labelKey: 'timeline.overdue',
         icon: <AlertTriangle size={14} />,
         tasks: overdue,
         color: 'bg-red-500'
@@ -90,7 +79,7 @@ export function TimelineView(): React.ReactElement {
     if (today.length > 0) {
       result.push({
         id: 'today',
-        label: '오늘',
+        labelKey: 'timeline.today',
         icon: <Clock size={14} />,
         tasks: today,
         color: 'bg-blue-500'
@@ -99,7 +88,7 @@ export function TimelineView(): React.ReactElement {
     if (tomorrowTasks.length > 0) {
       result.push({
         id: 'tomorrow',
-        label: '내일',
+        labelKey: 'timeline.tomorrow',
         icon: <Clock size={14} />,
         tasks: tomorrowTasks,
         color: 'bg-amber-500'
@@ -108,7 +97,7 @@ export function TimelineView(): React.ReactElement {
     if (thisWeek.length > 0) {
       result.push({
         id: 'thisWeek',
-        label: '이번 주',
+        labelKey: 'timeline.thisWeek',
         icon: <Clock size={14} />,
         tasks: thisWeek,
         color: 'bg-green-500'
@@ -117,7 +106,7 @@ export function TimelineView(): React.ReactElement {
     if (later.length > 0) {
       result.push({
         id: 'later',
-        label: '나중에',
+        labelKey: 'timeline.later',
         icon: <Clock size={14} />,
         tasks: later,
         color: 'bg-gray-500'
@@ -126,7 +115,7 @@ export function TimelineView(): React.ReactElement {
     if (noDueDate.length > 0) {
       result.push({
         id: 'noDue',
-        label: '마감일 없음',
+        labelKey: 'timeline.noDueDate',
         icon: <Clock size={14} />,
         tasks: noDueDate,
         color: isDark ? 'bg-gray-600' : 'bg-gray-400'
@@ -134,16 +123,18 @@ export function TimelineView(): React.ReactElement {
     }
 
     return result
-  }, [tasks, isDark])
+  }, [tasks, isDark, todayStr])
 
   const totalTasks = groups.reduce((sum, g) => sum + g.tasks.length, 0)
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>타임라인</h2>
-        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{totalTasks}개의 할 일</p>
+        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('timeline.title')}</h2>
+        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          {t('timeline.taskCount', { count: totalTasks })}
+        </p>
       </div>
 
       {/* 타임라인 본문 */}
@@ -151,7 +142,7 @@ export function TimelineView(): React.ReactElement {
         {groups.length === 0 ? (
           <div className={`text-center py-16 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             <Clock size={40} className="mx-auto mb-3 opacity-50" />
-            <p>할 일이 없습니다</p>
+            <p>{t('task.empty')}</p>
           </div>
         ) : (
           <div className="relative">
@@ -174,70 +165,84 @@ export function TimelineView(): React.ReactElement {
                 {/* 그룹 라벨 */}
                 <div className="mb-3">
                   <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                    {group.label}
+                    {t(group.labelKey)}
                   </h3>
                   <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                    {group.tasks.length}개
+                    {t('task.count', { count: group.tasks.length })}
                   </span>
                 </div>
 
                 {/* 태스크 목록 */}
                 <div className="space-y-1.5">
-                  {group.tasks.map((task) => (
-                    <div
-                      key={task.id}
-                      onClick={() => selectTask(task.id)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                        selectedTaskId === task.id
-                          ? isDark
-                            ? 'bg-blue-900/30 border border-blue-500/50'
-                            : 'bg-blue-50 border border-blue-300'
-                          : isDark
-                            ? 'hover:bg-gray-800 border border-transparent'
-                            : 'hover:bg-gray-100 border border-transparent'
-                      }`}
-                    >
-                      {/* 체크박스 */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleTask(task.id)
+                  {group.tasks.map((task) => {
+                    // 태스크 항목: 중첩 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
+                    return (
+                      // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
+                      <div
+                        key={task.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => selectTask(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            selectTask(task.id)
+                          }
                         }}
-                        className="flex-shrink-0"
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                          selectedTaskId === task.id
+                            ? isDark
+                              ? 'bg-blue-900/30 border border-blue-500/50'
+                              : 'bg-blue-50 border border-blue-300'
+                            : isDark
+                              ? 'hover:bg-gray-800 border border-transparent'
+                              : 'hover:bg-gray-100 border border-transparent'
+                        }`}
                       >
-                        {task.completed ? (
-                          <CheckCircle2 size={16} className="text-green-500" />
-                        ) : (
-                          <Circle size={16} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
-                        )}
-                      </button>
-
-                      {/* 제목 */}
-                      <span className={`flex-1 text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                        {task.title}
-                      </span>
-
-                      {/* 우선순위 */}
-                      {task.priority !== 'none' && <Flag size={12} className={priorityColor[task.priority]} />}
-
-                      {/* 시간 */}
-                      {task.dueTime && (
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{task.dueTime}</span>
-                      )}
-
-                      {/* 날짜 */}
-                      {task.dueDate && (
-                        <span
-                          className={`text-xs ${
-                            group.id === 'overdue' ? 'text-red-500' : isDark ? 'text-gray-500' : 'text-gray-400'
-                          }`}
+                        {/* 체크박스 */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleTask(task.id)
+                          }}
+                          className="flex-shrink-0"
                         >
-                          {task.dueDate}
+                          {task.completed ? (
+                            <CheckCircle2 size={16} className="text-green-500" />
+                          ) : (
+                            <Circle size={16} className={isDark ? 'text-gray-500' : 'text-gray-400'} />
+                          )}
+                        </button>
+
+                        {/* 제목 */}
+                        <span className={`flex-1 text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                          {task.title}
                         </span>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* 우선순위 */}
+                        {task.priority !== 'none' && <Flag size={12} className={PRIORITY_COLOR[task.priority]} />}
+
+                        {/* 시간 */}
+                        {task.dueTime && (
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {task.dueTime}
+                          </span>
+                        )}
+
+                        {/* 날짜 */}
+                        {task.dueDate && (
+                          <span
+                            className={`text-xs ${
+                              group.id === 'overdue' ? 'text-red-500' : isDark ? 'text-gray-500' : 'text-gray-400'
+                            }`}
+                          >
+                            {task.dueDate}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}

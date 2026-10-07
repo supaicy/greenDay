@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="resources/icon-128-rounded.png" alt="haru" width="128" height="128">
+  <img src="resources/icon-128-rounded.png" alt="Greenday" width="128" height="128">
 </p>
 
-<h1 align="center">haru</h1>
+<h1 align="center">Greenday</h1>
 
 <p align="center">
   <strong>All-in-one productivity app for macOS</strong><br>
@@ -14,17 +14,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/supaicy/haru/releases/latest/download/haru.dmg">
+  <a href="https://github.com/supaicy/greenDay/releases/latest/download/Greenday-arm64.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Apple_Silicon)-blue?style=for-the-badge&logo=apple" alt="Download DMG">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/supaicy/haru/stargazers">
-    <img src="https://img.shields.io/github/stars/supaicy/haru?style=flat-square" alt="Stars">
+  <a href="https://github.com/supaicy/greenDay/stargazers">
+    <img src="https://img.shields.io/github/stars/supaicy/greenDay?style=flat-square" alt="Stars">
   </a>
-  <img src="https://img.shields.io/github/downloads/supaicy/haru/total?style=flat-square" alt="Downloads">
-  <img src="https://img.shields.io/github/v/release/supaicy/haru?style=flat-square" alt="Release">
+  <img src="https://img.shields.io/github/downloads/supaicy/greenDay/total?style=flat-square" alt="Downloads">
+  <img src="https://img.shields.io/github/v/release/supaicy/greenDay?style=flat-square" alt="Release">
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 </p>
@@ -56,43 +56,36 @@
 ### Homebrew (Recommended)
 
 ```bash
-brew install --cask supaicy/haru/haru
-```
-
-If macOS shows a "damaged" warning on first launch, clear the quarantine flag:
-
-```bash
-xattr -cr /Applications/haru.app
+brew install --cask supaicy/haru/greenday
 ```
 
 To upgrade:
 
 ```bash
-brew upgrade --cask haru
+brew upgrade --cask greenday
 ```
 
 ### Download DMG
 
-1. Click the **Download** button above (or visit [Releases](https://github.com/supaicy/haru/releases))
-2. Open the downloaded `.dmg` and drag `haru` into your `Applications` folder
-3. Before the first launch, run:
+1. Click the **Download** button above (or visit [Releases](https://github.com/supaicy/greenDay/releases))
+2. Open the downloaded `.dmg` and drag `Greenday` into your `Applications` folder
+3. Launch it — no extra steps.
 
-```bash
-xattr -cr /Applications/haru.app
-```
-
-> haru is open-source and isn't signed with an Apple Developer certificate, so macOS may show a *"damaged"* warning. The command above clears the quarantine flag and only needs to run once.
+> Releases are signed with a Developer ID certificate and notarized by Apple (the release
+> workflow verifies both before publishing), so Gatekeeper opens Greenday without a
+> *"damaged"* warning. If you still see one, the download was altered or incomplete —
+> download it again rather than clearing the quarantine flag.
 
 ### Update
 
-- **Homebrew:** `brew upgrade --cask haru`
-- **DMG:** Open **Settings → Check for Updates** in-app. When a new version is available, download the latest `haru.dmg` from Releases and replace the existing app.
+- **Homebrew:** `brew upgrade --cask greenday`
+- **DMG:** Open **Settings → Check for Updates** in-app. When a new version is available, download the latest `Greenday-arm64.dmg` (or `Greenday-x64.dmg` for Intel) from Releases and replace the existing app.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/supaicy/haru.git
-cd haru
+git clone https://github.com/supaicy/greenDay.git
+cd greenDay
 npm install
 npm run dev        # Development mode
 npm run package    # Build macOS app
@@ -100,7 +93,7 @@ npm run package    # Build macOS app
 
 ## AI Setup (Optional)
 
-haru's AI features work with a local or cloud model. Configure under **Settings → AI**.
+Greenday's AI features work with a local or cloud model. Configure under **Settings → AI**.
 
 | Provider | Default endpoint | Default model | Notes |
 |----------|------------------|---------------|-------|
@@ -122,9 +115,13 @@ haru's AI features work with a local or cloud model. Configure under **Settings 
 | `Delete` | Delete selected task |
 | `Esc` | Deselect / Close |
 
+## Documentation
+
+Developer docs (Korean) live under [`docs/`](docs/README.md) — tutorials, how-tos (release, Mac App Store, bridge build, Google OAuth, screenshots, i18n), references (scripts and flags, IPC channels, licensing, migration files) and explanations (bundle-ID migration, license gate and MAS, local data and safeStorage). Start at [docs/README.md](docs/README.md).
+
 ## Tech Stack
 
-- **Electron 40** — Native macOS app
+- **Electron 41** — Native macOS app
 - **React 19** + **TypeScript** — UI
 - **Tailwind CSS 3** — Styling
 - **Zustand** — State management
@@ -133,7 +130,7 @@ haru's AI features work with a local or cloud model. Configure under **Settings 
 ## System Requirements
 
 - macOS 12 (Monterey) or later
-- Apple Silicon only (M1 / M2 / M3 / M4) — *Intel Macs are not supported*
+- Apple Silicon (`Greenday-arm64.dmg`) and Intel (`Greenday-x64.dmg`) — both are built and notarized for every release
 
 ---
 

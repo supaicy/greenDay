@@ -1,9 +1,8 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useStore } from './store/useStore'
 import { Sidebar } from './components/sidebar/Sidebar'
 import { Settings } from './components/sidebar/Settings'
 import { TaskListView } from './components/tasks/TaskList'
-import { TaskDetail } from './components/tasks/TaskDetail'
 import { CalendarView } from './components/calendar/CalendarView'
 import { WeeklyCalendar } from './components/calendar/WeeklyCalendar'
 import { DailyCalendar } from './components/calendar/DailyCalendar'
@@ -17,6 +16,13 @@ import { QuickAdd } from './components/common/QuickAdd'
 import { UndoToast } from './components/common/UndoToast'
 import { AiChatPanel } from './components/ai/AiChatPanel'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
+import { usePomodoroTicker } from './hooks/usePomodoroTicker'
+import { LicenseGate } from './licensing/LicenseGate'
+import { BridgeNotice } from './components/migration/BridgeNotice'
+import { MigrationBanner } from './components/migration/MigrationBanner'
+
+// CodeMirror 6 라이브프리뷰 에디터(@atomic-editor/editor) 포함 무거운 컴포넌트 → 코드분할로 메인 청크 축소
+const TaskDetail = lazy(() => import('./components/tasks/TaskDetail').then((m) => ({ default: m.TaskDetail })))
 
 function MainContent() {
   const viewType = useStore((s) => s.viewType)
@@ -47,27 +53,43 @@ function MainContent() {
 export default function App() {
   const loadData = useStore((s) => s.loadData)
   const selectedTaskId = useStore((s) => s.selectedTaskId)
-  const viewType = useStore((s) => s.viewType)
   const theme = useStore((s) => s.theme)
-  const showQuickAdd = useStore((s) => s.showQuickAdd)
+  const language = useStore((s) => s.language)
 
   useKeyboardShortcuts()
+  usePomodoroTicker()
 
   useEffect(() => {
     loadData()
     void useStore.getState().aiLoadHistory()
+    // AI 연결 상태를 시작 시 한 번 확인한다. 예전에는 설정이나 AI 패널을 열어야만
+    // 확인돼서, 첫 실행에는 할일 추가 폼의 AI 버튼이 아예 보이지 않았다.
+    void useStore.getState().aiCheckConnection()
     // 자동 업데이트 이벤트 수신 (electron-updater에서 push)
     const cleanupUpdate = window.api.onUpdateAvailable?.((info) => {
-      useStore.setState({ updateAvailable: info, updateChecked: true })
+      useStore.setState({ updateAvailable: info, updateChecked: true, updateFailed: false })
     })
     const cleanupNotAvailable = window.api.onUpdateNotAvailable?.(() => {
-      useStore.setState({ updateChecked: true })
+      useStore.setState({ updateChecked: true, updateFailed: false })
+    })
+    // 실패도 "확인이 끝났다"이다 — `updateChecked`를 안 올리면 설정이 "업데이트
+    // 확인 중…"에 영영 갇힌다. 그렇다고 '최신 버전'은 아니라서 깃발을 갈라 둔다.
+    // 한 시간 뒤 재시도가 성공하면 위 두 핸들러가 이 깃발을 도로 내린다.
+    const cleanupUpdateError = window.api.onUpdateError?.(() => {
+      useStore.setState({ updateChecked: true, updateFailed: true })
+    })
+    // 다운로드 실패는 확인 실패가 아니다 — 새 버전이 있다는 답은 이미 받았다.
+    // 막대를 내려야 설정이 '다시 받기' 버튼을 돌려준다(`progress != null`이면 막대만
+    // 그린다). `updateReady`도 내린다: 이 채널은 설치 단계의 실패도 실어 오고, 그때
+    // "재시작하여 설치"를 계속 내밀면 같은 실패를 되풀이할 뿐이다.
+    const cleanupDownloadError = window.api.onUpdateDownloadError?.(() => {
+      useStore.setState({ updateDownloadProgress: null, updateDownloadFailed: true, updateReady: false })
     })
     const cleanupProgress = window.api.onUpdateProgress?.((percent) => {
-      useStore.setState({ updateDownloadProgress: percent })
+      useStore.setState({ updateDownloadProgress: percent, updateDownloadFailed: false })
     })
     const cleanupDownloaded = window.api.onUpdateDownloaded?.(() => {
-      useStore.setState({ updateReady: true, updateDownloadProgress: null })
+      useStore.setState({ updateReady: true, updateDownloadProgress: null, updateDownloadFailed: false })
     })
     // 글로벌 단축키 등록
     window.api.registerGlobalShortcut?.()
@@ -79,10 +101,17 @@ export default function App() {
       cleanup?.()
       cleanupUpdate?.()
       cleanupNotAvailable?.()
+      cleanupUpdateError?.()
+      cleanupDownloadError?.()
       cleanupProgress?.()
       cleanupDownloaded?.()
     }
   }, [loadData])
+
+  // 저장된 언어를 메인에 알린다(첫 실행 포함). 이후 변경은 setLanguage가 직접 보낸다.
+  useEffect(() => {
+    window.api.setLanguage?.(language)
+  }, [language])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
@@ -97,14 +126,23 @@ export default function App() {
       className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#1C1C1E] text-gray-100' : 'bg-white text-gray-800'}`}
     >
       <Sidebar />
-      <div className="flex flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <MainContent />
-        {viewType === 'tasks' && selectedTaskId && <TaskDetail />}
       </div>
+      {selectedTaskId && (
+        <Suspense fallback={null}>
+          <TaskDetail />
+        </Suspense>
+      )}
       <AiChatPanel />
       <Settings />
-      {showQuickAdd && <QuickAdd />}
+      <QuickAdd />
       <UndoToast />
+      {/* 유료 게이트는 앱 전체에서 한 곳이다. enforcement가 꺼져 있으면 아무것도 그리지 않는다. */}
+      <LicenseGate />
+      {/* 번들 ID 마이그레이션 — 브리지 빌드의 안내, 새 빌드의 첫 실행 상태. 해당 없으면 null. */}
+      <BridgeNotice />
+      <MigrationBanner />
     </div>
   )
 }

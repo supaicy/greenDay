@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru — 하단 상세 패널 목업</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-100:#dbeafe; --primary-700:#2563eb;
+    --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db; --gray-400:#9ca3af;
+    --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151; --gray-800:#1f2937;
+    --red:#ef4444; --amber:#f59e0b; --blue:#3b82f6;
+    --panel-h: 46vh; /* controlled by drag / presets */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+    color:var(--gray-800); background:#fff; -webkit-font-smoothing:antialiased;
+    font-size:14px; overflow:hidden;
+  }
+  .app{display:flex; height:100vh; overflow:hidden}
+
+  /* ---- Sidebar ---- */
+  .sidebar{width:220px; flex-shrink:0; background:var(--gray-100); display:flex; flex-direction:column; padding:8px; user-select:none}
+  .sb-spacer{height:28px}
+  .sb-item{display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:8px; color:var(--gray-600); font-size:13px; cursor:pointer}
+  .sb-item:hover{background:var(--gray-200)}
+  .sb-item.active{background:var(--primary-100); color:var(--primary-700); font-weight:500}
+  .sb-item .ic{width:16px; text-align:center; opacity:.7}
+  .sb-item .count{margin-left:auto; font-size:11px; color:var(--gray-400)}
+  .sb-sec{font-size:10px; font-weight:700; letter-spacing:.06em; color:var(--gray-400); padding:12px 10px 4px; text-transform:uppercase}
+  .sb-divider{height:1px; background:var(--gray-300); margin:8px 4px}
+
+  /* ---- Main column (holds list + bottom panel) ---- */
+  .main{flex:1; min-width:0; display:flex; flex-direction:column; position:relative; overflow:hidden}
+  .topbar{height:56px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 24px}
+  .topbar h1{font-size:20px; font-weight:700}
+  .search{margin-left:auto; width:220px; height:32px; background:var(--gray-100); border-radius:8px; display:flex; align-items:center; gap:8px; padding:0 10px; color:var(--gray-400); font-size:12px}
+  .icbtn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--gray-400);cursor:pointer}
+  .icbtn:hover{background:var(--gray-100)}
+
+  /* list area shrinks when panel is open (PUSH mode) */
+  .list-wrap{flex:1; min-height:0; overflow:auto; padding:0 12px 12px; transition:flex-basis .28s cubic-bezier(.32,.72,0,1)}
+  .add-row{display:flex; align-items:center; gap:10px; color:var(--primary); font-weight:500; padding:10px 12px}
+  .task{display:flex; gap:12px; align-items:flex-start; padding:12px; border-radius:10px; cursor:pointer; border-bottom:1px solid #f4f4f5}
+  .task:hover{background:#fafafa}
+  .task.sel{background:var(--primary-100)}
+  .circle{width:18px;height:18px;border:2px solid var(--gray-300);border-radius:50%;flex-shrink:0;margin-top:1px}
+  .task.p-high .circle{border-color:var(--red)} .task.p-low .circle{border-color:var(--blue)}
+  .task .t-title{font-size:14px}
+  .task .t-meta{display:flex;gap:10px;margin-top:4px;font-size:12px;color:var(--gray-400)}
+  .flag-high{color:var(--red)} .flag-low{color:var(--blue)}
+
+  /* ---- Bottom detail panel ---- */
+  .panel{
+    position:absolute; left:0; right:0; bottom:0; height:var(--panel-h);
+    background:#fff; border-top:1px solid var(--gray-200);
+    box-shadow:0 -8px 30px rgba(0,0,0,.08);
+    display:flex; flex-direction:column;
+    transform:translateY(100%); transition:transform .28s cubic-bezier(.32,.72,0,1);
+    z-index:5;
+  }
+  .panel.open{transform:translateY(0)}
+  .grip{height:16px; display:grid; place-items:center; cursor:ns-resize; flex-shrink:0}
+  .grip::before{content:""; width:36px; height:4px; border-radius:3px; background:var(--gray-300)}
+  .p-head{display:flex; align-items:center; gap:12px; padding:2px 20px 10px}
+  .p-check{width:22px;height:22px;border:2px solid var(--red);border-radius:50%;flex-shrink:0;cursor:pointer}
+  .p-title{flex:1; font-size:18px; font-weight:600; border:none; outline:none; background:transparent}
+  .p-x{color:var(--gray-400); cursor:pointer; font-size:18px; padding:4px}
+  .p-x:hover{color:var(--gray-700)}
+
+  .meta-row{display:flex; flex-wrap:wrap; gap:8px; padding:0 20px 12px; border-bottom:1px solid var(--gray-100)}
+  .chip{display:flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:8px; background:var(--gray-100); color:var(--gray-600); font-size:12px; cursor:pointer; white-space:nowrap}
+  .chip:hover{background:var(--gray-200)}
+  .chip.on{background:var(--primary-100); color:var(--primary-700)}
+  .seg{display:flex; background:var(--gray-100); border-radius:8px; padding:2px}
+  .seg button{border:none;background:transparent;font-size:12px;padding:5px 10px;border-radius:6px;color:var(--gray-500);cursor:pointer}
+  .seg button.on{background:#fff; color:var(--gray-800); box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .seg button.high.on{color:var(--red)} .seg button.low.on{color:var(--blue)}
+
+  /* body: two columns to use the wide-short space */
+  .p-body{flex:1; min-height:0; display:grid; grid-template-columns:1fr 1fr; gap:0; overflow:hidden}
+  .col{padding:14px 20px; overflow:auto}
+  .col + .col{border-left:1px solid var(--gray-100)}
+  .col h4{font-size:11px; font-weight:700; letter-spacing:.05em; color:var(--gray-400); text-transform:uppercase; margin-bottom:10px}
+  .sub{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:13px;color:var(--gray-700)}
+  .sub .sc{width:16px;height:16px;border:1.5px solid var(--gray-300);border-radius:4px;flex-shrink:0}
+  .sub.done .sc{background:var(--primary);border-color:var(--primary)}
+  .sub.done span{text-decoration:line-through;color:var(--gray-400)}
+  .addsub{color:var(--gray-400);font-size:13px;padding:7px 0;cursor:pointer}
+  .note{width:100%;height:100%;min-height:80px;border:none;outline:none;resize:none;font-size:13px;color:var(--gray-700);line-height:1.6;background:transparent}
+
+  /* ---- floating controls (mockup only) ---- */
+  .ctrls{position:fixed; top:14px; right:18px; z-index:50; display:flex; gap:8px; align-items:center;
+    background:rgba(28,28,30,.92); color:#fff; padding:8px 12px; border-radius:12px; font-size:12px; box-shadow:0 6px 24px rgba(0,0,0,.25)}
+  .ctrls b{font-weight:600; margin-right:2px}
+  .ctrls button{border:1px solid rgba(255,255,255,.25); background:transparent; color:#fff; border-radius:7px; padding:5px 9px; cursor:pointer; font-size:12px}
+  .ctrls button.on{background:#fff; color:#1c1c1e; border-color:#fff}
+  .ctrls .sep{width:1px;height:20px;background:rgba(255,255,255,.2)}
+  .hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:40;font-size:12px;color:var(--gray-400);background:#fff;padding:6px 12px;border-radius:20px;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+
+  /* overlay mode: panel floats over list, list doesn't shrink */
+  .app.overlay .list-wrap{flex-basis:auto !important}
+  .app.overlay .panel{box-shadow:0 -12px 40px rgba(0,0,0,.14)}
+</style>
+</head>
+<body>
+<div class="ctrls">
+  <b>동작</b>
+  <button id="mPush" class="on" onclick="setMode('push')">Push(밀기)</button>
+  <button id="mOver" onclick="setMode('overlay')">Overlay(덮기)</button>
+  <span class="sep"></span>
+  <b>높이</b>
+  <button onclick="setH(34)">S</button>
+  <button class="on" id="hM" onclick="setH(46)">M</button>
+  <button onclick="setH(64)">L</button>
+</div>
+
+<div class="app" id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-spacer"></div>
+    <div class="sb-item"><span class="ic">📅</span>오늘<span class="count">2</span></div>
+    <div class="sb-item"><span class="ic">🗓</span>다음 7일<span class="count">2</span></div>
+    <div class="sb-item active"><span class="ic">📥</span>수신함<span class="count">8</span></div>
+    <div class="sb-item"><span class="ic">☰</span>전체<span class="count">10</span></div>
+    <div class="sb-item"><span class="ic">✓</span>완료됨<span class="count">14</span></div>
+    <div class="sb-item"><span class="ic">🗑</span>휴지통<span class="count">1</span></div>
+    <div class="sb-divider"></div>
+    <div class="sb-sec">뷰</div>
+    <div class="sb-item"><span class="ic">📆</span>캘린더 (월)</div>
+    <div class="sb-item"><span class="ic">▦</span>칸반 보드</div>
+    <div class="sb-item"><span class="ic">◷</span>포모도로</div>
+    <div class="sb-item"><span class="ic">▤</span>통계</div>
+    <div class="sb-sec">리스트</div>
+    <div class="sb-item"><span class="ic" style="color:#4A90D9">●</span>HomestayKorea</div>
+    <div class="sb-item"><span class="ic" style="color:#2ECC71">●</span>web<span class="count">1</span></div>
+  </aside>
+
+  <!-- Main -->
+  <section class="main">
+    <div class="topbar">
+      <h1>수신함</h1>
+      <div class="search">🔍 검색... (Cmd+F)</div>
+      <div class="icbtn">↕</div><div class="icbtn">☑</div>
+    </div>
+
+    <div class="list-wrap" id="listWrap">
+      <div class="add-row">＋ 할 일 추가 (Cmd+N)</div>
+      <div class="task p-low" onclick="openTask(this,'Chatwoot','낮음')">
+        <div class="circle"></div><div><div class="t-title">Chatwoot</div><div class="t-meta"><span class="flag-low">⚑ 낮음</span></div></div>
+      </div>
+      <div class="task p-high" onclick="openTask(this,'대전 결혼 장려금','높음')">
+        <div class="circle"></div><div><div class="t-title">대전 결혼 장려금</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div>
+      </div>
+      <div class="task p-high sel" onclick="openTask(this,'Android 키스토어 생성 + 보안 백업','높음')">
+        <div class="circle"></div><div><div class="t-title">Android 키스토어 생성 + 보안 백업</div><div class="t-meta"><span>📅 오늘</span><span class="flag-high">⚑ 높음</span></div></div>
+      </div>
+      <div class="task p-high" onclick="openTask(this,'Firebase 콘솔 앱 등록','높음')">
+        <div class="circle"></div><div><div class="t-title">Firebase 콘솔 앱 등록 → GoogleService-Info.plist 배치</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div>
+      </div>
+      <div class="task p-high" onclick="openTask(this,'Info.plist 권한 설명 문자열 추가','높음')">
+        <div class="circle"></div><div><div class="t-title">Info.plist 권한 설명 문자열 추가</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div>
+      </div>
+      <div class="task p-high" onclick="openTask(this,'Bundle ID / 브랜드명 최종 확정','높음')">
+        <div class="circle"></div><div><div class="t-title">Bundle ID / 브랜드명 최종 확정</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div>
+      </div>
+      <div class="task p-high" onclick="openTask(this,'스토어 메타데이터 작성','높음')">
+        <div class="circle"></div><div><div class="t-title">스토어 메타데이터 작성 (4개 언어 + 스크린샷)</div><div class="t-meta"><span class="flag-high">⚑ 높음</span></div></div>
+      </div>
+    </div>
+
+    <!-- Bottom detail panel -->
+    <div class="panel open" id="panel">
+      <div class="grip" id="grip" title="드래그해서 높이 조절"></div>
+      <div class="p-head">
+        <div class="p-check" title="완료"></div>
+        <input class="p-title" id="pTitle" value="Android 키스토어 생성 + 보안 백업" />
+        <div class="p-x" onclick="closePanel()" title="닫기 (Esc)">✕</div>
+      </div>
+      <div class="meta-row">
+        <div class="chip">📋 수신함 ▾</div>
+        <div class="chip on">📅 2026-07-24  14:00</div>
+        <div class="seg" title="우선순위">
+          <button>없음</button><button>낮음</button><button>중간</button><button class="high on">높음</button>
+        </div>
+        <div class="chip">🔔 알림</div>
+        <div class="chip">🔁 반복</div>
+        <div class="chip"># 태그 추가</div>
+      </div>
+      <div class="p-body">
+        <div class="col">
+          <h4>하위 작업</h4>
+          <div class="sub done"><span class="sc"></span><span>키스토어(.jks) 생성</span></div>
+          <div class="sub"><span class="sc"></span><span>SHA-1 / SHA-256 지문 등록</span></div>
+          <div class="sub"><span class="sc"></span><span>암호를 1Password에 백업</span></div>
+          <div class="addsub">＋ 하위 작업 추가</div>
+          <h4 style="margin-top:16px">첨부</h4>
+          <div class="addsub">＋ 파일 추가</div>
+        </div>
+        <div class="col">
+          <h4>메모</h4>
+          <textarea class="note" placeholder="클릭하여 메모 작성...">- keytool -genkey -v -keystore haru.jks ...
+- Play Console → 앱 서명 키 등록
+- 유출 시 앱 업데이트 불가하므로 오프라인 백업 필수</textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="hint">👆 왼쪽 리스트에서 다른 할 일을 클릭해 보세요 · 상단 컨트롤로 동작/높이 비교 · 핸들(⎯) 드래그로 리사이즈</div>
+
+<script>
+  const app=document.getElementById('app'), panel=document.getElementById('panel');
+  function openTask(el,title,pri){
+    document.querySelectorAll('.task').forEach(t=>t.classList.remove('sel'));
+    el.classList.add('sel');
+    document.getElementById('pTitle').value=title;
+    panel.classList.add('open'); syncPush();
+  }
+  function closePanel(){ panel.classList.remove('open'); syncPush(); }
+  function setMode(m){
+    app.classList.toggle('overlay', m==='overlay');
+    document.getElementById('mPush').classList.toggle('on', m==='push');
+    document.getElementById('mOver').classList.toggle('on', m==='overlay');
+    syncPush();
+  }
+  function setH(vh){
+    document.documentElement.style.setProperty('--panel-h', vh+'vh');
+    document.querySelectorAll('.ctrls button').forEach(b=>{ if(['S','M','L'].includes(b.textContent)) b.classList.remove('on'); });
+    ({34:'S',46:'M',64:'L'});
+    [...document.querySelectorAll('.ctrls button')].find(b=>b.textContent===(vh<40?'S':vh<55?'M':'L'))?.classList.add('on');
+    syncPush();
+  }
+  // PUSH: shrink list to fill the space above the open panel
+  function syncPush(){
+    const open=panel.classList.contains('open');
+    const overlay=app.classList.contains('overlay');
+    const lw=document.getElementById('listWrap');
+    if(open && !overlay){ lw.style.flexBasis='calc(100% - '+getComputedStyle(document.documentElement).getPropertyValue('--panel-h')+')'; }
+    else { lw.style.flexBasis='auto'; }
+  }
+  // drag to resize
+  const grip=document.getElementById('grip'); let dragging=false;
+  grip.addEventListener('mousedown',e=>{dragging=true; e.preventDefault();});
+  window.addEventListener('mouseup',()=>dragging=false);
+  window.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const vh=Math.min(80,Math.max(22,(1-e.clientY/window.innerHeight)*100));
+    document.documentElement.style.setProperty('--panel-h', vh+'vh'); syncPush();
+  });
+  window.addEventListener('keydown',e=>{ if(e.key==='Escape') closePanel(); });
+  syncPush();
+</script>
+</body>
+</html>

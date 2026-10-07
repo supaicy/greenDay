@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru 설정 화면 디자인 검토 — 2026-07-29</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f8fa;
+    --surface-2: #eef1f5;
+    --text: #1f2328;
+    --text-dim: #57606a;
+    --text-faint: #6e7781;
+    --line: #d8dee4;
+    --accent: #2563eb;
+    --ok: #15803d;
+    --warn: #92400e;
+    --bad: #b91c1c;
+    --mono: "SF Mono", "Fira Code", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --surface: #1e2128;
+      --surface-2: #262a33;
+      --text: #e6e8eb;
+      --text-dim: #a8b0ba;
+      --text-faint: #8b939e;
+      --line: #303640;
+      --accent: #7aa7f0;
+      --ok: #4ade80;
+      --warn: #fcd34d;
+      --bad: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  header.top { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 40px; }
+  .eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 10px; }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  .lede { font-size: 16px; color: var(--text-dim); margin: 0; max-width: 68ch; }
+
+  h2 {
+    font-size: 20px; margin: 52px 0 16px; padding-top: 24px;
+    border-top: 1px solid var(--line); letter-spacing: -.01em;
+  }
+  h2:first-of-type { border-top: 0; padding-top: 0; }
+  h3 { font-size: 15px; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+
+  .scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 24px 0 8px; }
+  .score { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .score .k { font-size: 12px; color: var(--text-faint); margin-bottom: 6px; }
+  .score .v { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .score .v .from { color: var(--text-faint); font-weight: 400; }
+  .score .v .arrow { color: var(--text-faint); font-weight: 400; margin: 0 6px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0 8px; }
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); font-weight: 600; white-space: nowrap; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+
+  code { font-family: var(--mono); font-size: .88em; background: var(--surface-2); padding: .12em .38em; border-radius: 4px; }
+
+  .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+  .pill.warn { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+
+  .finding { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 0 0 12px; background: var(--surface); }
+  .finding .hd { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+  .finding .id { font-family: var(--mono); font-size: 12px; color: var(--text-faint); }
+  .finding .ti { font-weight: 600; font-size: 15px; }
+  .finding p { margin: 6px 0 0; color: var(--text-dim); font-size: 14px; }
+  .finding .why { margin-top: 8px; font-size: 13px; color: var(--text-faint); }
+
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 20px 0; }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; }
+  figcaption { font-size: 12px; color: var(--text-faint); margin-top: 8px; }
+
+  .note { background: var(--surface); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 20px 0; font-size: 14px; color: var(--text-dim); }
+  ul { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">haru · 디자인 검토</p>
+  <h1>설정 화면 전면 검토 — 디자인 · 레이아웃 · 텍스트</h1>
+  <p class="lede">
+    실행 중인 haru v2.0.0의 설정 모달을 라이브 캡처하고, 렌더링된 색상의 대비를 실측해
+    25건을 확인했습니다. 이 중 20건은 수정해 커밋했고, 제품 판단이 필요한 5건은 제안으로 남겼습니다.
+    이후 피드백을 받아 <a href="#round2">테마 선택 UI를 다시 설계</a>했습니다.
+  </p>
+</header>
+
+<h2>결과 요약</h2>
+
+<div class="scores">
+  <div class="score"><div class="k">발견</div><div class="v">25건</div></div>
+  <div class="score"><div class="k">수정 완료</div><div class="v">20건</div></div>
+  <div class="score"><div class="k">제안으로 남김</div><div class="v">5건</div></div>
+  <div class="score"><div class="k">색·대비</div><div class="v"><span class="from">F</span><span class="arrow">→</span>A</div></div>
+  <div class="score"><div class="k">인터랙션</div><div class="v"><span class="from">D</span><span class="arrow">→</span>B</div></div>
+  <div class="score"><div class="k">텍스트</div><div class="v"><span class="from">C</span><span class="arrow">→</span>A−</div></div>
+</div>
+
+<p>
+  가장 심각한 건 <strong>대비</strong>였습니다. 특히 “이 제공자를 사용하면 대화·할일 내용이 외부 서버로
+  전송됩니다”라는 프라이버시 경고가 기본 테마인 다크 모드에서 <strong>2.32:1</strong>로,
+  패널에서 가장 중요한 문장이 가장 안 읽히는 상태였습니다. 그다음은 <strong>포커스 링 전무</strong>로,
+  렌더러 전체에 <code>focus-visible</code>/<code>focus:ring</code> 스타일이 단 한 건도 없었습니다.
+</p>
+
+<h2>검증 방법</h2>
+<ul>
+  <li><strong>라이브 캡처</strong> — 실행 중인 haru v2.0.0의 설정 모달을 접근성 트리 + 스크린샷으로 확보. 스크롤 아래 영역(모델·채팅기록·단축키·버전)은 접근성 트리로 전량 확인.</li>
+  <li><strong>대비 실측</strong> — 수정 후 빌드된 실제 CSS를 브라우저에 로드해 <code>getComputedStyle</code>로 렌더링된 색을 읽고, 반투명 배경을 하위 배경 위에 합성한 뒤 WCAG 공식으로 계산. 계산값과 실측값이 일치(예: 8.10 vs 8.09).</li>
+  <li><strong>Tailwind 생성 확인</strong> — 포커스 유틸리티는 JIT가 클래스를 만들지 못하면 조용히 실패하므로, <code>npm run build</code> 후 번들 CSS에 <code>.focus-visible\:ring-2</code> 등이 실제로 생성되는지 직접 확인.</li>
+  <li><strong>재현 캡처</strong> — 사용자 DB를 건드리지 않도록 격리된 <code>--user-data-dir</code>로 dev 빌드를 띄워 수정 후 화면을 다크/라이트 모두 캡처.</li>
+  <li><strong>Health stack</strong> — <code>tsc --build --force</code> 통과, <code>biome lint</code> 78파일 clean, <code>vitest</code> 222 tests 통과.</li>
+  <li><strong>최종 확인</strong> — 수정본을 실제로 띄워 접근성 트리와 스크린샷으로 다크·라이트 양쪽을 재확인. 트리에 <code>라디오 버튼 (settable) 다크 / 라이트</code>가 잡히는 것으로 네이티브 radio 구현도 확인.</li>
+</ul>
+
+<div class="note">
+  <strong>주의 — 설치본은 자동으로 바뀌지 않습니다.</strong> 이 변경은 소스에 있고,
+  <code>/Applications/haru.app</code>은 별도로 <code>npm run package</code>를 돌려 재설치해야 반영됩니다.
+  두 빌드의 <code>package.json</code> 버전이 모두 <code>2.0.0</code>이라 앱 화면의 “haru v2.0.0” 표시로는
+  신구를 구분할 수 없으니, 패키징 시 버전을 올리는 것을 권합니다.
+</div>
+
+<h2>Before / After</h2>
+
+<div class="shots">
+  <figure>
+    <img src="assets/2026-07-29-settings/before-dark.png" alt="수정 전 설정 모달, 다크 모드" />
+    <figcaption><strong>Before</strong> — 힌트 텍스트 2.88:1, 🔒 이모지, 헤더가 본문과 함께 스크롤, 테마 선택에 96px.</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-07-29-settings/final-dark.png" alt="최종 설정 모달, 다크 모드" />
+    <figcaption><strong>After</strong> — 테마는 세그먼티드 컨트롤 한 줄, 섹션 제목에 장식 아이콘 없음, 힌트 5.49:1, 헤더 고정.</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-07-29-settings/final-light.png" alt="최종 설정 모달, 라이트 모드" />
+    <figcaption><strong>라이트 모드</strong> — 힌트 2.54:1 → 4.83:1. 선택된 세그먼트는 흰 배경으로 떠 보인다.</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-07-29-settings/after-focus-ring.png" alt="AI 제공자 셀렉트에 파란 포커스 링이 표시된 상태" />
+    <figcaption><strong>포커스 링</strong> — AI 제공자 셀렉트에 링이 표시됨. 수정 전에는 어떤 컨트롤에도 포커스 표시가 없었다. (1차 시점 캡처)</figcaption>
+  </figure>
+  <figure>
+    <img src="assets/2026-07-29-settings/after-dark.png" alt="1차 수정 후 설정 모달, 다크 모드" />
+    <figcaption><strong>참고: 1차 중간 상태</strong> — 섹션 제목마다 아이콘을 붙이고 테마 카드를 유지했던 단계. <a href="#round2">2차에서 둘 다 걷어냈습니다</a>.</figcaption>
+  </figure>
+</div>
+
+<h2>대비 실측 (WCAG AA 기준 본문 4.5:1)</h2>
+
+<div class="scroll-x">
+<table>
+  <thead>
+    <tr><th>대상</th><th>테마</th><th>수정 전</th><th>수정 후</th><th>비고</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>외부 전송 경고 문구</td><td>다크</td>
+      <td class="num"><span class="pill bad">2.32:1</span></td>
+      <td class="num"><span class="pill ok">8.09:1</span></td>
+      <td>amber-700 → amber-300. 기본 테마이자 가장 중요한 경고</td>
+    </tr>
+    <tr>
+      <td>외부 전송 경고 문구</td><td>라이트</td>
+      <td class="num"><span class="pill warn">4.65:1</span></td>
+      <td class="num"><span class="pill ok">6.56:1</span></td>
+      <td>턱걸이 통과 → 여유 확보</td>
+    </tr>
+    <tr>
+      <td>힌트·설명 텍스트</td><td>다크</td>
+      <td class="num"><span class="pill bad">2.88:1</span></td>
+      <td class="num"><span class="pill ok">5.49:1</span></td>
+      <td>gray-500 → gray-400. 8곳 이상에 적용</td>
+    </tr>
+    <tr>
+      <td>힌트·설명 텍스트</td><td>라이트</td>
+      <td class="num"><span class="pill bad">2.54:1</span></td>
+      <td class="num"><span class="pill ok">4.83:1</span></td>
+      <td>gray-400 → gray-500</td>
+    </tr>
+    <tr>
+      <td>연결 성공 문구·아이콘</td><td>라이트</td>
+      <td class="num"><span class="pill bad">2.28:1</span></td>
+      <td class="num"><span class="pill ok">5.02:1</span></td>
+      <td>green-500 → green-700</td>
+    </tr>
+    <tr>
+      <td>연결 실패 문구</td><td>다크 / 라이트</td>
+      <td class="num"><span class="pill bad">3.70 / 3.76</span></td>
+      <td class="num"><span class="pill ok">5.04 / 4.83</span></td>
+      <td>red-500 → red-400 / red-600</td>
+    </tr>
+    <tr>
+      <td>채움 버튼 + 흰 글자</td><td>공통</td>
+      <td class="num"><span class="pill bad">3.34:1</span></td>
+      <td class="num"><span class="pill ok">5.17:1</span></td>
+      <td>모델 설치 버튼. primary-500 → primary-700</td>
+    </tr>
+    <tr>
+      <td>선택된 테마 라벨</td><td>라이트</td>
+      <td class="num"><span class="pill bad">3.01:1</span></td>
+      <td class="num"><span class="pill ok">17.74:1</span></td>
+      <td>2차에서 카드가 세그먼티드 컨트롤로 바뀌며 선택 칸이 흰 배경 + gray-900이 됨</td>
+    </tr>
+    <tr>
+      <td>비선택 세그먼트</td><td>라이트</td>
+      <td class="num">—</td>
+      <td class="num"><span class="pill ok">6.87:1</span></td>
+      <td>gray-500은 트랙(gray-100) 위에서 4.39:1로 미달이라 gray-600</td>
+    </tr>
+    <tr>
+      <td>업데이트 알림 버튼 본문</td><td>라이트</td>
+      <td class="num"><span class="pill bad">3.78:1</span></td>
+      <td class="num"><span class="pill ok">4.75:1</span></td>
+      <td>primary-500 → primary-700</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h2>수정한 항목 (20건)</h2>
+
+<h3>디자인 · 접근성</h3>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-001</span><span class="ti">프라이버시 경고가 다크 모드에서 사실상 안 읽힘</span><span class="pill bad">HIGH</span></div>
+  <p>경고 박스가 <code>bg-amber-500/10 text-amber-700</code> 한 벌만 있고 다크 대응이 없었다. 어두운 배경 위 어두운 주황이라 2.32:1.</p>
+  <p class="why">패널에서 사용자에게 가장 중요한 정보(데이터가 외부로 나간다)가 가장 안 보였다. 다크가 기본 테마라 대부분의 사용자가 이 상태를 봤다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-002 · F-008</span><span class="ti">힌트·상태 텍스트가 두 테마 모두 AA 미달</span><span class="pill bad">HIGH</span></div>
+  <p>역할별 색상 토큰(제목 &gt; 라벨 &gt; 힌트)을 도입해 3단계 위계를 유지하면서 두 테마 모두 4.5:1을 넘도록 조정. 상태 아이콘(Wifi·WifiOff·CheckCircle2)도 테마 대응.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-003</span><span class="ti">포커스 링이 앱 전체에 단 하나도 없었음</span><span class="pill bad">HIGH</span></div>
+  <p>렌더러 전체 grep 결과 <code>focus-visible</code>/<code>focus:ring</code> 0건. Tab으로 이동해도 지금 어디에 있는지 화면상 단서가 없었다. 설정의 인터랙티브 요소 14곳에 링 추가 — 버튼은 <code>focus-visible</code>, 입력 필드는 <code>focus</code>.</p>
+  <p class="why">Tailwind JIT는 소스에 리터럴로 적힌 클래스만 생성한다. 문자열을 조합해 만들면 조용히 아무것도 적용되지 않으므로 상수로 전부 적어 두고 빌드 산출물에서 생성을 확인했다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-004</span><span class="ti">스크롤을 내리면 헤더와 닫기 버튼이 사라짐</span><span class="pill bad">HIGH</span></div>
+  <p>카드 전체가 <code>max-h-[80vh] overflow-y-auto</code> 스크롤 컨테이너라 제목과 X가 같이 밀려 올라갔다. 내용이 보이는 높이의 약 2.8배라 체감이 컸다. <code>flex-col</code> + 본문만 스크롤로 헤더 고정.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-005</span><span class="ti">라이트 모드에서 닫기 버튼에 마우스를 올리면 사라짐</span><span class="pill bad">HIGH</span></div>
+  <p><code>hover:text-gray-300</code>이 테마 구분 없이 걸려 있어, 흰 배경에서 hover 시 1.6:1이 됐다. 같은 프로젝트의 <code>ExportDialog</code>는 이미 테마별로 올바르게 처리하고 있었다 — 설정에만 빠진 케이스.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-006 · F-007</span><span class="ti">한 패널에 파랑 3종 혼용</span><span class="pill warn">MEDIUM</span></div>
+  <p>저장 버튼 <code>blue-600</code>, 설치 버튼 <code>primary-500</code>, Bot 아이콘 <code>blue-500</code>. <code>primary</code> 토큰이 있는데도 쓰이지 않았다. 전부 primary 스케일로 통일하면서 채움 버튼은 AA를 만족하는 <code>primary-700</code>으로.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-010</span><span class="ti">섹션 제목 처리가 제각각</span><span class="pill warn">MEDIUM</span></div>
+  <p>다섯 섹션 중 AI·단축키만 아이콘이 있고 테마·데이터·버전 정보는 텍스트만 있어, 같은 위계인데 다르게 보였다. <code>SectionHeading</code> 하나로 통일.</p>
+  <p class="why">1차에서는 모든 제목에 아이콘을 <strong>추가</strong>하는 방향으로 맞췄는데, 그건 장식을 늘리는 선택이었다.
+  2차에서 전부 <strong>제거</strong>하는 쪽으로 뒤집었다 — 의미가 있는 아이콘(경고·잠금·내려받기·연결 상태)만 남겼다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-011 · F-015</span><span class="ti">네이티브 체크박스와 이모지가 아이콘 언어를 깨뜨림</span><span class="pill warn">MEDIUM</span></div>
+  <p>앱 전체가 lucide 아이콘을 쓰는데 설정에만 🔒·⚠️ 이모지가 섞여 있었다(플랫폼마다 렌더가 달라 정렬도 틀어진다). Lock·AlertTriangle로 교체. 체크박스는 <code>accent-color</code>가 없어 다크 패널 위에 흰 상자로 떠 있었다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-020</span><span class="ti">구분선이 어느 섹션에 속하는지 안 잡힘</span><span class="pill warn">POLISH</span></div>
+  <p>섹션 사이 24px, 구분선 아래 16px — 차이가 8px뿐이라 그룹핑 신호가 약했다. 32/16으로 조정.</p>
+</div>
+
+<h3>텍스트 (한글 · 영어)</h3>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-013</span><span class="ti">‘태스크’와 ‘할 일’이 같은 목록 안에서 혼용</span><span class="pill warn">MEDIUM</span></div>
+  <p>단축키 목록에 “할 일 추가”와 “선택 <strong>태스크</strong> 삭제”가 나란히 있었다. 앱 전체가 쓰는 ‘할 일’로 통일.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-014</span><span class="ti">단축키 설명이 실제 동작과 어긋남</span><span class="pill warn">MEDIUM</span></div>
+  <p><code>useKeyboardShortcuts.ts</code>와 9개 항목을 1:1 대조한 결과, <code>Cmd+D</code>·<code>Delete</code>·<code>1-4</code>는 할 일이 <strong>선택돼 있어야만</strong> 동작하는데 문구에 그 전제가 없었다. 선택 없이 누르면 아무 일도 안 일어나는데 이유를 알 방법이 없다. <code>Cmd+N</code>·<code>Cmd+Shift+A</code>도 ‘추가’가 아니라 토글이다.</p>
+  <div class="scroll-x">
+  <table>
+    <thead><tr><th>키</th><th>수정 전</th><th>수정 후</th></tr></thead>
+    <tbody>
+      <tr><td class="num">Cmd+N</td><td>할 일 추가</td><td>할 일 추가 열기/닫기</td></tr>
+      <tr><td class="num">Cmd+Shift+A</td><td>빠른 추가</td><td>빠른 추가 열기/닫기</td></tr>
+      <tr><td class="num">Cmd+D</td><td>오늘 마감일 설정</td><td>선택한 할 일을 오늘 마감으로</td></tr>
+      <tr><td class="num">Delete</td><td>선택 태스크 삭제</td><td>선택한 할 일 삭제</td></tr>
+      <tr><td class="num">1-4</td><td>우선순위 변경 (없음~높음)</td><td>선택한 할 일 우선순위 (없음~높음)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-016 · F-017</span><span class="ti">명칭 드리프트와 중복 안내</span><span class="pill warn">MEDIUM</span></div>
+  <p>제목은 “AI 어시스턴트”인데 상태 문구만 “AI <strong>서비스</strong>에 연결되었습니다”였다. 또 Ollama 안내가 “8B 이상 권장”과 “EXAONE이 더 정확”으로 겹쳐 두 줄이었다 — 한 줄로 합쳤다. EEVE는 원클릭 설치 경로가 없어 언급만 하고 끝나므로 제거.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-018 · F-019</span><span class="ti">말줄임표와 개발자 트리비아</span><span class="pill warn">POLISH</span></div>
+  <p>“업데이트 확인 중<strong>...</strong>” → “확인 중<strong>…</strong>”. 버전 카드의 “Electron + React”는 사용자에게 의미가 없어 제거.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-022 · F-023</span><span class="ti">브랜드·버전 불일치</span><span class="pill warn">POLISH</span></div>
+  <p>창 제목이 아직 <code>TickTick</code>이었다. 설정 화면은 “haru v2.0.0”이라 표시하는데 윈도우 타이틀과 접근성 트리에는 옛 이름이 남아 있었다(<code>electron-builder</code>의 productName은 이미 haru). 루트 <code>VERSION</code> 파일도 1.4.1에 멈춰 <code>package.json</code>(2.0.0)과 어긋나 있었다.</p>
+</div>
+
+<div class="note">
+  <strong>덤으로 붙인 접근성 보강:</strong> 아이콘만 있던 닫기 버튼에 <code>aria-label="설정 닫기"</code>,
+  테마 카드에 <code>aria-pressed</code>를 추가했습니다. 스크린리더에서 닫기 버튼은 이름이 없었고,
+  두 테마 카드는 어느 쪽이 선택됐는지 알 수 없었습니다.
+</div>
+
+<h2 id="round2">2차 — 피드백 반영: 테마 선택 다시 설계</h2>
+
+<p>
+  1차 결과를 보고 받은 지적: <strong>① 2지 선택에 공간을 너무 씀 ② 디자인·아이콘·설명이 AI스러움
+  ③ 직관적이지 않음</strong>. 셋 다 맞는 지적이었습니다.
+</p>
+
+<p>
+  이전 테마 선택은 카드 두 장에 “미리보기”를 넣은 형태였는데, 그 미리보기는 실제 테마를 보여주는 게 아니라
+  <strong>아이콘 하나를 담은 상자</strong>였습니다. 즉 정보를 주지 않으면서 공간만 쓰는 장식이었고,
+  카드가 인터랙션의 단위도 아니었습니다(누르는 대상은 “테마 값” 하나뿐). 카드로 만들 이유가 없었습니다.
+</p>
+
+<figure style="margin: 20px 0;">
+  <img src="assets/2026-07-29-settings/theme-before-after.png" alt="테마 선택 UI 변경 전후 비교 — 카드 2장에서 세그먼티드 컨트롤로" />
+  <figcaption>빌드된 실제 CSS로 렌더해 <code>offsetHeight</code>로 측정. 변경 전 마크업은 소스에서 제거되며 Tailwind가 해당 클래스를 더 이상 생성하지 않으므로, 원본과 같아 보이도록 색만 인라인으로 고정해 재현했습니다.</figcaption>
+</figure>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th></th><th>변경 전</th><th>변경 후</th><th>차이</th></tr></thead>
+  <tbody>
+    <tr><td>테마 섹션 전체</td><td class="num">128px</td><td class="num">64px</td><td class="num"><span class="pill ok">−50%</span></td></tr>
+    <tr><td>컨트롤만</td><td class="num">96px</td><td class="num">32px</td><td class="num"><span class="pill ok">−67%</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<ul>
+  <li><strong>세그먼티드 컨트롤</strong> — macOS 관례이고, 현재 값이 어느 쪽인지 한눈에 보입니다. 라벨도 “다크 모드/라이트 모드” → “다크/라이트”로 줄였습니다. 섹션 제목이 이미 “테마”라 ‘모드’는 중복입니다.</li>
+  <li><strong>네이티브 <code>&lt;input type="radio"&gt;</code> + <code>&lt;label&gt;</code></strong>로 구현했습니다. <code>role="radio"</code>를 붙인 버튼보다 낫습니다 — 방향키 이동이 공짜로 따라오고, 스크린리더에 “2개 중 1번째”가 그대로 전달됩니다. 숨긴 input의 포커스는 <code>peer-focus-visible</code>로 라벨에 링을 그립니다.</li>
+  <li><strong>섹션 제목 아이콘 전부 제거</strong> — 1차에서 제가 일관성을 “아이콘을 모두에 추가”로 맞춘 게 장식을 늘리는 방향이었습니다. 걷어내는 쪽이 맞았습니다.</li>
+  <li><strong>중복 설명 정리</strong> — “로컬 전용 <em>(외부 AI 차단)</em>” + “켜면 <em>외부 제공자를 선택할 수 없어</em>…”가 같은 말을 두 번 했습니다. 라벨은 “로컬 전용”으로 줄이고 설명이 한 번만 말하게 했습니다.</li>
+</ul>
+
+<div class="note">
+  <strong>남은 장식 판단 기준:</strong> 아이콘은 <em>상태나 동작을 알려주는 것</em>만 남겼습니다 —
+  경고 삼각형(위험), 잠금(프라이버시 토글), 내려받기(내보내기·설치), Wi-Fi(연결 상태).
+  섹션 제목의 팔레트·데이터베이스·정보 아이콘처럼 <em>옆의 글자를 그림으로 한 번 더 말하는</em> 것은 전부 뺐습니다.
+</div>
+
+<h2>제안으로 남긴 5건 (제품 판단 필요)</h2>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-012</span><span class="ti">정보 구조가 한쪽으로 쏠려 있다</span><span class="pill bad">가장 큰 건</span></div>
+  <p>AI 어시스턴트 섹션이 패널 높이의 약 60%를 차지합니다. 테마와 데이터는 각각 한 줄인데,
+  480px 단일 컬럼에 5개 섹션이 쌓여 <strong>내용이 보이는 높이의 약 2.8배</strong>입니다.
+  가장 자주 쓸 설정(테마)과 가장 드물게 쓸 설정(모델 URL)이 같은 스크롤 위에 있습니다.</p>
+  <p class="why">선택지: ① 왼쪽 탭/사이드 목록으로 분리 ② AI 고급 필드(API URL·모델·기록 개수)를 접기
+  ③ 모달 폭을 560~600px로 넓혀 스크롤 자체를 줄이기. 구조 변경이라 별도로 판단하시는 게 맞다고 봤습니다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-009</span><span class="ti">AI 설정 편집분이 조용히 사라진다</span><span class="pill warn">동작 변경</span></div>
+  <p>테마는 즉시 반영되는데 AI 설정은 “저장 및 연결 테스트”를 눌러야 반영됩니다. 두 방식이 한 화면에
+  섞여 있고 시각적 구분이 없습니다. API URL을 고치고 Esc를 누르거나 배경을 클릭하면 입력이 그냥 버려지는데
+  경고도, 되돌릴 방법도 없습니다.</p>
+  <p class="why">dirty 상태 추적 + 닫기 시 확인이 필요해 동작 변경입니다. “명백한 결함 수정” 범위를 넘는다고 판단했습니다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-024</span><span class="ti">테마에 ‘시스템 설정 따르기’가 없다</span><span class="pill warn">기능 추가</span></div>
+  <p>현재 <code>Theme = 'dark' | 'light'</code>로 시스템 연동 옵션이 없습니다. macOS 앱의 관례이고,
+  테마가 설정 화면의 첫 섹션이라 눈에 띄는 공백입니다. 타입·스토어·<code>matchMedia</code> 구독이 필요합니다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-021</span><span class="ti">단축키 표기가 <code>Cmd+N</code> 형태</span><span class="pill warn">취향</span></div>
+  <p>macOS 전용 앱이라면 <code>⌘N</code>, <code>⌘⇧A</code>, <code>⌫</code> 심볼이 플랫폼 관례에 가깝습니다.
+  다만 텍스트 표기도 충분히 읽히고 취향의 영역이라 손대지 않았습니다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">F-025</span><span class="ti">모달 폭 480px 고정</span><span class="pill warn">취향</span></div>
+  <p>1200pt 창에서 40%만 씁니다. AI 섹션의 밀도를 생각하면 560~600px가 스크롤을 눈에 띄게 줄입니다.
+  F-012와 함께 결정하는 게 자연스럽습니다.</p>
+</div>
+
+<h2>알아 둘 만한 것</h2>
+<ul>
+  <li>설정의 “데이터 내보내기”는 <code>ExportDialog</code>를 거치지 않고 바로 저장 대화상자를 엽니다. 확장자(<code>.json</code>/<code>.csv</code>)로 형식이 결정되므로 “JSON 또는 CSV로 백업”이라는 설명은 <strong>정확합니다</strong>. 다만 앱에 내보내기 UI가 두 벌 존재합니다.</li>
+  <li>모델 설치 진행 문구의 <code>{status}</code>는 Ollama가 주는 영문 그대로입니다(“pulling manifest” 등). 한글 문장 안에 영문이 섞이지만 외부 API 값이라 손대지 않았습니다.</li>
+  <li>이 앱은 접근성 API로 네이티브 <code>&lt;select&gt;</code> 팝업을 조작할 수 없습니다. 그래서 외부 제공자 경고는 앱에서 직접 띄우지 못하고, 빌드된 실제 CSS로 렌더 하네스를 만들어 픽셀을 측정했습니다.</li>
+</ul>
+
+<h2>커밋</h2>
+<div class="scroll-x">
+<table>
+  <thead><tr><th>커밋</th><th>내용</th></tr></thead>
+  <tbody>
+    <tr><td class="num"><code>932f64a</code></td><td>F-001/002/008 — 설정 화면 대비를 WCAG AA로 올림</td></tr>
+    <tr><td class="num"><code>ee08427</code></td><td>F-004/005 — 헤더 고정, 라이트 모드 닫기 버튼 hover 수정</td></tr>
+    <tr><td class="num"><code>79bfdce</code></td><td>F-006/007 — 파랑 3종 혼용을 primary 토큰으로 통일</td></tr>
+    <tr><td class="num"><code>344a9be</code></td><td>F-003 — 설정 화면에 키보드 포커스 링 추가</td></tr>
+    <tr><td class="num"><code>27dc156</code></td><td>F-010/011/015 — 섹션 제목 통일, 이모지를 lucide로, 체크박스 스타일</td></tr>
+    <tr><td class="num"><code>ea3793f</code></td><td>F-013~019 — 용어 통일, 단축키 문구를 실제 동작과 일치</td></tr>
+    <tr><td class="num"><code>b01b386</code></td><td>F-020/022/023 — 섹션 여백, 창 제목, VERSION 정합</td></tr>
+    <tr><td class="num"><code>4e6a263</code></td><td>2차 — 테마 선택을 세그먼티드 컨트롤로, 장식용 아이콘 제거</td></tr>
+  </tbody>
+</table>
+</div>
+
+<footer>
+  2026-07-29 · 브랜치 <code>supaicy/coordinate</code> · 대상 <code>src/renderer/src/components/sidebar/Settings.tsx</code>,
+  <code>src/renderer/index.html</code>, <code>VERSION</code><br />
+  검증: tsc --build --force 통과 · biome lint 78파일 clean · vitest 222 tests 통과 · npm run build 성공
+</footer>
+
+</div>
+</body>
+</html>

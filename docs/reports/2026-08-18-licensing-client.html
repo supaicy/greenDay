@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>라이선스 클라이언트 — 구현 보고</title>
+<style>
+  :root {
+    --bg:#fafaf9; --surface:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4;
+    --accent:#16a34a; --accent-soft:#f0fdf4; --warn:#b45309; --warn-soft:#fffbeb;
+    --hot:#b91c1c; --hot-soft:#fef2f2; --cool:#1d4ed8; --cool-soft:#eff6ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#1c1917; --surface:#292524; --ink:#e7e5e4; --muted:#a8a29e; --line:#44403c;
+      --accent:#4ade80; --accent-soft:#14532d33; --warn:#fbbf24; --warn-soft:#78350f33;
+      --hot:#f87171; --hot-soft:#7f1d1d33; --cool:#93c5fd; --cool-soft:#1e3a8a33; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.65 -apple-system,"Apple SD Gothic Neo","Pretendard",sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:40px 24px 80px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:26px; }
+  h2 { font-size:19px; margin:40px 0 12px; padding-top:20px; border-top:1px solid var(--line); }
+  h3 { font-size:15px; margin:24px 0 8px; }
+  p { margin:10px 0; }
+  code { font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
+  pre { background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    padding:14px 16px; overflow-x:auto; }
+  pre code { background:none; border:none; padding:0; }
+  .wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:14px; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; }
+  .box { border:1px solid var(--line); border-left-width:3px; border-radius:8px;
+    padding:14px 16px; margin:16px 0; background:var(--surface); }
+  .box.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+  .box.hot { border-left-color:var(--hot); background:var(--hot-soft); }
+  .box.ok { border-left-color:var(--accent); background:var(--accent-soft); }
+  .box.cool { border-left-color:var(--cool); background:var(--cool-soft); }
+  .box h3 { margin-top:0; }
+  ul,ol { margin:10px 0; padding-left:22px; }
+  li { margin:5px 0; }
+  .num { font-variant-numeric:tabular-nums; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:600; padding:1px 7px;
+    border-radius:99px; border:1px solid var(--line); color:var(--muted); white-space:nowrap; }
+  .tag.red { color:var(--accent); border-color:var(--accent); }
+  .tag.kill { color:var(--hot); border-color:var(--hot); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0; }
+  .stat { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .stat b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
+  .stat span { color:var(--muted); font-size:12.5px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>라이선스 클라이언트 — 구현 보고</h1>
+<div class="meta">haru / Greenday · 2026-08-18 · 커밋 <code>3ee7b7a</code>, <code>18ba2e9</code> (로컬에만 있음)</div>
+
+<div class="grid">
+  <div class="stat"><b>0</b><span>typecheck 오류</span></div>
+  <div class="stat"><b>0</b><span>lint 오류 (경고 7, 전부 기존)</span></div>
+  <div class="stat"><b>756</b><span>테스트 통과 (라이선스 120)</span></div>
+  <div class="stat"><b>31</b><span>심어본 뮤테이션</span></div>
+  <div class="stat"><b>0</b><span>새 의존성</span></div>
+</div>
+
+<div class="box ok">
+<h3>정해진 대로 넣었습니다</h3>
+<table>
+<tr><th>항목</th><th>값</th></tr>
+<tr><td>제품 slug · 접두사</td><td><code>greenday</code> · <code>GREENDAY-XXXX-XXXX-XXXX-XXXX</code></td></tr>
+<tr><td>트라이얼</td><td>30일</td></tr>
+<tr><td>무료/유료 경계</td><td>무료 티어 없음. 게이트는 <strong>앱 전체에서 한 곳</strong></td></tr>
+<tr><td>enforcement</td><td><code>IS_ENFORCED = false</code> — <strong>꺼진 채로 출하</strong></td></tr>
+<tr><td>가격</td><td>아직 안 정하셔도 됩니다 — 코드에 숫자가 하나도 없습니다(아래 참조)</td></tr>
+</table>
+</div>
+
+<h2>먼저, 사실 확인 두 가지</h2>
+
+<h3>haru에는 우리가 돈을 내는 서버가 없습니다</h3>
+<p>구독을 고민하신 이유가 "동기화는 서버가 필요하다"였는데, haru의 구조에서는 성립하지 않습니다.</p>
+<div class="wrap">
+<table>
+<tr><th>기능</th><th>실제로 어디에 붙는가</th><th>근거</th></tr>
+<tr><td>AI 어시스턴트</td><td><code>localhost:11434</code>(Ollama) 또는 <strong>사용자 본인의 API 키</strong></td><td><code>ai-service.ts:22-27</code></td></tr>
+<tr><td>CalDAV 동기화</td><td>사용자 본인의 서버(iCloud·Fastmail·Nextcloud)</td><td><code>caldav/client.ts</code></td></tr>
+<tr><td>Google Calendar</td><td>PKCE 공개 클라이언트로 구글에 직접. 시크릿도 중계도 없음</td><td><code>google/oauth.ts:1-26</code></td></tr>
+<tr><td>업데이트</td><td>GitHub Releases</td><td><code>index.ts:143</code></td></tr>
+</table>
+</div>
+<p>구독은 "매달 우리가 지출하는 것"에 대한 대가입니다. 그게 없으면 설명할 근거가 없고, 갱신 실패·해지·정기 환불이라는 새 비용만 생깁니다. <strong>평생가를 권합니다.</strong> 08-03 제안서의 문장이 여전히 제일 강합니다 — <em>2년만 써도 TickTick 대비 1/8</em>. TickTick의 연 7~8만원은 <em>그들의</em> 서버·웹앱·모바일앱을 사는 값이고, 우리는 그중 어느 것도 운영하지 않습니다.</p>
+<p>다만 "₩19,000이 싼가"는 별개의 좋은 질문입니다. 리뷰가 한 건도 없는 지금은 ₩19,000으로 시작하고, 초기 판매가 붙은 뒤 올리는 것을 권합니다 — 올리는 건 마케팅 이벤트가 되지만 내리는 건 초기 구매자를 손해 본 기분으로 만듭니다. <strong>이 결정은 코드를 막지 않습니다:</strong> 앱에는 가격도 기기 대수도 숫자로 적혀 있지 않습니다. 둘 다 서버 <code>products</code> 행에 있고, 앱의 기기 한도 안내는 "다른 기기에서 먼저 해제해 주세요"라 서버 값과 영영 어긋나지 않습니다.</p>
+
+<h3>저장소에 이미 다른 라이선스 코드가 있었습니다 <span class="tag kill">지웠음</span></h3>
+<p>2026-08-02 설계(<code>src/shared/license/</code> 730줄 + <code>scripts/license.mjs</code>)가 남아 있었고, <strong>서버 계약과 호환되지 않았습니다</strong> — 키가 구매자 이름·seats를 담은 수백 자짜리 서명 blob이고, 토큰 형식도 필드도 공개키도 전부 달랐습니다. 지운 근거 셋:</p>
+<ul>
+<li><strong>참조 0건</strong> — 그 디렉터리 바깥에서 아무도 import하지 않았습니다.</li>
+<li><strong>발급 이력 0건</strong> — <code>.license-keys/issued.jsonl</code>이 없었습니다. 마이그레이션 대상이 0명입니다.</li>
+<li>두 체계를 함께 두면 저장소가 서로 다른 키 형식을 주장하게 됩니다.</li>
+</ul>
+<p><code>.license-keys/private.pem</code>은 그대로 뒀습니다. <strong>더 이상 백업하실 필요가 없습니다</strong> — 이제 서명하는 개인키는 워커의 <code>ED25519_PRIVATE_KEY</code> 시크릿입니다.</p>
+
+<h2>BicMac이 네 라운드에 걸쳐 만난 결함 여섯 — 전부 실패 테스트를 먼저 썼습니다</h2>
+<div class="wrap">
+<table>
+<tr><th>#</th><th>결함</th><th>haru에서 막은 방식</th><th>테스트</th></tr>
+<tr><td>1</td><td>검증 안 된 로컬 문자열로 유료 진입</td><td>상태는 <strong>서명 검증을 통과한 페이로드에서만</strong> 파생. <code>license.json</code>의 어떤 값도 권한을 만들지 못한다</td><td>아무 문자열 · 다른 키쌍 · 다른 기기 · <strong>다른 제품(BicMac)</strong> · 기기 식별 실패 <span class="tag red">5</span></td></tr>
+<tr><td>2</td><td>유예를 로컬 타임스탬프에 앵커</td><td>유예 마감 = <strong>토큰의 <code>exp</code> + 30일</strong>. 앱이 적어둔 시각은 읽지 않는다</td><td>정확한 천장 · 천장 넘김 · <code>lastSeen</code>을 2126으로 써도 안 늘어남 <span class="tag red">3</span></td></tr>
+<tr><td>3</td><td>비활성화 중 도착한 응답이 되살림</td><td><code>await</code> 뒤 <strong>"내가 물어본 그 키가 아직 로컬에 있나"</strong>를 다시 확인</td><td>해제 후 도착한 성공 응답 · 재활성화 후 도착한 옛 키의 거부 <span class="tag red">2</span></td></tr>
+<tr><td>4</td><td>시계를 되돌려 만료 토큰 무한 갱신</td><td>타이머(<code>setTimeout</code>=단조 시계)가 깨면 <strong>"마감이 실제로 지났다"를 바닥에 기록</strong></td><td>깬 뒤 시계를 되돌려도 유예 유지 · 30일 마감이 즉시 발화하지 않음 <span class="tag red">2</span></td></tr>
+<tr><td>5</td><td>미래 시각을 디스크에 되써 트라이얼 영구 소멸</td><td>큰 오차는 <strong>메모리에서만</strong> 보정. 작은 오차(≤30일)만 기록</td><td>2126년 시작일은 파일에 안 씀 · 3일 오차는 씀 · 창이 안 길어짐 · <code>lastSeen</code> 폭주해도 즉사 안 함 <span class="tag red">4</span></td></tr>
+<tr><td>6</td><td>만료를 타이머로만 관리</td><td><code>allowsPaidFeatures</code>가 <strong>접근할 때마다</strong> 실제 시각과 자기 마감을 비교</td><td>타이머 없이 exp 통과 → 유예 → 차단 · 트라이얼도 스스로 닫힘 <span class="tag red">2</span></td></tr>
+</table>
+</div>
+
+<h3>추가로 고정한 것</h3>
+<ul>
+<li><strong>거부와 불통의 구분.</strong> 409와 JSON 봉투가 있는 404만 라이선스를 닫습니다. Cloudflare의 HTML 404, 타임아웃, 봉투 없는 400, 캡티브 포털의 200은 닫지 않습니다 — 워커 라우트 이름 하나 잘못 바꾼 날 유료 사용자 전원이 다음 실행에서 라이선스를 잃으면, 서버를 고친 뒤에도 전원이 재활성화해야 회복됩니다.</li>
+<li><strong>반감기 갱신.</strong> <code>iat + 수명/2</code>를 지났을 때만 네트워크를 칩니다.</li>
+<li><strong>enforcement가 꺼져 있으면 트라이얼 시작일을 기록조차 하지 않습니다.</strong> 지금 쓰는 분들의 30일이 살 것도 없는 상태에서 타들어가면 안 됩니다. 켜는 날 모두가 온전한 창을 받습니다.</li>
+<li><strong>키도 토큰도 렌더러로 내려가지 않습니다.</strong> IPC는 상태·마감·가린 키(<code>GREENDAY-••••-••••-••••-G8H9</code>)만 넘깁니다.</li>
+</ul>
+
+<h2>브리프에 없었지만 고친 것</h2>
+
+<div class="box hot">
+<h3>지금 상태로는 Mac에 키 입력 칸이 영영 안 보였습니다</h3>
+<p><code>capabilities.ts:61</code>이 <code>needsLicenseKey: platform === 'win32' &amp;&amp; !isStoreBuild</code>였고, 테스트가 <em>"is off on macOS even outside the store"</em>로 못 박고 있었습니다. "맥은 App Store, Windows는 직판"이던 옛 계획을 플랫폼으로 근사한 것인데, macOS를 직접 다운로드로 팔기 시작한 순간 <strong>결제한 Mac 사용자에게 키를 넣을 곳이 없어지는</strong> 버그가 됩니다.</p>
+<p><code>needsLicenseKey: !isStoreBuild</code>로 바로잡고 테스트를 다시 썼습니다. 스토어 빌드는 여전히 false라 Apple 3.1.1은 그대로 지켜집니다. 규칙이 바뀐 게 아니라, 원래 규칙("스토어냐 아니냐")을 정확히 적은 것입니다.</p>
+</div>
+
+<div class="box cool">
+<h3>기기 식별을 시작 경로에서 뺐습니다</h3>
+<p>기기 id를 읽으려면 서브프로세스가 필요합니다(macOS는 <code>ioreg</code>). 처음엔 앱 시작 때 무조건 읽었는데, <strong>토큰도 키도 없는 설치에서는 한 번도 필요하지 않습니다</strong> — 그리고 enforcement가 꺼져 있는 동안 그건 모든 설치입니다. 지연 평가로 바꾸고 <em>"키도 토큰도 없으면 기기 id를 아예 읽지 않는다"</em>를 테스트로 고정했습니다.</p>
+<p>같은 맥락에서: <strong>키를 넣지 않은 사용자는 라이선스 서버에 요청을 한 번도 보내지 않습니다.</strong> 앱이 조용히 집에 전화하지 않습니다.</p>
+</div>
+
+<h2>뮤테이션 — 테스트가 실제로 뭔가를 지키는지</h2>
+<p>테스트가 처음 실행에 통과하면 그건 아무것도 안 지킨다는 신호일 수 있습니다. 가드를 하나씩 지워 빨개지는지 확인했습니다.</p>
+<div class="wrap">
+<table>
+<tr><th>대상</th><th>심음</th><th>빨개짐</th><th>살아남은 것</th></tr>
+<tr><td>라이선스 모듈(상태 기계·토큰·클라이언트·기기·키)</td><td class="num">20</td><td class="num">19</td><td>1 — <strong>제 뮤테이션이 잘못됐습니다.</strong> 유예 경로의 기기 확인은 한 층 아래 <code>verifyToken</code>이 하고 거기 테스트가 있습니다. 주석이 사실과 달라 고쳤습니다</td></tr>
+<tr><td>잠금 화면 · 렌더러 상태</td><td class="num">6</td><td class="num">5</td><td>1 — <strong>진짜 죽은 코드였습니다.</strong> 아래 참조</td></tr>
+<tr><td><code>license.json</code> 파서</td><td class="num">5</td><td class="num">4</td><td>1 — 배열/문자열 이른 반환. 필드별 타입 검사가 어차피 같은 결과를 내는 지름길입니다</td></tr>
+</table>
+</div>
+
+<div class="box warn">
+<h3>뮤테이션이 잡아낸 제 죽은 코드</h3>
+<p>잠금 화면에 <code>onEscapeKeyDown</code>·<code>onPointerDownOutside</code>·<code>onInteractOutside</code>로 preventDefault를 걸어 뒀습니다. 셋 다 지워도 테스트가 통과했습니다.</p>
+<p>이유: 닫히지 않는 것은 <code>open</code>이 고정이고 <code>onOpenChange</code>가 없기 때문입니다 — Radix의 해제 경로는 전부 그 콜백으로 흐릅니다. 그리고 Escape는 Radix가 이미 캡처 단계에서 소비합니다. <strong>세 줄이 전부 아무 일도 하지 않고 있었습니다.</strong> 지웠고, 대신 대조군 테스트를 넣었습니다 — 게이트가 없을 때 Escape가 그냥 지나가는지 확인해, "게이트가 Escape를 막는다"는 단언이 jsdom에서 공짜로 참이 아님을 보입니다.</p>
+</div>
+
+<div class="box warn">
+<h3>테스트끼리 새고 있었습니다</h3>
+<p>렌더러 라이선스 상태가 모듈 싱글턴이라, 앞 테스트가 남긴 값으로 다음 테스트의 첫 프레임에 잠금 화면이 잠깐 그려졌습니다. 구독자가 0이 되면 캐시를 버리도록 고쳤습니다 — 이건 테스트 편의가 아니라 정확성입니다. 구독을 끊은 뒤의 값은 더 이상 갱신되지 않으므로, 다음 마운트에서 옛 판정으로 한 프레임을 그리면 안 됩니다.</p>
+</div>
+
+<h2>구조</h2>
+<pre><code>미인증 ──(첫 평가)──▶ 트라이얼(30일) ──▶ 트라이얼만료
+   ▲                       │                    │
+   │                       └────── 활성화 ──────┬┘
+   │                                            ▼
+   └──(해제 / 서버 거부)────────── 라이선스(until = 토큰 exp)
+                                                │ 오프라인으로 exp 통과
+                                                ▼
+                                   유예(until = exp + 30일) ──▶ 미인증</code></pre>
+<div class="wrap">
+<table>
+<tr><th>파일</th><th>책임</th></tr>
+<tr><td><code>main/licensing/trialWindow.ts</code></td><td>창 산술과 시계 래칫. 디스크도 실제 시각도 안 읽는 순수 함수</td></tr>
+<tr><td><code>main/licensing/activationToken.ts</code></td><td>토큰 파싱 + ed25519 검증 + <code>dev</code>/<code>prod</code>/<code>exp</code> 판정</td></tr>
+<tr><td><code>main/licensing/licenseKey.ts</code></td><td><code>GREENDAY-</code> 형식. 다른 제품의 키가 서버까지 가지 않는다</td></tr>
+<tr><td><code>main/licensing/deviceIdentity.ts</code></td><td>플랫폼별 하드웨어 id → salt+SHA256. salt는 BicMac과 달라 제품 간 대조 불가</td></tr>
+<tr><td><code>main/licensing/licenseClient.ts</code></td><td>activate·validate·deactivate. <strong>거부와 불통의 구분</strong></td></tr>
+<tr><td><code>main/licensing/licenseStore.ts</code></td><td><code>userData/license.json</code>. 할일 데이터와 다른 파일이다</td></tr>
+<tr><td><code>main/licensing/licenseManager.ts</code></td><td>상태 기계 · 반감기 재검증 · 마감 타이머 · 시계 래칫</td></tr>
+<tr><td><code>main/licensing/service.ts</code></td><td>electron 배선. <code>IS_ENFORCED</code>가 여기 있다</td></tr>
+<tr><td><code>shared/license.ts</code></td><td>렌더러와 주고받는 것 전부. 실패 코드가 두 곳에 적혀 어긋나지 않게</td></tr>
+<tr><td><code>renderer/licensing/LicenseGate.tsx</code></td><td>잠금 화면 — 앱 전체에서 게이트는 여기 하나</td></tr>
+<tr><td><code>renderer/components/sidebar/LicenseSection.tsx</code></td><td>설정의 키 입력·상태·<strong>기기 해제</strong>·구매/복구 링크</td></tr>
+</table>
+</div>
+<p>코드 <span class="num">3,020</span>줄 · 테스트 <span class="num">1,330</span>줄 · 새 의존성 0개(<code>node:crypto</code>로 충분합니다).</p>
+
+<h2>솔직하게, 계획에서 좁힌 것 하나</h2>
+<div class="box warn">
+<p>계획서에 "잠긴 상태에서도 <strong>읽기</strong>와 내보내기는 열어둔다"고 썼는데, 실제로는 <strong>내보내기만</strong> 열었습니다.</p>
+<p>읽기 전용 둘러보기를 하려면 스토어의 쓰기 지점 30여 곳을 각각 막아야 합니다. 지금 구조에는 그 하나의 길목이 없습니다(뮤테이션 하나하나가 새 회귀 표면입니다). 대신 잠금 화면 안에 내보내기 버튼을 넣었습니다 — <strong>윤리적 요구("자기 데이터를 인질로 잡지 않는다")는 충족하되</strong>, 목록을 눈으로 둘러보는 것은 안 됩니다.</p>
+<p>enforcement가 꺼진 채 나가므로 <strong>지금 결정하지 않아도 됩니다.</strong> 켜기 전에 "둘러보기까지 열어줄지"를 정하시면, 그때 쓰기 길목을 하나 만드는 작업으로 잡겠습니다.</p>
+</div>
+
+<h2>사장님이 하실 것</h2>
+<ol>
+<li><strong>서버 <code>products</code> 행 INSERT.</strong> <code>slug='greenday'</code>, <code>key_prefix='GREENDAY'</code>, 그리고 가격·<code>max_activations</code>. 앱에는 이 숫자들이 없으니 여기가 유일한 출처입니다.</li>
+<li><strong>가격과 기기 대수 확정.</strong> 위 표대로 코드를 막지 않습니다. 제 권고는 ₩19,000 평생 / 3대이고, 초기 판매 후 인상입니다.</li>
+<li><strong>실거래로 활성화 확인</strong> — 키를 하나 발급해 실제로 앱에 넣어 보기.</li>
+<li>그 다음에야 <code>service.ts</code>의 <code>IS_ENFORCED = true</code>. <strong>그 전에는 켜지 마세요.</strong></li>
+</ol>
+
+<h2>안 한 것</h2>
+<ul>
+<li><code>bicmac-license</code> 서버 — 손대지 않았습니다.</li>
+<li>BicMac 저장소 — 읽기만 했습니다.</li>
+<li>앱 안의 결제 흐름 — 구매는 웹에서 끝나고 앱은 키를 받기만 합니다.</li>
+<li>새 암호 라이브러리 — 없습니다.</li>
+<li><strong>push</strong> — 커밋 둘 다 로컬에만 있습니다.</li>
+</ul>
+<p class="meta" style="margin-top:28px">계획서: <code>docs/plans/2026-08-18-licensing-client.html</code></p>
+
+</main>
+</body>
+</html>

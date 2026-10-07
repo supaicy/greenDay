@@ -12,7 +12,12 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ESNext",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/src/*"]
+    }
   },
-  "include": ["src/renderer/src/**/*"]
+  // `**/*` 는 .ts/.tsx만 집어간다. 로케일 JSON은 확장자를 명시해야 프로젝트에 포함된다.
+  "include": ["src/renderer/src/**/*", "src/renderer/src/**/*.json", "src/shared/**/*"]
 }

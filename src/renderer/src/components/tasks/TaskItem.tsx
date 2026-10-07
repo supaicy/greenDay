@@ -1,14 +1,25 @@
-import { useState, useRef, useEffect, memo } from 'react'
-import { Circle, CheckCircle2, Flag, Calendar, Trash2, Copy, ArrowRight, Square, CheckSquare2 } from 'lucide-react'
+import { memo } from 'react'
+import { Circle, CheckCircle2, Flag, Calendar, Pin, Square, CheckSquare2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { formatDueDate, isOverdue } from '../../utils/date'
+import { formatDateRange, isOverdue } from '../../utils/date'
+import { DND_MIME } from '../../utils/dnd'
+import { TaskContextMenu } from './TaskContextMenu'
 import type { Task } from '../../types'
 
 const PRIORITY_COLORS = {
   none: 'text-gray-500',
   low: 'text-blue-400',
-  medium: 'text-yellow-400',
+  medium: 'text-amber-400',
   high: 'text-red-400'
+}
+
+/** 선택된 행 왼쪽 액센트 바 색. 위 글자색과 같은 계열의 면색이다. */
+const PRIORITY_BAR: Record<keyof typeof PRIORITY_COLORS, string> = {
+  none: 'bg-gray-500',
+  low: 'bg-blue-400',
+  medium: 'bg-amber-400',
+  high: 'bg-red-400'
 }
 
 // 서브태스크 카운트를 위한 셀렉터 (각 값을 개별 구독하여 불필요한 리렌더 방지)
@@ -31,12 +42,10 @@ function useSubtaskCount(taskId: string) {
 }
 
 export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; onDrop?: (targetId: string) => void }) {
+  const { t } = useTranslation()
   const toggleTask = useStore((s) => s.toggleTask)
   const selectTask = useStore((s) => s.selectTask)
   const selectedTaskId = useStore((s) => s.selectedTaskId)
-  const removeTask = useStore((s) => s.removeTask)
-  const lists = useStore((s) => s.lists)
-  const updateTask = useStore((s) => s.updateTask)
   const theme = useStore((s) => s.theme)
   const batchMode = useStore((s) => s.batchMode)
   const batchSelectedIds = useStore((s) => s.batchSelectedIds)
@@ -45,41 +54,36 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
   const setDragTaskId = useStore((s) => s.setDragTaskId)
 
   const overdue = isOverdue(task.dueDate) && !task.completed
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
-  const [showMoveMenu, setShowMoveMenu] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const isDark = theme === 'dark'
   const isBatchSelected = batchSelectedIds.includes(task.id)
-
-  useEffect(() => {
-    const handleClick = () => {
-      setContextMenu(null)
-      setShowMoveMenu(false)
-    }
-    if (contextMenu) {
-      document.addEventListener('click', handleClick)
-      return () => document.removeEventListener('click', handleClick)
-    }
-  }, [contextMenu])
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY })
-  }
 
   const { total: subtaskCount, completed: completedSubtasks } = useSubtaskCount(task.id)
 
   return (
-    <>
+    <TaskContextMenu task={task}>
+      {/* biome-ignore lint/a11y/useSemanticElements: 드래그/컨텍스트메뉴/중첩 button 포함으로 <button> 전환 불가 */}
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => (batchMode ? toggleBatchSelect(task.id) : selectTask(task.id))}
-        onContextMenu={handleContextMenu}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            batchMode ? toggleBatchSelect(task.id) : selectTask(task.id)
+          }
+        }}
         draggable={!batchMode}
         onDragStart={(e) => {
           setDragTaskId(task.id)
-          e.dataTransfer.setData('application/haru-task-id', task.id)
-          e.dataTransfer.effectAllowed = 'copy'
+          e.dataTransfer.setData(DND_MIME.TASK_ID, task.id)
+          // **'move'여야 한다.** 받는 쪽은 전부 `dropEffect = 'move'`를 설정하는데,
+          // 여기서 'copy'만 허용하면 HTML5 DnD 규격상 조합이 맞지 않아 드롭 자체가
+          // 허용되지 않는다 — `onDrop`이 발화하지 않아 목록 재정렬도, 캘린더로 끌어
+          // 시간 배정하기도 아무 일이 일어나지 않았다. 행이 흐려지며 드래그는
+          // 시작되므로 사용자에게는 "앱이 드롭을 놓쳤다"로 보인다.
+          // (`utils/dnd.ts`의 주석이 이 드래그를 'effectAllowed: move'로 적고 있다 —
+          //  저장소에서 'copy'를 쓰던 곳은 여기 하나뿐이었다.)
+          e.dataTransfer.effectAllowed = 'move'
         }}
         onDragOver={(e) => {
           e.preventDefault()
@@ -90,22 +94,32 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
           onDrop?.(task.id)
         }}
         onDragEnd={() => setDragTaskId(null)}
-        className={`group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
+        // 선택/일괄선택 표시는 왼쪽 액센트 바 + 중립 표면색이다. 예전에는 남색
+        // (primary-900/30)을 깔았는데, 옆에 붙는 상세 패널·사이드바가 채도 3%의
+        // 중립 회색(#2C2C2E)이라 큰 면이 맞붙으면 선택 행만 색 계열이 달라 붕 떴다.
+        className={`group relative flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
           isDark ? 'border-b border-gray-800/50' : 'border-b border-gray-200'
         } ${dragTaskId === task.id ? 'opacity-40' : ''} ${
-          isBatchSelected
+          isBatchSelected || selectedTaskId === task.id
             ? isDark
-              ? 'bg-primary-900/20'
-              : 'bg-primary-50'
-            : selectedTaskId === task.id
-              ? isDark
-                ? 'bg-primary-900/30'
-                : 'bg-primary-50'
-              : isDark
-                ? 'hover:bg-gray-800/30'
-                : 'hover:bg-gray-50'
+              ? 'bg-surface-raised'
+              : 'bg-gray-100'
+            : isDark
+              ? 'hover:bg-gray-800/30'
+              : 'hover:bg-gray-50'
         }`}
       >
+        {/* 선택 표시: 색이 중립이 된 만큼 왼쪽 액센트 바로 명확히 알린다.
+            일괄 선택은 파랑, 단일 선택은 그 할일의 우선순위 색을 쓴다. */}
+        {(isBatchSelected || selectedTaskId === task.id) && (
+          <span
+            aria-hidden
+            className={`absolute left-0 top-0 bottom-0 w-[3px] rounded-r ${
+              isBatchSelected ? 'bg-primary-500' : PRIORITY_BAR[task.priority]
+            }`}
+          />
+        )}
+
         {/* 일괄 선택 또는 체크박스 */}
         {batchMode ? (
           <span
@@ -147,17 +161,21 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
                 className={`flex items-center gap-1 text-xs ${overdue ? 'text-red-400' : isDark ? 'text-gray-500' : 'text-gray-400'}`}
               >
                 <Calendar size={12} />
-                {formatDueDate(task.dueDate)}
-                {task.dueTime ? ` ${task.dueTime}` : ''}
+                {formatDateRange(task.startDate, task.dueDate, task.dueTime)}
               </span>
             )}
             {task.priority !== 'none' && (
               <span className={`flex items-center gap-1 text-xs ${PRIORITY_COLORS[task.priority]}`}>
                 <Flag size={12} />
-                {{ low: '낮음', medium: '중간', high: '높음' }[task.priority]}
+                {t(`priority.${task.priority}`)}
               </span>
             )}
-            {task.isRecurring && <span className="text-xs text-purple-400">🔄 반복</span>}
+            {task.pinned && (
+              <span className="flex items-center gap-1 text-xs text-primary-400" title={t('task.pin')}>
+                <Pin size={12} />
+              </span>
+            )}
+            {task.isRecurring && <span className="text-xs text-purple-400">🔄 {t('task.recurring')}</span>}
             {subtaskCount > 0 && (
               <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                 ✓ {completedSubtasks}/{subtaskCount}
@@ -179,90 +197,6 @@ export const TaskItem = memo(function TaskItem({ task, onDrop }: { task: Task; o
           </div>
         </div>
       </div>
-
-      {/* 우클릭 컨텍스트 메뉴 */}
-      {contextMenu && (
-        <div
-          ref={menuRef}
-          className={`fixed z-[100] rounded-lg shadow-2xl py-1 min-w-[180px] border ${isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'}`}
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              toggleTask(task.id)
-              setContextMenu(null)
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
-          >
-            <CheckCircle2 size={15} />
-            {task.completed ? '미완료로 변경' : '완료로 변경'}
-          </button>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowMoveMenu(!showMoveMenu)
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
-            >
-              <ArrowRight size={15} />
-              다른 리스트로 이동
-            </button>
-            {showMoveMenu && (
-              <div
-                className={`absolute left-full top-0 ml-1 rounded-lg shadow-2xl py-1 min-w-[140px] border ${isDark ? 'bg-[#2C2C2E] border-gray-700' : 'bg-white border-gray-200'}`}
-              >
-                {lists.map((list) => (
-                  <button
-                    type="button"
-                    key={list.id}
-                    onClick={() => {
-                      updateTask({ id: task.id, listId: list.id })
-                      setContextMenu(null)
-                    }}
-                    className={`w-full flex items-center gap-2 px-4 py-2 text-sm ${
-                      task.listId === list.id
-                        ? 'text-primary-400 font-medium'
-                        : isDark
-                          ? 'text-gray-200 hover:bg-gray-700'
-                          : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: list.color }} />
-                    {list.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(task.title)
-              setContextMenu(null)
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${isDark ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-100'}`}
-          >
-            <Copy size={15} />
-            제목 복사
-          </button>
-          <div className={`my-1 ${isDark ? 'border-t border-gray-700' : 'border-t border-gray-200'}`} />
-          <button
-            type="button"
-            onClick={() => {
-              removeTask(task.id)
-              setContextMenu(null)
-            }}
-            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
-          >
-            <Trash2 size={15} />
-            삭제
-          </button>
-        </div>
-      )}
-    </>
+    </TaskContextMenu>
   )
 })

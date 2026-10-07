@@ -1,22 +1,18 @@
 import type React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
-import { toDateString } from '../../utils/date'
-import type { Task, Priority } from '../../types'
+import { useToday } from '../../hooks/useToday'
+import { shiftIsoByDays } from '../../utils/recurrence'
+import type { Task } from '../../types'
 import { CheckCircle2, Circle, Flag, Zap, Target, Clock, Coffee } from 'lucide-react'
-
-// 우선순위 색상
-const priorityColor: Record<Priority, string> = {
-  high: 'text-red-500',
-  medium: 'text-amber-500',
-  low: 'text-blue-500',
-  none: 'text-gray-400'
-}
+import { PRIORITY_COLOR, byPinnedThenPriority } from '../../utils/priority'
+import { isActiveTopLevel } from '../../utils/smartLists'
 
 interface Quadrant {
   id: 'do' | 'schedule' | 'delegate' | 'eliminate'
-  title: string
-  subtitle: string
+  titleKey: string
+  subtitleKey: string
   icon: React.ReactNode
   borderColor: string
   headerBg: string
@@ -24,19 +20,24 @@ interface Quadrant {
 }
 
 export function EisenhowerMatrix(): React.ReactElement {
-  const { theme, tasks, selectTask, selectedTaskId, toggleTask } = useStore()
+  const { t } = useTranslation()
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const selectTask = useStore((s) => s.selectTask)
+  const selectedTaskId = useStore((s) => s.selectedTaskId)
+  const toggleTask = useStore((s) => s.toggleTask)
   const isDark = theme === 'dark'
 
+  // 자정에 갱신되는 '오늘'. 예전에는 tasks 변경에 얹어 다시 계산했는데,
+  // 밤새 할일을 건드리지 않으면 '지남' 색이 어제 기준으로 남았다.
+  const todayStr = useToday()
+
   const quadrants = useMemo(() => {
-    const now = new Date()
-    const _todayStr = toDateString(now)
+    // "곧" = 3일 이내. 오늘에서 파생해야 자정을 넘길 때 함께 움직인다 —
+    // 렌더 시각의 new Date()로 잡으면 밤새 열어둔 창에서 어제 기준으로 남는다.
+    const soonStr = shiftIsoByDays(todayStr, 3)
 
-    // "곧" = 3일 이내
-    const soonDate = new Date(now)
-    soonDate.setDate(soonDate.getDate() + 3)
-    const soonStr = toDateString(soonDate)
-
-    const activeTasks = tasks.filter((t) => !t.completed && !t.deletedAt)
+    const activeTasks = tasks.filter(isActiveTopLevel)
 
     const doNow: Task[] = [] // 긴급 + 중요
     const schedule: Task[] = [] // 중요 + 긴급하지 않음
@@ -60,8 +61,7 @@ export function EisenhowerMatrix(): React.ReactElement {
 
     // 우선순위 + 마감일 순 정렬
     const sortFn = (a: Task, b: Task) => {
-      const pOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 }
-      const pDiff = pOrder[a.priority] - pOrder[b.priority]
+      const pDiff = byPinnedThenPriority(a, b)
       if (pDiff !== 0) return pDiff
       if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate)
       if (a.dueDate) return -1
@@ -77,8 +77,8 @@ export function EisenhowerMatrix(): React.ReactElement {
     const result: Quadrant[] = [
       {
         id: 'do',
-        title: '즉시 실행',
-        subtitle: '긴급 + 중요',
+        titleKey: 'eisenhower.doTitle',
+        subtitleKey: 'eisenhower.doSubtitle',
         icon: <Zap size={16} />,
         borderColor: isDark ? 'border-red-500/50' : 'border-red-300',
         headerBg: isDark ? 'bg-red-500/10' : 'bg-red-50',
@@ -86,8 +86,8 @@ export function EisenhowerMatrix(): React.ReactElement {
       },
       {
         id: 'schedule',
-        title: '계획 수립',
-        subtitle: '중요 + 긴급하지 않음',
+        titleKey: 'eisenhower.scheduleTitle',
+        subtitleKey: 'eisenhower.scheduleSubtitle',
         icon: <Target size={16} />,
         borderColor: isDark ? 'border-blue-500/50' : 'border-blue-300',
         headerBg: isDark ? 'bg-blue-500/10' : 'bg-blue-50',
@@ -95,8 +95,8 @@ export function EisenhowerMatrix(): React.ReactElement {
       },
       {
         id: 'delegate',
-        title: '위임',
-        subtitle: '긴급 + 중요하지 않음',
+        titleKey: 'eisenhower.delegateTitle',
+        subtitleKey: 'eisenhower.delegateSubtitle',
         icon: <Clock size={16} />,
         borderColor: isDark ? 'border-amber-500/50' : 'border-amber-300',
         headerBg: isDark ? 'bg-amber-500/10' : 'bg-amber-50',
@@ -104,8 +104,8 @@ export function EisenhowerMatrix(): React.ReactElement {
       },
       {
         id: 'eliminate',
-        title: '제거',
-        subtitle: '긴급하지도 중요하지도 않음',
+        titleKey: 'eisenhower.eliminateTitle',
+        subtitleKey: 'eisenhower.eliminateSubtitle',
         icon: <Coffee size={16} />,
         borderColor: isDark ? 'border-gray-600' : 'border-gray-300',
         headerBg: isDark ? 'bg-gray-800' : 'bg-gray-50',
@@ -114,12 +114,22 @@ export function EisenhowerMatrix(): React.ReactElement {
     ]
 
     return result
-  }, [tasks, isDark])
+  }, [tasks, isDark, todayStr])
 
+  // 태스크 항목: 중첩된 button(체크박스) 포함으로 <button> 전환 불가 → Pattern B
   const renderTaskItem = (task: Task) => (
+    // biome-ignore lint/a11y/useSemanticElements: 중첩 button 포함으로 <button> 전환 불가
     <div
       key={task.id}
+      role="button"
+      tabIndex={0}
       onClick={() => selectTask(task.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          selectTask(task.id)
+        }
+      }}
       className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${
         selectedTaskId === task.id
           ? isDark
@@ -147,16 +157,12 @@ export function EisenhowerMatrix(): React.ReactElement {
 
       <span className={`flex-1 text-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{task.title}</span>
 
-      {task.priority !== 'none' && <Flag size={10} className={`flex-shrink-0 ${priorityColor[task.priority]}`} />}
+      {task.priority !== 'none' && <Flag size={10} className={`flex-shrink-0 ${PRIORITY_COLOR[task.priority]}`} />}
 
       {task.dueDate && (
         <span
           className={`text-[10px] flex-shrink-0 ${
-            task.dueDate < new Date().toISOString().split('T')[0]
-              ? 'text-red-500'
-              : isDark
-                ? 'text-gray-500'
-                : 'text-gray-400'
+            task.dueDate < todayStr ? 'text-red-500' : isDark ? 'text-gray-500' : 'text-gray-400'
           }`}
         >
           {task.dueDate.slice(5)}
@@ -166,13 +172,11 @@ export function EisenhowerMatrix(): React.ReactElement {
   )
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>아이젠하워 매트릭스</h2>
-        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-          우선순위와 마감일 기반으로 자동 분류됩니다
-        </p>
+        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('eisenhower.title')}</h2>
+        <p className={`text-sm mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('eisenhower.subtitle')}</p>
       </div>
 
       {/* 축 라벨 */}
@@ -182,10 +186,10 @@ export function EisenhowerMatrix(): React.ReactElement {
           <div className="w-12" />
           <div className="flex-1 flex">
             <div className={`flex-1 text-center text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              긴급
+              {t('eisenhower.urgent')}
             </div>
             <div className={`flex-1 text-center text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-              긴급하지 않음
+              {t('eisenhower.notUrgent')}
             </div>
           </div>
         </div>
@@ -200,7 +204,7 @@ export function EisenhowerMatrix(): React.ReactElement {
               }`}
               style={{ writingMode: 'vertical-rl' }}
             >
-              중요
+              {t('eisenhower.important')}
             </div>
             <div
               className={`text-xs font-medium transform -rotate-180 text-center ${
@@ -208,7 +212,7 @@ export function EisenhowerMatrix(): React.ReactElement {
               }`}
               style={{ writingMode: 'vertical-rl' }}
             >
-              중요하지 않음
+              {t('eisenhower.notImportant')}
             </div>
           </div>
 
@@ -220,8 +224,10 @@ export function EisenhowerMatrix(): React.ReactElement {
                 <div className={`px-3 py-2 ${q.headerBg} flex items-center gap-2`}>
                   <span className={isDark ? 'text-gray-300' : 'text-gray-600'}>{q.icon}</span>
                   <div>
-                    <h3 className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{q.title}</h3>
-                    <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{q.subtitle}</p>
+                    <h3 className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                      {t(q.titleKey)}
+                    </h3>
+                    <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{t(q.subtitleKey)}</p>
                   </div>
                   <span
                     className={`ml-auto text-xs px-1.5 py-0.5 rounded-full ${
@@ -235,7 +241,9 @@ export function EisenhowerMatrix(): React.ReactElement {
                 {/* 태스크 목록 */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
                   {q.tasks.length === 0 ? (
-                    <div className={`text-center py-4 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>없음</div>
+                    <div className={`text-center py-4 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
+                      {t('common.none')}
+                    </div>
                   ) : (
                     q.tasks.map(renderTaskItem)
                   )}

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="../resources/icon-128-rounded.png" alt="haru" width="128" height="128">
+  <img src="../resources/icon-128-rounded.png" alt="Greenday" width="128" height="128">
 </p>
 
-<h1 align="center">haru</h1>
+<h1 align="center">Greenday</h1>
 
 <p align="center">
   <strong>macOS 올인원 생산성 앱</strong><br>
@@ -14,17 +14,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/supaicy/haru/releases/latest/download/haru.dmg">
+  <a href="https://github.com/supaicy/greenDay/releases/latest/download/Greenday-arm64.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Apple_Silicon)-blue?style=for-the-badge&logo=apple" alt="Download DMG">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/supaicy/haru/stargazers">
-    <img src="https://img.shields.io/github/stars/supaicy/haru?style=flat-square" alt="Stars">
+  <a href="https://github.com/supaicy/greenDay/stargazers">
+    <img src="https://img.shields.io/github/stars/supaicy/greenDay?style=flat-square" alt="Stars">
   </a>
-  <img src="https://img.shields.io/github/downloads/supaicy/haru/total?style=flat-square" alt="Downloads">
-  <img src="https://img.shields.io/github/v/release/supaicy/haru?style=flat-square" alt="Release">
+  <img src="https://img.shields.io/github/downloads/supaicy/greenDay/total?style=flat-square" alt="Downloads">
+  <img src="https://img.shields.io/github/v/release/supaicy/greenDay?style=flat-square" alt="Release">
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 </p>
@@ -55,30 +55,26 @@
 
 ### DMG로 설치 (권장)
 
-1. 위의 **Download** 버튼 클릭 (또는 [Releases](https://github.com/supaicy/haru/releases) 페이지)
+1. 위의 **Download** 버튼 클릭 (또는 [Releases](https://github.com/supaicy/greenDay/releases) 페이지)
 2. 다운로드된 `.dmg` 파일 열기
-3. `haru` 앱을 `Applications` 폴더로 드래그
-4. **첫 실행 전에 터미널에서 아래 명령을 실행하세요:**
+3. `Greenday` 앱을 `Applications` 폴더로 드래그
+4. 바로 실행하면 됩니다 — 추가 작업이 없습니다.
 
-```bash
-xattr -cr /Applications/haru.app
-```
-
-> **왜 필요한가요?**
-> haru는 Apple Developer 인증서로 서명되지 않은 오픈소스 앱입니다.
-> macOS가 "손상되었습니다" 경고를 표시할 수 있으며, 위 명령으로 해결됩니다.
-> 이 명령은 최초 설치 시 1회만 실행하면 됩니다.
+> 릴리스는 Developer ID 인증서로 서명되고 Apple 공증을 거칩니다(릴리스 워크플로가 둘 다
+> 검증한 뒤에만 공개합니다). 그래서 Gatekeeper가 "손상되었습니다" 경고 없이 엽니다.
+> 그래도 경고가 뜬다면 내려받은 파일이 손상되거나 바뀐 것이니, 격리 플래그를 지우지 말고
+> 다시 내려받으세요.
 
 ### 업데이트
 
 앱 내 **설정 > 업데이트 확인**에서 새 버전이 감지되면 GitHub Releases 페이지로 이동합니다.
-`haru.dmg`를 다시 다운로드하여 기존 앱에 덮어쓰기하세요.
+`Greenday-arm64.dmg`(Intel은 `Greenday-x64.dmg`)를 다시 다운로드하여 기존 앱에 덮어쓰기하세요.
 
 ### 소스에서 빌드
 
 ```bash
-git clone https://github.com/supaicy/haru.git
-cd haru
+git clone https://github.com/supaicy/greenDay.git
+cd greenDay
 npm install
 npm run dev        # 개발 모드 실행
 npm run package    # macOS 앱으로 패키징
@@ -86,7 +82,7 @@ npm run package    # macOS 앱으로 패키징
 
 ## AI 설정 (선택)
 
-haru의 AI 기능은 로컬 모델이나 클라우드 모델 모두 사용할 수 있습니다. **설정 → AI**에서 구성하세요.
+Greenday의 AI 기능은 로컬 모델이나 클라우드 모델 모두 사용할 수 있습니다. **설정 → AI**에서 구성하세요.
 
 | 제공자 | 기본 엔드포인트 | 기본 모델 | 비고 |
 |--------|----------------|-----------|------|
@@ -108,9 +104,13 @@ haru의 AI 기능은 로컬 모델이나 클라우드 모델 모두 사용할 �
 | `Delete` | 선택 태스크 삭제 |
 | `Esc` | 선택 해제 / 닫기 |
 
+## 문서
+
+개발자 문서는 [`docs/README.md`](README.md) 에서 시작합니다 — 튜토리얼(개발 환경에서 활성화까지), 하우투(태그 릴리스·MAS 빌드·브리지 빌드·Google OAuth·스크린샷·i18n), 레퍼런스(스크립트와 플래그·IPC 채널·라이선스·마이그레이션 파일), 설명(번들 ID 마이그레이션·라이선스 게이트와 MAS·로컬 데이터와 safeStorage).
+
 ## 기술 스택
 
-- **Electron 40** — macOS 네이티브 앱
+- **Electron 41** — macOS 네이티브 앱
 - **React 19** + **TypeScript** — UI
 - **Tailwind CSS 3** — 스타일링
 - **Zustand** — 상태 관리
@@ -119,7 +119,7 @@ haru의 AI 기능은 로컬 모델이나 클라우드 모델 모두 사용할 �
 ## 시스템 요구사항
 
 - macOS 12 (Monterey) 이상
-- Apple Silicon 전용 (M1 / M2 / M3 / M4) — *Intel Mac은 지원하지 않습니다*
+- Apple Silicon(`Greenday-arm64.dmg`)과 Intel(`Greenday-x64.dmg`) 둘 다 — 릴리스마다 둘 다 빌드하고 공증합니다
 
 ---
 

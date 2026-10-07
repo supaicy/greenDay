@@ -1,0 +1,250 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { CheckCircle2, ExternalLink, Loader2, Unlink, WifiOff } from 'lucide-react'
+import { useActivation } from '../../licensing/useActivation'
+import { daysLeft, refreshLicense, useLicense } from '../../licensing/useLicense'
+import type { DeactivateFailure } from '../../../../shared/license'
+
+interface Props {
+  isDark: boolean
+  focusRing: string
+  fieldSurface: string
+  labelText: string
+  hintText: string
+  successText: string
+  errorText: string
+}
+
+/**
+ * 설정의 라이선스 칸.
+ *
+ * **기기 해제 버튼이 이 화면의 존재 이유 절반이다.** 기기 한도에 걸린 사람에게
+ * 안내만 하고 푸는 방법을 주지 않으면, 두 번째 기기를 사는 순간 그 한도가 벽이
+ * 되고 지원 메일함이 그 벽의 유일한 출구가 된다.
+ *
+ * 스토어 빌드에서는 아예 그려지지 않는다 — Apple 가이드라인 3.1.1은 앱 안에서
+ * 외부 결제로 유도하는 것을 금지하고, 키 입력 칸이 그 유도로 읽힌다.
+ * 판정은 `shared/capabilities.ts`의 `needsLicenseKey`가 한다.
+ */
+export function LicenseSection({
+  isDark,
+  focusRing,
+  fieldSurface,
+  labelText,
+  hintText,
+  successText,
+  errorText
+}: Props): React.JSX.Element {
+  const { t } = useTranslation()
+  const license = useLicense()
+  // 활성화 흐름은 잠금 화면과 공유한다 — 두 화면이 같은 키에 대해 다르게
+  // 실패하면 안 된다(licensing/useActivation.ts).
+  const activation = useActivation()
+  const [releasing, setReleasing] = useState(false)
+  const [releaseError, setReleaseError] = useState<DeactivateFailure | null>(null)
+  const [done, setDone] = useState<'activated' | 'deactivated' | null>(null)
+
+  // 두 버튼이 서로를 잠근다 — 활성화 중에 해제를 누르거나 그 반대가 되면, 방금
+  // 넣은 키가 도착하는 순간 지워지는 종류의 경합이 생긴다.
+  //
+  // 활성화 버튼은 이 `busy`를 안 쓰고 `!canSubmit || releasing`으로 적는다.
+  // `canSubmit`이 품는 것은 **`activation.busy`뿐**이라(useActivation.ts) 그쪽만
+  // 중복이고, `releasing`은 죽은 항이 아니다 — 지우면 해제 중에 활성화가 열린다.
+  const busy = activation.busy || releasing
+  const error = activation.error ?? releaseError
+
+  /** 새 시도를 시작하기 전에 지난 결과를 치운다. */
+  function resetOutcome(): void {
+    setReleaseError(null)
+    setDone(null)
+  }
+
+  async function activate(): Promise<void> {
+    resetOutcome()
+    if (await activation.activate()) setDone('activated')
+  }
+
+  /**
+   * `finally`가 없으면 IPC 거절 한 번이 **두 버튼을 다 잠근다** — 아래 `busy`가
+   * `releasing`을 품고 있어서, 해제가 거절된 사용자는 활성화도 못 하게 된다.
+   * `useActivation.activate`가 같은 이유로 같은 모양이다.
+   */
+  async function deactivate(): Promise<void> {
+    setReleasing(true)
+    resetOutcome()
+    try {
+      const failure = await window.api.licenseDeactivate()
+      if (failure) return setReleaseError(failure)
+      setDone('deactivated')
+      await refreshLicense()
+    } catch (error) {
+      console.error('[license] 해제 요청이 거절됐다', error)
+      setReleaseError('network')
+    } finally {
+      setReleasing(false)
+    }
+  }
+
+  const button = `px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50 ${focusRing}`
+  const neutralButton = `${button} ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`
+
+  return (
+    <div className="space-y-3">
+      <p className={`text-sm ${labelText}`}>
+        <StatusLine license={license} hintText={hintText} successText={successText} />
+      </p>
+
+      {license.maskedKey && (
+        <p className={`text-xs ${hintText}`}>
+          {t('license.registeredKey')}: <code>{license.maskedKey}</code>
+        </p>
+      )}
+
+      {license.status !== 'licensed' && (
+        <div className="space-y-1.5">
+          <label htmlFor="license-key" className={`block text-xs ${labelText}`}>
+            {t('license.keyLabel')}
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="license-key"
+              value={activation.key}
+              onChange={(e) => activation.setKey(e.target.value)}
+              placeholder={t('license.keyPlaceholder')}
+              spellCheck={false}
+              autoCapitalize="characters"
+              className={`flex-1 px-3 py-1.5 rounded-lg text-sm font-mono ${fieldSurface}`}
+            />
+            <button
+              type="button"
+              onClick={() => void activate()}
+              disabled={!activation.canSubmit || releasing}
+              className={`${button} ${isDark ? 'bg-primary-600 hover:bg-primary-500 text-white' : 'bg-primary-500 hover:bg-primary-600 text-white'}`}
+            >
+              {activation.busy ? (
+                <span className="flex items-center gap-1.5">
+                  <Loader2 size={13} className="animate-spin" /> {t('license.activating')}
+                </span>
+              ) : (
+                t('license.activate')
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {license.status !== 'licensed' && license.deviceName && (
+        // 서버로 가는 값을 보내기 전에 같은 화면에 적어 둔다. 기기 목록에서 골라
+        // 해제하려면 이 이름이 필요하지만, 뭐가 나가는지 숨기지는 않는다.
+        <p className={`text-xs ${hintText}`}>
+          {t('license.deviceNameNotice')}: <code>{license.deviceName}</code>
+        </p>
+      )}
+
+      {/* 서버가 말해 준 이유. **아직 쓸 수 있을 때도 뜬다** — `deviceLimit`은 토큰이
+          살아 있는 채로 붙고, 그때 알려 줘야 웹에서 슬롯을 정리할 시간이 있다.
+          잠긴 뒤에는 위의 `StatusLine`이 같은 문구를 상태 자리에서 말하므로,
+          여기서는 아직 허용 중인 동안만 그린다(두 줄이 같은 말을 하지 않게). */}
+      {license.blockedReason && license.allowsPaidFeatures && (
+        <p className={`text-xs ${errorText}`}>{t(`license.error.${license.blockedReason}`)}</p>
+      )}
+
+      {error && <p className={`text-xs ${errorText}`}>{t(`license.error.${error}`)}</p>}
+      {done && (
+        <p className={`flex items-center gap-1.5 text-xs ${successText}`}>
+          <CheckCircle2 size={13} /> {t(`license.${done}`)}
+        </p>
+      )}
+
+      {license.maskedKey && (
+        <div className="space-y-1">
+          <button
+            type="button"
+            onClick={() => void deactivate()}
+            disabled={busy}
+            className={`${neutralButton} flex items-center gap-1.5`}
+          >
+            {releasing ? <Loader2 size={13} className="animate-spin" /> : <Unlink size={13} />}
+            {t(releasing ? 'license.deactivating' : 'license.deactivate')}
+          </button>
+          <p className={`text-xs ${hintText}`}>{t('license.deactivateDesc')}</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1">
+        <button
+          type="button"
+          onClick={() => void window.api.licenseOpenPurchase('settings')}
+          className={`flex items-center gap-1 text-xs underline ${labelText} ${focusRing} rounded`}
+        >
+          {t('license.buy')} <ExternalLink size={11} />
+        </button>
+        <button
+          type="button"
+          onClick={() => void window.api.licenseOpenRecover()}
+          className={`flex items-center gap-1 text-xs underline ${hintText} ${focusRing} rounded`}
+        >
+          {t('license.lost')} <ExternalLink size={11} />
+        </button>
+      </div>
+      <p className={`text-xs ${hintText}`}>{t('license.buyDesc')}</p>
+    </div>
+  )
+}
+
+/**
+ * 지금이 어떤 상태인지 한 줄로.
+ *
+ * enforcement 전에는 트라이얼 얘기를 아예 꺼내지 않는다 — 아직 아무것도 타들어가지
+ * 않는데 "n일 남음"이라고 쓰면 없는 마감을 만들어낸다.
+ */
+function StatusLine({
+  license,
+  hintText,
+  successText
+}: {
+  license: ReturnType<typeof useLicense>
+  hintText: string
+  successText: string
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  if (license.status === 'licensed') {
+    return (
+      <span className={`flex items-center gap-1.5 ${successText}`}>
+        <CheckCircle2 size={14} /> {t('license.licensed')}
+      </span>
+    )
+  }
+  if (!license.enforced) {
+    return (
+      <span>
+        {t('license.free')}
+        <span className={`block text-xs mt-0.5 ${hintText}`}>{t('license.freeDesc')}</span>
+      </span>
+    )
+  }
+  // 1일과 0일은 따로 쓴다. 영어에는 복수 일치가 있어서 `{{days}} days`가
+  // "1 days left" / "within 1 days"로 나온다 — 한국어에는 그 일치가 없어
+  // 번역만 보면 안 보이는 종류의 오류다. (i18next 복수 키는 안 쓴다: 한국어에는
+  // `_one`이 없어서 로케일 키 대칭 테스트와 어긋난다.)
+  if (license.status === 'grace') {
+    const days = daysLeft(license.untilMs)
+    return (
+      <span className="flex items-center gap-1.5">
+        <WifiOff size={14} />{' '}
+        {days === 0 ? t('license.graceToday') : days === 1 ? t('license.graceOneDay') : t('license.grace', { days })}
+      </span>
+    )
+  }
+  if (license.status === 'trial') {
+    const days = daysLeft(license.untilMs)
+    if (days === 0) return <span>{t('license.trialLastDay')}</span>
+    return <span>{days === 1 ? t('license.trialOneDay') : t('license.trial', { days })}</span>
+  }
+  // **취소·한도로 막힌 사람에게 "체험 기간이 끝났습니다"는 거짓말이다.** 그 사람은
+  // 돈을 냈고, 필요한 안내는 환불 문의나 슬롯 정리이지 구매가 아니다. 서버가
+  // 말해 준 이유가 있으면 그걸 쓴다 — 문구는 활성화 실패와 같은 표를 쓴다.
+  if (license.blockedReason) return <span>{t(`license.error.${license.blockedReason}`)}</span>
+  return <span>{t('license.trialExpired')}</span>
+}

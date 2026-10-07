@@ -1,18 +1,31 @@
 import type React from 'react'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
+import { useToday } from '../../hooks/useToday'
+import { tList } from '../../i18n'
+import { toDateString } from '../../utils/date'
+import { levelFromScore, levelProgress, pointsToNextLevel, POINTS_PER_LEVEL } from '../../utils/score'
+import { habitCompletionRate } from '../../utils/habitStats'
 import { Trophy, CheckCircle2, Flame, Timer, Target, TrendingUp, Star, Calendar } from 'lucide-react'
 
-// 요일 이름
-const dayNames = ['일', '월', '화', '수', '목', '금', '토']
-
 export function StatsView(): React.ReactElement {
-  const { theme, tasks, pomodoroSessions, habitLogs, habits, score } = useStore()
+  const { t, i18n } = useTranslation()
+  // tList는 매번 새 배열을 돌려주므로 메모해야 아래 useMemo가 매 렌더 재계산되지 않는다.
+  const dayNames = useMemo(() => tList('date.weekdaysShort', i18n.language), [i18n.language])
+  const theme = useStore((s) => s.theme)
+  const tasks = useStore((s) => s.tasks)
+  const pomodoroSessions = useStore((s) => s.pomodoroSessions)
+  const habitLogs = useStore((s) => s.habitLogs)
+  const habits = useStore((s) => s.habits)
+  const score = useStore((s) => s.score)
   const isDark = theme === 'dark'
+
+  // 자정에 갱신되는 '오늘'(로컬 기준 — toISOString()은 UTC라 KST 00:00~09:00에 하루 밀렸다).
+  const todayStr = useToday()
 
   const stats = useMemo(() => {
     const now = new Date()
-    const todayStr = now.toISOString().split('T')[0]
 
     // 이번 주 시작 (월요일)
     const weekStart = new Date(now)
@@ -20,28 +33,30 @@ export function StatsView(): React.ReactElement {
     const diff = day === 0 ? 6 : day - 1
     weekStart.setDate(weekStart.getDate() - diff)
     weekStart.setHours(0, 0, 0, 0)
-    const weekStartStr = weekStart.toISOString().split('T')[0]
+    const weekStartStr = toDateString(weekStart)
 
-    // 완료된 태스크
+    // 완료된 태스크. completedAt은 UTC ISO 문자열이므로 로컬 날짜로 변환해 비교한다 —
+    // 문자열 앞자리를 그대로 맞대면 KST 00:00~09:00 완료분이 전날로 세어진다.
     const completedTasks = tasks.filter((t) => t.completed && t.completedAt)
     const totalCompleted = completedTasks.length
+    const completedLocalDays = completedTasks.map((t) => toDateString(new Date(t.completedAt as string)))
 
-    const completedToday = completedTasks.filter((t) => t.completedAt?.startsWith(todayStr)).length
+    const completedToday = completedLocalDays.filter((d) => d === todayStr).length
 
-    const completedThisWeek = completedTasks.filter((t) => t.completedAt && t.completedAt >= weekStartStr).length
+    const completedThisWeek = completedLocalDays.filter((d) => d >= weekStartStr).length
 
-    // 점수 & 레벨
+    // 점수 & 레벨 (utils/score.ts 단일 출처 — 사이드바와 같은 값)
     const totalScore = score.total
-    const level = Math.floor(totalScore / 100) + 1
-    const levelProgress = totalScore % 100
+    const level = levelFromScore(totalScore)
+    const progressInLevel = levelProgress(totalScore)
 
     // 최근 14일 일별 완료 수
     const last14Days: { date: string; label: string; count: number }[] = []
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now)
       d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().split('T')[0]
-      const count = completedTasks.filter((t) => t.completedAt?.startsWith(dateStr)).length
+      const dateStr = toDateString(d)
+      const count = completedLocalDays.filter((x) => x === dateStr).length
       last14Days.push({
         date: dateStr,
         label: `${d.getMonth() + 1}/${d.getDate()}`,
@@ -58,13 +73,10 @@ export function StatsView(): React.ReactElement {
     const totalFocusHours = Math.floor(totalFocusMinutes / 60)
     const remainingMinutes = totalFocusMinutes % 60
 
-    // 습관 완료율
-    let habitCompletionRate = 0
-    if (habits.length > 0 && habitLogs.length > 0) {
-      const completedLogs = habitLogs.filter((l) => l.completed).length
-      // 간단한 비율: 완료된 로그 / 전체 로그
-      habitCompletionRate = habitLogs.length > 0 ? Math.round((completedLogs / habitLogs.length) * 100) : 0
-    }
+    // 습관 완료율 — 분모는 '기대한 날'이지 '남아 있는 로그'가 아니다.
+    // 체크를 풀면 로그의 completed가 false가 되는 게 아니라 행이 지워지므로,
+    // 로그끼리 나누면 언제나 100%였다(utils/habitStats.ts에 이유를 적어 뒀다).
+    const habitRate = habitCompletionRate(habits, habitLogs, todayStr)
 
     // 가장 생산적인 요일
     const dayCount = [0, 0, 0, 0, 0, 0, 0] // 일~토
@@ -75,7 +87,10 @@ export function StatsView(): React.ReactElement {
       }
     }
     const maxDayCount = Math.max(...dayCount)
-    const mostProductiveDay = maxDayCount > 0 ? dayNames[dayCount.indexOf(maxDayCount)] : '-'
+    // 완료한 할일이 하나도 없으면 최고 요일이라는 것도 없다. '-'를 흘려보내면
+    // date.dayLabel('{{day}}요일')이 '-요일'이라는 없는 요일을 그린다 —
+    // 값이 없다는 것은 렌더가 말하게 한다.
+    const mostProductiveDay = maxDayCount > 0 ? dayNames[dayCount.indexOf(maxDayCount)] : null
 
     return {
       totalCompleted,
@@ -83,18 +98,19 @@ export function StatsView(): React.ReactElement {
       completedThisWeek,
       totalScore,
       level,
-      levelProgress,
+      progressInLevel,
+      todayStr,
       last14Days,
       maxDailyCount,
       pomodoroCount,
       totalFocusHours,
       remainingMinutes,
-      habitCompletionRate,
+      habitCompletionRate: habitRate,
       mostProductiveDay,
       dayCount,
       maxDayCount
     }
-  }, [tasks, pomodoroSessions, habitLogs, habits, score])
+  }, [tasks, pomodoroSessions, habitLogs, habits, score, dayNames, todayStr])
 
   // 카드 스타일
   const cardClass = `rounded-xl border p-4 ${isDark ? 'bg-gray-800/60 border-gray-700' : 'bg-white border-gray-200'}`
@@ -104,10 +120,10 @@ export function StatsView(): React.ReactElement {
   const subValueClass = `text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* 헤더 */}
       <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>통계</h2>
+        <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t('stats.title')}</h2>
       </div>
 
       {/* 통계 콘텐츠 */}
@@ -119,10 +135,10 @@ export function StatsView(): React.ReactElement {
               <Trophy size={20} className="text-amber-500" />
             </div>
             <div>
-              <p className={labelClass}>레벨 & 점수</p>
+              <p className={labelClass}>{t('stats.levelAndScore')}</p>
               <div className="flex items-baseline gap-2">
                 <span className={valueClass}>Lv.{stats.level}</span>
-                <span className={subValueClass}>{stats.totalScore}점</span>
+                <span className={subValueClass}>{t('stats.points', { points: stats.totalScore })}</span>
               </div>
             </div>
           </div>
@@ -131,13 +147,15 @@ export function StatsView(): React.ReactElement {
             <div className={`h-2 rounded-full ${isDark ? 'bg-gray-700' : 'bg-gray-200'}`}>
               <div
                 className="h-full rounded-full bg-amber-500 transition-all"
-                style={{ width: `${stats.levelProgress}%` }}
+                style={{ width: `${stats.progressInLevel}%` }}
               />
             </div>
             <div className="flex justify-between mt-1">
-              <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{stats.levelProgress}/100</span>
               <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                다음 레벨까지 {100 - stats.levelProgress}점
+                {stats.progressInLevel}/{POINTS_PER_LEVEL}
+              </span>
+              <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                {t('stats.toNextLevel', { points: pointsToNextLevel(stats.totalScore) })}
               </span>
             </div>
           </div>
@@ -148,21 +166,21 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-2">
               <CheckCircle2 size={16} className="text-green-500" />
-              <span className={labelClass}>오늘 완료</span>
+              <span className={labelClass}>{t('stats.completedToday')}</span>
             </div>
             <p className={valueClass}>{stats.completedToday}</p>
           </div>
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-2">
               <Calendar size={16} className="text-blue-500" />
-              <span className={labelClass}>이번 주 완료</span>
+              <span className={labelClass}>{t('stats.completedThisWeek')}</span>
             </div>
             <p className={valueClass}>{stats.completedThisWeek}</p>
           </div>
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-2">
               <Star size={16} className="text-amber-500" />
-              <span className={labelClass}>전체 완료</span>
+              <span className={labelClass}>{t('stats.completedTotal')}</span>
             </div>
             <p className={valueClass}>{stats.totalCompleted}</p>
           </div>
@@ -173,7 +191,7 @@ export function StatsView(): React.ReactElement {
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={16} className={isDark ? 'text-blue-400' : 'text-blue-500'} />
             <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-              최근 14일 완료 추이
+              {t('stats.trend14d')}
             </span>
           </div>
           <div className="flex items-end gap-1.5 h-32">
@@ -182,17 +200,13 @@ export function StatsView(): React.ReactElement {
                 {/* 바 */}
                 <div
                   className={`w-full rounded-t transition-all ${
-                    day.date === new Date().toISOString().split('T')[0]
-                      ? 'bg-blue-500'
-                      : isDark
-                        ? 'bg-gray-600'
-                        : 'bg-gray-300'
+                    day.date === stats.todayStr ? 'bg-blue-500' : isDark ? 'bg-gray-600' : 'bg-gray-300'
                   }`}
                   style={{
                     height: day.count > 0 ? `${Math.max((day.count / stats.maxDailyCount) * 100, 8)}%` : '2px',
                     minHeight: day.count > 0 ? '8px' : '2px'
                   }}
-                  title={`${day.date}: ${day.count}개 완료`}
+                  title={t('stats.dayTooltip', { date: day.date, done: day.count })}
                 />
                 {/* 숫자 */}
                 {day.count > 0 && (
@@ -211,19 +225,21 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-3">
               <Timer size={16} className="text-red-500" />
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>포모도로</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                {t('stats.pomodoro')}
+              </span>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className={labelClass}>세션 수</span>
+                <span className={labelClass}>{t('stats.sessionCount')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {stats.pomodoroCount}회
+                  {t('stats.sessions', { sessions: stats.pomodoroCount })}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className={labelClass}>총 집중 시간</span>
+                <span className={labelClass}>{t('stats.totalFocus')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {stats.totalFocusHours}시간 {stats.remainingMinutes}분
+                  {t('stats.hoursMinutes', { hours: stats.totalFocusHours, minutes: stats.remainingMinutes })}
                 </span>
               </div>
             </div>
@@ -233,19 +249,21 @@ export function StatsView(): React.ReactElement {
           <div className={cardClass}>
             <div className="flex items-center gap-2 mb-3">
               <Flame size={16} className="text-orange-500" />
-              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>습관 & 생산성</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                {t('stats.habitsAndProductivity')}
+              </span>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className={labelClass}>습관 완료율</span>
+                <span className={labelClass}>{t('stats.habitRate')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                   {stats.habitCompletionRate}%
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className={labelClass}>최고 생산 요일</span>
+                <span className={labelClass}>{t('stats.mostProductiveDay')}</span>
                 <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                  {stats.mostProductiveDay}요일
+                  {stats.mostProductiveDay ? t('date.dayLabel', { day: stats.mostProductiveDay }) : t('common.none')}
                 </span>
               </div>
             </div>
@@ -257,7 +275,7 @@ export function StatsView(): React.ReactElement {
           <div className="flex items-center gap-2 mb-4">
             <Target size={16} className={isDark ? 'text-green-400' : 'text-green-500'} />
             <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-              요일별 완료 분포
+              {t('stats.weekdayDistribution')}
             </span>
           </div>
           <div className="flex items-end gap-3 h-20">

@@ -1,24 +1,30 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar, Flag, X, Sparkles, Loader2 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
 import { formatDueDate } from '../../utils/date'
 import type { Priority } from '../../types'
-
-const PRIORITY_OPTIONS: { value: Priority; label: string; color: string }[] = [
-  { value: 'none', label: '없음', color: 'text-gray-500' },
-  { value: 'low', label: '낮음', color: 'text-blue-400' },
-  { value: 'medium', label: '중간', color: 'text-yellow-400' },
-  { value: 'high', label: '높음', color: 'text-red-400' }
-]
+import { useTranslation } from 'react-i18next'
+import { PRIORITY_OPTIONS } from '../../utils/priority'
+import { isVirtualSmartList } from '../../utils/smartLists'
 
 export function AddTask({ onClose }: { onClose: () => void }) {
-  const { addTask, selectedListId, theme, aiCreateTaskFromNL, aiConnected } = useStore()
+  const { t } = useTranslation()
+  const addTask = useStore((s) => s.addTask)
+  const selectedListId = useStore((s) => s.selectedListId)
+  const theme = useStore((s) => s.theme)
+  const aiCreateTaskFromNL = useStore((s) => s.aiCreateTaskFromNL)
+  const aiConnected = useStore((s) => s.aiConnected)
   const isDark = theme === 'dark'
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [priority, setPriority] = useState<Priority>('none')
-  const [showPriority, setShowPriority] = useState(false)
   const [naturalDateHint, setNaturalDateHint] = useState<string | null>(null)
   const [naturalTimeHint, setNaturalTimeHint] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -58,9 +64,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
     try {
       const result = await aiCreateTaskFromNL(title.trim())
       if (result) {
-        const listId = ['today', 'next7days', 'all', 'completed', 'trash'].includes(selectedListId as string)
-          ? undefined
-          : (selectedListId as string)
+        const listId = isVirtualSmartList(selectedListId as string) ? undefined : (selectedListId as string)
         // 메인 태스크 생성
         await addTask(result.title, {
           listId,
@@ -111,9 +115,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
 
     if (!finalTitle) return
 
-    const listId = ['today', 'next7days', 'all', 'completed', 'trash'].includes(selectedListId as string)
-      ? undefined
-      : (selectedListId as string)
+    const listId = isVirtualSmartList(selectedListId as string) ? undefined : (selectedListId as string)
     await addTask(finalTitle, { listId, dueDate: finalDueDate, dueTime: finalDueTime, priority })
     setTitle('')
     setDueDate('')
@@ -136,9 +138,14 @@ export function AddTask({ onClose }: { onClose: () => void }) {
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return
             if (e.key === 'Enter') handleSubmit()
-            if (e.key === 'Escape') onClose()
+            if (e.key === 'Escape') {
+              // 이 Escape는 여기서 쓴다 — 전역 단축키(useKeyboardShortcuts)가 선택까지
+              // 해제해 상세 패널을 닫지 않도록 알린다.
+              e.preventDefault()
+              onClose()
+            }
           }}
-          placeholder='할 일을 입력하세요... (예: "내일 장보기")'
+          placeholder={t('task.placeholder')}
           className={`flex-1 bg-transparent text-sm outline-none ${isDark ? 'text-gray-100 placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'}`}
         />
         <button
@@ -154,8 +161,8 @@ export function AddTask({ onClose }: { onClose: () => void }) {
       {naturalDateHint && (
         <div className={`px-3 py-1 text-xs ${isDark ? 'text-primary-400' : 'text-primary-600'}`}>
           📅 {formatDueDate(naturalDateHint)}
-          {naturalTimeHint ? ` ${naturalTimeHint}` : ''} ({naturalDateHint}
-          {naturalTimeHint ? ` ${naturalTimeHint}` : ''})로 설정됨
+          {naturalTimeHint ? ` ${naturalTimeHint}` : ''}{' '}
+          {t('task.dueSetTo', { date: naturalDateHint, time: naturalTimeHint ? ` ${naturalTimeHint}` : '' })}
         </div>
       )}
 
@@ -177,45 +184,35 @@ export function AddTask({ onClose }: { onClose: () => void }) {
             }`}
           >
             <Calendar size={14} />
-            {dueDate || '마감일'}
+            {dueDate || t('task.dueDate')}
           </span>
         </div>
 
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowPriority(!showPriority)}
-            className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
-              priority !== 'none'
-                ? PRIORITY_OPTIONS.find((p) => p.value === priority)?.color + (isDark ? ' bg-gray-700' : ' bg-gray-200')
-                : isDark
-                  ? 'text-gray-500 hover:bg-gray-700'
-                  : 'text-gray-400 hover:bg-gray-200'
-            }`}
-          >
-            <Flag size={14} />
-            {PRIORITY_OPTIONS.find((p) => p.value === priority)?.label}
-          </button>
-          {showPriority && (
-            <div
-              className={`absolute left-0 top-full mt-1 rounded-lg shadow-xl py-1 z-50 min-w-[100px] ${isDark ? 'bg-gray-700' : 'bg-white border border-gray-200'}`}
+        {/* 우선순위 — 열림 상태·바깥 클릭·포커스 복귀는 Radix가 관리 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors ${
+                priority !== 'none'
+                  ? PRIORITY_OPTIONS.find((p) => p.value === priority)?.color + (isDark ? ' bg-gray-700' : ' bg-gray-200')
+                  : isDark
+                    ? 'text-gray-500 hover:bg-gray-700'
+                    : 'text-gray-400 hover:bg-gray-200'
+              }`}
             >
-              {PRIORITY_OPTIONS.map((opt) => (
-                <button
-                  type="button"
-                  key={opt.value}
-                  onClick={() => {
-                    setPriority(opt.value)
-                    setShowPriority(false)
-                  }}
-                  className={`w-full text-left px-3 py-1.5 text-xs ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'} ${opt.color}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+              <Flag size={14} />
+              {t(PRIORITY_OPTIONS.find((p) => p.value === priority)?.labelKey ?? 'priority.none')}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[100px]">
+            {PRIORITY_OPTIONS.map((opt) => (
+              <DropdownMenuItem key={opt.value} onSelect={() => setPriority(opt.value)} className={`text-xs ${opt.color}`}>
+                {t(opt.labelKey)}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <div className="flex-1" />
         {aiConnected && (
@@ -224,7 +221,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
             onClick={handleAiCreate}
             disabled={!title.trim() || aiLoading}
             className="text-xs px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-30 hover:bg-blue-700 transition-colors flex items-center gap-1"
-            title="AI가 서브태스크와 우선순위를 자동으로 설정합니다"
+            title={t('task.aiAutofill')}
           >
             {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             AI
@@ -236,7 +233,7 @@ export function AddTask({ onClose }: { onClose: () => void }) {
           disabled={!title.trim()}
           className="text-xs px-3 py-1 rounded bg-primary-500 text-white disabled:opacity-30 hover:bg-primary-600 transition-colors"
         >
-          추가
+          {t('task.add')}
         </button>
       </div>
     </div>

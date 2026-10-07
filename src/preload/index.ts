@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { Capabilities } from '../shared/capabilities'
+import type { MigrationStatus } from '../shared/migration'
+import type { ActivateFailure, DeactivateFailure, PublicLicenseState } from '../shared/license'
 
 const api = {
   // Folders
@@ -14,7 +17,6 @@ const api = {
     ipcRenderer.invoke('create-list', id, name, color, icon, folderId || null),
   updateList: (id: string, updates: Record<string, unknown>) => ipcRenderer.invoke('update-list', id, updates),
   deleteList: (id: string) => ipcRenderer.invoke('delete-list', id),
-  reorderLists: (ids: string[]) => ipcRenderer.invoke('reorder-lists', ids),
 
   // Tasks
   getTasks: () => ipcRenderer.invoke('get-tasks'),
@@ -45,16 +47,32 @@ const api = {
   // Score
   getScore: () => ipcRenderer.invoke('get-score'),
   addScoreEvent: (event: unknown) => ipcRenderer.invoke('add-score-event', event),
+  addScoreEvents: (events: unknown[]) => ipcRenderer.invoke('add-score-events', events),
 
   // Attachments
   pickAttachment: () => ipcRenderer.invoke('pick-attachment'),
-  getAttachmentsDir: () => ipcRenderer.invoke('get-attachments-dir'),
+  openAttachment: (path: string) => ipcRenderer.invoke('open-attachment', path),
 
   // Export
   exportData: () => ipcRenderer.invoke('export-data'),
 
-  // Notifications
-  showNotification: (title: string, body: string) => ipcRenderer.invoke('show-notification', title, body),
+  // Notifications — 권한이 없으면 리마인더가 조용히 사라지므로 설정에서 상태를 안내한다.
+  notificationPermission: () =>
+    ipcRenderer.invoke('app:notification-permission') as Promise<'supported' | 'unsupported'>,
+  requestNotificationPermission: () => ipcRenderer.invoke('app:request-notification-permission') as Promise<boolean>,
+  openNotificationSettings: () => ipcRenderer.invoke('app:open-notification-settings'),
+
+  // App meta — 이 빌드가 무엇을 할 수 있는가 (shared/capabilities.ts)
+  capabilities: () => ipcRenderer.invoke('app:capabilities') as Promise<Capabilities>,
+
+  // 번들 ID 마이그레이션 (shared/migration.ts · main/migration/). 부팅 때 계산된 결과를 받는다.
+  migrationStatus: () => ipcRenderer.invoke('migration:status') as Promise<MigrationStatus>,
+  // 브리지: "나중에" / 설정에서 다시 열기
+  migrationSnooze: () => ipcRenderer.invoke('migration:snooze') as Promise<MigrationStatus>,
+  migrationReopen: () => ipcRenderer.invoke('migration:reopen') as Promise<MigrationStatus>,
+  // 새 앱: 옛 앱 안내 닫기 / 보호 모드 해제(사용자가 다시 연결한 뒤 명시적으로)
+  migrationDismissOldApp: () => ipcRenderer.invoke('migration:dismiss-old-app') as Promise<MigrationStatus>,
+  migrationReleaseLock: () => ipcRenderer.invoke('migration:release-lock') as Promise<MigrationStatus>,
 
   // 외부 링크 열기
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
@@ -71,6 +89,20 @@ const api = {
     ipcRenderer.on('update-not-available', handler)
     return () => ipcRenderer.removeListener('update-not-available', handler)
   },
+  // 실패에도 봉투가 없다 — 메인이 electron-updater의 원문 오류를 넘기지 않기
+  // 때문이다(`main/index.ts`의 'error' 리스너). 사용자 문구는 i18n에 있다.
+  onUpdateError: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('update-error', handler)
+    return () => ipcRenderer.removeListener('update-error', handler)
+  },
+  // 다운로드 실패는 확인 실패와 **다른 채널**이다 — 같은 'update-error'로 받으면 설정이
+  // "업데이트 확인 실패"를 새 버전 카드 옆에 띄우고 진행 막대가 멈춘다(`main/index.ts`).
+  onUpdateDownloadError: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('update-download-error', handler)
+    return () => ipcRenderer.removeListener('update-download-error', handler)
+  },
   onUpdateProgress: (callback: (percent: number) => void) => {
     const handler = (_: Electron.IpcRendererEvent, percent: number): void => callback(percent)
     ipcRenderer.on('update-download-progress', handler)
@@ -86,23 +118,50 @@ const api = {
   aiCheckConnection: () => ipcRenderer.invoke('ai:check-connection'),
   aiGetConfig: () => ipcRenderer.invoke('ai:get-config'),
   aiSetConfig: (updates: Record<string, unknown>) => ipcRenderer.invoke('ai:set-config', updates),
+  aiWarmup: () => ipcRenderer.invoke('ai:warmup'),
   aiCreateTask: (input: string, tasks: unknown[]) => ipcRenderer.invoke('ai:create-task', input, tasks),
-  aiChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:chat', message, tasks),
-  aiStreamChat: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:stream-chat', message, tasks),
+  aiInterpretAction: (message: string, tasks: unknown[]) => ipcRenderer.invoke('ai:interpret-action', message, tasks),
+  // requestId는 그냥 통과시킨다. 여기서 만들지 않는 이유: 응답 이벤트를 받는 쪽이
+  // 스토어이므로, 자기가 낸 요청의 id를 스토어가 쥐고 있어야 대조가 성립한다.
+  aiStreamChat: (message: string, tasks: unknown[], history: unknown[], requestId: string) =>
+    ipcRenderer.invoke('ai:stream-chat', message, tasks, history, requestId),
   aiGetHistory: () => ipcRenderer.invoke('ai:get-history'),
   aiSaveHistory: (messages: unknown[]) => ipcRenderer.invoke('ai:save-history', messages),
-  onAiStreamToken: (callback: (token: string) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, token: string): void => callback(token)
+  aiPullModel: (model: string) => ipcRenderer.invoke('ai:pull-model', model),
+  onAiPullProgress: (
+    callback: (p: { status: string; completed?: number; total?: number; percent: number | null }) => void
+  ) => {
+    const handler = (
+      _: Electron.IpcRendererEvent,
+      p: { status: string; completed?: number; total?: number; percent: number | null }
+    ): void => callback(p)
+    ipcRenderer.on('ai:pull-progress', handler)
+    return () => ipcRenderer.removeListener('ai:pull-progress', handler)
+  },
+  onAiPullDone: (callback: () => void) => {
+    const handler = (_: Electron.IpcRendererEvent): void => callback()
+    ipcRenderer.on('ai:pull-done', handler)
+    return () => ipcRenderer.removeListener('ai:pull-done', handler)
+  },
+  onAiPullError: (callback: (error: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, error: string): void => callback(error)
+    ipcRenderer.on('ai:pull-error', handler)
+    return () => ipcRenderer.removeListener('ai:pull-error', handler)
+  },
+  // 세 채널 모두 requestId를 함께 넘긴다. 리스너를 떼는 것으로는 main의 스트림이
+  // 멈추지 않으므로, 구독이 살아 있는 동안 남의 스트림 이벤트가 섞여 들어온다.
+  onAiStreamToken: (callback: (token: string, requestId: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, token: string, requestId: string): void => callback(token, requestId)
     ipcRenderer.on('ai:stream-token', handler)
     return () => ipcRenderer.removeListener('ai:stream-token', handler)
   },
-  onAiStreamDone: (callback: () => void) => {
-    const handler = (_: Electron.IpcRendererEvent): void => callback()
+  onAiStreamDone: (callback: (requestId: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, requestId: string): void => callback(requestId)
     ipcRenderer.on('ai:stream-done', handler)
     return () => ipcRenderer.removeListener('ai:stream-done', handler)
   },
-  onAiStreamError: (callback: (error: string) => void) => {
-    const handler = (_: Electron.IpcRendererEvent, error: string): void => callback(error)
+  onAiStreamError: (callback: (error: string, requestId: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, error: string, requestId: string): void => callback(error, requestId)
     ipcRenderer.on('ai:stream-error', handler)
     return () => ipcRenderer.removeListener('ai:stream-error', handler)
   },
@@ -110,7 +169,43 @@ const api = {
   // Global shortcut
   registerGlobalShortcut: () => ipcRenderer.invoke('register-global-shortcut'),
 
+  // 메인이 직접 띄우는 알림 문구를 위해 UI 언어를 알려 준다.
+  setLanguage: (language: string) => ipcRenderer.invoke('set-language', language),
+
+  // 캘린더 연동. 비밀번호는 저장하러 보낼 때만 오가고, 읽어올 때는 절대 넘어오지 않는다.
+  calendarGetConfig: () => ipcRenderer.invoke('calendar:get-config'),
+  calendarSaveCredentials: (input: { serverUrl?: string; username?: string; password?: string }) =>
+    ipcRenderer.invoke('calendar:save-credentials', input),
+  calendarTestConnection: () => ipcRenderer.invoke('calendar:test-connection'),
+  calendarSelect: (url: string, name: string) => ipcRenderer.invoke('calendar:select', url, name),
+  calendarSyncNow: () => ipcRenderer.invoke('calendar:sync-now'),
+  calendarDisconnect: () => ipcRenderer.invoke('calendar:disconnect'),
+
+  // 구글 캘린더. 토큰은 메인에만 있고 렌더러로 넘어오지 않는다.
+  googleGetConfig: () => ipcRenderer.invoke('google:get-config'),
+  googleConnect: () => ipcRenderer.invoke('google:connect'),
+  googleSyncNow: () => ipcRenderer.invoke('google:sync-now'),
+  googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
+
+  // 라이선스. 키도 토큰도 여기로 넘어오지 않는다 — 상태와 가린 키만 온다.
+  // 타입을 preload가 한 번 진다 — 64행의 `capabilities`와 같은 방식이다.
+  // 렌더러 세 곳이 각자 캐스트하면, 실패 코드가 하나 늘어도 셋 다 조용히 통과한다.
+  licenseGetState: () => ipcRenderer.invoke('license:state') as Promise<PublicLicenseState>,
+  licenseActivate: (key: string) =>
+    ipcRenderer.invoke('license:activate', key) as Promise<ActivateFailure | null>,
+  licenseDeactivate: () => ipcRenderer.invoke('license:deactivate') as Promise<DeactivateFailure | null>,
+  licenseOpenPurchase: (source: string) => ipcRenderer.invoke('license:purchase', source),
+  licenseOpenRecover: () => ipcRenderer.invoke('license:recover'),
+
   // IPC events
+  onLicenseChanged: (callback: (state: PublicLicenseState) => void) => {
+    // 상태는 마감 타이머로도 스스로 움직인다. 이걸 안 들으면 설정 화면이 만료된
+    // 라이선스를 계속 "활성"이라고 말한다 — 데스크톱 앱은 몇 주씩 안 꺼진다.
+    const handler = (_: Electron.IpcRendererEvent, state: PublicLicenseState): void => callback(state)
+    ipcRenderer.on('license:changed', handler)
+    return () => ipcRenderer.removeListener('license:changed', handler)
+  },
+
   onGlobalQuickAdd: (callback: () => void) => {
     const handler = (_: Electron.IpcRendererEvent): void => callback()
     ipcRenderer.on('global-quick-add', handler)

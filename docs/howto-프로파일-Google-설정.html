@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Greenday 프로파일·Google 설정</title>
+<style>
+  /* 레이아웃: 820px 한 단. 출시 준비 체크리스트와 같은 토큰 — 두 문서를 오가도 같은 문서처럼 읽힌다.
+     파랑(--you)은 "당신이 누를 것", 초록(--accent)은 "확인됨", 주황은 주의, 빨강은 하지 말 것. */
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1c;
+    --muted: #6b6b70;
+    --line: #e3e3e6;
+    --card: #fafafa;
+    --accent: #2f7d4f;
+    --warn: #a8620f;
+    --dead: #a13b3b;
+    --code-bg: #f2f2f4;
+    --you: #1d5fa8;
+    --you-soft: #eef4fb;
+    --font-body: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1c1e; --fg: #e8e8ea; --muted: #9a9aa0; --line: #333338; --card: #242427;
+      --accent: #6cc48d; --warn: #e0a458; --dead: #e08585; --code-bg: #2a2a2e;
+      --you: #7fb3ec; --you-soft: #1b2a3a; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1c1e; --fg: #e8e8ea; --muted: #9a9aa0; --line: #333338; --card: #242427;
+    --accent: #6cc48d; --warn: #e0a458; --dead: #e08585; --code-bg: #2a2a2e;
+    --you: #7fb3ec; --you-soft: #1b2a3a; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding-block: 3rem 6rem; padding-inline: 1.25rem;
+    background: var(--bg); color: var(--fg);
+    font: 15px/1.7 var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 1.75rem; line-height: 1.3; margin: 0 0 .4rem; letter-spacing: -.02em; text-wrap: balance; }
+  h2 {
+    font-size: 1.15rem; margin: 3rem 0 1rem; padding-top: 1.25rem;
+    border-top: 1px solid var(--line); letter-spacing: -.01em; text-wrap: balance;
+  }
+  h3 { font-size: .98rem; margin: 0 0 .5rem; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: .875rem; margin: 0 0 2rem; }
+  p { margin: .6rem 0; }
+  code {
+    background: var(--code-bg); padding: .12em .38em; border-radius: 4px;
+    font: 13px/1.5 var(--font-mono); overflow-wrap: anywhere;
+  }
+  .lede {
+    background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    padding: 1.1rem 1.25rem; border-radius: 8px; margin: 0 0 1.25rem;
+  }
+  .lede p { margin: 0; }
+  .lede p + p { margin-top: .7rem; }
+
+  /* 전달물 두 개 — 이 문서가 끝났을 때 손에 있어야 하는 것 */
+  .deliver { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .75rem; margin: 1.25rem 0; }
+  .deliver div {
+    border: 1px solid var(--line); border-radius: 8px; padding: .85rem 1rem; min-width: 0;
+    background: var(--you-soft);
+  }
+  .deliver b { display: block; color: var(--you); font-size: .78rem; letter-spacing: .04em; margin-bottom: .2rem; }
+  .deliver span { font-size: .9rem; }
+
+  /* 단계 — 순서가 의미를 가지므로 번호를 쓴다 */
+  .step { display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .9rem; margin: 1.75rem 0; }
+  .step-n {
+    width: 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center;
+    background: var(--you-soft); color: var(--you); font-weight: 700; font-size: .8rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .step-body { min-width: 0; }
+  .step-body > :first-child { margin-top: .2rem; }
+  ol, ul { padding-left: 1.2rem; margin: .5rem 0; }
+  li { margin: .35rem 0; }
+  .click { color: var(--you); font-weight: 600; }
+  .path { color: var(--muted); }
+  .path b { color: var(--fg); font-weight: 600; }
+
+  /* 입력할 값 표 — 왼쪽 칸 이름은 콘솔 화면의 글자 그대로 */
+  .scroll { overflow-x: auto; margin: .8rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td { text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: .76rem; letter-spacing: .04em; }
+  tbody tr:last-child td { border-bottom: none; }
+  td:first-child { white-space: nowrap; }
+
+  /* 명령 블록 + 복사 */
+  .cmd { position: relative; margin: .7rem 0; }
+  .cmd pre {
+    background: var(--code-bg); border-radius: 6px; padding: .8rem 4.5rem .8rem .9rem; margin: 0;
+    font: 12.5px/1.65 var(--font-mono); overflow-x: auto; white-space: pre;
+  }
+  .cmd button {
+    position: absolute; top: .45rem; right: .45rem;
+    font: 600 .75rem var(--font-body); color: var(--you); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 5px; padding: .25rem .6rem; cursor: pointer;
+  }
+  .cmd button:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+
+  .ok-box, .warn-box, .no-box {
+    border-radius: 8px; padding: .8rem 1rem; margin: .9rem 0; font-size: .9rem;
+  }
+  .ok-box { background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+  .warn-box { background: color-mix(in srgb, var(--warn) 9%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+  .no-box { background: color-mix(in srgb, var(--dead) 8%, transparent); border: 1px solid color-mix(in srgb, var(--dead) 28%, transparent); }
+  .ok-box strong { color: var(--accent); }
+  .warn-box strong { color: var(--warn); }
+  .no-box strong { color: var(--dead); }
+  .ok-box p, .warn-box p, .no-box p { margin: .3rem 0; }
+  .ok-box ul, .warn-box ul, .no-box ul { margin: .3rem 0; }
+
+  /* 문제 해결 — 화면에 나온 말 → 원인 → 할 일 */
+  .trouble { display: grid; gap: .5rem; margin: .8rem 0; }
+  .trouble div { border-left: 2px solid var(--line); padding: .1rem 0 .1rem .8rem; font-size: .88rem; }
+  .trouble q { quotes: "“" "”"; font-weight: 600; }
+
+  footer { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  a { color: var(--you); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Greenday 프로파일·Google 설정</h1>
+<p class="sub">2026-10-06 · Apple 개발자 포털과 Google Cloud 콘솔에서 당신이 할 일 · 소요 약 25분</p>
+
+<div class="lede">
+  <p><strong>이 문서를 끝내면 손에 두 가지가 있어야 합니다.</strong> 둘 다 오면 App Store 빌드와
+  직접 배포판 빌드를 제가 이어서 진행합니다.</p>
+</div>
+
+<div class="deliver">
+  <div><b>APPLE</b><span>프로파일 파일 하나를 <code>resources/embedded.provisionprofile</code>에 저장.
+  같은 맥이라 저에게 보낼 필요는 없습니다. 저장했다고만 말해 주세요.</span></div>
+  <div><b>GOOGLE</b><span>클라이언트 ID 문자열 하나를 대화창에 붙여넣기.
+  <code>…apps.googleusercontent.com</code>으로 끝납니다.</span></div>
+</div>
+
+<div class="no-box">
+  <strong>보내지 마세요.</strong> 아래는 어떤 단계에서도 대화창에 붙이지 않습니다. 이 문서의 어떤 단계도 이것들을 요구하지 않습니다.
+  <ul>
+    <li>Apple ID 비밀번호, 앱 암호(<code>xxxx-xxxx-xxxx-xxxx</code>), 인증서 <code>.p12</code> 파일과 그 비밀번호</li>
+    <li>Google <b>클라이언트 보안 비밀</b>(<code>GOCSPX-</code>로 시작). 앱이 쓰지 않습니다</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────── 0 ───────────────────────────── -->
+<h2>먼저 — Xcode 라이선스 동의</h2>
+
+<div class="step">
+  <div class="step-n">0</div>
+  <div class="step-body">
+    <p>Xcode 27이 새로 깔리면서 라이선스 동의가 풀렸습니다. git은 제가 Command Line Tools 쪽으로 돌려 쓰고 있지만,
+    <b>App Store 업로드 도구(<code>altool</code>)는 Xcode에만 있어서</b> 동의 없이는 C단계의 업로드가 멈춥니다.
+    <b>터미널.app</b>을 열고 붙여넣은 뒤 맥 로그인 비밀번호를 입력하세요(입력해도 화면에 글자가 안 보이는 것이 정상입니다).</p>
+    <div class="cmd"><pre id="c-license">sudo xcodebuild -license accept</pre><button type="button" data-copy="c-license">복사</button></div>
+    <p class="path">A·B보다 먼저 할 필요는 없습니다. 업로드 전까지만 해 두시면 됩니다.</p>
+  </div>
+</div>
+
+<!-- ───────────────────────────── A ───────────────────────────── -->
+<h2>A. App Store 프로비저닝 프로파일</h2>
+
+<p>프로비저닝 프로파일은 "이 팀의 이 인증서로 서명한 이 앱(<code>com.begreen.greenday</code>)을 App Store에
+올려도 된다"는 Apple의 허가증입니다. 인증서는 이 맥에 이미 다 있고(<code>Apple Distribution: MINSEOK SHIN</code>,
+2027-07-30까지 유효), App ID도 이미 등록돼 있어서 <b>프로파일 하나만</b> 새로 만들면 됩니다.</p>
+
+<div class="step">
+  <div class="step-n">A1</div>
+  <div class="step-body">
+    <h3>옛 haru 항목 정리 (먼저)</h3>
+    <p>Identifiers 목록에 이름이 "Greenday"인 항목이 둘이라, 다음 단계 드롭다운에서 잘못 고르기 쉽습니다.
+    옛 것을 먼저 치웁니다. <b>순서가 중요합니다</b>: 프로파일을 먼저, App ID를 나중에.</p>
+    <ol>
+      <li><a href="https://developer.apple.com/account/resources/profiles/list" target="_blank" rel="noopener">developer.apple.com → Profiles</a>에서
+        App ID가 <code>com.supaicy.haru</code>인 프로파일(이름 <code>haru MAS</code>)을 클릭 → <span class="click">Remove</span>(또는 Delete).</li>
+      <li><a href="https://developer.apple.com/account/resources/identifiers/list" target="_blank" rel="noopener">Identifiers</a>에서
+        Identifier가 <code>com.supaicy.haru</code>인 항목 클릭 → 맨 아래 <span class="click">Remove</span>.</li>
+    </ol>
+    <div class="warn-box">
+      <strong>BicMac(<code>com.supaicy.bicmac</code>)은 건드리지 마세요.</strong> 별개 앱입니다.
+      지운 Identifier는 다시 등록할 수 없지만 <code>com.supaicy.haru</code>는 배포된 적이 없고 다시 쓸 일도 없습니다.
+    </div>
+    <p class="path">이 단계를 건너뛰고 싶다면, 옛 App ID를 클릭해 Description만 <code>Greenday (OLD — do not use)</code>로
+    바꿔 두는 것도 됩니다. 핵심은 다음 단계에서 헷갈리지 않는 것입니다.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">A2</div>
+  <div class="step-body">
+    <h3>프로파일 만들기</h3>
+    <ol>
+      <li><a href="https://developer.apple.com/account/resources/profiles/add" target="_blank" rel="noopener">Profiles → ＋(새 프로파일)</a>을 엽니다.</li>
+      <li><b>Distribution</b> 묶음에서 <span class="click">Mac App Store Connect</span>를 고르고 <span class="click">Continue</span>.
+        <span class="path">(위쪽 Development 묶음이나 "App Store Connect"(iOS)가 아닙니다. 이름에 <b>Mac</b>이 들어간 것입니다.)</span></li>
+      <li><b>App ID</b> 드롭다운에서 <code>Greenday (32R6RHXU36.com.begreen.greenday)</code>를 고릅니다.
+        <b>괄호 안이 <code>com.begreen.greenday</code>인지 꼭 확인</b>하세요. → <span class="click">Continue</span>.</li>
+      <li><b>Certificates</b>에서 <code>Apple Distribution: MINSEOK SHIN</code>(만료 2027/07/30)을 체크 → <span class="click">Continue</span>.
+        <span class="path">(같은 이름이 여러 개면 만료일이 2027/07/30인 것. 그게 이 맥에 깔린 인증서입니다.)</span></li>
+      <li><b>Provisioning Profile Name</b>에 <code>Greenday Mac App Store</code> → <span class="click">Generate</span>.</li>
+      <li><span class="click">Download</span>. 다운로드 폴더에 <code>Greenday_Mac_App_Store.provisionprofile</code> 같은 파일이 생깁니다.
+        <b>더블클릭하지 않아도 됩니다.</b></li>
+    </ol>
+    <p class="path">App ID에서 따로 켤 기능(Capabilities)은 없습니다. 이 앱의 샌드박스 권한은 네트워크·사용자가 고른 파일뿐이라 App ID 설정이 필요 없습니다.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">A3</div>
+  <div class="step-body">
+    <h3>정해진 자리에 저장</h3>
+    <p>터미널에 붙여넣으세요. 다운로드 폴더의 프로파일을 저장소의 정해진 이름으로 옮깁니다.</p>
+    <div class="cmd"><pre id="c-mv">mv ~/Downloads/*.provisionprofile ~/Code/services/greenDay/resources/embedded.provisionprofile</pre><button type="button" data-copy="c-mv">복사</button></div>
+    <p class="path">다운로드 폴더에 <code>.provisionprofile</code>이 둘 이상 있으면 이 명령이 실패합니다. 그때는 파일 이름을 직접 적어 주세요.
+    이 파일은 <code>.gitignore</code>에 들어 있어 저장소(GitHub)에는 올라가지 않습니다.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">A4</div>
+  <div class="step-body">
+    <h3>확인 (선택)</h3>
+    <p>직접 확인하고 싶으면 아래를 돌리세요. 안 돌리고 "프로파일 넣었어"라고만 말해 주셔도 제가 돌립니다.</p>
+    <div class="cmd"><pre id="c-pre">cd ~/Code/services/greenDay &amp;&amp; npm run mas:preflight</pre><button type="button" data-copy="c-pre">복사</button></div>
+    <div class="ok-box">
+      <strong>이렇게 나오면 성공</strong> — <code>2/6 프로비저닝 프로파일</code> 아래에
+      <ul>
+        <li>✓ 프로파일 App ID 일치: <code>32R6RHXU36.com.begreen.greenday</code></li>
+        <li>✓ 플랫폼: macOS · ✓ 팀: <code>32R6RHXU36</code> · ✓ 만료: (1년 뒤 날짜)</li>
+      </ul>
+      <p><code>6/6</code>의 Google 클라이언트 ID 항목은 B를 마칠 때까지 ✗가 정상입니다.</p>
+    </div>
+    <div class="trouble">
+      <div><q>프로파일이 다른 앱의 것입니다</q> → A2-3에서 App ID를 잘못 골랐습니다. 그 프로파일을 지우고 A2를 다시.</div>
+      <div><q>macOS용 프로파일이 아닙니다</q> → A2-2에서 iOS용 "App Store Connect"를 골랐습니다. "Mac App Store Connect"로 다시.</div>
+      <div><q>프로파일을 읽지 못했습니다</q> → 다운로드가 덜 됐거나 다른 파일입니다. 다시 Download.</div>
+      <div>A2-4에서 인증서가 목록에 없음 → 그 화면을 캡처해서 보여 주세요. 인증서를 새로 만들 필요가 있는지 제가 판단합니다.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────── B ───────────────────────────── -->
+<h2>B. Google 캘린더 연동 — OAuth 클라이언트 ID</h2>
+
+<p>Google 캘린더 동기화는 사용자가 "Google로 연결"을 누르면 브라우저에서 로그인하고, 앱이 그 계정에
+<b><code>Greenday</code>라는 별도 캘린더를 하나 만들어 거기에만</b> 일정을 씁니다. 사용자의 기존 캘린더는 목록조차 보지 않습니다.
+이 로그인 창구를 Google에 등록하는 것이 이 절입니다. 클라이언트 ID는 비밀이 아니고 빌드할 때 앱 안에 들어갑니다.</p>
+
+<p class="path">Google 콘솔은 2025년에 OAuth 화면을 <b>Google 인증 플랫폼</b>(영문 Google Auth Platform)으로 재편했습니다.
+메뉴 이름이 아래와 조금 다르면 가장 가까운 것을 고르고, 막히면 화면을 캡처해 보여 주세요.</p>
+
+<div class="step">
+  <div class="step-n">B1</div>
+  <div class="step-body">
+    <h3>프로젝트 만들기</h3>
+    <ol>
+      <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com → 새 프로젝트</a>.</li>
+      <li>프로젝트 이름 <code>Greenday</code> → <span class="click">만들기</span>. 만들어지면 위쪽 프로젝트 선택기에서 <code>Greenday</code>가 골라져 있는지 확인합니다.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B2</div>
+  <div class="step-body">
+    <h3>Google Calendar API 켜기</h3>
+    <ol>
+      <li><a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">API 라이브러리 → Google Calendar API</a>.</li>
+      <li><span class="click">사용</span>(Enable). 이미 "API 사용 설정됨"이면 그대로 둡니다.</li>
+    </ol>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B3</div>
+  <div class="step-body">
+    <h3>Google 인증 플랫폼 시작 — 앱 정보</h3>
+    <p><a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google 인증 플랫폼 → 개요</a>에서 <span class="click">시작하기</span>를 누르면 네 단계 마법사가 나옵니다.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>칸</th><th>넣을 값</th></tr></thead>
+      <tbody>
+        <tr><td>앱 이름</td><td><code>Greenday</code></td></tr>
+        <tr><td>사용자 지원 이메일</td><td>당신의 Gmail(드롭다운에 나오는 것). 사용자 동의 화면에 보입니다</td></tr>
+        <tr><td>대상(Audience)</td><td><b>외부</b>(External). 내부는 Google Workspace 조직용입니다</td></tr>
+        <tr><td>연락처 정보</td><td><code>support@begreen.dev</code> — Google이 공지를 보내는 주소</td></tr>
+        <tr><td>정책 동의</td><td>체크 → <span class="click">만들기</span></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B4</div>
+  <div class="step-body">
+    <h3>브랜딩 — 주소 넣기</h3>
+    <p>왼쪽 메뉴 <span class="click">브랜딩</span>(Branding).</p>
+    <div class="scroll"><table>
+      <thead><tr><th>칸</th><th>넣을 값</th></tr></thead>
+      <tbody>
+        <tr><td>앱 로고</td><td><b>비워 두세요.</b> 로고를 올리면 Google의 브랜드 확인 절차가 붙어 게시가 늦어질 수 있습니다</td></tr>
+        <tr><td>애플리케이션 홈페이지</td><td><code>https://begreen.dev/greenday</code></td></tr>
+        <tr><td>개인정보처리방침 링크</td><td><code>https://begreen.dev/privacy</code></td></tr>
+        <tr><td>서비스 약관 링크</td><td><code>https://begreen.dev/terms</code></td></tr>
+        <tr><td>승인된 도메인</td><td><code>begreen.dev</code></td></tr>
+        <tr><td>개발자 연락처</td><td><code>support@begreen.dev</code></td></tr>
+      </tbody>
+    </table></div>
+    <p class="path">세 주소 모두 2026-10-06에 열리는 것을 확인했습니다. → <span class="click">저장</span></p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B5</div>
+  <div class="step-body">
+    <h3>데이터 액세스 — 범위 하나 추가</h3>
+    <ol>
+      <li>왼쪽 메뉴 <span class="click">데이터 액세스</span>(Data Access) → <span class="click">범위 추가 또는 삭제</span>.</li>
+      <li>패널 아래쪽 <b>직접 범위 추가</b> 칸에 아래를 붙여넣고 <span class="click">표에 추가</span> → <span class="click">업데이트</span>.</li>
+    </ol>
+    <div class="cmd"><pre id="c-scope">https://www.googleapis.com/auth/calendar.app.created</pre><button type="button" data-copy="c-scope">복사</button></div>
+    <ol start="3">
+      <li>화면 아래 <span class="click">저장</span>.</li>
+    </ol>
+    <div class="warn-box">
+      <strong>여기서 하나만 봐 주세요.</strong> 추가된 범위가 <b>"민감하지 않은 범위"</b> 표에 들어갔는지,
+      <b>"민감한 범위"</b> 표에 들어갔는지. 저장소 문서는 민감하지 않다고 적고 있지만 Google 공식 문서에서는 확인되지 않았습니다.
+      Google 화면이 정답이니, 어느 쪽인지 클라이언트 ID와 함께 알려 주세요.
+      <ul>
+        <li><b>민감하지 않음</b> → 심사 없이 B7에서 바로 게시할 수 있습니다.</li>
+        <li><b>민감함</b> → 게시하려면 Google 앱 인증(설명 영상·사용 이유 작성, 보통 수 일~수 주)이 필요합니다. 그 준비물은 제가 따로 정리해 드립니다.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B6</div>
+  <div class="step-body">
+    <h3>클라이언트 만들기 — 이게 전달할 값</h3>
+    <ol>
+      <li>왼쪽 메뉴 <span class="click">클라이언트</span>(Clients) → <span class="click">클라이언트 만들기</span>.</li>
+      <li>애플리케이션 유형: <span class="click">데스크톱 앱</span>.
+        <span class="path">(iOS·Android·웹 애플리케이션이 아닙니다. 번들 ID나 리디렉션 URI를 묻는 칸이 나오면 유형을 잘못 고른 것입니다.)</span></li>
+      <li>이름: <code>Greenday macOS</code> → <span class="click">만들기</span>.</li>
+      <li>뜨는 창의 <b>클라이언트 ID</b>를 복사합니다. 모양은 이렇습니다.</li>
+    </ol>
+    <div class="cmd"><pre>123456789012-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com</pre></div>
+    <p class="path">같은 창의 <b>클라이언트 보안 비밀</b>(<code>GOCSPX-…</code>)과 JSON 다운로드는 무시하세요. 앱은 PKCE 방식이라 보안 비밀을 쓰지 않습니다.
+    클라이언트 ID는 나중에도 클라이언트 목록에서 다시 볼 수 있습니다.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B7</div>
+  <div class="step-body">
+    <h3>대상 — 테스트 사용자 추가, 그리고 출시 전 게시</h3>
+    <ol>
+      <li>왼쪽 메뉴 <span class="click">대상</span>(Audience) → 테스트 사용자 → <span class="click">Add users</span> → 당신의 Gmail 주소 → 저장.
+        지금은 게시 상태가 <b>테스트</b>라서, 이 목록에 있는 계정만 로그인됩니다. 제가 TestFlight 빌드로 연결을 확인할 때 이 계정을 씁니다.</li>
+      <li><b>출시 직전에</b> 같은 화면의 <span class="click">앱 게시</span>(Publish app)를 눌러 <b>프로덕션</b>으로 바꿉니다.
+        그 전에는 아무도 연결할 수 없습니다.</li>
+    </ol>
+    <div class="warn-box">
+      <strong>테스트 상태로 출시하면 안 되는 이유.</strong> 테스트 상태의 외부 앱이 받는 리프레시 토큰은 7일 뒤 만료됩니다.
+      테스트 사용자도 일주일마다 다시 로그인해야 하고, 목록에 없는 사람은 아예 연결되지 않습니다.
+      App Store 심사에 내기 전에 게시하라고 제가 그때 다시 알려 드립니다.
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-n">B8</div>
+  <div class="step-body">
+    <h3>전달</h3>
+    <p>대화창에 이렇게 붙여 주세요.</p>
+    <div class="cmd"><pre id="c-msg">프로파일 넣었어.
+Google 클라이언트 ID: 123456789012-…….apps.googleusercontent.com
+범위 분류: 민감하지 않음 (또는 민감함)</pre><button type="button" data-copy="c-msg">복사</button></div>
+    <p class="path">GitHub Actions 자동 릴리스를 쓸 거라면 이 값을 저장소 Settings → Secrets → Actions에
+    <code>GOOGLE_OAUTH_CLIENT_ID</code>로도 넣어야 합니다. 로컬 릴리스만 하면 필요 없습니다.</p>
+  </div>
+</div>
+
+<!-- ───────────────────────────── C ───────────────────────────── -->
+<h2>C. 받은 뒤 제가 하는 일</h2>
+
+<div class="scroll"><table>
+  <thead><tr><th>순서</th><th>무엇</th><th>당신의 확인</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>npm run mas:preflight</code> — 6개 항목 전부 ✓</td><td>—</td></tr>
+    <tr><td>2</td><td><code>npm run mas:build</code> — 헬스 스택(typecheck·lint·테스트) 뒤 서명된 유니버설 pkg.
+      electron-builder 26으로 서명 빌드를 실제로 도는 첫 번째라, 깨지면 고칩니다</td><td>—</td></tr>
+    <tr><td>3</td><td><code>npm run mas:upload</code> — 검증 후 App Store Connect로 업로드</td><td><b>업로드 직전에 묻습니다</b></td></tr>
+    <tr><td>4</td><td>TestFlight 내부 테스트로 설치 → 샌드박스에서 Google 연결(루프백 콜백)·알림·데이터 저장 확인</td><td>TestFlight 설치는 당신 맥에서</td></tr>
+    <tr><td>5</td><td>직접 배포판: <code>GOOGLE_OAUTH_CLIENT_ID=… npm run release</code> — 서명·공증된 dmg, draft 릴리스</td><td>공개(draft 해제)는 당신이</td></tr>
+  </tbody>
+</table></div>
+
+<p class="path">App Store Connect 앱 레코드 생성과 심사 제출은 그다음입니다. 레코드를 만들 때 Bundle ID는 <b><code>com.begreen.greenday</code></b>를 고르세요.
+만든 뒤에는 바꿀 수 없습니다. 메타데이터·심사 답변 문구는 <code>docs/app-store-submission.md</code>에 준비돼 있습니다.</p>
+
+<footer>
+  관련 문서: <code>docs/howto-출시-준비-체크리스트.html</code>(인증서 전체) ·
+  <code>docs/howto-Google-OAuth-클라이언트.md</code>(앱이 OAuth를 어떻게 쓰는지) ·
+  <code>scripts/mas-preflight.sh</code>(프로파일 검사 규칙)
+</footer>
+
+</main>
+<script>
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var el = document.getElementById(btn.getAttribute('data-copy'));
+      var text = el.textContent;
+      var done = function () { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1500); };
+      var select = function () {
+        var r = document.createRange(); r.selectNodeContents(el);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        btn.textContent = '⌘C로 복사';
+      };
+      try {
+        navigator.clipboard.writeText(text).then(done, select);
+      } catch (e) { select(); }
+    });
+  });
+</script>
+</body>
+</html>

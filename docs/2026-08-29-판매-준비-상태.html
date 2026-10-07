@@ -1,0 +1,300 @@
+<title>지금 팔 수 있는가 — 판매 준비 상태</title>
+<style>
+:root {
+  --ground:#F8F9FB; --surface:#FFFFFF; --sunk:#EEF0F5;
+  --ink:#12151D; --ink-soft:#3D4356; --ink-mute:#6B7185;
+  --rule:#E0E3EC; --rule-soft:#ECEEF4;
+  --go:#1F7A4D; --go-bg:#E7F3EC;
+  --stop:#C0342A; --stop-bg:#FBECEA;
+  --warn:#91600B; --warn-bg:#FAF2E0;
+  --info:#2C5FA8; --info-bg:#E9F0FA;
+  --console:#7A3E9D; --console-bg:#F3EBF9;
+  --mono:'SF Mono','JetBrains Mono','IBM Plex Mono',Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1016; --surface:#151822; --sunk:#1A1E2A;
+    --ink:#E7E9F0; --ink-soft:#B6BBCB; --ink-mute:#8C92A6;
+    --rule:#252938; --rule-soft:#1E222E;
+    --go:#5DBE8B; --go-bg:#11251B;
+    --stop:#FF7A6B; --stop-bg:#2A1512;
+    --warn:#DFA44C; --warn-bg:#281F11;
+    --info:#79ADEB; --info-bg:#131F2E;
+    --console:#C08FE0; --console-bg:#221730;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1016; --surface:#151822; --sunk:#1A1E2A;
+  --ink:#E7E9F0; --ink-soft:#B6BBCB; --ink-mute:#8C92A6;
+  --rule:#252938; --rule-soft:#1E222E;
+  --go:#5DBE8B; --go-bg:#11251B;
+  --stop:#FF7A6B; --stop-bg:#2A1512;
+  --warn:#DFA44C; --warn-bg:#281F11;
+  --info:#79ADEB; --info-bg:#131F2E;
+  --console:#C08FE0; --console-bg:#221730;
+}
+*{box-sizing:border-box}
+/* 한글은 기본값(word-break:normal)에서 **음절 사이 아무 데나** 끊긴다 —
+   "테스트"가 "테스 / 트"로, "시작일조차"가 "시작일조 / 차"로 갈린다.
+   라틴은 단어 사이에서만 끊기므로 이 문제가 없어 눈에 잘 안 띈다.
+   keep-all은 띄어쓰기에서만 끊는다. 대신 끊을 수 없는 긴 토큰(URL·식별자)이
+   그대로 넘칠 수 있어 overflow-wrap을 함께 준다. */
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;
+  word-break:keep-all;overflow-wrap:break-word}
+.wrap{max-width:980px;margin:0 auto;padding:0 26px 110px}
+
+header.mast{padding:56px 0 28px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:0;color:var(--ink-mute);margin:0 0 15px}
+h1{font-size:clamp(30px,4.6vw,46px);line-height:1.1;letter-spacing:-.025em;font-weight:700;margin:0 0 17px;text-wrap:balance}
+.lede{font-size:17.5px;color:var(--ink-soft);margin:0;max-width:66ch;text-wrap:pretty}
+.factbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);margin:26px 0 0}
+.fact{background:var(--surface);padding:14px 16px}
+.fact .k{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0;color:var(--ink-mute);display:block;margin-bottom:5px}
+.fact .v{font-family:var(--sans);font-size:13.5px;color:var(--ink-soft)}
+.fact .v.ok{color:var(--go);font-weight:600}
+.fact .v.no{color:var(--stop);font-weight:600}
+
+h2{font-size:23px;font-weight:700;letter-spacing:-.015em;margin:0;padding-bottom:11px;border-bottom:1px solid var(--ink);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h2 .ph{font-family:var(--sans);font-size:12.5px;letter-spacing:0;color:var(--ink-mute);font-weight:400}
+.sec{margin:56px 0 0}
+.sec-note{font-size:14.5px;color:var(--ink-mute);margin:13px 0 0;max-width:72ch;text-wrap:pretty}
+
+.tw{overflow-x:auto;margin:20px 0 0}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:620px}
+th,td{text-align:left;padding:11px 16px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+th{font-family:var(--sans);font-size:11.5px;font-weight:600;letter-spacing:0;color:var(--ink-mute);border-bottom:1px solid var(--rule);white-space:nowrap}
+td.sym{font-weight:600;width:25%}
+
+.step{display:grid;grid-template-columns:56px 1fr;gap:0 22px;padding:28px 0;border-bottom:1px solid var(--rule-soft)}
+/* 그리드 자식은 기본이 min-width:auto라 **내용보다 작아지지 않는다.** 안에 있는
+   표(min-width:620px)가 칸을 밀어내서, 좁은 화면에서 .tw의 overflow-x가 아무
+   일도 못 하고 문서 전체가 옆으로 스크롤된다(420px에서 실측). */
+.step > *,.check li > *{min-width:0}
+.stepno{font-family:var(--mono);font-size:15px;font-weight:700;line-height:1.5;color:var(--ink-mute);font-variant-numeric:tabular-nums;position:sticky;top:18px;align-self:start;letter-spacing:-.02em}
+.step.gate .stepno{color:var(--stop)}
+.step h3{font-size:19px;font-weight:650;letter-spacing:-.01em;margin:0 0 6px;line-height:1.35;text-wrap:balance}
+.where{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0;padding:2.5px 8px;border-radius:2px;display:inline-block;margin:0 0 11px}
+.w-con{background:var(--console-bg);color:var(--console)}
+.w-term{background:var(--sunk);color:var(--ink-mute)}
+.step p{margin:0 0 12px;max-width:74ch;text-wrap:pretty}
+.step p:last-child{margin-bottom:0}
+.step ul,.step ol{max-width:74ch;padding-left:21px;margin:0 0 12px}
+.step li{margin-bottom:7px}
+
+code{font-family:var(--mono);font-size:.875em;background:var(--sunk);padding:1.5px 5px;border-radius:2px;word-break:break-word}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.65;background:var(--sunk);border-left:2px solid var(--rule);padding:14px 17px;overflow-x:auto;margin:0 0 13px}
+pre code{background:none;padding:0;font-size:inherit}
+pre.cmd{border-left-color:var(--go)}
+pre.val{border-left-color:var(--console)}
+
+.call{margin:0 0 13px;padding:13px 17px;font-size:14.5px;line-height:1.62;max-width:74ch;border-left:2px solid}
+.call .lb{font-family:var(--sans);font-size:11.5px;letter-spacing:0;display:block;margin-bottom:5px;font-weight:600}
+.call:last-child{margin-bottom:0}
+.stopc{background:var(--stop-bg);border-color:var(--stop)}.stopc .lb{color:var(--stop)}
+.warnc{background:var(--warn-bg);border-color:var(--warn)}.warnc .lb{color:var(--warn)}
+.infoc{background:var(--info-bg);border-color:var(--info)}.infoc .lb{color:var(--info)}
+.goc{background:var(--go-bg);border-color:var(--go)}.goc .lb{color:var(--go)}
+.conc{background:var(--console-bg);border-color:var(--console)}.conc .lb{color:var(--console)}
+
+.check{list-style:none;padding:0;margin:18px 0 0;max-width:76ch}
+.check li{display:grid;grid-template-columns:24px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--rule-soft);font-size:15px;align-items:start}
+.check li::before{content:"\2610";font-family:var(--mono);font-size:17px;color:var(--ink-mute);line-height:1.4}
+.check li b{font-weight:650}
+/* **2열로 못박는다.** li는 `24px 1fr` 그리드이고 항목이 셋이다(::before, <b>,
+   .why). 자동 배치에 맡기면 셋째가 둘째 줄 **첫 열(24px)**로 밀려나서, 설명이
+   폭 24px 세로 기둥으로 2글자씩 쌓인다(실측: 폭 24px). */
+.check li .why{grid-column:2;display:block;font-size:13.5px;color:var(--ink-mute);margin-top:3px;line-height:1.55}
+
+footer{margin-top:68px;padding-top:24px;border-top:2px solid var(--ink);font-size:14px;color:var(--ink-mute);max-width:76ch}
+footer p{margin:0 0 11px}
+
+@media (max-width:760px){.step{grid-template-columns:1fr;gap:10px}.stepno{position:static}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<style>.w-adm{background:var(--go-bg);color:var(--go)}</style>
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">판매 준비 상태 · 2026-08-29 실측</p>
+  <div style="border:2px solid var(--stop);border-radius:8px;padding:12px 16px;margin:0 0 20px;background:var(--stop-bg)">
+    <strong>⚠ 2026-10-06: 이 문서의 번들 ID는 낡았습니다.</strong> 2026-09-07에
+    <code>com.supaicy.haru</code> → <code>com.begreen.greenday</code>로 바뀌었습니다.
+    App Store Connect 레코드와 프로비저닝 프로파일은 <strong><code>com.begreen.greenday</code></strong>로
+    만드세요 — ASC 레코드의 Bundle ID는 만든 뒤 바꿀 수 없습니다.
+    현재 절차는 <code>docs/howto-출시-준비-체크리스트.html</code>.
+  </div>
+  <h1>지금 팔 수 있는가</h1>
+  <p class="lede">웹 직판과 App Store를 나눠서 봤다. 아래 상태는 전부 <strong>오늘 직접 측정한 값</strong>이다 — 문서에 적혀 있던 것을 그대로 옮기지 않고, 인증서·URL·릴리스·플래그를 하나씩 다시 확인했다. <strong>네 가지가 그 사이 바뀌어 있었다.</strong></p>
+
+  <div class="factbar">
+    <div class="fact"><span class="k">워커 배포</span><span class="v no">아직 — pay.begreen.dev 응답 없음</span></div>
+    <div class="fact"><span class="k">IS_ENFORCED</span><span class="v no">false — 키가 아무것도 안 잠금</span></div>
+    <div class="fact"><span class="k">공개된 최신 릴리스</span><span class="v no">v1.4.1 (4월) · 현재 2.0.2</span></div>
+    <div class="fact"><span class="k">MAS 빌드 점검</span><span class="v ok">5개 항목 전부 통과</span></div>
+    <div class="fact"><span class="k">개인정보방침 URL</span><span class="v no">404 — 주소가 옮겨졌다</span></div>
+  </div>
+</header>
+
+<section class="sec">
+  <h2>1. 웹 직판 <span class="ph">결제는 되지만 판매는 성립하지 않는다</span></h2>
+  <p class="sec-note">결제 인프라(토스 키·Paddle 승인)만 끝나면 <strong>돈은 받아진다.</strong> 결제 → 키 발급 → 메일 발송까지 배관은 다 있고 테스트도 붙어 있다. 그런데 그 상태로 팔면 <strong>고객이 산 것이 아무것도 아니게 된다.</strong> 셋이 막혀 있다.</p>
+
+  <div class="step gate">
+    <div class="stepno">1</div>
+    <div>
+      <h3>산 키가 아무 일도 하지 않는다</h3>
+      <pre class="val"><code>src/main/licensing/service.ts:33
+export const IS_ENFORCED = false</code></pre>
+      <p>이게 false인 동안 앱은 라이선스를 <strong>요구하지 않는다.</strong> 미인증 상태가 앱 동작을 아무것도 바꾸지 않고, 트라이얼 시작일조차 기록되지 않는다.</p>
+      <div class="call stopc">
+        <span class="lb">이대로 팔면</span>
+        돈을 낸 사람과 안 낸 사람이 <strong>완전히 같은 앱</strong>을 쓴다. 환불 사유가 되고, 나중에 켜면 "전에 산 사람"과 "그냥 쓰던 사람"을 구분하는 문제가 남는다.
+      </div>
+      <p>꺼진 채로 출하한 것은 의도된 설계다 — 유료 전환이 재설계가 아니라 <strong>플래그 하나 + 서버 배포</strong>가 되도록 배관을 잠들여 뒀다. 켜는 시점은 "서버 배포가 끝나고 실거래로 활성화까지 확인한 뒤"라고 코드 주석이 못박고 있다.</p>
+    </div>
+  </div>
+
+  <div class="step gate">
+    <div class="stepno">2</div>
+    <div>
+      <h3>앱을 받을 곳이 없다</h3>
+      <p><code>pay.begreen.dev</code>에 있는 페이지는 이것이 전부다:</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>페이지</th><th>역할</th></tr></thead>
+          <tbody>
+            <tr><td class="sym"><code>/buy</code></td><td>구매</td></tr>
+            <tr><td class="sym"><code>/success</code></td><td>키 전달</td></tr>
+            <tr><td class="sym"><code>/recover</code></td><td>키 재발송</td></tr>
+            <tr><td class="sym"><code>/terms · /refund · /privacy · /contact</code></td><td>법적 문서</td></tr>
+            <tr><td class="sym"><strong>다운로드</strong></td><td><strong>없다</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><code>begreen.dev</code>(최상위)는 아무 데도 안 간다 — routes에 <code>pay.begreen.dev</code>만 있다. 랜딩 페이지는 <code>begreen/mockups/greenday.html</code>에 <strong>목업으로만</strong> 있다.</p>
+      <div class="call warnc">
+        <span class="lb">구매자 동선이 끊긴다</span>
+        결제하고 키를 받은 사람이 <strong>앱을 어디서 받는지 알 수 없다.</strong> 성공 화면도 "앱의 설정 ▸ 라이선스에 붙여넣으세요"라고만 하고, 그 앱을 어떻게 구하는지는 말하지 않는다.
+      </div>
+    </div>
+  </div>
+
+  <div class="step gate">
+    <div class="stepno">3</div>
+    <div>
+      <h3>공개된 릴리스가 넉 달 전 버전이다</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>구분</th><th>버전</th><th>상태</th></tr></thead>
+          <tbody>
+            <tr><td class="sym">package.json</td><td><code>2.0.2</code></td><td>지금 개발 중</td></tr>
+            <tr><td class="sym">최신 태그</td><td><code>v2.0.1</code></td><td><strong>Draft — 공개 안 됨</strong></td></tr>
+            <tr><td class="sym">공개된 최신</td><td><code>v1.4.1</code></td><td>2026-04-20</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>다운로드 경로를 만들어도 지금 링크를 걸면 <strong>4월 버전</strong>이 나간다.</p>
+    </div>
+  </div>
+
+  <div class="call infoc" style="margin-top:26px">
+    <span class="lb">정리</span>
+    결제 인프라는 <strong>필요조건이지 충분조건이 아니다.</strong> 위 셋을 풀지 않으면 "결제는 되는데 파는 게 없는" 상태가 된다.
+  </div>
+</section>
+
+<section class="sec">
+  <h2>2. Mac App Store <span class="ph">빌드는 준비됐고 콘솔 작업이 남았다</span></h2>
+  <p class="sec-note"><code>docs/app-store-submission.md</code>가 7월 29일자로 이미 있었는데, 한 달 사이 상태가 바뀌어 <strong>네 항목이 틀려 있었다.</strong> 오늘 전부 다시 재서 문서를 갱신했다.</p>
+
+  <h3 style="font-size:16px;margin:28px 0 0">이미 끝나 있던 것 <span style="font-weight:400;color:var(--ink-mute);font-size:14px">— 문서엔 미완료로 적혀 있었다</span></h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>항목</th><th>실측 결과</th></tr></thead>
+      <tbody>
+        <tr><td class="sym">앱 서명 인증서</td><td><code>Apple Distribution: MINSEOK SHIN (32R6RHXU36)</code></td></tr>
+        <tr><td class="sym">설치 패키지 서명 인증서</td><td>있음</td></tr>
+        <tr><td class="sym">프로비저닝 프로파일</td><td><code>haru MAS</code> · App ID <code>32R6RHXU36.com.supaicy.haru</code> · macOS · <strong>2027-07-30까지</strong></td></tr>
+        <tr><td class="sym">Bundle ID 등록</td><td>프로파일이 그 App ID로 발급됨 — 등록돼 있다</td></tr>
+        <tr><td class="sym">샌드박스 권한</td><td>최소 3개만 — <code>app-sandbox</code> · <code>network.client</code> · <code>files.user-selected.read-write</code></td></tr>
+        <tr><td class="sym">MAS에서 꺼져야 하는 기능</td><td>자동 업데이트·전역 단축키가 <code>capabilities.ts</code> 한 곳에서 분기됨</td></tr>
+        <tr><td class="sym">스크린샷</td><td>2880×1800 6장</td></tr>
+        <tr><td class="sym">메타데이터·심사 노트</td><td>복붙 가능한 원문이 문서 3·4절에</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call goc" style="margin-top:20px">
+    <span class="lb">사전 점검 통과</span>
+    <code>npm run mas:preflight</code> — 인증서 / 프로파일 / 샌드박스 권한 / MAS 분기 / 번들 ID 일관성 <strong>다섯 항목 전부 통과.</strong> 빌드는 지금 바로 돌릴 수 있다.
+  </div>
+
+  <h3 style="font-size:16px;margin:34px 0 0">제출을 막는 것</h3>
+  <div class="call stopc">
+    <span class="lb">개인정보처리방침 URL이 404다</span>
+    문서에는 <strong>"✅ 게시 완료 — HTTP 200 확인"</strong>으로 적혀 있는데 지금은 안 열린다. 저장소 이름이 <code>haru</code> → <code>greenDay</code>로 바뀌면서 GitHub Pages 주소가 옮겨졌다.
+  </div>
+  <pre class="val"><code>옛 주소  https://supaicy.github.io/haru/privacy.html      → 404
+새 주소  https://supaicy.github.io/greenDay/privacy.html  → 200
+         https://supaicy.github.io/greenday/privacy.html  → 404  ← 소문자 d는 안 된다</code></pre>
+  <p>Pages 경로는 저장소 이름을 그대로 쓰고, 저장소는 <code>greenDay</code>다. <strong>대소문자가 맞아야 한다.</strong></p>
+  <p>이 문서 스스로가 "첫 제출 반려의 자주 걸리는 지점" <strong>1번</strong>으로 꼽아 둔 항목이다. 지원 URL·마케팅 URL도 같이 깨져 있어 전부 새 주소로 고쳐 커밋했다.</p>
+
+  <h3 style="font-size:16px;margin:34px 0 0">남은 콘솔 작업</h3>
+  <ul class="check">
+    <li><b>App Store Connect 앱 레코드 생성</b><span class="why">macOS · 이름 Greenday · Bundle ID com.supaicy.haru · SKU는 아무 값</span></li>
+    <li><b>메타데이터 입력</b><span class="why">부제·설명·키워드·카테고리. 문서 3절에 한국어·영어 원문이 복붙 가능한 상태로 있다</span></li>
+    <li><b>스크린샷 6장 업로드</b><span class="why">이미 촬영돼 있다 — <code>docs/app-store/screenshots/</code></span></li>
+    <li><b>App Privacy 설문</b><span class="why">답은 "No, we do not collect data" — 근거와 심사 노트 원문이 문서 4절에</span></li>
+    <li><b>빌드 업로드 → 제출</b><span class="why"><code>npm run mas:build</code> → Transporter로 .pkg 업로드</span></li>
+    <li><b>Google OAuth 클라이언트</b><span class="why">캘린더 연동을 쓰려면 별도. <code>calendar.app.created</code> 범위라 심사 부담은 작다</span></li>
+  </ul>
+
+  <div class="call warnc">
+    <span class="lb">빌드 명령이 문서와 다르다</span>
+    문서 7절이 가리키는 <code>npm run package:mas</code>는 끝이 <code>--config</code>로 잘려 값이 비어 있다. <strong><code>npm run mas:build</code></strong>를 쓴다 — 그쪽이 preflight를 먼저 돌리고 universal로 빌드한다.
+  </div>
+</section>
+
+<section class="sec">
+  <h2>3. "준비 중" 화면 <span class="ph">구현 완료</span></h2>
+  <p class="sec-note">"결제가 실제로 불가능할 때는 미서비스 화면을, 연동되면 결제 화면을" — 맞는 판단이라 그대로 만들었다.</p>
+
+  <p><strong>비활성 버튼 셋은 "준비 중"이 아니라 "고장"으로 읽힌다.</strong> 지금이 정확히 그 상태였다 — 토스 클라이언트 키 없음, Paddle·크립토 링크 없음.</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>열린 레일</th><th>보이는 화면</th></tr></thead>
+      <tbody>
+        <tr><td class="sym">하나도 없음</td><td>제품명·소개 + <strong>"아직 판매를 시작하지 않았습니다"</strong>. 결제 UI를 아예 안 그린다</td></tr>
+        <tr><td class="sym">일부만</td><td><strong>열린 것만</strong> 탭에 남는다. 닫힌 탭은 지운다 — 회색으로 남겨 두면 그 수단을 기다려야 하는지 알 수 없다</td></tr>
+        <tr><td class="sym">전부</td><td>기존 결제 화면 그대로</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="call stopc" style="margin-top:20px">
+    <span class="lb">같이 잡은 것 — 심사를 막을 뻔했다</span>
+    법적 링크와 사업자 정보가 <code>#shop</code> 안에 있어서 <strong>준비 중 화면에서 통째로 사라졌다.</strong> 결제사 심사는 레일이 아직 안 열린 상태에서 이뤄지므로, 심사관이 보는 화면에 약관·환불·개인정보·연락처가 <strong>하나도 없었다.</strong> "Paddle이 이 넷에 닿는지를 본다"는 주석이 바로 위에 붙어 있었는데도 그랬다. <code>#shop</code> 밖으로 뺐다.
+  </div>
+
+  <p>구현 중에 한 번 깨졌고 실측으로 잡았다 — 닫힌 레일을 <strong>버튼 라벨을 세우기 전에</strong> 지우면 <code>$("#pay-toss").textContent = …</code> 세 줄이 없는 요소를 건드려 던지고, 그러면 화면이 통째로 안 뜬다. 지우는 시점을 라벨 뒤로 옮겼다.</p>
+</section>
+
+<section class="sec">
+  <h2>팔기 전에 정해야 할 것</h2>
+  <p class="sec-note">아래 둘은 코드 문제가 아니라 결정이다. 정해지지 않으면 결제 인프라가 끝나도 팔 수 없다.</p>
+  <ul class="check">
+    <li><b>다운로드를 어디서 주나</b><span class="why">랜딩 페이지를 세울 것인가(<code>begreen.dev</code> 최상위), 아니면 구매 완료 화면과 키 메일에 GitHub 릴리스 링크를 직접 걸 것인가. 후자가 훨씬 빠르지만 "제품 소개"가 없는 채로 파는 셈이 된다</span></li>
+    <li><b><code>IS_ENFORCED</code>를 언제 켜나</b><span class="why">코드 주석의 조건은 "서버 배포가 끝나고 실거래로 활성화까지 확인한 뒤". 켜는 순간부터 트라이얼 시작일이 기록되므로, 켜기 전에 산 사람들은 별도로 챙겨야 한다</span></li>
+    <li><b>v2.0.1 Draft를 공개할 것인가</b><span class="why">지금 공개된 최신은 4월의 v1.4.1이다. 다운로드 경로를 만들기 전에 이것부터 정리해야 한다</span></li>
+  </ul>
+</section>
+
+<footer>
+  <p><strong>순서에 대한 의견.</strong> 웹 직판과 App Store는 서로를 기다릴 필요가 없다. App Store 쪽은 <strong>개인정보방침 URL만 고치면</strong> 오늘 제출할 수 있는 상태이고(빌드 점검 5개 통과), 스토어 빌드는 <code>capabilities</code>가 라이선스를 강제하지 않으므로 <code>IS_ENFORCED</code>와 무관하게 나갈 수 있다. 웹 직판은 위의 셋을 푸는 데 시간이 더 걸린다.</p>
+  <p><strong>이 문서의 근거.</strong> 인증서는 <code>security find-identity</code>, 프로파일은 <code>security cms</code>로 복호화해 만료·App ID를 읽었고, URL은 전부 <code>curl</code>로 상태 코드를 확인했다. 릴리스 상태는 <code>gh release</code>, 플래그는 소스 직접 확인이다.</p>
+</footer>
+
+</div>

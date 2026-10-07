@@ -1,10 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { Command, CornerDownLeft, Calendar } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store/useStore'
 import { parseNaturalDateTime } from '../../utils/naturalDate'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 
 export function QuickAdd() {
-  const { showQuickAdd, setShowQuickAdd, addTask, theme } = useStore()
+  const { t } = useTranslation()
+  const showQuickAdd = useStore((s) => s.showQuickAdd)
+  const setShowQuickAdd = useStore((s) => s.setShowQuickAdd)
+  const addTask = useStore((s) => s.addTask)
+  const theme = useStore((s) => s.theme)
   const isDark = theme === 'dark'
   const [input, setInput] = useState('')
   const [parsedDate, setParsedDate] = useState<string | null>(null)
@@ -18,8 +24,6 @@ export function QuickAdd() {
       setParsedDate(null)
       setParsedTime(null)
       setParsedTitle('')
-      // auto-focus 지연 (모달 렌더링 후)
-      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [showQuickAdd])
 
@@ -53,19 +57,23 @@ export function QuickAdd() {
     setShowQuickAdd(false)
   }
 
-  if (!showQuickAdd) return null
-
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-start justify-center pt-[20vh] bg-black/60 backdrop-blur-sm"
-      onClick={() => setShowQuickAdd(false)}
-    >
-      <div
-        className={`w-[540px] rounded-2xl shadow-2xl overflow-hidden transition-all animate-in fade-in slide-in-from-top-4 duration-200 ${
-          isDark ? 'bg-[#2C2C2E] border border-gray-700' : 'bg-white border border-gray-200'
-        }`}
-        onClick={(e) => e.stopPropagation()}
+    // 배경 클릭·Escape·포커스 트랩은 Radix Dialog가 담당. show 플래그로 mount를
+    // 감싸지 않는다 — open은 Dialog가 갖는다(CLAUDE.md 오버레이 규칙).
+    <Dialog open={showQuickAdd} onOpenChange={setShowQuickAdd}>
+      <DialogContent
+        showCloseButton={false}
+        aria-label={t('task.quickAdd')}
+        className="top-[20vh] w-[540px] translate-y-0 gap-0 overflow-hidden rounded-2xl p-0"
+        // 포커스는 Radix가 연다/닫는다. 예전에는 50ms setTimeout으로 넣었는데,
+        // 정리되지 않아 그 안에 닫으면 Radix가 트리거로 돌려준 포커스를 도로 뺏었다.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          inputRef.current?.focus()
+        }}
       >
+        <DialogTitle className="sr-only">{t('task.quickAdd')}</DialogTitle>
+        <DialogDescription className="sr-only">{t('task.quickAddPlaceholder')}</DialogDescription>
         {/* 입력 영역 */}
         <div className="p-5">
           <input
@@ -75,10 +83,10 @@ export function QuickAdd() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return
+              // Escape는 Dialog가 처리한다 — 여기서 중복으로 닫지 않는다.
               if (e.key === 'Enter') handleSubmit()
-              if (e.key === 'Escape') setShowQuickAdd(false)
             }}
-            placeholder="할 일을 입력하세요... (예: 내일 장보기)"
+            placeholder={t('task.quickAddPlaceholder')}
             className={`w-full text-lg bg-transparent outline-none ${
               isDark ? 'text-gray-100 placeholder-gray-500' : 'text-gray-800 placeholder-gray-400'
             }`}
@@ -89,11 +97,11 @@ export function QuickAdd() {
             <div className={`flex items-center gap-2 mt-3 text-sm ${isDark ? 'text-primary-400' : 'text-primary-600'}`}>
               <Calendar size={14} />
               <span>
-                마감일: {parsedDate}
+                {t('task.parsedDue', { date: parsedDate })}
                 {parsedTime ? ` ${parsedTime}` : ''}
               </span>
               <span className={`${isDark ? 'text-gray-500' : 'text-gray-400'}`}>|</span>
-              <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>제목: {parsedTitle}</span>
+              <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{t('task.parsedTitle', { title: parsedTitle })}</span>
             </div>
           )}
         </div>
@@ -107,16 +115,16 @@ export function QuickAdd() {
           <div className={`flex items-center gap-3 text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
             <span className="flex items-center gap-1">
               <CornerDownLeft size={12} />
-              추가
+              {t('task.add')}
             </span>
-            <span>Esc 닫기</span>
+            <span>{t('task.escToClose')}</span>
           </div>
           <div className={`flex items-center gap-1 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
             <Command size={11} />
             <span>Shift + A</span>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

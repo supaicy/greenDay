@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru · Mac App Store 배포 계획 & 자기검증 (2026-07-27)</title>
+<style>
+  :root{
+    --primary:#4A90D9; --primary-700:#2563eb; --primary-50:#eff6ff;
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626; --card:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo",Arial,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:40px 24px 80px}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px}
+  .kicker{color:var(--primary-700);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+  h1{font-size:28px;margin:6px 0 8px;line-height:1.25}
+  .sub{color:var(--muted);font-size:15px}
+  h2{font-size:20px;margin:36px 0 12px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:var(--primary);color:#fff;font-size:13px;font-weight:700;flex:none}
+  h3{font-size:15px;margin:16px 0 4px}
+  p{margin:8px 0}
+  .lead{font-size:16px;background:var(--primary-50);border:1px solid #dbeafe;border-radius:12px;padding:16px 18px;color:#1e3a8a}
+  .statline{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .status{font-size:12.5px;font-weight:700;padding:4px 12px;border-radius:999px}
+  .s-ok{background:#dcfce7;color:#166534}
+  .s-user{background:#fef3c7;color:#92400e}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:#f1f5f9;border-radius:5px;padding:1px 6px;color:#0f172a}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;color:#334155;font-weight:700;font-size:12px;letter-spacing:.03em}
+  ul.check{list-style:none;padding:0;margin:6px 0}
+  ul.check li{position:relative;padding:5px 0 5px 26px;font-size:14px;border-bottom:1px solid #f6f7f9}
+  ul.check li:last-child{border-bottom:0}
+  ul.check li::before{content:"☐";position:absolute;left:2px;top:4px;color:var(--muted);font-size:15px}
+  ul.done{list-style:none;padding:0;margin:6px 0}
+  ul.done li{position:relative;padding:5px 0 5px 26px;font-size:14px}
+  ul.done li::before{content:"✓";position:absolute;left:3px;top:4px;color:var(--green);font-weight:800}
+  .phase{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 18px 14px;margin-top:14px}
+  .who{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px}
+  .who-you{background:#fef3c7;color:#92400e}
+  .who-done{background:#dcfce7;color:#166534}
+  .warn{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;font-size:13.5px;color:#9a3412;margin-top:10px}
+  .foot{margin-top:36px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+  a{color:var(--primary-700)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="kicker">Mac App Store · Deployment Plan & Self-Verification</div>
+    <h1>Mac App Store 배포 계획 &amp; 자기검증</h1>
+    <div class="sub">2026-07-27 · haru v2.0.0 · appId <span class="code">com.haru.app</span></div>
+    <div class="statline">
+      <span class="status s-ok">코드/설정 준비 ✅</span>
+      <span class="status s-ok">MAS 빌드 dry-run 검증 ✅</span>
+      <span class="status s-ok">샌드박스 호환 ✅</span>
+      <span class="status s-user">Apple 계정·인증서 = 당신 필요</span>
+    </div>
+  </header>
+
+  <p class="lead">
+    결론부터: <b>코드·빌드 설정은 App Store에 올릴 준비가 됐습니다.</b> 자기검증(정적 스캔 + MAS 빌드 dry-run +
+    Info.plist 확인)을 모두 통과했고, MAS 빌드는 <b>서명 인증서 부재로만</b> 멈췄습니다. 남은 것은 코드가 아니라
+    <b>Apple 계정·인증서·App Store Connect 등록·업로드</b> — 비밀키라 코드에 넣을 수 없는, 당신만 할 수 있는 단계입니다.
+    아래 순서대로 진행하면 됩니다.
+  </p>
+
+  <h2><span class="n">✓</span> 자기검증 결과</h2>
+  <h3>1. 정적 스캔 — 샌드박스 호환</h3>
+  <ul class="done">
+    <li>MAS 비호환 API 없음: <span class="code">child_process/spawn/exec</span> 미사용(원클릭 Ollama pull은 HTTP <span class="code">/api/pull</span>이라 안전), 서버 리슨 없음(<span class="code">network.client</span>만 필요)</li>
+    <li>파일 쓰기는 전부 안전 범위: export는 <span class="code">user-selected.read-write</span>(save 다이얼로그), DB/첨부는 userData 샌드박스 컨테이너 내부</li>
+    <li><span class="code">globalShortcut</span>·<span class="code">autoUpdater</span>는 <span class="code">process.mas</span> 가드로 비활성, <span class="code">safeStorage</span>(Keychain)는 샌드박스 호환</li>
+    <li>entitlements ↔ 실제 코드 사용 일치: <span class="code">app-sandbox</span> + <span class="code">network.client</span> + <span class="code">files.user-selected.read-write</span></li>
+  </ul>
+  <h3>2. MAS 빌드 dry-run (<span class="code">npm run package:mas</span>, 인증서 없이)</h3>
+  <ul class="done">
+    <li>electron-vite build ✅ → 네이티브 의존성 arm64 리빌드 ✅</li>
+    <li><b>MAS 전용</b> electron 바이너리 다운로드(<span class="code">electron-v40.8.0-mas-arm64.zip</span>) → MAS 타겟 정상 인식 ✅</li>
+    <li>앱 번들 생성 <span class="code">dist/mas-arm64/haru.app</span> ✅, <b>오직 서명 단계에서만 중단</b>(<span class="code">CSC_IDENTITY_AUTO_DISCOVERY=false</span>)</li>
+  </ul>
+  <h3>3. 생성된 Info.plist</h3>
+  <table>
+    <thead><tr><th>키</th><th>값</th><th>확인</th></tr></thead>
+    <tbody>
+      <tr><td>CFBundleIdentifier</td><td><span class="code">com.haru.app</span></td><td>✅</td></tr>
+      <tr><td>CFBundleName</td><td>haru</td><td>✅</td></tr>
+      <tr><td>CFBundleShortVersionString / Version</td><td>2.0.0 / 2.0.0</td><td>✅ (재제출 시 Version↑ 필요)</td></tr>
+      <tr><td>LSApplicationCategoryType</td><td>public.app-category.productivity</td><td>✅</td></tr>
+      <tr><td>아키텍처</td><td>arm64</td><td>⚠ Intel 지원 시 universal 필요</td></tr>
+    </tbody>
+  </table>
+
+  <h2><span class="n">△</span> 이번에 수정한 것</h2>
+  <ul class="done">
+    <li><b>MAS 업데이트 UI 버그</b> (<span class="code">51f1bad</span>): MAS 빌드는 updater 이벤트가 오지 않아 Settings에 "업데이트 확인 중..."이 영구 표시되던 문제 → <span class="code">app:is-mas</span> IPC 추가, MAS면 "Mac App Store를 통해 자동 업데이트됩니다"로 대체 + 업데이트 버튼 숨김. (222 tests green)</li>
+  </ul>
+
+  <h2><span class="n">1</span> 배포 순서 — 당신이 진행할 단계</h2>
+
+  <div class="phase">
+    <h3>Phase 0 · 선행조건 <span class="who who-you">당신</span></h3>
+    <ul class="check">
+      <li><b>Apple Developer Program 가입</b> ($99/년) — <a href="https://developer.apple.com/programs/">developer.apple.com/programs</a></li>
+      <li>Team ID 확인 (Membership 페이지), <span class="code">xcode-select --install</span></li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 1 · 식별자 + 앱 레코드 <span class="who who-you">당신</span></h3>
+    <ul class="check">
+      <li>Apple Developer → Identifiers에 Bundle ID <span class="code">com.haru.app</span> 등록 (이미 선점됐으면 <span class="code">com.&lt;yourteam&gt;.haru</span>로 바꾸고 <span class="code">electron-builder.yml</span>의 <span class="code">appId</span>도 수정)</li>
+      <li>App Store Connect → 새 앱 생성: 이름(haru), Bundle ID, SKU, 기본 언어</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 2 · 인증서 + 프로비저닝 <span class="who who-you">당신</span></h3>
+    <ul class="check">
+      <li><b>Apple Distribution</b> 인증서 (앱 서명)</li>
+      <li><b>3rd Party Mac Developer Installer</b> 인증서 (.pkg 서명) — 없으면 MAS 빌드 실패</li>
+      <li>Mac App Store <b>프로비저닝 프로파일</b> 생성 → <span class="code">resources/embedded.provisionprofile</span>로 저장 (electron-builder 자동 인식)</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 3 · 빌드 <span class="who who-done">설정 준비됨</span></h3>
+    <ul class="check">
+      <li><span class="code">NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection" npm run package:mas</span></li>
+      <li>결과: <span class="code">dist/mas-arm64/haru-2.0.0.pkg</span> (Apple Distribution + Installer 인증서로 서명됨)</li>
+      <li>(선택) Intel 포함하려면 universal 빌드 — <span class="code">--x64</span> 추가 또는 universal 타겟</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 4 · 업로드 + 메타데이터 <span class="who who-you">당신</span></h3>
+    <ul class="check">
+      <li><b>Transporter</b>(Mac App Store 앱) 또는 <span class="code">xcrun notarytool</span>/<span class="code">altool</span>로 <span class="code">.pkg</span> 업로드</li>
+      <li>App Store Connect에 스크린샷(1280×800 등), 설명, 키워드, <b>개인정보 처리방침 URL</b>, 가격/지역 입력</li>
+      <li><b>App Privacy</b>: haru는 로컬 저장 + 온디바이스 AI라 기본 "데이터 수집 안 함". 단 외부 provider(OpenAI 등) 옵션이 있으므로 "선택 시 외부 전송" 고지 검토 (로컬 전용 잠금 기능이 있어 유리)</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <h3>Phase 5 · 심사 제출 + 대응 <span class="who who-you">당신</span></h3>
+    <ul class="check">
+      <li>심사 제출</li>
+      <li><b>심사 노트 권장</b>: AI 기능은 사용자가 별도 설치한 <b>로컬 Ollama 서버</b>(localhost)에 접속. Ollama 미설치여도 앱은 정상 동작(AI만 비활성). 심사관이 AI를 테스트하려면 Ollama 설치가 필요함을 명시</li>
+    </ul>
+  </div>
+
+  <div class="warn">
+    <b>재제출 주의:</b> 같은 버전을 다시 업로드하려면 <span class="code">CFBundleVersion</span>(빌드 번호)이 매번 증가해야 합니다.
+    electron-builder는 <span class="code">version</span>을 그대로 쓰므로, 재빌드 시 <span class="code">package.json</span>의 version을 올리거나
+    <span class="code">electron-builder.yml</span>에 <span class="code">buildVersion</span>을 따로 관리하세요.
+  </div>
+
+  <h2><span class="n">2</span> 요약 · 남은 블로커</h2>
+  <p>
+    코드/설정/빌드 파이프라인은 <b>준비 완료</b>. 유일한 블로커는 <b>Apple Developer 계정과 3종 인증서(+프로비저닝)</b> —
+    전부 Apple 로그인이 필요한 당신의 영역입니다. 인증서를 <span class="code">resources/embedded.provisionprofile</span>로 넣고
+    <span class="code">npm run package:mas</span>를 돌리면 서명된 <span class="code">.pkg</span>가 나오고, Transporter로 올리면 됩니다.
+    전체 세부 절차는 리포지토리의 <span class="code">docs/DEPLOYMENT.md</span>에도 정리돼 있습니다.
+  </p>
+
+  <div class="foot">
+    검증 커밋: MAS 업데이트 UI <span class="code">51f1bad</span>. 빌드 산출물 <span class="code">dist/</span>는 gitignore.
+    이 계획은 코드가 아니라 계정/인증서 단계라 제가 대신 수행할 수 없어 순서로 안내합니다 — 각 Phase에서 막히면 알려주세요.
+  </div>
+</div>
+</body>
+</html>

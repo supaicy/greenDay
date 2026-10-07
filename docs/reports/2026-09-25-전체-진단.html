@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenday 전체 진단</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1c;
+    --muted: #6b6b70;
+    --line: #e3e3e6;
+    --card: #fafafa;
+    --accent: #2f7d4f;
+    --warn: #a8620f;
+    --dead: #a13b3b;
+    --crit: #8f2323;
+    --code-bg: #f2f2f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1c1e;
+      --fg: #e8e8ea;
+      --muted: #9a9aa0;
+      --line: #333338;
+      --card: #242427;
+      --accent: #6cc48d;
+      --warn: #e0a458;
+      --dead: #e08585;
+      --crit: #f0a0a0;
+      --code-bg: #2a2a2e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1c1e;
+    --fg: #e8e8ea;
+    --muted: #9a9aa0;
+    --line: #333338;
+    --card: #242427;
+    --accent: #6cc48d;
+    --warn: #e0a458;
+    --dead: #e08585;
+    --crit: #f0a0a0;
+    --code-bg: #2a2a2e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3rem 1.25rem 6rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.75rem; line-height: 1.3; margin: 0 0 .4rem; letter-spacing: -.02em; text-wrap: balance; }
+  h2 {
+    font-size: 1.15rem; margin: 3rem 0 1rem; padding-top: 1.25rem;
+    border-top: 1px solid var(--line); letter-spacing: -.01em; text-wrap: balance;
+  }
+  h3 { font-size: .98rem; margin: 1.75rem 0 .5rem; text-wrap: balance; }
+  .sub { color: var(--muted); font-size: .875rem; margin: 0 0 2.5rem; }
+  code {
+    background: var(--code-bg); padding: .12em .38em; border-radius: 4px;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow-wrap: anywhere;
+  }
+  .lede {
+    background: var(--card); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    padding: 1.1rem 1.25rem; border-radius: 8px; margin: 0 0 1rem;
+  }
+  .lede p { margin: 0; }
+  .lede p + p { margin-top: .7rem; }
+  .scroll { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 620px; }
+  th, td { text-align: left; padding: .65rem .8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  tbody tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block; font-size: .75rem; font-weight: 600;
+    padding: .15em .5em; border-radius: 4px; white-space: nowrap;
+  }
+  .t-crit { color: var(--crit); background: color-mix(in srgb, var(--crit) 14%, transparent); }
+  .t-high { color: var(--dead); background: color-mix(in srgb, var(--dead) 12%, transparent); }
+  .t-med  { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+  .t-low  { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
+  .t-ok   { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  ul { padding-left: 1.15rem; }
+  li { margin: .3rem 0; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .col { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.15rem; }
+  .col h4 { margin: 0 0 .6rem; font-size: .9rem; }
+  .col dl { margin: 0; font-size: .875rem; }
+  .col dt { color: var(--muted); font-size: .78rem; margin-top: .55rem; }
+  .col dd { margin: .1rem 0 0; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* 결함 항목 — 심각도는 왼쪽 띠로만 말한다. 카드를 남발하지 않는다. */
+  .find { margin: 1.5rem 0; padding-left: .95rem; border-left: 3px solid var(--line); }
+  .find.crit { border-left-color: var(--crit); }
+  .find.high { border-left-color: var(--dead); }
+  .find.med  { border-left-color: var(--warn); }
+  .find h3 { margin: 0 0 .35rem; }
+  .find .where { color: var(--muted); font-size: .8rem; margin: 0 0 .55rem; }
+  .find p { margin: .45rem 0; }
+  .find .ev {
+    background: var(--code-bg); border-radius: 6px; padding: .7rem .85rem; margin: .6rem 0 0;
+    font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre; overflow-x: auto;
+  }
+  .verified { color: var(--accent); font-weight: 600; }
+  footer { margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Greenday 전체 진단</h1>
+<p class="sub">2026-09-25~26 · 대상: <code>main</code> @ <code>417d02e</code> → <code>qa/2026-09-25-diagnosis-fixes</code> · 방법: 실행 중인 앱 직접 조작 + 서브시스템 14개 정적 사냥 + 건별 재현 후 수정</p>
+
+<div class="lede">
+  <p><strong>코드 건강 지표는 전부 초록입니다 — typecheck 0, lint 0 errors, 테스트 1450개 전부 통과. 그런데도 앱을 실제로 띄워 조작하자 사용자가 매일 맞을 수 있는 결함이 나왔습니다.</strong> 초록 지표가 놓친 이유는 구조적입니다: <code>vitest.config.ts</code>가 시간대를 <code>Asia/Seoul</code>로 못박아 두어 UTC 서쪽 사용자에게만 나타나는 날짜 오류가 통과하고, <code>src/main/index.ts</code>의 종료 배선을 검증하는 테스트가 아예 없습니다.</p>
+  <p>가장 중요한 세 가지: 할일 제목에 <strong><code>constructor</code>를 타이핑하는 순간 앱 전체가 백지</strong>가 되고, <strong>미주 지역 사용자에게는 모든 날짜가 하루씩 밀리며</strong>, <strong>로컬 DB가 손상된 상태에서 "지금 동기화"를 누르면 사용자의 iCloud·Google 캘린더에서 Greenday 일정이 전부 삭제됩니다.</strong></p>
+</div>
+
+
+<div class="lede" style="border-left-color: var(--accent); margin-top: 1rem">
+  <p><strong>진단 후 수정까지 끝냈습니다 — 결함 65건 중 63건을 고쳤고, 2건은 재현해 보니 결함이 아니어서 의도적으로 두었습니다.</strong>
+  커밋 57개, 전부 "고치기 전에 실패하는 테스트"를 먼저 세운 뒤 적용했습니다. 의존성 취약점 35건도 이어서 닫았습니다 — <code>npm audit</code> 0건(6장).</p>
+  <p>테스트는 <strong>1,450 → 2,120개</strong>(파일 79 → 114)로 늘었고 전부 통과합니다. typecheck 0,
+  lint 0 errors, 빌드 성공, 새 프로필로 실제 앱 부팅까지 확인했습니다. 추가된 줄의 <strong>3분의 2가 테스트</strong>입니다
+  (테스트 5,424줄 / 소스 2,811줄) — 회귀를 막는 것이 수정 자체보다 중요해서입니다.</p>
+</div>
+<div class="cols">
+  <div class="col">
+    <h4>수정 전</h4>
+    <dl>
+      <dt>테스트</dt><dd class="num">1,450 (79 파일)</dd>
+      <dt>시간대 커버리지</dt><dd>Asia/Seoul 한 곳</dd>
+      <dt>ErrorBoundary</dt><dd>없음</dd>
+      <dt>종료 시 플러시</dt><dd>Cmd+Q 경로에 없음</dd>
+    </dl>
+  </div>
+  <div class="col">
+    <h4>수정 후</h4>
+    <dl>
+      <dt>테스트</dt><dd class="num">2,120 (114 파일)</dd>
+      <dt>시간대 커버리지</dt><dd>Asia/Seoul + America/New_York</dd>
+      <dt>ErrorBoundary</dt><dd>루트에 복구 화면</dd>
+      <dt>종료 시 플러시</dt><dd><code>before-quit</code>에서 판정까지 사용</dd>
+    </dl>
+  </div>
+  <div class="col">
+    <h4>검증 방식</h4>
+    <dl>
+      <dt>재현 없이 고친 건</dt><dd class="num">0건</dd>
+      <dt>테스트가 수정 없이도 통과한 건</dt><dd class="num">0건</dd>
+      <dt>결함 아님으로 판정</dt><dd class="num">2건</dd>
+    </dl>
+  </div>
+</div>
+
+<h2>1. 어떻게 진단했는가</h2>
+
+<p>두 갈래로 동시에 진행했습니다. 실제 결함은 대부분 첫 번째에서 나왔습니다.</p>
+
+<div class="cols">
+  <div class="col">
+    <h4>실행 진단 (직접)</h4>
+    <dl>
+      <dt>방법</dt><dd>앱을 격리된 데이터 폴더로 띄우고 CDP로 렌더러를 실제 조작 — 진짜 마우스·키보드 이벤트</dd>
+      <dt>범위</dt><dd>뷰 17개 전수, 한/영 전환, 할일 생명주기, 오버레이·메뉴, 반복, AI 채팅</dd>
+      <dt>데이터 안전</dt><dd><code>--user-data-dir</code>로 격리. 실제 <code>~/Library/Application Support/ticktick</code>은 건드리지 않음</dd>
+    </dl>
+  </div>
+  <div class="col">
+    <h4>정적 사냥 (에이전트)</h4>
+    <dl>
+      <dt>구성</dt><dd>서브시스템 14개에 탐색 에이전트 1개씩, 발견마다 관점이 다른 검증자 3명이 반박 시도</dd>
+      <dt>규모</dt><dd class="num">에이전트 218 / 51분 / 도구 호출 5,623</dd>
+      <dt>결과</dt><dd class="num">후보 68 → 2표 이상 확인 65</dd>
+    </dl>
+  </div>
+</div>
+
+<p>실행 진단 중 실제 앱이 두 번 백지가 됐고, 두 번 다 원인이 달랐습니다. 그게 아래 2장의 출발점입니다.</p>
+
+<h2>2. 직접 재현한 결함</h2>
+
+<p>여기 있는 것은 전부 제가 실행 중인 앱이나 프로브로 <span class="verified">직접 재현</span>했습니다. 에이전트 보고를 옮긴 것이 아닙니다.</p>
+
+<div class="find crit">
+  <h3>2.1 할일 제목에 <code>constructor</code>를 치면 앱 전체가 백지가 된다</h3>
+  <p class="where"><code>src/renderer/src/utils/naturalDate.ts:298</code> (같은 모양이 283·290·343·350·358에도)</p>
+  <p><code>DAY_MAP</code>·<code>EN_DAY_MAP</code>이 평범한 객체 리터럴이라 <code>Object.prototype</code>을 상속합니다. <code>DAY_MAP['constructor']</code>는 <code>undefined</code>가 아니라 <em>함수</em>를 돌려주므로 <code>!== undefined</code> 가드를 통과하고, 그 값이 곧바로 배열 인덱스로 쓰여 <code>NEXT_DAY_FN[&lt;함수&gt;](today)</code> → <code>undefined(...)</code>가 됩니다.</p>
+  <p>자연어 날짜 파싱은 <code>AddTask</code>·<code>QuickAdd</code>의 <code>useEffect</code>에서 <strong>글자를 칠 때마다</strong> 돕니다. 제출도 필요 없습니다. 그리고 렌더러 어디에도 ErrorBoundary가 없어(2.3) React가 루트를 통째로 언마운트합니다.</p>
+  <div class="ev">실측 — Cmd+N 후 "constructor buy milk" 타이핑
+  BEFORE: {"root":1,"buttons":54,"len":1023}
+  AFTER : {"root":0,"buttons":0,"len":0}
+  uncaught TypeError: Gr[p] is not a function
+
+프로브 — Object.prototype 키 12개 전부 크래시(단독·구문 선두·한글 접두사 모두)
+  constructor, toString, valueOf, hasOwnProperty, isPrototypeOf,
+  propertyIsEnumerable, toLocaleString, __proto__,
+  __defineGetter__, __defineSetter__, __lookupGetter__, __lookupSetter__
+  생존: 0개</div>
+  <p><strong>고치기:</strong> 6개 지점 전부 <code>Object.hasOwn(DAY_MAP, text)</code>로 가드하거나, 맵을 <code>Object.create(null)</code>/<code>Map</code>으로 선언합니다.</p>
+</div>
+
+<div class="find crit">
+  <h3>2.2 UTC 서쪽에서는 모든 날짜가 하루 밀린다</h3>
+  <p class="where"><code>src/renderer/src/utils/date.ts:29</code> (48·54·59·64·79도 같음)</p>
+  <p>날짜를 <strong>쓸 때</strong>는 로컬 기준 <code>toLocalDateString</code>을 쓰는데, <strong>읽을 때</strong>는 <code>new Date('YYYY-MM-DD')</code>를 씁니다. 후자는 ECMAScript 규격상 <strong>UTC 자정</strong>으로 해석됩니다. 오프셋이 음수인 지역에서는 두 기준이 하루 어긋납니다.</p>
+  <div class="ev">실측 — 같은 코드, 시간대만 바꿔가며 (오늘 = 로컬 기준 오늘)
+  Asia/Seoul      (+9)  isToday=true   OK
+  UTC             ( 0)  isToday=true   OK
+  Europe/London   (+1)  isToday=true   OK
+  America/New_York(-4)  isToday=false  isYesterday=true  isOverdue=true   ← 틀림
+  America/LA      (-7)  isToday=false  isYesterday=true  isOverdue=true   ← 틀림
+  Pacific/Honolulu(-10) isToday=false  isYesterday=true  isOverdue=true   ← 틀림</div>
+  <p>미주 사용자에게 <strong>오늘 마감인 할일이 "어제"로 뜨고 연체로 표시</strong>됩니다. 내일 마감은 "오늘"로 뜹니다. '내일'·'다음 7일' 스마트 리스트도 하루씩 밀립니다.</p>
+  <p><strong>왜 테스트가 못 잡았는가:</strong> <code>vitest.config.ts</code>가 <code>TZ: 'Asia/Seoul'</code>로 고정돼 있습니다. 주석은 "UTC 머신에서 회귀 테스트가 통과해버리는 것"을 막으려는 의도라고 적혀 있는데, UTC+9로 고정하면 반대쪽(음수 오프셋) 케이스가 통째로 가려집니다.</p>
+  <p><strong>고치기:</strong> <code>fromLocalDateString(s)</code> 헬퍼를 <code>toLocalDateString</code> 옆에 두고 <code>date.ts</code>의 모든 <code>new Date(dateStr)</code>를 교체합니다. 그리고 날짜 테스트를 음수 오프셋 시간대에서도 한 번 더 돌리는 프로젝트를 추가해야 재발을 막습니다.</p>
+</div>
+
+<div class="find crit">
+  <h3>2.3 ErrorBoundary가 없어, 렌더 예외 한 번이 앱을 영구히 백지로 만든다</h3>
+  <p class="where"><code>src/renderer/src/</code> 전역 — <code>componentDidCatch</code>/<code>getDerivedStateFromError</code>/<code>ErrorBoundary</code> 검색 결과 0건</p>
+  <p>2.1은 타이핑 중 크래시라 재시작하면 살아납니다. 하지만 <strong>나쁜 값이 디스크에 저장되는 경로</strong>라면 재시작해도 같은 자리에서 다시 죽습니다. 실제로 그 상태를 만들어 확인했습니다.</p>
+  <div class="ev">실측 — tags가 배열로 파싱되지 않는 행 1개가 DB에 있을 때
+  reload 후: root=0  buttons=0  bodyLen=0   (창은 열리지만 완전히 빈 화면)
+  uncaught TypeError: a.tags.map is not a function
+  → 데이터가 디스크에 있으므로 재시작해도 동일. 앱 안에서 복구할 방법 없음.</div>
+  <p>연결된 검증 공백이 둘 있습니다. <code>validate.ts</code>는 <code>pinned</code>·날짜·<code>scheduledOverrides</code>는 검사하면서 <code>tags</code>·<code>attachments</code>는 검사하지 않고, <code>updateTask</code>는 받은 값을 그대로 <code>JSON.stringify</code>합니다. 렌더러의 <code>safeParseJson&lt;string[]&gt;</code>은 파싱 결과를 <code>as</code>로 캐스팅만 할 뿐 배열인지 확인하지 않습니다.</p>
+  <p class="sub" style="margin:.5rem 0 0">공정하게: 제가 이 상태를 만든 경로는 IPC에 직접 문자열을 넣은 것이라 일반 사용자의 평소 조작은 아닙니다. LLM이 만든 <code>tags</code>는 <code>sanitizeTaskResult</code>가 <code>Array.isArray</code>로 제대로 막고 있습니다. 문제는 <em>트리거</em>보다 <em>결과</em>입니다 — 어떤 렌더 예외든 결과가 "앱 영구 백지"입니다.</p>
+  <p><strong>고치기:</strong> 루트에 ErrorBoundary를 두어 백지 대신 복구 화면(데이터 내보내기·해당 항목 건너뛰기)을 보여 줍니다. <code>safeParseJson</code>에 형태 검증을 붙이고, <code>validate.ts</code>에 <code>tags</code>/<code>attachments</code> 타입 검사를 추가합니다.</p>
+</div>
+
+<div class="find high">
+  <h3>2.4 Caps Lock이 켜져 있으면 단축키 5개가 통째로 죽는다</h3>
+  <p class="where"><code>src/renderer/src/hooks/useKeyboardShortcuts.ts:83·88·96·102·110</code></p>
+  <p>핸들러가 <code>key === 'n'</code>처럼 <strong>소문자만</strong> 비교합니다. Caps Lock이 켜지면 <code>e.key</code>가 <code>'N'</code>이 되어 전부 무시됩니다. Cmd+Shift+A만 <code>(key === 'a' || key === 'A')</code>로 양쪽을 처리하는데, 그 예외가 나머지로 일반화되지 않았습니다.</p>
+  <div class="ev">실측 — 실제 키 이벤트 전송
+  Cmd+n  → 할일 추가 입력창 열림·포커스     OK
+  Cmd+N  → 아무 일도 없음 (focus: BODY)     죽음
+  Cmd+f  → 검색창 포커스                    OK
+  Cmd+F  → 포커스 안 됨                      죽음
+
+  실측 — 삭제 후 되돌리기 (가장 아픈 경로)
+  할일 삭제 → tasks 25, trash 1
+  Cmd+Z (Caps) → tasks 25, trash 1   되돌아오지 않음
+  Cmd+z        → tasks 26, trash 0   되돌아옴</div>
+  <p>영향받는 단축키: <strong>Cmd+N</strong>(추가) · <strong>Cmd+F</strong>(검색) · <strong>Cmd+Z</strong>(되돌리기) · <strong>Cmd+E</strong>(내보내기) · <strong>Cmd+D</strong>(오늘 마감). 설정 화면이 이 단축키들을 광고하고 있어서 사용자는 "앱이 고장났다"고 느낍니다.</p>
+  <p><strong>고치기:</strong> 비교 전에 <code>const key = e.key.toLowerCase()</code> 한 줄. (<code>e.code === 'KeyN'</code>은 비QWERTY 배열에서 다르게 동작하므로 권하지 않습니다.)</p>
+</div>
+
+<div class="find crit">
+  <h3>2.5 로컬 DB가 손상된 상태의 "지금 동기화"가 원격 캘린더를 지운다</h3>
+  <p class="where"><code>src/main/ipc-handlers.ts:403</code> (CalDAV) · <code>:534</code> (Google) · <code>src/main/caldav/sync.ts:324</code></p>
+  <p>데이터 파일을 못 읽으면 세션이 읽기 전용으로 내려가고 <code>data</code>는 빈 기본값이 됩니다. 그런데 <code>getTasks()</code>에는 <code>assertWritable()</code> 가드가 없어서(읽기는 무료 채널이라 의도된 것) <code>[]</code>를 돌려줍니다. <code>calendar-config.json</code>은 <em>별도 파일</em>이라 멀쩡히 로드되므로 <code>syncState</code>에는 이전에 올린 모든 항목이 남아 있습니다.</p>
+  <div class="ev">src/main/caldav/sync.ts — planSync 마지막 루프 (코드 확인)
+  for (const [taskId, entry] of Object.entries(state)) {
+    if (seen.has(taskId)) continue
+    plan.deletes.push({ taskId, href: entry.href, etag: entry.etag })
+  }
+  tasks = [] 이면 seen 은 공백 → state 의 모든 항목이 DELETE 대상</div>
+  <p>로컬 데이터가 이미 읽히지 않는 바로 그 순간에, 마지막 남은 사본인 캘린더가 지워집니다. 서버 삭제는 앱에서 되돌릴 수 없고, 비워진 <code>state</code>가 저장되면서 무엇을 지웠는지 기록도 사라집니다.</p>
+  <p>이 프로젝트는 같은 위험을 <em>이미 인지</em>하고 있습니다 — <code>databaseReadOnly.test.ts</code>가 "빈 백업으로 진짜 백업을 덮지 않는다"며 <code>exportData()</code>가 읽기 전용에서 던지도록 못박아 두었습니다. 동기화 채널 두 개만 같은 가드를 못 받았고, <code>isDatabaseReadOnly()</code>는 export되어 있으나 자기 테스트 말고는 부르는 곳이 없습니다.</p>
+  <p><strong>고치기:</strong> 두 <code>sync-now</code> 핸들러에서 <code>runSync</code> 전에 <code>isDatabaseReadOnly()</code>를 확인해 거절합니다. 방어적으로 <code>planSync</code>도 <code>tasks</code>가 비었는데 <code>state</code>가 비지 않았으면 삭제 루프를 건너뛰어야 합니다.</p>
+</div>
+
+<div class="find high">
+  <h3>2.6 macOS Cmd+Q는 DB를 플러시하지 않는다</h3>
+  <p class="where"><code>src/main/index.ts:252-264</code></p>
+  <p><code>closeDatabase()</code>를 부르는 프로덕션 코드는 <code>app.on('window-all-closed')</code> 한 곳뿐입니다. Electron 문서가 명시하듯 <strong>Cmd+Q로 종료할 때 이 이벤트는 발화하지 않습니다</strong>(<code>before-quit</code> → 창 닫기 → <code>will-quit</code> 순서). 바로 아래 <code>will-quit</code> 핸들러는 리마인더 인터벌·라이선스 타이머·단축키만 정리하고 플러시는 하지 않습니다.</p>
+  <p>저장은 300ms 디바운스이고 쓰기 실패 시 최대 30초까지 재시도 대기열에 머뭅니다. 그동안 IPC는 렌더러에 이미 "성공"이라고 답한 상태입니다. <code>database.ts</code>의 주석은 <code>closeDatabase()</code>의 반환값을 "<code>main/index.ts</code>의 <code>will-quit</code>이 판정에 쓴다"고 설명하지만, <code>will-quit</code>은 그것을 부르지 않고 <code>window-all-closed</code>는 반환값을 버립니다.</p>
+  <p><strong>고치기:</strong> <code>before-quit</code>(또는 기존 <code>will-quit</code>)에서도 <code>closeDatabase()</code>를 부르고 그 판정을 실제로 씁니다. <code>window-all-closed</code> 쪽은 Windows/Linux 경로를 위해 남겨 둡니다.</p>
+</div>
+
+<div class="find high">
+  <h3>2.7 목록 드래그 재정렬이 전혀 동작하지 않는다</h3>
+  <p class="where"><code>src/renderer/src/components/tasks/TaskItem.tsx:79</code></p>
+  <p>드래그 시작에서 <code>effectAllowed = 'copy'</code>를 설정하는데, 받는 쪽은 전부 <code>dropEffect = 'move'</code>를 요구합니다. HTML5 DnD 규격상 이 조합은 드롭이 허용되지 않아 <code>drop</code> 이벤트가 발화하지 않습니다.</p>
+  <div class="ev">코드 확인 — 저장소 전체에서 'copy'는 이 한 곳뿐
+  TaskItem.tsx:79        effectAllowed = 'copy'    ← 유일
+  TimeBlock.tsx:55       effectAllowed = 'move'
+  CalendarView.tsx:146   effectAllowed = 'move'
+  UnscheduledRail.tsx:79 effectAllowed = 'move'
+  KanbanView.tsx:77      effectAllowed = 'move'
+
+  utils/dnd.ts:4 (자체 주석)
+  "TASK_ID: 할일 목록 → 주·일 캘린더로 드래그(시간 배정). effectAllowed: move"</div>
+  <p>코드가 자기 문서화된 계약을 스스로 어깁니다. 행이 흐려지며 드래그는 시작되므로, 사용자에게는 "기능이 없다"가 아니라 "앱이 드롭을 놓쳤다"로 보입니다.</p>
+  <p><strong>고치기:</strong> <code>'move'</code>로 바꾸는 한 글자.</p>
+</div>
+
+<h2>3. 나머지 결함 — 재현하고 고친 것들</h2>
+
+<p>서브시스템 14개를 병렬로 훑어 65건을 모았고, 2장의 7건을 먼저 고친 뒤 나머지를 건별로 재현·수정했습니다. 아래 표의 <strong>모든 항목은 수정됐고</strong>, 각 항목마다 수정을 되돌리면 깨지는 회귀 테스트가 붙어 있습니다.</p>
+
+<div class="lede" style="border-left-color: var(--accent)">
+  <p><strong>처음 이 보고서는 "이 65건을 그대로 믿지 마십시오 — 통과율 96%는 검증이 충분히 적대적이지 않았다는 뜻"이라고 적었습니다. 그래서 전부 다시 검증했습니다.</strong>
+  건별로 에이전트 하나를 붙여 <em>고치기 전에 실패하는 테스트</em>를 쓰게 했고, 실패 출력을 실제로 받아 확인했습니다.</p>
+  <p>결과: 55건 중 <strong>53건은 재현됐고 2건은 결함이 아니었습니다</strong>(하나는 제가 이미 고쳐 둔 것, 하나는
+  같은 작업의 다른 수정이 이미 해결해 적용하면 오히려 회귀). 재현된 것 중 여러 건은 검증 과정에서
+  <strong>원래 제안된 수정이 틀렸다는 것까지 잡아냈습니다</strong> — 예: Google 403을 전부 던지게 바꾸면
+  범위 밖 캘린더를 만난 사용자의 연동이 영구히 막힙니다. 그래서 상태 코드가 아니라 응답 본문의
+  <code>reason</code>으로 가르는 쪽으로 고쳤습니다.</p>
+</div>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>심각도</th><th>영역</th><th>결함</th><th>위치</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag t-crit">치명</span></td><td>caldav</td><td>손상된 DB 상태의 동기화가 원격 캘린더를 전부 삭제 <em>(2.5에서 직접 확인)</em></td><td><code>ipc-handlers.ts:403</code></td></tr>
+    <tr><td><span class="tag t-crit">치명</span></td><td>pure-utils</td><td>UTC 서쪽에서 모든 날짜·연체·스마트리스트가 하루 밀림 <em>(2.2)</em></td><td><code>date.ts:29</code></td></tr>
+    <tr><td><span class="tag t-crit">치명</span></td><td>i18n</td><td><code>constructor</code> 등 입력 시 앱 전체 언마운트 <em>(2.1)</em></td><td><code>naturalDate.ts:298</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>db</td><td>macOS Cmd+Q에서 종료 플러시 누락 <em>(2.6)</em></td><td><code>index.ts:253</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>db / store</td><td>하위작업만 휴지통에서 복원하면 어디에도 보이지 않고, 부모를 영구삭제하면 함께 사라짐</td><td><code>database.ts:895</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>google</td><td>읽기 실패 세션의 동기화가 Google 캘린더 일정을 전부 삭제</td><td><code>ipc-handlers.ts:534</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>caldav</td><td>완료된 반복 인스턴스마다 끝없는 RRULE을 계속 내보내 완료 횟수만큼 일정이 쌓임</td><td><code>caldav/sync.ts:158</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>caldav</td><td>시간블록 있는 반복 일정의 DTSTART가 고정돼 앱에 없는 날짜에 일정이 보임</td><td><code>caldav/sync.ts:125</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>caldav</td><td>오래된 ETag로 DELETE가 412로 영구 실패 — "다음에 재시도" 문구가 지킬 수 없는 약속</td><td><code>calendar-sync.ts:128</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>caldav</td><td>DTSTART는 UTC, EXDATE/RECURRENCE-ID는 로컬 — DST 넘어가면 1시간 밀리고 삭제·이동 회차가 안 맞음</td><td><code>caldav/ical.ts:176</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>store</td><td>반복 할일이 롤오버될 때마다 노트·첨부·하위작업을 잃음</td><td><code>useStore.ts:656</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>store</td><td>검색으로 목록을 좁혀도 일괄 선택이 유지돼, 보이지 않는 할일까지 일괄 삭제됨</td><td><code>useStore.ts:1016</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>store</td><td>텍스트 입력 중 Cmd+Z를 전역 되돌리기가 가로채 — 글자 되돌리기는 죽고 지운 할일이 되살아남</td><td><code>useKeyboardShortcuts.ts:96</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>tasks-ui</td><td>TaskDetail의 낡은 상태가 다른 곳에서 바꾼 마감일을 조용히 되돌림</td><td><code>TaskDetail.tsx:99</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>tasks-ui</td><td>드래그 재정렬이 전혀 동작하지 않음 <em>(2.7)</em></td><td><code>TaskItem.tsx:79</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>pure-utils</td><td>월간·연간 반복 완료 시 캘린더가 이미 보여주고 있는 바로 다음 회차를 건너뜀</td><td><code>recurrence.ts:122</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>pure-utils</td><td>"다음주 &lt;요일&gt;"이 목표 요일이 이번 주 앞쪽이면 2주 뒤로 감</td><td><code>naturalDate.ts:284</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>pure-utils</td><td>반복 할일 일괄 완료가 미래 시간블록을 영구 중복시킴</td><td><code>useStore.ts:956</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>reminders</td><td>빠른 알림 옵션이 마감일을 UTC로 계산 — 뉴욕에서 "마감 시"가 하루 전 20시에 울림</td><td><code>ReminderPicker.tsx:77</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>ai</td><td>답변 중 AI 패널을 닫으면 스트림이 중단되지 않고, 그 토큰이 다음 답변에 섞여 답을 잘라먹음</td><td><code>useStore.ts:1189</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>ai</td><td>부팅 시 연결 확인이 저장된 설정을 읽기 전에 돌아, 기본 localhost가 아닌 사용자는 매번 "AI 없음"</td><td><code>ai-service.ts:497</code></td></tr>
+    <tr><td><span class="tag t-high">높음</span></td><td>migration</td><td>첫 실행 '전환 전 백업'이 <code>initDatabase()</code> 뒤에 돌아, 첨부가 백업되기 전에 영구 삭제됨</td><td><code>index.ts:160</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>views</td><td>주간 캘린더가 08:00–22:59 밖의 시간 할일을 전부 누락(일간은 06:00–23:59)</td><td><code>WeeklyCalendar.tsx:18</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>views</td><td>통계 '습관 완료율'이 구조적으로 항상 100% — 미완료 로그를 저장하지 않는 데이터 모델</td><td><code>StatsView.tsx:80</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>views</td><td>사이드바 배지가 하위작업까지 세어 목록 개수와 영영 불일치</td><td><code>Sidebar.tsx:110</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>views</td><td>칸반에서 startDate가 있는 카드를 '진행 중'→'할 일'로 끌면 아무 일도 안 일어남</td><td><code>KanbanView.tsx:124</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>tasks-ui</td><td>UndoToast(z-90)가 BatchBar(z-50)와 같은 자리에 떠서 버튼을 가림</td><td><code>BatchBar.tsx:36</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>i18n</td><td>메인 프로세스의 동기화·AI 오류가 하드코딩된 한국어라 영어 UI에 그대로 출력됨</td><td><code>caldav/client.ts:83</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>i18n</td><td>창이 뜨기 전 메인 프로세스가 띄우는 모든 대화상자가 언어 설정과 무관하게 한국어</td><td><code>ui-language.ts:5</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>ipc</td><td><code>batch-update-tasks</code>가 검증 없이 디스크에 직접 씀 — <code>validate.ts</code> 가드를 우회</td><td><code>ipc-handlers.ts:117</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>ipc</td><td>CalDAV·Google 요청에 타임아웃이 없어 멈춘 서버가 설정 화면을 묶어버림</td><td><code>caldav/client.ts:192</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>ai</td><td>로컬 전용 잠금이 리다이렉트 홉에 적용되지 않음 — 302 한 번이면 외부로 나감</td><td><code>ai-service.ts:352</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>google</td><td>오프라인 상태의 "지금 동기화" 한 번이 저장된 refresh token을 영구 파괴</td><td><code>ipc-handlers.ts:469</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>build</td><td><code>mas:upload</code>가 <code>mas:build</code> 산출물을 찾지 못함 — App Store 업로드 경로가 죽어 있음</td><td><code>mas-upload.sh:21</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>build</td><td>릴리스 경로 어디에서도 테스트·타입체크·린트를 돌리지 않음</td><td><code>release.yml:28</code></td></tr>
+    <tr><td><span class="tag t-med">보통</span></td><td>licensing</td><td>시스템 시계를 트라이얼 시작일 이전으로 되돌리면 유효한 트라이얼이 즉시 만료</td><td><code>licenseManager.ts:474</code></td></tr>
+    <tr><td><span class="tag t-low">낮음</span></td><td>i18n</td><td>CSV 내보내기에 UTF-8 BOM이 없어 Excel에서 한글이 깨짐</td><td><code>ipc-handlers.ts:213</code></td></tr>
+    <tr><td><span class="tag t-low">낮음</span></td><td>reminders</td><td>autoUpdater에 error 리스너가 없어 실패한 업데이트 확인이 unhandled rejection이 됨</td><td><code>index.ts:237</code></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="sub">위 표는 전체 65건 중 대표 38건입니다. 나머지 27건은 낮음 등급(라이선스 경고 문구 잔존, 첨부 GC 경합, 마이그레이션 안내 문구 등)으로 전체 목록은 워크플로 결과에 있습니다.</p>
+
+<h2>4. 확인한 결과 문제없던 것</h2>
+
+<p>진단의 절반은 "여기는 멀쩡하다"를 확인하는 일입니다. 아래는 전부 실제로 조작해 본 결과입니다.</p>
+
+<div class="cols">
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> 화면 렌더링</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0">뷰 17개 전수 — 콘솔 에러 0건, <code>NaN</code>·<code>Invalid Date</code>·<code>[object Object]</code>·미번역 키 0건. 긴 제목, 이모지, 중국어, RTL 문자, <code>&lt;script&gt;</code> 태그를 넣어도 React가 정상 이스케이프.</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> i18n 한/영</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0">영어로 전환 후 전 뷰를 훑어 남은 한국어는 언어 선택기의 "한국어" 라벨과 사용자가 만든 습관 이름뿐. 둘 다 맞는 동작. 렌더러 번역 누락 0건.</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> 오버레이 규칙</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0">CLAUDE.md가 못박은 규칙 전부 준수 — ⋯ 메뉴가 <strong>한 번</strong>에 열리고, z-index 111, Escape가 메뉴만 닫고 선택은 유지, 닫을 때 포커스가 트리거로 복귀.</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> 반복 날짜 계산</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0"><code>monthly:31</code>이 02-28 → 03-31 → 04-30으로 올바르게 복귀(클램프가 고착되지 않음). 윤년 2/29, 밀린 회차 따라잡기 모두 정확.</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> 할일 생명주기</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0">추가 → 완료(점수 +1) → 삭제 → 휴지통 → 복원까지 상태 보존. 되돌리기 토스트와 Cmd+z 정상(Caps Lock 제외, 2.4).</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> AI 어시스턴트</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0">실제 Ollama로 스트리밍 응답 확인. 채팅 기록이 <code>ai-chat.json</code>에 영속. "온디바이스" 배지와 "전송 데이터 미리보기 · N건"이 실제 전송 건수와 일치. API 키는 렌더러로 내려오지 않음(<code>null</code>).</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> IPC 입력 검증</h4>
+    <p style="font-size:.875rem;margin:.5rem 0 0">에이전트가 <code>update-task</code>에 잘못된 페이로드를 퍼징했으나 <code>validate.ts</code>가 전부 거절(로그로 확인). 날짜·<code>pinned</code>·<code>scheduledOverrides</code> 검사는 견고함.</p>
+  </div>
+  <div class="col">
+    <h4><span class="tag t-ok">정상</span> 건강 지표</h4>
+    <dl>
+      <dt>typecheck</dt><dd class="num">0 errors</dd>
+      <dt>lint</dt><dd class="num">0 errors / 8 warnings / 211 파일</dd>
+      <dt>test</dt><dd class="num">1,450 통과 / 79 파일 / 4.6초</dd>
+    </dl>
+  </div>
+</div>
+
+<p style="margin-top:1.5rem">한 가지 더: 처음 <code>tsc --build</code>가 30여 건의 "Cannot find module" 오류를 뱉었는데, 이는 <code>node_modules</code>가 <code>package.json</code>보다 낡아 있었기 때문입니다. <code>npm ci</code> 후 0건이 됐습니다. 코드 문제가 아닙니다.</p>
+
+<h2>5. 무엇을 고쳤는가</h2>
+
+<p>브랜치: <code>qa/2026-09-25-diagnosis-fixes</code> (<code>main</code>에서 분기, 아직 push 안 함).
+아래 순서대로 쌓여 있습니다. 각 커밋은 무엇이 잘못됐고 사용자가 무엇을 당했는지, 왜 수정이 그 자리에
+있는지를 본문에 적어 두었습니다. 전부 <strong>수정을 되돌리면 깨지는</strong> 회귀 테스트를 함께 넣었습니다.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>커밋</th><th>내용</th></tr></thead>
+  <tbody>
+    <tr><td><code>602edfc</code></td><td>fix(natural-date): 프로토타입 키가 요일 표를 통과해 앱을 언마운트시켰다</td></tr>
+    <tr><td><code>09d4fff</code></td><td>fix(shortcuts): Caps Lock이 문자 단축키를 죽이고, 입력칸의 Cmd+Z를 가로챘다</td></tr>
+    <tr><td><code>4a24308</code></td><td>fix(dnd): 할일 드래그가 &#x27;copy&#x27;를 광고해 드롭이 거부됐다</td></tr>
+    <tr><td><code>4e30666</code></td><td>fix(date): 날짜를 쓸 때는 로컬, 읽을 때는 UTC라 UTC 서쪽에서 하루가 밀렸다</td></tr>
+    <tr><td><code>b5fb91b</code></td><td>fix(shutdown): macOS Cmd+Q가 DB를 플러시하지 않고 종료했다</td></tr>
+    <tr><td><code>1a000b3</code></td><td>fix(sync): 읽기 전용 세션의 &quot;지금 동기화&quot;가 원격 캘린더를 통째로 비웠다</td></tr>
+    <tr><td><code>2a8f01a</code></td><td>fix(renderer): 렌더 예외 하나가 앱을 영구 백지로 만들었다 — 안전망과 모양 검사</td></tr>
+    <tr><td><code>47be982</code></td><td>fix(google): 할당량 초과(403)를 &quot;우리 캘린더가 아니다&quot;로 읽어 중복 캘린더를 만들었다</td></tr>
+    <tr><td><code>175fc9d</code></td><td>fix(caldav): 삭제만 충돌 복구가 없어 낡은 etag 하나로 영구 실패했다</td></tr>
+    <tr><td><code>bfa8b55</code></td><td>fix(trash): 휴지통에서 하위작업만 복원하면 그 할일이 어느 화면에도 없는 유령이 됐다</td></tr>
+    <tr><td><code>0bc2ade</code></td><td>fix(caldav): 완료한 반복 회차가 끝없는 RRULE을 계속 내보내 캘린더가 복사본으로 덮였다</td></tr>
+    <tr><td><code>f00c956</code></td><td>fix(ai): 부팅 첫 AI 요청이 저장된 설정을 무시하고 localhost로 나갔다</td></tr>
+    <tr><td><code>ec581c8</code></td><td>fix(recurrence): 같은 달·같은 해에 남은 회차를 통째로 건너뛰었다</td></tr>
+    <tr><td><code>311eb05</code></td><td>fix(naturalDate): &quot;다음주 화요일&quot;이 일주일 뒤 — 기준점을 today+6으로 잡아 한 주를 건너뛰었다</td></tr>
+    <tr><td><code>7d55d13</code></td><td>fix(detail): 상세 패널이 마감일 사본을 들고 있다가 바깥에서 정한 날짜를 덮어썼다</td></tr>
+    <tr><td><code>ced1868</code></td><td>fix(licensing): 라이선스를 잃으면 서명 없는 30일이 새로 열렸다 — 환불도 잠기지 않았다</td></tr>
+    <tr><td><code>83b680b</code></td><td>fix(licensing): 깨진 license.json을 옆으로 치운 부팅이 사용자에게 아무 말도 하지 않았다</td></tr>
+    <tr><td><code>7128329</code></td><td>fix(ipc): 일괄 수정만 페이로드 검증을 건너뛰었다 — 개행 섞인 마감일이 캘린더로 나갔다</td></tr>
+    <tr><td><code>eab672e</code></td><td>fix(sync): 응답 없는 서버에서 캘린더 연동이 영영 안 끝난다 — 요청 상한 추가</td></tr>
+    <tr><td><code>f447c2a</code></td><td>fix(migration): 지킬 암호문이 없는데도 잠가 &quot;옛 앱 지워도 됩니다&quot;가 영영 안 떴다</td></tr>
+    <tr><td><code>1471337</code></td><td>fix(pomodoro): 건너뛰기가 일시정지 시간까지 집중 시간으로 적었다</td></tr>
+    <tr><td><code>e79bcad</code></td><td>fix(shortcuts): 입력칸에서 누른 Escape가 상세 패널까지 닫았다</td></tr>
+    <tr><td><code>101b7ee</code></td><td>fix(calendar): 밴드(주 8~22시, 일 6~23시) 밖 시각의 할일이 격자 어디에도 안 떴다</td></tr>
+    <tr><td><code>090de71</code></td><td>fix(kanban): 시작된 기간을 가진 할일이 &#x27;진행 중&#x27;에서 빠져나오지 못했다</td></tr>
+    <tr><td><code>d36b919</code></td><td>fix(stats): 습관 완료율이 구조적으로 언제나 100%였다 — 분모를 로그가 아니라 달력에서 센다</td></tr>
+    <tr><td><code>61736db</code></td><td>fix(sidebar): 뱃지가 하위작업까지 세서 목록 줄 수와 갈렸다</td></tr>
+    <tr><td><code>63834f6</code></td><td>fix(mas): mas 블록이 mac 이름을 물려받아 빌드한 pkg를 업로드가 못 찾았다</td></tr>
+    <tr><td><code>1b7ce64</code></td><td>fix(release): 출하 경로가 테스트를 한 번도 안 돌려 빨간 커밋이 공증된 dmg로 나갔다</td></tr>
+    <tr><td><code>f18900e</code></td><td>fix(mas): 앱 인증서만 깔린 맥에서 설치 패키지 인증서 검사가 초록으로 통과했다</td></tr>
+    <tr><td><code>0f200a8</code></td><td>fix(db): 첫 실행에서 백업보다 먼저 첨부를 지워 되돌릴 사본이 없었다</td></tr>
+    <tr><td><code>1a471ad</code></td><td>fix(sync): 영어 UI에 연동 오류가 한국어로 떴다 — 렌더러가 message를 그대로 출력한다</td></tr>
+    <tr><td><code>80b7419</code></td><td>fix(ai): 본문이 멈춘 응답에 타임아웃이 안 걸려 AI 패널이 통째로 얼었다</td></tr>
+    <tr><td><code>30d8540</code></td><td>fix(migration): 한 건도 못 읽고서 &quot;데이터를 정상적으로 읽었습니다 — haru.app 지워도 됩니다&quot;</td></tr>
+    <tr><td><code>f0c8701</code></td><td>fix(tasks): 배치 모드에서 할일 하나를 지우면 되돌리기 토스트가 일괄 바를 덮었다</td></tr>
+    <tr><td><code>9880564</code></td><td>fix(calendar): 마감일 붙은 하위작업이 캘린더 격자에 독립 카드로 새어 나왔다</td></tr>
+    <tr><td><code>805f0d5</code></td><td>fix(licensing): 시계가 뒤로 간 기기가 남은 트라이얼을 두고 잠겼다</td></tr>
+    <tr><td><code>7d6c110</code></td><td>fix(release): cask zap 이 만들어진 적 없는 캐시를 지웠다 — electron-builder 는 updaterCacheDirName 을 버린다</td></tr>
+    <tr><td><code>f7cfd45</code></td><td>fix(caldav): 반복 시리즈를 UTC로 내보내 서머타임 뒤 회차가 한 시간 밀리고 예외가 빗나갔다</td></tr>
+    <tr><td><code>f00552e</code></td><td>fix(google): 오프라인 &quot;지금 동기화&quot; 한 번이 저장된 리프레시 토큰을 지웠다</td></tr>
+    <tr><td><code>8e326ab</code></td><td>fix(ai): 로컬 전용 잠금을 저장된 설정으로 판정해 302 한 번에 외부로 나갔다</td></tr>
+    <tr><td><code>c929420</code></td><td>fix(main): 창보다 먼저 뜨는 대화상자 둘이 영어 OS에서도 한국어로 떴다</td></tr>
+    <tr><td><code>07131a1</code></td><td>test(db): 예약된 첨부 GC와 파일 선택 사이의 경합을 고정한다</td></tr>
+    <tr><td><code>755cad2</code></td><td>types: 반복 롤오버가 넘길 본문·첨부·하위작업을 AddTaskOptions에 싣는다</td></tr>
+    <tr><td><code>48574e3</code></td><td>test(main): 창을 닫아 둔 macOS에서 전역 퀵 추가가 죽던 자리를 고정한다</td></tr>
+    <tr><td><code>198419f</code></td><td>fix(recurrence): 일괄 완료가 옮겨둔 미래 회차를 복제했다 — 인계 규칙을 한 곳으로</td></tr>
+    <tr><td><code>c7aafa6</code></td><td>fix(ai): 스트림 이벤트에 요청 id — 버려진 답변이 다음 답변 말머리에 붙었다</td></tr>
+    <tr><td><code>a4f9cd8</code></td><td>fix(export): CSV에 UTF-8 BOM을 붙인다 — 엑셀이 한글 제목을 코드페이지로 읽어 깨뜨렸다</td></tr>
+    <tr><td><code>98cfc3a</code></td><td>fix(updater): 오프라인 실행마다 뜨던 네이티브 크래시 창 — autoUpdater &#x27;error&#x27; 리스너가 없었다</td></tr>
+    <tr><td><code>27d288a</code></td><td>fix(reorder): 리스트를 가로지르는 뷰에서 드래그가 통째로 버려졌다</td></tr>
+    <tr><td><code>9bc0b5e</code></td><td>fix(main): 창을 닫아 둔 macOS에서 전역 퀵 추가와 OAuth 복귀가 아무 반응도 없었다</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="sub">수정하지 않고 둔 2건: 하나는 제가 2장에서 이미 고친 것을 다시 지적한 항목,
+하나는 같은 작업의 다른 수정이 이미 해결해서 적용하면 오히려 회귀가 되는 항목(주간·일간 캘린더
+밴드가 24시간으로 열린 뒤라 시각 밖 누락이 사라졌습니다). 둘 다 재현을 시도한 뒤 결함이 아니라고
+판정했습니다.</p>
+
+<h2>6. 의존성 취약점 — 35건에서 0건으로</h2>
+
+<div class="lede">
+  <p><strong>진단 직후에는 <code>npm audit</code>이 35건(critical 1 · high 26)을 보고했고, 재검증 범위가 커서
+  판단을 남겨 두었습니다. 그 뒤 제안한 순서대로 처리해 <span class="verified">0건</span>이 됐습니다.</strong></p>
+</div>
+
+<p class="sub"><strong>2026-10-06 재측정:</strong> 그 뒤 새로 공개된 권고 18건(high 8 · moderate 10)이
+떴습니다. 비파괴 수정으로 3건을 닫아 15건이 남았고, 전부 Tailwind 3·electron-builder 경유의 빌드 도구입니다 —
+고칠 버전이 아직 없거나(braces·sprintf-js) Tailwind 4 이주가 필요합니다. 닿는 입력과 재검토 기한은
+<code>TODOS.md</code>의 "남은 dev 의존성 권고 15건"에 있습니다. 아래 표는 9월 26일 기준 그대로입니다.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>단계</th><th>무엇</th><th>닫은 것</th><th>실측 검증</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="num">1</td>
+      <td><code>electron</code> 40.8.0 → <strong>40.10.6</strong></td>
+      <td>권고 25건 중 24건. <span class="tag t-high">high</span> 둘 — custom protocol의
+      교차 출처 읽기, <code>Function.prototype.bind</code> 하이재킹으로 context isolation 우회</td>
+      <td>같은 메이저라 패치 라인. 선언 하한도 올려 <code>npm ci</code> 회귀 방지</td>
+    </tr>
+    <tr>
+      <td class="num">2</td>
+      <td><code>electron</code> → <strong>41.10.7</strong></td>
+      <td>40.x가 못 닫은 마지막 1건 — sandboxed iframe의 <code>allow-popups</code> 우회
+      (41.10.3+ 필요)</td>
+      <td>메이저 업. Chromium 144 → 146. <code>require</code>·<code>process</code> 미노출,
+      preload 83키 전부, IPC 왕복 + DB 쓰기, 네비게이션 가드 차단을 실제로 확인</td>
+    </tr>
+    <tr>
+      <td class="num">3</td>
+      <td><code>electron-builder</code> 25.1.8 → <strong>26.15.3</strong></td>
+      <td><span class="tag t-crit">critical</span> <code>tar</code> 하드링크 경로 탈출
+      (CVSS 8.2) 등 20건</td>
+      <td><code>--mac --dir</code>로 실제 패키징하고 <strong>만들어진
+      <code>Greenday.app</code>을 띄워</strong> 번들 ID·버전·런타임·출하 플래그까지 확인</td>
+    </tr>
+    <tr>
+      <td class="num">4</td>
+      <td>lockfile 갱신 (15건)</td>
+      <td>출하물에 닿는 둘: <code>electron-updater</code>(교차 출처 리다이렉트에서
+      <code>Authorization</code> 헤더 유출, prod 의존성), <code>uuid</code>(버퍼 경계 검사).
+      나머지는 vite·vitest·postcss 등 개발 도구</td>
+      <td>전부 기존 semver 범위 안이라 <code>package.json</code>은 그대로. vitest 자체가
+      올라가서 스위트가 그대로 도는지 확인</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>서명·공증·MAS 업로드는 인증서가 필요해 검증하지 못했습니다.</strong> electron-builder
+업그레이드는 설정 파싱과 패키징까지만 확인했으니, 첫 실제 릴리스 때 그 경로를 반드시 다시 봐야 합니다.
+<code>TODOS.md</code>에 그렇게 적어 두었습니다.</p>
+
+<h2>7. 남은 한계 — 확인하지 못한 것</h2>
+
+<ul>
+  <li><strong>실기기·실서버 조건은 여전히 못 봤습니다.</strong> 샌드박스(MAS) 빌드, 실제 iCloud·Google 서버 왕복,
+  알림 권한 승인 상태, 실제 라이선스 활성화, 다중 디스플레이는 검증 범위 밖입니다. 동기화 수정들은
+  서버 대역(fake) 위에서 검증했습니다 — 규격 해석이 맞다는 근거는 있지만 실서버 확인은 아닙니다.</li>
+  <li><strong>라이선스 enforcement는 꺼진 채로 테스트했습니다</strong>(<code>IS_ENFORCED = false</code>, 의도된 출하 상태).
+  라이선스 수정 3건은 단위 테스트로만 검증됐고, 켰을 때의 실제 동작은 확인하지 않았습니다.</li>
+  <li><strong>중간 커밋 일부는 단독으로 빌드되지 않습니다.</strong> 수정 38건을 병렬로 적용하면서 여러 건이
+  같은 파일(<code>useStore.ts</code>·<code>ipc-handlers.ts</code> 등)을 건드렸고, 먼저 커밋된 쪽이 옆 수정의
+  변경을 함께 안고 갔습니다. <strong>브랜치 끝은 전부 초록</strong>이지만 중간 지점을 bisect하면 깨질 수 있습니다.</li>
+  <li><strong>이미 고아가 된 데이터는 치료하지 않습니다.</strong> 휴지통 하위작업 버그로 이미 보이지 않게 된 행이
+  기존 사용자 파일에 있다면 그대로 남습니다 — 수정은 새로 생기는 것만 막습니다.</li>
+  <li><strong>lint 경고 11건이 남아 있습니다</strong>(errors 0). 기존 8건 + 새 테스트의 스타일 경고 3건으로,
+  저장소가 원래 경고를 안고 출하하고 있어 게이트로 보지 않았습니다.</li>
+</ul>
+
+<h2>8. 작업 중 생긴 일 — 실제 사용자 데이터</h2>
+
+<div class="lede" style="border-left-color: var(--warn)">
+  <p><strong>서브에이전트 하나가 격리 플래그 없이 앱을 띄워 실제 프로필을 열었습니다</strong>
+  (<code>~/Library/Application Support/ticktick</code>). 데이터 유실은 없었습니다 — 할일 27건의 ID가
+  9월 16일 백업과 정확히 일치하고, 앱이 자기 보호 백업(<code>backup-before-greenday-2/</code>)까지 만들어 뒀습니다.</p>
+  <p>바뀐 것은 <code>migration-state.json</code>의 <code>oldAppHintDismissed</code> 하나였고
+  ("옛 haru 앱 지워도 됩니다" 안내가 다시 안 뜨게 됨), <code>/Applications/haru.app</code>이 실제로 깔려 있어
+  그 안내가 의미 있는 상태였으므로 <strong>원래 값으로 되돌려 두었습니다</strong>
+  (<code>migration-state.json.pre-qa-backup</code>에 직전 상태를 남겼습니다). 그 실행이 남긴 stale singleton 락 심볼릭 링크 3개도 치웠습니다 — Chromium이 다음 실행에서 다시 만듭니다.</p>
+  <p>이후 작업에는 "추적 파일을 건드리지 말 것"을 훨씬 강하게 걸었고, 그 뒤 65개 에이전트가 도는 동안
+  워킹트리 오염은 0건이었습니다. 같은 사고가 한 번 더 있었는데(첫 검증 시도에서 세션 한도로 죽은
+  에이전트들이 반쯤 고친 파일 7개를 남겼습니다) 전부 버리고 다시 했습니다.</p>
+</div>
+
+<footer>
+  Greenday 전체 진단 및 수정 · 2026-09-25~26 · <code>main</code> @ <code>417d02e</code> → <code>qa/2026-09-25-diagnosis-fixes</code> (커밋 50)<br>
+  실행 진단: Electron 40.8.0을 격리 데이터 폴더로 구동, CDP로 직접 조작 · 에이전트 합계 338개 · 결함 65건 중 63건 수정 · 테스트 1,450 → 2,120
+</footer>
+
+</main>
+</body>
+</html>

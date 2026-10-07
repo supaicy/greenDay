@@ -4,5 +4,12 @@ dist
 .DS_Store
 *.log
 docs/superpowers/
+.superpowers/
 .gstack/
 homebrew-haru/
+
+# App Store 프로비저닝 프로파일 (개인 자격증명 — 커밋 금지)
+resources/embedded.provisionprofile
+
+# 라이선스 개인키 — 유출되면 누구나 라이선스를 발급할 수 있다. 절대 커밋 금지.
+.license-keys/

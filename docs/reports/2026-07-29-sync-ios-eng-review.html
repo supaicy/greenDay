@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>haru 동기화 + iOS 설계 — 엔지니어링 리뷰 (2026-07-29)</title>
+<style>
+  :root {
+    --bg:#ffffff; --surface:#f7f8fa; --surface-2:#eef1f5;
+    --text:#1f2328; --text-dim:#57606a; --text-faint:#6e7781;
+    --line:#d8dee4; --accent:#2563eb;
+    --ok:#15803d; --warn:#92400e; --bad:#b91c1c;
+    --mono:"SF Mono","Fira Code",Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#16181d; --surface:#1e2128; --surface-2:#262a33;
+      --text:#e6e8eb; --text-dim:#a8b0ba; --text-faint:#8b939e;
+      --line:#303640; --accent:#7aa7f0;
+      --ok:#4ade80; --warn:#fcd34d; --bad:#f87171;
+    }
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:960px; margin:0 auto; padding:56px 24px 96px; }
+
+  header.top { border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:40px; }
+  .eyebrow { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-faint); margin:0 0 10px; }
+  h1 { font-size:30px; line-height:1.25; margin:0 0 12px; letter-spacing:-.01em; }
+  .lede { font-size:16px; color:var(--text-dim); margin:0; max-width:68ch; }
+
+  h2 { font-size:20px; margin:52px 0 16px; padding-top:24px; border-top:1px solid var(--line); letter-spacing:-.01em; }
+  h2:first-of-type { border-top:0; padding-top:0; }
+  h3 { font-size:15px; margin:28px 0 8px; }
+  p { margin:0 0 14px; }
+  a { color:var(--accent); }
+
+  .scores { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:24px 0 8px; }
+  .score { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .score .k { font-size:12px; color:var(--text-faint); margin-bottom:6px; }
+  .score .v { font-size:22px; font-weight:600; font-variant-numeric:tabular-nums; }
+
+  .scroll-x { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table { width:100%; border-collapse:collapse; font-size:14px; margin:16px 0 8px; }
+  th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); font-weight:600; white-space:nowrap; }
+  td.num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:0; }
+
+  code { font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.12em .38em; border-radius:4px; }
+  pre { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; overflow-x:auto; font-family:var(--mono); font-size:12.5px; line-height:1.55; margin:16px 0; }
+  pre code { background:none; padding:0; font-size:inherit; }
+
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .pill.bad { background:color-mix(in srgb,var(--bad) 16%,transparent); color:var(--bad); }
+  .pill.ok { background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
+  .pill.warn { background:color-mix(in srgb,var(--warn) 20%,transparent); color:var(--warn); }
+
+  .finding { border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:0 0 12px; background:var(--surface); }
+  .finding .hd { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
+  .finding .id { font-family:var(--mono); font-size:12px; color:var(--text-faint); }
+  .finding .ti { font-weight:600; font-size:15px; }
+  .finding p { margin:6px 0 0; color:var(--text-dim); font-size:14px; }
+  .finding .why { margin-top:8px; font-size:13px; color:var(--text-faint); }
+
+  .note { background:var(--surface); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:14px 18px; margin:20px 0; font-size:14px; color:var(--text-dim); }
+  .note.danger { border-left-color:var(--bad); }
+  ul { margin:0 0 14px; padding-left:22px; }
+  li { margin-bottom:6px; }
+  .task { font-size:14px; border-bottom:1px solid var(--line); padding:12px 0; }
+  .task:last-child { border-bottom:0; }
+  .task .t { font-weight:600; }
+  .task .m { color:var(--text-faint); font-size:12.5px; margin-top:4px; }
+  footer { margin-top:64px; padding-top:20px; border-top:1px solid var(--line); font-size:13px; color:var(--text-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">haru · 엔지니어링 리뷰</p>
+  <h1>동기화 + iOS 앱 설계 — 아키텍처·테스트·성능 리뷰</h1>
+  <p class="lede">
+    office-hours에서 나온 설계 문서를 코드 실측과 대조해 리뷰했습니다. 7개 이슈를 찾아
+    전부 결정했고, 원안의 잘못된 전제 하나를 바로잡았습니다. 치명적 공백 1건이 남아 있습니다.
+  </p>
+</header>
+
+<h2>결과 요약</h2>
+
+<div class="scores">
+  <div class="score"><div class="k">아키텍처</div><div class="v">4건</div></div>
+  <div class="score"><div class="k">코드 품질</div><div class="v">2건</div></div>
+  <div class="score"><div class="k">성능</div><div class="v">1건</div></div>
+  <div class="score"><div class="k">테스트 공백</div><div class="v">28건</div></div>
+  <div class="score"><div class="k">치명적 공백</div><div class="v" style="color:var(--bad)">1건</div></div>
+  <div class="score"><div class="k">미해결 결정</div><div class="v" style="color:var(--ok)">0건</div></div>
+</div>
+
+<p>
+  스코프는 <strong>원안 유지</strong>입니다. SQLite 이관을 뒤로 미루고 서버 타임스탬프만 먼저 하자는
+  축소안을 제안했으나, 전부 진행하는 쪽을 선택하셨습니다. 이후 섹션에서 스코프를 다시 줄이자고 하지 않았습니다.
+</p>
+
+<h2>가장 중요한 발견 세 가지</h2>
+
+<div class="finding">
+  <div class="hd"><span class="id">TEST</span><span class="ti">원안의 안전망이 존재하지 않았습니다</span><span class="pill bad">P1</span></div>
+  <p>설계 문서 0단계에 <em>"기존 222개 테스트를 안전망으로 사용"</em>이라고 적혀 있었습니다. 확인해 보니 틀렸습니다.</p>
+  <pre><code>database.test.ts (14개) 가 실제로 검사하는 것
+  · 채팅 기록 파일 I/O   5개
+  · capEvents 상한       4개
+  · API 키 암호화        5개
+
+database.ts CRUD 24개 함수
+  createTask · updateTask · deleteTask · restoreTask · emptyTrash
+  reorderTasks · batchUpdateTasks · createList · deleteList
+  createFolder · toggleHabitLog · addScoreEvent ...
+  → 테스트 0개</code></pre>
+  <p class="why">0단계가 재작성하는 파일이 코드베이스에서 가장 무방비한 파일이었습니다. 안전망이 필요한 자리에 안전망이 없었습니다. → 재작성 전 특성화 테스트 선행으로 확정(T1).</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">ARCH</span><span class="ti">LWW의 시간 출처가 빠져 있었습니다</span><span class="pill bad">P1</span></div>
+  <p>원안은 <code>updatedAt</code> 기반 last-write-wins라고만 적었고, <strong>누가 그 값을 찍는지</strong>가 없었습니다. 클라이언트 시계로 하면 맥과 아이폰의 시계 차이만큼 엉뚱한 쪽이 이깁니다.</p>
+  <p class="why">분산 환경에서 "타임스탬프가 작으면 먼저 일어난 것"은 거짓입니다. → Postgres 트리거로 <code>updated_at = now()</code> 확정. 클럭 스큐 버그 부류가 구조적으로 사라집니다.</p>
+</div>
+
+<div class="finding">
+  <div class="hd"><span class="id">DRY</span><span class="ti">공유 로직이 두 코드베이스로 갈라질 참이었습니다</span><span class="pill bad">P1</span></div>
+  <p><code>utils/</code> 13개 파일 930줄은 window·document·electron·react 의존이 <strong>0</strong>입니다. 그런데 <code>package.json</code>에 workspaces가 없어 RN 앱이 생기면 복사본이 만들어집니다.</p>
+  <p class="why">반복 일정 계산이나 자연어 날짜 해석 버그를 맥에서 고쳐도 아이폰은 그대로 남습니다. 그리고 그건 보통 몇 달 뒤 사용자 제보로 알게 됩니다. → RN 착수 <strong>전에</strong> <code>packages/core</code> 추출로 확정(T4).</p>
+</div>
+
+<h2>확정된 설계 변경 8건</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>#</th><th>원안</th><th>확정</th><th>이유</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td><code>updatedAt</code> 기반 LWW</td><td><strong>서버 할당</strong> Postgres <code>now()</code></td><td>클럭 스큐로 편집이 조용히 소실</td></tr>
+    <tr><td class="num">2</td><td>(없음)</td><td><code>schemaVersion</code> + <code>.bak</code> + 건수 검증 + 롤백</td><td><code>raw.lists || []</code>가 실패를 조용한 빈 배열로 만듦</td></tr>
+    <tr><td class="num">3</td><td>(없음)</td><td>이메일 매직 링크 + 앱 안 계정 삭제</td><td>인증이 설계에 통째로 부재. 계정 삭제는 App Store 요구</td></tr>
+    <tr><td class="num">4</td><td>툼스톤 추가 (수명 미명세)</td><td><strong>영구 보존</strong>, GC 없음</td><td>이 규모에선 GC가 새 실패 경로만 만듦</td></tr>
+    <tr><td class="num">5</td><td>"utils 재사용" (방법 없음)</td><td>RN 착수 전 <code>packages/core</code> 추출</td><td>복사본이 생기기 전이 가장 쌈</td></tr>
+    <tr><td class="num">6</td><td>(없음)</td><td><code>touch()</code> 단일 지점 + 전수 회귀 테스트</td><td><code>save()</code> 호출 21곳에 스탬프가 흩어짐</td></tr>
+    <tr><td class="num">7</td><td>"222개 테스트가 안전망"</td><td>재작성 전 특성화 테스트 선행</td><td>CRUD 24개가 테스트 0개</td></tr>
+    <tr><td class="num">8</td><td>(없음)</td><td>폴링 + 포커스 + 변경 직후</td><td>Realtime 500 동시연결 ≈ 사용자 250명 천장</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>데이터 흐름 (0~1단계)</h2>
+
+<pre><code>  변이 (createTask / updateTask / deleteList / toggleHabitLog ...)
+        │
+        ▼
+   touch(record)  ◄── 단일 지점. updatedAt 스탬프 + 동기화 큐 적재
+        │            (회귀 테스트가 모든 변이 함수를 순회 검사)
+        ▼
+   SQLite (로컬 진실)
+        │
+        ├── 툼스톤: deletedAt 설정, 행은 영구 보존 (GC 없음)
+        │
+        ▼
+   sync engine
+        │
+        ├── push ──► Supabase ──► Postgres 트리거: updated_at = now()
+        │              │                          ▲
+        │              │              시간의 출처는 여기 한 곳뿐
+        │              ▼
+        └── pull ◄── where updated_at &gt; last_sync
+                     │
+                     ▼
+               LWW 병합 (서버 시각 기준)
+                     │
+                     ├── 서버가 최신 → 로컬 덮어씀
+                     ├── 로컬이 최신 → push 대기
+                     └── 삭제 vs 편집 → 서버 도착 순서
+
+  주기: 포그라운드 15~30초 · 창 포커스 시 · 변경 직후
+        (Realtime 연결 0개 — 500개 한도·초과요금 회피)</code></pre>
+
+<h2>테스트 커버리지</h2>
+
+<pre><code>CODE PATHS                                          USER FLOWS
+[+] database.ts (0단계 재작성)                       [+] 2기기 동기화
+  ├── touch(record) — 신규                            ├── [GAP][→E2E] 맥 추가 → 아이폰 반영
+  │   └── [GAP] 모든 변이가 updatedAt 올림             ├── [GAP][→E2E] 양쪽 오프라인 편집 → 병합
+  ├── CRUD 24개 함수                                  └── [GAP][→E2E] 맥 삭제 → 아이폰 삭제(부활X)
+  │   └── [GAP] 현재 0개 — 재작성 전 특성화 필요
+  ├── migrate(raw) — 신규                            [+] 마이그레이션
+  │   ├── [GAP] 버전 없음 → v1 인식                    └── [GAP][→E2E] v2.0.1 데이터 → 25건 보존
+  │   ├── [GAP] .bak 백업 생성
+  │   ├── [GAP] 건수 불일치 → 중단+롤백               [+] 에러 상태
+  │   └── [GAP] 손상 JSON → 중단(현재는 조용히 [])     ├── [GAP] 네트워크 없음 → 대기 N건 표시
+  └── 툼스톤 List/Folder                              └── [GAP] 인증 만료 → 재로그인 유도
+      ├── [GAP] 삭제 리스트가 getLists에서 제외
+      └── [GAP] 툼스톤 영구 보존(GC 없음)
+
+[+] sync engine (1단계 신규)                        [+] packages/core 이동
+  ├── push: [GAP][→E2E] 오프라인 큐 → 재연결 전송      └── [★★★] recurrence 26 · scheduledTime 16
+  ├── push: [GAP] 5xx 재시도 / 4xx 중단                    naturalDate 11 · smartLists 10
+  ├── pull: [GAP] updated_at &gt; last_sync 만 수신           → 이동만 하면 그대로 유지
+  ├── pull: [GAP] 툼스톤 수신 → 로컬 삭제
+  └── LWW: [GAP] 서버 최신/로컬 최신/삭제vs편집
+
+[+] auth (1단계 신규)
+  ├── [GAP] 만료 링크 → 명확한 에러
+  ├── [GAP] 로그아웃 시 로컬 데이터 처리
+  └── [GAP] 계정 삭제 (App Store 요구사항)
+
+COVERAGE: 신규 경로 1/29 (3%)  |  코드 경로 1/22  |  사용자 흐름 0/7
+GAPS: 28 (6 E2E)  |  기존 유지: core utils 63 tests</code></pre>
+
+<p>
+  <strong>REGRESSION RULE 적용 (질문 없이 확정):</strong> 마이그레이션은 기존 동작을 바꾸므로 회귀 테스트가
+  필수입니다. 특히 <code>|| []</code> 폴백 때문에 실패가 조용합니다. 3개를 계획에 그냥 넣었습니다 —
+  v2.0.1 형식 → 전건 보존 / 손상 JSON → 중단 / 건수 불일치 → 롤백.
+</p>
+
+<h2>실패 모드</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>신규 경로</th><th>현실적 실패</th><th>테스트</th><th>에러 처리</th><th>사용자에게 보이는가</th></tr></thead>
+  <tbody>
+    <tr><td><code>migrate()</code></td><td>손상 JSON → 빈 배열</td><td>회귀(확정)</td><td>중단+롤백 예정</td><td><span class="pill bad">현재 조용함</span></td></tr>
+    <tr><td><code>touch()</code> 누락</td><td>특정 변이가 영영 미동기화</td><td>회귀(T2)</td><td>없음</td><td>조용함 → 테스트로만 방어</td></tr>
+    <tr><td>sync push</td><td>네트워크 끊김</td><td>GAP</td><td>큐 재시도</td><td>대기 건수 표시 필요</td></tr>
+    <tr><td>sync pull</td><td>토큰 만료 (4xx)</td><td>GAP</td><td>미설계</td><td>재로그인 유도 필요</td></tr>
+    <tr><td><strong>LWW 병합</strong></td><td><strong>진 쪽 편집 소실</strong></td><td><span class="pill bad">없음</span></td><td><span class="pill bad">없음</span></td><td><span class="pill bad">조용함</span></td></tr>
+    <tr><td>매직 링크</td><td>링크 만료</td><td>GAP</td><td>미설계</td><td>안내 필요</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note danger">
+  <strong>치명적 공백 1건.</strong> LWW에서 진 쪽 편집이 <strong>조용히 사라집니다.</strong>
+  테스트도 없고 에러 처리도 없고 사용자도 모릅니다. 최소한 "다른 기기의 변경으로 덮어썼다" 정도는
+  알려야 합니다. T9로 추적하지만, 구현 전까지 이 경로는 무방비입니다. 이 때문에 리뷰 상태를
+  <code>NOT CLEARED</code>로 기록했습니다.
+</div>
+
+<h2>구현 태스크</h2>
+
+<div class="task"><span class="t">T1 · P1 · 사람 손 ~3일 / CC ~반나절 — database.ts</span><br />재작성 전 CRUD 24개 특성화 테스트 작성<div class="m">근거: database.test.ts 14개가 CRUD를 하나도 안 봄 · Verify: <code>npm run test</code></div></div>
+<div class="task"><span class="t">T2 · P1 · ~1일 / ~30분 — database.ts</span><br /><code>touch()</code> 단일 지점 + 변이 함수 전수 회귀 테스트<div class="m">근거: <code>save()</code> 호출 21곳에 스탬프가 흩어짐</div></div>
+<div class="task"><span class="t">T3 · P1 · ~1일 / ~30분 — database.ts</span><br /><code>schemaVersion</code> + <code>.bak</code> 백업 + 건수 검증 + 롤백<div class="m">근거: <code>raw.lists || []</code>가 실패를 조용한 빈 배열로 만듦</div></div>
+<div class="task"><span class="t">T4 · P1 · ~2~3일 / ~2시간 — 루트</span><br />npm workspaces 전환 + <code>packages/core</code> 추출<div class="m">근거: RN 앱 생기면 순수 로직 930줄이 분기 · Verify: core 테스트 63개 통과</div></div>
+<div class="task"><span class="t">T5 · P1 · ~2주 / ~하루 — database.ts</span><br />전체-JSON → SQLite 이관 + 툼스톤(영구)<div class="m">Verify: T1 특성화 테스트 통과 + 리스트 삭제가 재시작 후에도 부활 안 함</div></div>
+<div class="task"><span class="t">T6 · P1 · ~반나절 / ~10분 — supabase</span><br /><code>updated_at = now()</code> 트리거로 서버 타임스탬프 할당<div class="m">Verify: 기기 시계를 인위로 틀어놔도 순서 유지</div></div>
+<div class="task"><span class="t">T7 · P1 · ~2일 / ~1시간 — auth</span><br />매직 링크 로그인 + 로그아웃 + <strong>앱 안 계정 삭제</strong><div class="m">계정 삭제는 App Store 요구사항</div></div>
+<div class="task"><span class="t">T8 · P2 · ~1일 / ~1시간 — sync</span><br />폴링 + 포커스/변경 시 동기화<div class="m">포그라운드 15~30초 · 백그라운드 중단</div></div>
+<div class="task"><span class="t">T9 · P2 · ~반나절 / ~20분 — sync</span><br />LWW에서 진 쪽 편집을 사용자에게 알림<div class="m"><span class="pill bad">치명적 공백</span> 편집 소실이 테스트·에러처리·표시 전부 없음</div></div>
+
+<h2>병렬화</h2>
+
+<pre><code>Lane A: 특성화 테스트 → SQLite 이관 + touch()   (순차, src/main/ 공유)
+Lane B: packages/core 추출                      (독립)
+Lane C: Supabase 스키마 + 매직 링크 인증          (독립)
+        ↓ A·B·C 병합 후
+Lane D: 동기화 엔진 → RN 앱                      (순차)</code></pre>
+
+<p><strong>A·B·C를 병렬 워크트리로 동시 실행할 수 있습니다.</strong> B가 <code>utils/</code>를 옮기고 A가 <code>src/main/</code>을 고치므로 충돌하지 않습니다. C는 신규 디렉터리라 완전 독립입니다.</p>
+
+<div class="note">
+  <strong>충돌 주의:</strong> Lane B의 <code>packages/core</code> 추출만 루트 <code>package.json</code>(workspaces)을 건드립니다.
+  머지할 때 그 파일만 확인하면 됩니다.
+</div>
+
+<h2>NOT in scope — 고려했으나 미룬 것</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>항목</th><th>사유</th></tr></thead>
+  <tbody>
+    <tr><td>PowerSync</td><td>단일 사용자 동기화라 CRDT 불필요. 월 $49 절약 → 손익분기 51명에서 <strong>17명</strong>으로</td></tr>
+    <tr><td>Supabase Realtime</td><td>즉시성이 지금 필요 없음. 500 동시연결 한도와 연결 관리 버그 회피</td></tr>
+    <tr><td>툼스톤 GC + 강제 재동기화</td><td>이 규모에서 아끼는 용량이 없고 새 실패 경로만 생김</td></tr>
+    <tr><td>HLC (하이브리드 논리 시계)</td><td>서버 타임스탬프로 클럭 문제가 해소되므로 과잉</td></tr>
+    <tr><td>Android · Windows · 웹</td><td>iOS 이후. <code>TODOS.md</code>에 키스토어·Firebase 항목이 이미 있으나 범위 밖</td></tr>
+    <tr><td>협업 · 공유 리스트</td><td>단일 사용자 전제가 깨지면 LWW 설계 전체가 바뀜. 별도 설계 필요</td></tr>
+    <tr><td>테마 공유 커뮤니티</td><td>네트워크 효과 기능. watcher 0명 상태에선 빈 갤러리</td></tr>
+    <tr><td>알림 설정 확장</td><td>최초 요청이었으나 동기화·iOS 이후로 이동</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>이미 있는 것 — 재사용 vs 재구축</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>기존 자산</th><th>계획의 처리</th><th>판정</th></tr></thead>
+  <tbody>
+    <tr><td><code>database.ts</code> export 43개</td><td>시그니처 유지, 엔진만 교체</td><td><span class="pill ok">재사용</span></td></tr>
+    <tr><td><code>ipc-handlers.ts</code> 47개</td><td>그대로 유지</td><td><span class="pill ok">재사용</span></td></tr>
+    <tr><td><code>utils/</code> 13파일 930줄 (100% 순수)</td><td><code>packages/core</code>로 추출</td><td><span class="pill ok">재사용</span></td></tr>
+    <tr><td>core utils 테스트 63개</td><td>이동만, 그대로 유지</td><td><span class="pill ok">재사용</span></td></tr>
+    <tr><td>Task의 <code>createdAt</code>·<code>deletedAt</code></td><td>툼스톤 절반은 이미 존재</td><td><span class="pill ok">재사용</span></td></tr>
+    <tr><td>MAS <code>network.client</code> 엔타이틀먼트</td><td>Supabase 호출에 그대로 충분</td><td><span class="pill ok">재사용</span></td></tr>
+    <tr><td><code>components/</code> 7,070줄</td><td>RN에서 재작성</td><td><span class="pill warn">재구축</span> Capacitor면 재사용 가능했음 · 사용자 결정</td></tr>
+    <tr><td><code>main + preload</code> 1,699줄</td><td>Electron 전용, iOS엔 미적용</td><td>불가피</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>실행하지 못한 것</h2>
+
+<div class="note danger">
+  <strong>외부 관점(Codex)이 실패했습니다.</strong> CLI는 설치·인증돼 있는데 이 ChatGPT 계정에서 지원되는
+  모델이 하나도 없습니다 — <code>gpt-5.3-codex</code>, <code>gpt-5.2-codex</code>, <code>gpt-5.1-codex</code>,
+  <code>gpt-5-codex</code>, <code>gpt-5.1</code>, <code>gpt-5</code>, <code>codex-mini-latest</code>,
+  <code>o4-mini</code> 전부 <code>invalid_request_error</code>. Claude 서브에이전트 폴백은 이 세션 규칙상 불가합니다.
+  <br /><br />
+  즉 <strong>설계도 리뷰도 모두 단일 모델 관점입니다.</strong> 특히 "iOS가 90%"라는 진단, 가격 제안,
+  그리고 위 8개 설계 결정이 교차 검증을 받지 않았습니다.
+</div>
+
+<h2>산출물</h2>
+
+<div class="scroll-x">
+<table>
+  <thead><tr><th>파일</th><th>용도</th></tr></thead>
+  <tbody>
+    <tr><td><code>~/.gstack/projects/supaicy-haru/…design-20260729-175151.md</code></td><td>설계 문서 + 리뷰 리포트 (하단에 append)</td></tr>
+    <tr><td><code>…eng-review-test-plan-20260729-191503.md</code></td><td>테스트 계획 — <code>/qa</code>가 소비</td></tr>
+    <tr><td><code>tasks-eng-review-20260729-210222.jsonl</code></td><td>구현 태스크 T1~T9 — <code>/autoplan</code>이 집계</td></tr>
+    <tr><td><code>TODOS.md</code></td><td>Tailwind gray 중립 교체 항목 추가 (커밋 <code>fe98eb0</code>)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>다음</h2>
+
+<p>
+  시작하신다면 <strong>T1(특성화 테스트)부터</strong>입니다. T5(SQLite 이관)를 먼저 하면 안전망 없이
+  재작성하게 됩니다. UI 변경이 이번 계획에 없어 <code>/plan-design-review</code>는 권하지 않고,
+  제품 방향은 office-hours에서 이미 다뤘습니다.
+</p>
+
+<footer>
+  2026-07-29 · 브랜치 <code>supaicy/coordinate</code> · 커밋 <code>fe98eb0</code><br />
+  Step 0 스코프: 원안 유지 (축소안 제안했으나 사용자가 전부 진행 선택) ·
+  Lake Score: 완전성 점수가 매겨진 8건 중 5건이 최고 완전성 선택, 나머지 3건은
+  "더 완전한 쪽이 이 앱엔 틀렸다"는 권고를 따름 · 미해결 결정 0건 · 치명적 공백 1건 (T9)
+</footer>
+
+</div>
+</body>
+</html>
