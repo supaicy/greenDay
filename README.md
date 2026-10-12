@@ -31,6 +31,25 @@
 
 ---
 
+> ### 📦 This repository is now for releases only
+>
+> Development has moved to a private repository. This repo continues to host the
+> **releases, the download links and the landing page** — nothing here changes for you.
+>
+> **Your current app keeps working.** v1.4.1 and every earlier public release stay
+> **free and MIT-licensed, permanently.** They contain no licence check and no remote
+> kill switch, and that cannot be changed retroactively.
+>
+> **Greenday v2 is a separate, new, paid app.** It is not an update to v1.4.1 and it will
+> not arrive through auto-update — the update channels are deliberately split. If you want
+> it, you choose it: <https://begreen.dev/greenday>
+>
+> _한국어: 이 저장소는 이제 **릴리스 전용**입니다. **v1.4.1과 그 이전 공개 릴리스는 계속 무료이고
+> MIT이며, 영구히 그렇습니다** — 라이선스 검사도 원격 차단 장치도 들어 있지 않습니다.
+> **Greenday v2는 새로 나온 별도의 유료 앱**이고 자동 업데이트로 가지 않습니다. 원하실 때만
+> 직접 받으시면 됩니다._
+
+
 ## Features
 
 | Feature | Description |
